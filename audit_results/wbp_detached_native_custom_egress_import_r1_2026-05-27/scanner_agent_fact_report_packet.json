@@ -1,0 +1,29 @@
+{
+  "agent": "Banach",
+  "captured_at_utc": "2026-05-26T21:46:00Z",
+  "facts": [
+    {
+      "evidence": "audit_results/wbp_native_custom_detached_egress_execution_handoff_r1_2026-05-26/detached_egress_command_hash_packet.json",
+      "finding": "current egress handoff has command_sha256 ea5bc957437788dc3ba2fa8f2a980618bb27f8e11b284f0af23cb82cbf7c668b",
+      "status": "ok"
+    },
+    {
+      "evidence": "audit_results/wbp_native_custom_detached_egress_execution_handoff_r1_2026-05-26/handoff_summary_packet.json",
+      "finding": "handoff final_status is NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+      "status": "ok"
+    },
+    {
+      "evidence": "audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_2026-05-26",
+      "finding": "expected owner-executed external egress evidence directory is absent",
+      "status": "blocked"
+    },
+    {
+      "evidence": "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_execution_result_packet.json",
+      "finding": "adjacent older owner/external execution chain reported no evidence produced",
+      "status": "blocked"
+    }
+  ],
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "text_only_audit_counted_as_pass": false
+}

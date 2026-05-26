@@ -6178,6 +6178,414 @@ def build_detached_egress_handoff_false_green_audit(
     }
 
 
+def build_detached_egress_safety_admission_prerequisite_packet(
+    *,
+    source_path: str,
+    source_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source_packet = source_packet if isinstance(source_packet, dict) else {}
+    ok = (
+        source_packet.get("status") == "ok"
+        and source_packet.get("allowed_final_claim")
+        == "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+        and source_packet.get("native_launch_attempted") is False
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_safety_admission_prerequisite",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "SAFETY_ADMISSION_PREREQUISITE_NOT_OK",
+        "source_path": source_path,
+        "source_status": source_packet.get("status", "missing"),
+        "source_allowed_final_claim": source_packet.get("allowed_final_claim", ""),
+        "safety_admission_classified": ok,
+        "native_launch_attempted_in_prerequisite": source_packet.get(
+            "native_launch_attempted"
+        ),
+        "counts_as_native_egress_proof": False,
+    }
+
+
+def build_detached_egress_handoff_prerequisite_packet(
+    *,
+    handoff_dir: Path,
+    handoff_summary_packet: dict[str, Any] | None,
+    command_packet: dict[str, Any] | None,
+    command_hash_packet: dict[str, Any] | None,
+    command_admission_packet: dict[str, Any] | None,
+    import_contract_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    handoff_summary_packet = (
+        handoff_summary_packet if isinstance(handoff_summary_packet, dict) else {}
+    )
+    command_packet = command_packet if isinstance(command_packet, dict) else {}
+    command_hash_packet = (
+        command_hash_packet if isinstance(command_hash_packet, dict) else {}
+    )
+    command_admission_packet = (
+        command_admission_packet if isinstance(command_admission_packet, dict) else {}
+    )
+    import_contract_packet = (
+        import_contract_packet if isinstance(import_contract_packet, dict) else {}
+    )
+    checks = [
+        {
+            "name": "handoff_summary_ready",
+            "passed": handoff_summary_packet.get("final_status")
+            == "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+        },
+        {
+            "name": "command_packet_ok",
+            "passed": command_packet.get("status") == "ok"
+            and command_packet.get("command_executed") is False,
+        },
+        {
+            "name": "command_hash_ok",
+            "passed": command_hash_packet.get("status") == "ok"
+            and bool(command_hash_packet.get("command_sha256")),
+        },
+        {
+            "name": "command_admission_ok",
+            "passed": command_admission_packet.get("status") == "ok",
+        },
+        {
+            "name": "import_contract_requires_hash_json_secrets",
+            "passed": import_contract_packet.get("status") == "ok"
+            and import_contract_packet.get("future_import_must_verify_command_hash")
+            is True
+            and import_contract_packet.get("future_import_must_verify_json") is True
+            and import_contract_packet.get("future_import_must_verify_no_secrets")
+            is True,
+        },
+    ]
+    ok = all(check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_handoff_prerequisite",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "DETACHED_HANDOFF_PREREQUISITE_NOT_OK",
+        "handoff_dir": str(handoff_dir.resolve(strict=False)),
+        "external_evidence_dir": command_packet.get(
+            "evidence_dir",
+            handoff_summary_packet.get("external_evidence_dir", ""),
+        ),
+        "checks": checks,
+        "native_launch_attempted_from_current_thread": False,
+        "external_result_imported_in_handoff": False,
+        "counts_as_network_claim": False,
+    }
+
+
+def build_detached_egress_command_hash_verification_packet(
+    *,
+    command_packet: dict[str, Any],
+    expected_hash_packet: dict[str, Any],
+) -> dict[str, Any]:
+    recomputed = build_detached_egress_command_hash_packet(
+        command_packet=command_packet,
+    )
+    expected = str(expected_hash_packet.get("command_sha256") or "")
+    actual = str(recomputed.get("command_sha256") or "")
+    matches = expected_hash_packet.get("status") == "ok" and expected == actual
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_command_hash_verification",
+        "status": "ok" if matches else "blocked",
+        "reason_class": "" if matches else "DETACHED_COMMAND_HASH_MISMATCH",
+        "expected_command_sha256": expected,
+        "recomputed_command_sha256": actual,
+        "command_hash_matches": matches,
+        "hash_covers_argv_cwd_target_and_evidence_dir": recomputed.get(
+            "hash_covers_argv_cwd_target_and_evidence_dir"
+        )
+        is True,
+        "command_executed_in_current_thread": False,
+    }
+
+
+def build_detached_egress_import_secret_scan_packet(
+    *,
+    external_evidence_dir: Path,
+    matches: list[str],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_external_secret_scan",
+        "status": "ok" if not matches else "blocked",
+        "reason_class": "" if not matches else "RAW_SECRET_IN_IMPORTED_EVIDENCE",
+        "external_evidence_dir": str(external_evidence_dir.resolve(strict=False)),
+        "secret_scan_performed": True,
+        "secret_scan_clean": not matches,
+        "raw_secret_matches": matches,
+    }
+
+
+def build_detached_egress_external_evidence_import_packet(
+    *,
+    external_evidence_dir: Path,
+    validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    exists = validation_packet.get("external_evidence_dir_exists") is True
+    loaded = validation_packet.get("status") == "ok"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_external_evidence_import",
+        "status": "ok" if loaded else "blocked",
+        "reason_class": validation_packet.get("reason_class", "")
+        or ("" if loaded else "EXTERNAL_EVIDENCE_NOT_IMPORTABLE"),
+        "external_evidence_dir": str(external_evidence_dir.resolve(strict=False)),
+        "external_evidence_dir_exists": exists,
+        "external_evidence_json_loaded": loaded,
+        "external_result_imported": loaded,
+        "missing_packets": validation_packet.get("missing_packets", []),
+        "invalid_json_packets": validation_packet.get("invalid_json_packets", []),
+        "current_thread_native_launch_attempted": False,
+    }
+
+
+def build_detached_egress_process_binding_validation_packet(
+    *,
+    validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    parsed = validation_packet.get("parsed_packets", {})
+    packet = parsed.get("custom_process_binding_packet.json", {}) or parsed.get(
+        "native_process_binding_packet.json", {}
+    )
+    bound = (
+        packet.get("custom_process_bound") is True
+        or packet.get("process_bound") is True
+        or packet.get("status") == "ok"
+        and packet.get("observer_root_pid_bound") is True
+    )
+    evidence_missing = validation_packet.get("external_evidence_dir_exists") is not True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_process_binding_validation",
+        "status": "ok" if bound else "blocked",
+        "reason_class": "EXTERNAL_EVIDENCE_MISSING"
+        if evidence_missing
+        else ""
+        if bound
+        else "NATIVE_PROCESS_BINDING_MISSING",
+        "native_process_bound": bound,
+        "source_packet_present": bool(packet),
+        "external_evidence_dir_exists": not evidence_missing,
+        "counts_as_native_ux_proof": False,
+    }
+
+
+def build_detached_egress_wbp_trace_validation_packet(
+    *,
+    validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    parsed = validation_packet.get("parsed_packets", {})
+    packet = parsed.get("wbp_trace_observation_packet.json", {})
+    confirmed = packet.get("route_status") == "confirmed" or (
+        packet.get("forwarded_to_wbp") is True
+        and packet.get("upstream_status") in {200, "200"}
+    )
+    evidence_missing = validation_packet.get("external_evidence_dir_exists") is not True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_wbp_trace_validation",
+        "status": "ok" if confirmed else "blocked",
+        "reason_class": "EXTERNAL_EVIDENCE_MISSING"
+        if evidence_missing
+        else ""
+        if confirmed
+        else "WBP_TRACE_MISSING",
+        "wbp_trace_confirmed": confirmed,
+        "source_packet_present": bool(packet),
+        "external_evidence_dir_exists": not evidence_missing,
+        "counts_as_direct_egress_absence": False,
+        "counts_as_native_ux_proof": False,
+    }
+
+
+def build_detached_egress_network_observation_validation_packet(
+    *,
+    validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    parsed = validation_packet.get("parsed_packets", {})
+    packet = parsed.get("native_process_network_observation_packet.json", {})
+    claim_packet = parsed.get("native_direct_egress_claim_packet.json", {})
+    observed = bool(packet)
+    direct_absent = (
+        packet.get("direct_non_wbp_model_egress_absent_proven") is True
+        or claim_packet.get("direct_non_wbp_model_egress_absent_proven") is True
+    )
+    direct_observed = (
+        packet.get("classification") == "direct_model_egress_observed"
+        or claim_packet.get("direct_model_egress_observed") is True
+    )
+    evidence_missing = validation_packet.get("external_evidence_dir_exists") is not True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_network_observation_validation",
+        "status": "ok" if observed else "blocked",
+        "reason_class": "EXTERNAL_EVIDENCE_MISSING"
+        if evidence_missing
+        else ""
+        if observed
+        else "NETWORK_OBSERVATION_MISSING",
+        "network_observation_present": observed,
+        "direct_non_wbp_model_egress_absent_within_bounded_window": direct_absent,
+        "direct_non_wbp_model_egress_observed": direct_observed,
+        "source_packet_present": bool(packet),
+        "external_evidence_dir_exists": not evidence_missing,
+        "full_network_absence_proven": False,
+    }
+
+
+def build_detached_egress_network_claim_classification_packet(
+    *,
+    safety_admission_prerequisite_packet: dict[str, Any],
+    handoff_prerequisite_packet: dict[str, Any],
+    command_hash_verification_packet: dict[str, Any],
+    external_evidence_import_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    process_binding_validation_packet: dict[str, Any],
+    wbp_trace_validation_packet: dict[str, Any],
+    network_observation_validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_INSUFFICIENT_OBSERVATION"
+    reason_class = "NETWORK_OBSERVATION_INSUFFICIENT"
+    if safety_admission_prerequisite_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_SAFETY_ADMISSION_MISSING"
+        reason_class = "SAFETY_ADMISSION_PREREQUISITE_NOT_OK"
+    elif handoff_prerequisite_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_DETACHED_HANDOFF_MISSING"
+        reason_class = "DETACHED_HANDOFF_PREREQUISITE_NOT_OK"
+    elif command_hash_verification_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_COMMAND_HASH_MISMATCH"
+        reason_class = "DETACHED_COMMAND_HASH_MISMATCH"
+    elif secret_scan_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_SECRET_LEAK"
+        reason_class = "RAW_SECRET_IN_IMPORTED_EVIDENCE"
+    elif external_evidence_import_packet.get("external_evidence_dir_exists") is not True:
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_EXTERNAL_EVIDENCE_MISSING"
+        reason_class = "EXTERNAL_EVIDENCE_DIR_MISSING"
+    elif external_evidence_import_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_EXTERNAL_EVIDENCE_MISSING"
+        reason_class = str(
+            external_evidence_import_packet.get("reason_class")
+            or "EXTERNAL_EVIDENCE_NOT_IMPORTABLE"
+        )
+    elif process_binding_validation_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_PROCESS_BINDING_MISSING"
+        reason_class = "NATIVE_PROCESS_BINDING_MISSING"
+    elif wbp_trace_validation_packet.get("status") != "ok":
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_TRACE_MISSING"
+        reason_class = "WBP_TRACE_MISSING"
+    elif network_observation_validation_packet.get(
+        "direct_non_wbp_model_egress_observed"
+    ) is True:
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_OBSERVED"
+        reason_class = "DIRECT_NON_WBP_MODEL_EGRESS_OBSERVED"
+    elif network_observation_validation_packet.get(
+        "direct_non_wbp_model_egress_absent_within_bounded_window"
+    ) is True:
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS"
+        )
+        reason_class = ""
+
+    positive_absence = (
+        final_status
+        == "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS"
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_network_claim_classification",
+        "status": "ok" if positive_absence else "blocked",
+        "final_status": final_status,
+        "reason_class": reason_class,
+        "network_claim_classified": True,
+        "direct_non_wbp_model_egress_absent_within_bounded_window": positive_absence,
+        "direct_non_wbp_model_egress_observed": final_status
+        == "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_OBSERVED",
+        "full_network_absence_proven": False,
+        "api_openai_com_absence_proven_globally": False,
+        "native_launch_attempted_from_current_thread": False,
+        "native_ux_claimed": False,
+        "model_availability_reproved": False,
+        "original_codex_reversibility_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def build_detached_egress_import_false_green_audit(
+    *,
+    classification_packet: dict[str, Any],
+    external_evidence_import_packet: dict[str, Any],
+    command_hash_verification_packet: dict[str, Any],
+    wbp_trace_validation_packet: dict[str, Any],
+    process_binding_validation_packet: dict[str, Any],
+    network_observation_validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    positive_absence = (
+        classification_packet.get("final_status")
+        == "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS"
+    )
+    checks = [
+        {
+            "name": "current_thread_did_not_launch_native",
+            "passed": classification_packet.get("native_launch_attempted_from_current_thread")
+            is False,
+        },
+        {
+            "name": "no_adjacent_layer_claims",
+            "passed": classification_packet.get("native_ux_claimed") is False
+            and classification_packet.get("model_availability_reproved") is False
+            and classification_packet.get("original_codex_reversibility_claimed")
+            is False
+            and classification_packet.get("final_e2e_claimed") is False,
+        },
+        {
+            "name": "positive_absence_requires_imported_evidence",
+            "passed": not positive_absence
+            or external_evidence_import_packet.get("external_result_imported") is True,
+        },
+        {
+            "name": "positive_absence_requires_command_hash",
+            "passed": not positive_absence
+            or command_hash_verification_packet.get("command_hash_matches") is True,
+        },
+        {
+            "name": "positive_absence_requires_trace_and_process_binding",
+            "passed": not positive_absence
+            or (
+                wbp_trace_validation_packet.get("wbp_trace_confirmed") is True
+                and process_binding_validation_packet.get("native_process_bound") is True
+            ),
+        },
+        {
+            "name": "positive_absence_requires_bounded_network_observation",
+            "passed": not positive_absence
+            or network_observation_validation_packet.get(
+                "direct_non_wbp_model_egress_absent_within_bounded_window"
+            )
+            is True,
+        },
+        {
+            "name": "no_global_absence_claim",
+            "passed": classification_packet.get("full_network_absence_proven") is False
+            and classification_packet.get("api_openai_com_absence_proven_globally")
+            is False,
+        },
+    ]
+    ok = all(check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_import_false_green_audit",
+        "status": "ok" if ok else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": not ok,
+        "positive_absence_claimed": positive_absence,
+        "text_only_audit_counted_as_pass": False,
+    }
+
+
 def build_egress_prior_blocker_replay_packet(
     *,
     prior_claim_packet: dict[str, Any],

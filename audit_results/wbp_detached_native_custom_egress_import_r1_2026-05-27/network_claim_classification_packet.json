@@ -1,0 +1,17 @@
+{
+  "api_openai_com_absence_proven_globally": false,
+  "captured_at_utc": "2026-05-26T21:45:50.391390Z",
+  "direct_non_wbp_model_egress_absent_within_bounded_window": false,
+  "direct_non_wbp_model_egress_observed": false,
+  "final_e2e_claimed": false,
+  "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_EXTERNAL_EVIDENCE_MISSING",
+  "full_network_absence_proven": false,
+  "model_availability_reproved": false,
+  "native_launch_attempted_from_current_thread": false,
+  "native_ux_claimed": false,
+  "network_claim_classified": true,
+  "original_codex_reversibility_claimed": false,
+  "packet_kind": "detached_egress_network_claim_classification",
+  "reason_class": "EXTERNAL_EVIDENCE_DIR_MISSING",
+  "status": "blocked"
+}

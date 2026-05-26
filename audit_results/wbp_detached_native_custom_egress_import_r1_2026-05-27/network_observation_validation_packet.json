@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T21:45:50.391377Z",
+  "direct_non_wbp_model_egress_absent_within_bounded_window": false,
+  "direct_non_wbp_model_egress_observed": false,
+  "external_evidence_dir_exists": false,
+  "full_network_absence_proven": false,
+  "network_observation_present": false,
+  "packet_kind": "detached_egress_network_observation_validation",
+  "reason_class": "EXTERNAL_EVIDENCE_MISSING",
+  "source_packet_present": false,
+  "status": "blocked"
+}

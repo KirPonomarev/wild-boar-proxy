@@ -79,11 +79,21 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_detached_egress_command_admission_packet,
     build_detached_egress_command_hash_packet,
     build_detached_egress_execution_command_packet,
+    build_detached_egress_external_evidence_import_packet,
+    build_detached_egress_command_hash_verification_packet,
     build_detached_egress_future_result_import_contract_packet,
     build_detached_egress_future_result_required_packets_packet,
     build_detached_egress_handoff_false_green_audit,
+    build_detached_egress_handoff_prerequisite_packet,
+    build_detached_egress_import_false_green_audit,
+    build_detached_egress_import_secret_scan_packet,
+    build_detached_egress_network_claim_classification_packet,
+    build_detached_egress_network_observation_validation_packet,
     build_detached_egress_owner_action_boundary_packet,
+    build_detached_egress_process_binding_validation_packet,
     build_detached_egress_quiescent_requirement_packet,
+    build_detached_egress_safety_admission_prerequisite_packet,
+    build_detached_egress_wbp_trace_validation_packet,
     build_domain_attribution_limit_packet,
     build_owner_visible_response_context_packet,
     build_temp_custom_cleanup_packet,
@@ -4497,6 +4507,239 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             )
             self.assertFalse(summary["native_launch_attempted"])
             self.assertIn("--mode", command["argv"])
+
+    def test_detached_egress_safety_admission_prerequisite_is_reference_only(self) -> None:
+        packet = build_detached_egress_safety_admission_prerequisite_packet(
+            source_path="/tmp/admission.json",
+            source_packet={
+                "status": "ok",
+                "allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED",
+                "native_launch_attempted": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["safety_admission_classified"])
+        self.assertFalse(packet["counts_as_native_egress_proof"])
+
+    def test_detached_egress_import_hash_mismatch_blocks(self) -> None:
+        repo_root = Path("/tmp/wbp-repo")
+        command = build_detached_egress_execution_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "egress_EXTERNAL_2026-05-26",
+        )
+        verification = build_detached_egress_command_hash_verification_packet(
+            command_packet=command,
+            expected_hash_packet={"status": "ok", "command_sha256": "wrong"},
+        )
+
+        self.assertEqual(verification["status"], "blocked")
+        self.assertFalse(verification["command_hash_matches"])
+
+    def test_detached_egress_missing_external_evidence_blocks_claim(self) -> None:
+        repo_root = Path("/tmp/wbp-repo")
+        external_dir = repo_root / "audit_results" / "egress_EXTERNAL_2026-05-26"
+        command = build_detached_egress_execution_command_packet(
+            repo_root=repo_root,
+            evidence_dir=external_dir,
+        )
+        command_hash = build_detached_egress_command_hash_packet(command_packet=command)
+        required = build_detached_egress_future_result_required_packets_packet()
+        validation = validate_external_evidence_packets(
+            external_evidence_dir=external_dir,
+            required_packets=required["required_packets"],
+        )
+        imported = build_detached_egress_external_evidence_import_packet(
+            external_evidence_dir=external_dir,
+            validation_packet=validation,
+        )
+        classification = build_detached_egress_network_claim_classification_packet(
+            safety_admission_prerequisite_packet={"status": "ok"},
+            handoff_prerequisite_packet={"status": "ok"},
+            command_hash_verification_packet=(
+                build_detached_egress_command_hash_verification_packet(
+                    command_packet=command,
+                    expected_hash_packet=command_hash,
+                )
+            ),
+            external_evidence_import_packet=imported,
+            secret_scan_packet=build_detached_egress_import_secret_scan_packet(
+                external_evidence_dir=external_dir,
+                matches=[],
+            ),
+            process_binding_validation_packet=(
+                build_detached_egress_process_binding_validation_packet(
+                    validation_packet=validation,
+                )
+            ),
+            wbp_trace_validation_packet=build_detached_egress_wbp_trace_validation_packet(
+                validation_packet=validation,
+            ),
+            network_observation_validation_packet=(
+                build_detached_egress_network_observation_validation_packet(
+                    validation_packet=validation,
+                )
+            ),
+        )
+
+        self.assertEqual(imported["status"], "blocked")
+        self.assertEqual(
+            classification["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_EXTERNAL_EVIDENCE_MISSING",
+        )
+        self.assertFalse(
+            classification[
+                "direct_non_wbp_model_egress_absent_within_bounded_window"
+            ]
+        )
+
+    def test_detached_egress_positive_absence_requires_trace_and_process(self) -> None:
+        classification = build_detached_egress_network_claim_classification_packet(
+            safety_admission_prerequisite_packet={"status": "ok"},
+            handoff_prerequisite_packet={"status": "ok"},
+            command_hash_verification_packet={"status": "ok"},
+            external_evidence_import_packet={
+                "status": "ok",
+                "external_evidence_dir_exists": True,
+            },
+            secret_scan_packet={"status": "ok"},
+            process_binding_validation_packet={
+                "status": "blocked",
+                "native_process_bound": False,
+            },
+            wbp_trace_validation_packet={"status": "ok", "wbp_trace_confirmed": True},
+            network_observation_validation_packet={
+                "status": "ok",
+                "direct_non_wbp_model_egress_absent_within_bounded_window": True,
+            },
+        )
+
+        self.assertEqual(
+            classification["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_PROCESS_BINDING_MISSING",
+        )
+        self.assertFalse(
+            classification[
+                "direct_non_wbp_model_egress_absent_within_bounded_window"
+            ]
+        )
+
+    def test_detached_egress_import_false_green_blocks_global_absence(self) -> None:
+        audit = build_detached_egress_import_false_green_audit(
+            classification_packet={
+                "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS",
+                "native_launch_attempted_from_current_thread": False,
+                "native_ux_claimed": False,
+                "model_availability_reproved": False,
+                "original_codex_reversibility_claimed": False,
+                "final_e2e_claimed": False,
+                "full_network_absence_proven": True,
+                "api_openai_com_absence_proven_globally": False,
+            },
+            external_evidence_import_packet={"external_result_imported": True},
+            command_hash_verification_packet={"command_hash_matches": True},
+            wbp_trace_validation_packet={"wbp_trace_confirmed": True},
+            process_binding_validation_packet={"native_process_bound": True},
+            network_observation_validation_packet={
+                "direct_non_wbp_model_egress_absent_within_bounded_window": True,
+            },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_detached_egress_import_tool_emits_blocked_missing_evidence_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            real_repo = Path(__file__).resolve().parents[1]
+            (repo_root / "tools").mkdir()
+            (repo_root / "tools" / "native_custom_direct_egress_classification_probe.py").write_text(
+                "# placeholder\n",
+                encoding="utf-8",
+            )
+            handoff_dir = repo_root / "audit_results" / "handoff"
+            handoff_dir.mkdir(parents=True)
+            external_dir = repo_root / "audit_results" / "egress_EXTERNAL_2026-05-26"
+            command = build_detached_egress_execution_command_packet(
+                repo_root=repo_root,
+                evidence_dir=external_dir,
+            )
+            command_hash = build_detached_egress_command_hash_packet(
+                command_packet=command,
+            )
+            command_admission = build_detached_egress_command_admission_packet(
+                command_packet=command,
+                repo_root=repo_root,
+            )
+            required = build_detached_egress_future_result_required_packets_packet()
+            import_contract = build_detached_egress_future_result_import_contract_packet(
+                required_packets_packet=required,
+            )
+            packets = {
+                "detached_egress_execution_command_packet.json": command,
+                "detached_egress_command_hash_packet.json": command_hash,
+                "detached_egress_command_admission_packet.json": command_admission,
+                "future_result_import_contract_packet.json": import_contract,
+                "handoff_summary_packet.json": {
+                    "packet_kind": "detached_egress_execution_handoff_summary",
+                    "status": "ok",
+                    "final_status": "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+                    "external_evidence_dir": str(external_dir),
+                },
+            }
+            for name, packet in packets.items():
+                (handoff_dir / name).write_text(
+                    json.dumps(packet, sort_keys=True),
+                    encoding="utf-8",
+                )
+            safety_path = repo_root / "audit_results" / "safety.json"
+            safety_path.write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED",
+                        "native_launch_attempted": False,
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            evidence_dir = repo_root / "audit_results" / "import"
+            script = real_repo / "tools" / "detached_native_custom_egress_import_r1_probe.py"
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--repo-root",
+                    str(repo_root),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--handoff-dir",
+                    str(handoff_dir),
+                    "--safety-admission-path",
+                    str(safety_path),
+                    "--skip-git",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(process.returncode, 0, process.stderr)
+            summary = json.loads(
+                (
+                    evidence_dir
+                    / "detached_native_custom_egress_import_summary_packet.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_EXTERNAL_EVIDENCE_MISSING",
+            )
+            self.assertTrue(summary["command_hash_matches"])
+            self.assertFalse(summary["external_evidence_dir_exists"])
+            self.assertFalse(summary["native_launch_attempted_from_current_thread"])
+            self.assertFalse(summary["direct_egress_absence_claimed"])
 
 
 if __name__ == "__main__":
