@@ -83,6 +83,15 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_network_claim_limits_packet,
     build_network_observer_feasibility_decision_packet,
     build_quiescent_network_precondition_packet,
+    build_original_auth_boundary_packet,
+    build_original_live_admissibility_decision_packet,
+    build_original_process_window_state_packet,
+    build_original_profile_inventory_packet,
+    build_original_readiness_false_green_audit,
+    build_original_rollback_feasibility_packet,
+    build_original_surface_read_classification_packet,
+    build_original_temporary_route_strategy_packet,
+    build_original_via_wbp_claim_limits_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
@@ -196,6 +205,199 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(packet["runtime_provider_authority_used"])
         self.assertFalse(packet["current_auth_json_execution_dependency"])
         self.assertGreaterEqual(len(packet["snapshot_targets"]), 4)
+
+    def test_original_surface_read_is_inspection_only(self) -> None:
+        packet = build_original_surface_read_classification_packet(
+            codex_home=Path("/tmp/original-codex-home"),
+            app_support_dir=Path("/tmp/original-app-support"),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["inspection_only"])
+        self.assertTrue(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["runtime_auth_input_used"])
+        self.assertFalse(packet["runtime_provider_authority_used"])
+        self.assertFalse(packet["current_auth_json_execution_dependency"])
+        self.assertFalse(packet["auth_json_token_value_read"])
+        self.assertFalse(packet["auth_json_parsed"])
+        self.assertFalse(packet["auth_json_copied"])
+
+    def test_original_readiness_does_not_use_current_auth_json_as_runtime_input(self) -> None:
+        inventory = build_original_profile_inventory_packet(
+            codex_home=Path("/tmp/original-codex-home"),
+            app_support_dir=Path("/tmp/original-app-support"),
+        )
+        auth = build_original_auth_boundary_packet(profile_inventory_packet=inventory)
+
+        self.assertEqual(auth["status"], "ok")
+        self.assertFalse(auth["auth_json_token_value_read"])
+        self.assertFalse(auth["auth_json_parsed"])
+        self.assertFalse(auth["auth_json_copied"])
+        self.assertFalse(auth["auth_json_used_as_runtime_input"])
+        self.assertFalse(auth["file_auth_used"])
+        self.assertFalse(auth["proxy_auth_equated_to_file_auth"])
+
+    def test_original_temporary_route_strategy_requires_exact_target_and_hash_plan(self) -> None:
+        inventory = {
+            "config_toml": {
+                "path": "/tmp/not-original-config.toml",
+                "state": "present",
+                "sha256": "a" * 64,
+            }
+        }
+        blocked = build_original_temporary_route_strategy_packet(
+            profile_inventory_packet=inventory,
+        )
+        ok = build_original_temporary_route_strategy_packet(
+            profile_inventory_packet={
+                "config_toml": {
+                    "path": "/Users/test/.codex/config.toml",
+                    "state": "present",
+                    "sha256": "b" * 64,
+                }
+            },
+        )
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn("exact_original_config_target_required", blocked["failed_checks"])
+        self.assertEqual(ok["status"], "ok")
+        self.assertTrue(ok["before_hash_or_absent_state_recorded"])
+        self.assertTrue(ok["expected_diff_shape_declared"])
+        self.assertFalse(ok["route_proven"])
+
+    def test_original_temporary_route_strategy_requires_rollback_plan(self) -> None:
+        strategy = build_original_temporary_route_strategy_packet(
+            profile_inventory_packet={
+                "config_toml": {
+                    "path": "/Users/test/.codex/config.toml",
+                    "state": "absent",
+                }
+            },
+        )
+        rollback = build_original_rollback_feasibility_packet(
+            temporary_route_strategy_packet=strategy,
+        )
+
+        self.assertEqual(strategy["status"], "ok")
+        self.assertTrue(strategy["restore_command_declared"])
+        self.assertTrue(strategy["rollback_trigger_declared"])
+        self.assertEqual(rollback["status"], "ok")
+        self.assertFalse(rollback["rollback_executed"])
+        self.assertFalse(rollback["normal_original_post_cleanup_proven"])
+
+    def test_original_readiness_does_not_claim_original_route(self) -> None:
+        inventory = build_original_profile_inventory_packet(
+            codex_home=Path("/tmp/original-codex-home"),
+            app_support_dir=Path("/tmp/original-app-support"),
+            config_path=Path("/Users/test/.codex/config.toml"),
+        )
+        strategy = build_original_temporary_route_strategy_packet(
+            profile_inventory_packet=inventory,
+        )
+        rollback = build_original_rollback_feasibility_packet(
+            temporary_route_strategy_packet=strategy,
+        )
+        decision = build_original_live_admissibility_decision_packet(
+            surface_read_packet=build_original_surface_read_classification_packet(),
+            profile_inventory_packet=inventory,
+            auth_boundary_packet=build_original_auth_boundary_packet(
+                profile_inventory_packet=inventory
+            ),
+            process_window_state_packet=build_original_process_window_state_packet(
+                process_inventory_packet={"line_count": 0}
+            ),
+            temporary_route_strategy_packet=strategy,
+            rollback_feasibility_packet=rollback,
+            claim_limits_packet=build_original_via_wbp_claim_limits_packet(),
+        )
+
+        self.assertEqual(decision["status"], "ok")
+        self.assertTrue(decision["future_live_original_admissible_with_owner_authorization"])
+        self.assertFalse(decision["native_original_launch_attempted"])
+        self.assertFalse(decision["original_profile_write_performed"])
+        self.assertFalse(decision["original_route_proven"])
+        self.assertFalse(decision["final_e2e_proven"])
+
+    def test_original_readiness_does_not_claim_rollback_execution(self) -> None:
+        limits = build_original_via_wbp_claim_limits_packet()
+
+        self.assertEqual(limits["status"], "ok")
+        self.assertFalse(limits["rollback_executed"])
+        self.assertFalse(limits["original_route_proven"])
+        self.assertFalse(limits["final_e2e_proven"])
+
+    def test_original_process_window_inventory_not_ux_proof(self) -> None:
+        packet = build_original_process_window_state_packet(
+            process_inventory_packet={
+                "line_count": 2,
+                "default_process_count": 1,
+                "root_app_pids": [123],
+            }
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["process_inventory_only"])
+        self.assertFalse(packet["native_window_ux_proven"])
+        self.assertFalse(packet["owner_visible_response_proven"])
+        self.assertFalse(packet["native_original_launch_attempted"])
+        self.assertFalse(packet["original_process_killed_or_mutated"])
+
+    def test_custom_native_proof_cannot_satisfy_original_claim(self) -> None:
+        audit = build_original_readiness_false_green_audit(
+            live_admissibility_decision_packet={
+                "native_original_launch_attempted": False,
+                "original_route_proven": False,
+                "rollback_executed": False,
+                "original_ux_proven": False,
+                "egress_blocked_counted_as_pass": False,
+            },
+            claim_limits_packet={
+                "original_route_proven": False,
+                "final_e2e_proven": False,
+            },
+            custom_native_proof_used_as_original_proof=True,
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_auth_model_history_cannot_satisfy_original_claim(self) -> None:
+        audit = build_original_readiness_false_green_audit(
+            live_admissibility_decision_packet={
+                "native_original_launch_attempted": False,
+                "original_route_proven": False,
+                "rollback_executed": False,
+                "original_ux_proven": False,
+                "egress_blocked_counted_as_pass": False,
+            },
+            claim_limits_packet={
+                "original_route_proven": False,
+                "final_e2e_proven": False,
+            },
+            auth_model_history_used_as_original_proof=True,
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_egress_blocked_not_counted_as_original_readiness_pass(self) -> None:
+        audit = build_original_readiness_false_green_audit(
+            live_admissibility_decision_packet={
+                "native_original_launch_attempted": False,
+                "original_route_proven": False,
+                "rollback_executed": False,
+                "original_ux_proven": False,
+                "egress_blocked_counted_as_pass": True,
+            },
+            claim_limits_packet={
+                "original_route_proven": False,
+                "final_e2e_proven": False,
+            },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
 
     def test_native_safety_layer_boundary_does_not_claim_adjacent_layers(self) -> None:
         packet = build_native_safety_layer_boundary_packet()

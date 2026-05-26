@@ -260,6 +260,432 @@ def scan_protected_surfaces() -> dict[str, Any]:
     }
 
 
+def _path_metadata(
+    path: Path,
+    *,
+    sha256_size_limit: int = DEFAULT_SHA256_SIZE_LIMIT,
+) -> dict[str, Any]:
+    path = path.expanduser()
+    metadata: dict[str, Any] = {
+        "path": str(path),
+        "exists": path.exists(),
+        "sha256_size_limit": sha256_size_limit,
+    }
+    if not path.exists():
+        metadata["state"] = "absent"
+        return metadata
+    stat = path.stat()
+    metadata.update(
+        {
+            "state": "present",
+            "kind": "dir" if path.is_dir() else "file" if path.is_file() else "other",
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+        }
+    )
+    if path.is_file() and stat.st_size <= sha256_size_limit:
+        metadata["sha256"] = _sha256_file(path)
+        metadata["hash_recorded"] = True
+    else:
+        metadata["hash_recorded"] = False
+    return metadata
+
+
+def build_original_surface_read_classification_packet(
+    *,
+    codex_home: Path | None = None,
+    app_support_dir: Path | None = None,
+    auth_json_path: Path | None = None,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
+    codex_home = (codex_home or PROTECTED_SURFACE_PATHS["codex_dir"]).expanduser()
+    app_support_dir = (
+        app_support_dir or PROTECTED_SURFACE_PATHS["default_app_support_codex"]
+    ).expanduser()
+    auth_json_path = (auth_json_path or codex_home / "auth.json").expanduser()
+    config_path = (config_path or codex_home / "config.toml").expanduser()
+    targets = [
+        {"surface": "original_codex_home", "path": str(codex_home), "classification": "inspection_only"},
+        {
+            "surface": "original_app_support_codex",
+            "path": str(app_support_dir),
+            "classification": "inspection_only",
+        },
+        {"surface": "original_auth_json", "path": str(auth_json_path), "classification": "hash_metadata_only"},
+        {"surface": "original_config_toml", "path": str(config_path), "classification": "hash_metadata_only"},
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_surface_read_classification",
+        "status": "ok",
+        "reason_for_read": "Original Codex readiness inventory only; no runtime authority is consumed",
+        "snapshot_targets": targets,
+        "filesystem_read_performed": True,
+        "filesystem_write_performed": False,
+        "native_original_launch_attempted": False,
+        "original_profile_write_performed": False,
+        "runtime_auth_input_used": False,
+        "runtime_provider_authority_used": False,
+        "current_auth_json_execution_dependency": False,
+        "auth_json_token_value_read": False,
+        "auth_json_parsed": False,
+        "auth_json_copied": False,
+        "inspection_only": True,
+    }
+
+
+def build_original_profile_inventory_packet(
+    *,
+    codex_home: Path | None = None,
+    app_support_dir: Path | None = None,
+    config_path: Path | None = None,
+    auth_json_path: Path | None = None,
+) -> dict[str, Any]:
+    codex_home = (codex_home or PROTECTED_SURFACE_PATHS["codex_dir"]).expanduser()
+    app_support_dir = (
+        app_support_dir or PROTECTED_SURFACE_PATHS["default_app_support_codex"]
+    ).expanduser()
+    config_path = (config_path or codex_home / "config.toml").expanduser()
+    auth_json_path = (auth_json_path or codex_home / "auth.json").expanduser()
+    config_metadata = _path_metadata(config_path)
+    auth_metadata = _path_metadata(auth_json_path)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_profile_inventory",
+        "status": "ok",
+        "codex_home": _path_metadata(codex_home),
+        "app_support_dir": _path_metadata(app_support_dir),
+        "config_toml": config_metadata,
+        "auth_json": auth_metadata,
+        "config_before_hash_or_absent_state_recorded": bool(
+            config_metadata.get("sha256") or config_metadata.get("state") == "absent"
+        ),
+        "auth_json_hash_recorded": bool(
+            auth_metadata.get("sha256") or auth_metadata.get("state") == "absent"
+        ),
+        "auth_json_token_value_read": False,
+        "auth_json_parsed": False,
+        "auth_json_copied": False,
+        "current_auth_json_execution_dependency": False,
+        "original_profile_write_performed": False,
+        "native_original_launch_attempted": False,
+    }
+
+
+def build_original_auth_boundary_packet(
+    *,
+    profile_inventory_packet: dict[str, Any],
+) -> dict[str, Any]:
+    auth_json = (
+        profile_inventory_packet.get("auth_json")
+        if isinstance(profile_inventory_packet.get("auth_json"), dict)
+        else {}
+    )
+    failed_checks: list[str] = []
+    if profile_inventory_packet.get("auth_json_token_value_read") is not False:
+        failed_checks.append("auth_json_token_value_must_not_be_read")
+    if profile_inventory_packet.get("auth_json_parsed") is not False:
+        failed_checks.append("auth_json_must_not_be_parsed")
+    if profile_inventory_packet.get("current_auth_json_execution_dependency") is not False:
+        failed_checks.append("current_auth_json_must_not_be_runtime_input")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_auth_boundary",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "ORIGINAL_AUTH_BOUNDARY_VIOLATED",
+        "auth_json_exists": bool(auth_json.get("exists")),
+        "auth_json_metadata_or_absent_state_recorded": bool(
+            auth_json.get("sha256") or auth_json.get("state") == "absent"
+        ),
+        "auth_json_token_value_read": False,
+        "auth_json_parsed": False,
+        "auth_json_copied": False,
+        "auth_json_used_as_runtime_input": False,
+        "symlink_auth_used": False,
+        "file_auth_used": False,
+        "proxy_auth_equated_to_file_auth": False,
+        "raw_upstream_secret_recorded": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_process_window_state_packet(
+    *,
+    process_inventory_packet: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_process_window_state",
+        "status": "ok",
+        "process_inventory": process_inventory_packet,
+        "original_process_count": process_inventory_packet.get("line_count", 0),
+        "default_process_count": process_inventory_packet.get("default_process_count", 0),
+        "root_app_pids": process_inventory_packet.get("root_app_pids", []),
+        "process_inventory_only": True,
+        "native_window_ux_proven": False,
+        "owner_visible_response_proven": False,
+        "native_original_launch_attempted": False,
+        "original_process_killed_or_mutated": False,
+    }
+
+
+def build_original_temporary_route_strategy_packet(
+    *,
+    profile_inventory_packet: dict[str, Any],
+    config_path: Path | None = None,
+    target_provider_id: str = "wbp",
+    future_owner_authorization_required: bool = True,
+) -> dict[str, Any]:
+    config_metadata = (
+        profile_inventory_packet.get("config_toml")
+        if isinstance(profile_inventory_packet.get("config_toml"), dict)
+        else {}
+    )
+    resolved_config_path = str(
+        (config_path or Path(str(config_metadata.get("path", Path.home() / ".codex" / "config.toml")))).expanduser()
+    )
+    before_state_recorded = bool(
+        config_metadata.get("sha256") or config_metadata.get("state") == "absent"
+    )
+    exact_target_declared = bool(resolved_config_path) and resolved_config_path.endswith(
+        ".codex/config.toml"
+    )
+    expected_diff_shape = {
+        "model_provider": target_provider_id,
+        "model_providers.wbp.base_url": "local WBP /v1 endpoint",
+        "model_providers.wbp.wire_api": "responses",
+        "model_providers.wbp.auth": "server-owned auth.command or explicitly classified fallback",
+    }
+    failed_checks: list[str] = []
+    if not exact_target_declared:
+        failed_checks.append("exact_original_config_target_required")
+    if not before_state_recorded:
+        failed_checks.append("before_hash_or_absent_state_required")
+    if not expected_diff_shape:
+        failed_checks.append("expected_diff_shape_required")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_temporary_route_strategy",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "TEMPORARY_ROUTE_STRATEGY_INCOMPLETE",
+        "strategy_scope": "future_live_original_route_preflight_only",
+        "exact_target_path": resolved_config_path,
+        "target_provider_id": target_provider_id,
+        "before_hash_or_absent_state_recorded": before_state_recorded,
+        "before_state": config_metadata,
+        "planned_after_hash_strategy": "compute_after_candidate_config_in_future_live_preflight_before_apply",
+        "expected_diff_shape_declared": True,
+        "expected_diff_shape": expected_diff_shape,
+        "restore_command_declared": True,
+        "restore_command_plan": (
+            "future live contour must restore exact prior bytes when before_state=present; "
+            "must delete only the created target when before_state=absent"
+        ),
+        "rollback_trigger_declared": True,
+        "rollback_triggers": [
+            "Codex ignores model_providers",
+            "WBP route trace missing",
+            "Original normal mode cannot be restored",
+            "unexpected protected surface drift",
+            "owner cancels authorization",
+        ],
+        "owner_authorization_required": future_owner_authorization_required,
+        "native_original_launch_attempted": False,
+        "original_profile_write_performed": False,
+        "route_proven": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_rollback_feasibility_packet(
+    *,
+    temporary_route_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if temporary_route_strategy_packet.get("status") != "ok":
+        failed_checks.append("temporary_route_strategy_must_be_ok")
+    if temporary_route_strategy_packet.get("restore_command_declared") is not True:
+        failed_checks.append("restore_command_required")
+    if temporary_route_strategy_packet.get("rollback_trigger_declared") is not True:
+        failed_checks.append("rollback_trigger_required")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_rollback_feasibility",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "ROLLBACK_FEASIBILITY_INCOMPLETE",
+        "rollback_plan_scope": "future_live_preflight_only",
+        "exact_target_path": temporary_route_strategy_packet.get("exact_target_path", ""),
+        "before_state": temporary_route_strategy_packet.get("before_state", {}),
+        "restore_command_plan": temporary_route_strategy_packet.get(
+            "restore_command_plan", ""
+        ),
+        "verification_command_plan": "future live contour must re-hash target and compare to before_state, then launch normal Original without WBP",
+        "rollback_triggers": temporary_route_strategy_packet.get("rollback_triggers", []),
+        "rollback_executed": False,
+        "normal_original_post_cleanup_proven": False,
+        "original_profile_write_performed": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_via_wbp_claim_limits_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_via_wbp_claim_limits",
+        "status": "ok",
+        "allowed_claims": [
+            "Original protected surface read classified",
+            "Original profile inventory classified",
+            "Original auth boundary classified",
+            "temporary route strategy readiness classified",
+            "rollback feasibility classified",
+            "future live admissibility classified with owner authorization",
+        ],
+        "forbidden_claims": [
+            "Original Codex via WBP proven",
+            "fresh Original native launch performed",
+            "fresh Original WBP route proven",
+            "Original native UX proven",
+            "direct egress absence proven",
+            "model availability proven",
+            "auth strategy proven",
+            "rollback executed",
+            "normal Original post-cleanup proven",
+            "final E2E proven",
+        ],
+        "native_original_launch_attempted": False,
+        "original_route_proven": False,
+        "rollback_executed": False,
+        "direct_egress_absence_proven": False,
+        "final_e2e_proven": False,
+    }
+
+
+def build_original_live_admissibility_decision_packet(
+    *,
+    surface_read_packet: dict[str, Any],
+    profile_inventory_packet: dict[str, Any],
+    auth_boundary_packet: dict[str, Any],
+    process_window_state_packet: dict[str, Any],
+    temporary_route_strategy_packet: dict[str, Any],
+    rollback_feasibility_packet: dict[str, Any],
+    claim_limits_packet: dict[str, Any],
+    egress_blocked_prior_context: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    for name, packet in (
+        ("surface_read", surface_read_packet),
+        ("profile_inventory", profile_inventory_packet),
+        ("auth_boundary", auth_boundary_packet),
+        ("process_window_state", process_window_state_packet),
+        ("temporary_route_strategy", temporary_route_strategy_packet),
+        ("rollback_feasibility", rollback_feasibility_packet),
+        ("claim_limits", claim_limits_packet),
+    ):
+        if packet.get("status") != "ok":
+            failed_checks.append(f"{name}_required")
+    if surface_read_packet.get("inspection_only") is not True:
+        failed_checks.append("surface_read_must_be_inspection_only")
+    if auth_boundary_packet.get("auth_json_used_as_runtime_input") is not False:
+        failed_checks.append("current_auth_json_must_not_be_runtime_input")
+    if temporary_route_strategy_packet.get("route_proven") is not False:
+        failed_checks.append("route_strategy_must_not_claim_route")
+    if rollback_feasibility_packet.get("rollback_executed") is not False:
+        failed_checks.append("rollback_plan_must_not_claim_execution")
+    if process_window_state_packet.get("native_window_ux_proven") is not False:
+        failed_checks.append("process_inventory_must_not_claim_ux")
+    admissible = not failed_checks
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_admissibility_decision",
+        "status": "ok" if admissible else "blocked",
+        "final_status": (
+            "ORIGINAL_CODEX_VIA_WBP_READINESS_CLASSIFIED_LIVE_ADMISSIBLE_WITH_OWNER_AUTHORIZATION"
+            if admissible
+            else "ORIGINAL_CODEX_VIA_WBP_READINESS_BLOCKED_WITH_PACKETED_REASON"
+        ),
+        "reason_class": "" if admissible else "ORIGINAL_READINESS_GATE_BLOCKED",
+        "failed_checks": failed_checks,
+        "future_live_original_admissible_with_owner_authorization": admissible,
+        "owner_authorization_required": True,
+        "ordinary_codex_quiescent_window_required": True,
+        "egress_blocked_prior_context": egress_blocked_prior_context,
+        "egress_blocked_counted_as_pass": False,
+        "network_claim_limits_required_if_egress_remains_blocked": True,
+        "native_original_launch_attempted": False,
+        "original_profile_write_performed": False,
+        "original_route_proven": False,
+        "original_ux_proven": False,
+        "direct_egress_absence_proven": False,
+        "rollback_executed": False,
+        "normal_original_post_cleanup_proven": False,
+        "final_e2e_proven": False,
+    }
+
+
+def build_original_readiness_false_green_audit(
+    *,
+    live_admissibility_decision_packet: dict[str, Any],
+    claim_limits_packet: dict[str, Any],
+    custom_native_proof_used_as_original_proof: bool = False,
+    auth_model_history_used_as_original_proof: bool = False,
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "no_native_original_launch_claim",
+            "passed": live_admissibility_decision_packet.get(
+                "native_original_launch_attempted"
+            )
+            is False,
+        },
+        {
+            "name": "route_strategy_not_route_proof",
+            "passed": live_admissibility_decision_packet.get("original_route_proven")
+            is False,
+        },
+        {
+            "name": "rollback_plan_not_execution",
+            "passed": live_admissibility_decision_packet.get("rollback_executed")
+            is False,
+        },
+        {
+            "name": "process_inventory_not_ux_proof",
+            "passed": live_admissibility_decision_packet.get("original_ux_proven")
+            is False,
+        },
+        {
+            "name": "custom_native_proof_not_original_proof",
+            "passed": custom_native_proof_used_as_original_proof is False,
+        },
+        {
+            "name": "auth_model_history_not_original_proof",
+            "passed": auth_model_history_used_as_original_proof is False,
+        },
+        {
+            "name": "egress_blocked_not_counted_as_pass",
+            "passed": live_admissibility_decision_packet.get(
+                "egress_blocked_counted_as_pass"
+            )
+            is False,
+        },
+        {
+            "name": "claim_limits_forbid_original_route_and_e2e",
+            "passed": claim_limits_packet.get("original_route_proven") is False
+            and claim_limits_packet.get("final_e2e_proven") is False,
+        },
+    ]
+    forbidden_claims_present = any(not check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_readiness_false_green_audit",
+        "status": "ok" if not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "readiness_counted_as_original_route_proof": False,
+        "readiness_counted_as_rollback_execution": False,
+    }
+
+
 def build_protected_surface_read_classification_packet() -> dict[str, Any]:
     targets = [
         {"surface": name, "path": str(path), "classification": "inspection_only"}

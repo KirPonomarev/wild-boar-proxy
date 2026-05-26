@@ -1,0 +1,32 @@
+{
+  "before_state": {
+    "exists": true,
+    "hash_recorded": true,
+    "kind": "file",
+    "mtime_ns": 1779800415294217852,
+    "path": "/Users/kirillponomarev/.codex/config.toml",
+    "sha256": "0a07967352c3242aefb2da992153b24c1334ac2cd421fdb4c2e07080daa04fc6",
+    "sha256_size_limit": 5000000,
+    "size": 5548,
+    "state": "present"
+  },
+  "captured_at_utc": "2026-05-26T14:06:26.738668Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "failed_checks": [],
+  "normal_original_post_cleanup_proven": false,
+  "original_profile_write_performed": false,
+  "packet_kind": "original_rollback_feasibility",
+  "reason_class": "",
+  "restore_command_plan": "future live contour must restore exact prior bytes when before_state=present; must delete only the created target when before_state=absent",
+  "rollback_executed": false,
+  "rollback_plan_scope": "future_live_preflight_only",
+  "rollback_triggers": [
+    "Codex ignores model_providers",
+    "WBP route trace missing",
+    "Original normal mode cannot be restored",
+    "unexpected protected surface drift",
+    "owner cancels authorization"
+  ],
+  "status": "ok",
+  "verification_command_plan": "future live contour must re-hash target and compare to before_state, then launch normal Original without WBP"
+}
