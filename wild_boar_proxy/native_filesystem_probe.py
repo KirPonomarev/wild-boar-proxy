@@ -686,6 +686,349 @@ def build_original_readiness_false_green_audit(
     }
 
 
+def build_original_live_owner_authorization_packet(
+    *,
+    owner_authorized: bool,
+    exact_target_path: str,
+    allowed_write_operation: str,
+    rollback_mode: str,
+    launch_permission: bool,
+    owner_prompt_permission: bool,
+    restore_permission: bool,
+    expected_target_path: Path | None = None,
+) -> dict[str, Any]:
+    expected_target = str(
+        (expected_target_path or (Path.home() / ".codex" / "config.toml")).expanduser()
+    )
+    failed_checks: list[str] = []
+    if owner_authorized is not True:
+        failed_checks.append("owner_authorization_missing")
+    if exact_target_path != expected_target:
+        failed_checks.append("exact_target_path_required")
+    if allowed_write_operation != "temporary_wbp_route_config_replace":
+        failed_checks.append("allowed_write_operation_too_broad")
+    if rollback_mode not in {"restore_prior_bytes", "delete_created_target"}:
+        failed_checks.append("rollback_mode_required")
+    if launch_permission is not True:
+        failed_checks.append("launch_permission_required")
+    if owner_prompt_permission is not True:
+        failed_checks.append("owner_prompt_permission_required")
+    if restore_permission is not True:
+        failed_checks.append("restore_permission_required")
+    authorization_exact = not failed_checks
+    reason_class = ""
+    if "owner_authorization_missing" in failed_checks:
+        reason_class = "NO_OWNER_AUTHORIZATION"
+    elif failed_checks:
+        reason_class = "OWNER_AUTHORIZATION_TOO_BROAD"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_owner_authorization",
+        "status": "ok" if authorization_exact else "blocked",
+        "reason_class": reason_class,
+        "owner_authorized": owner_authorized,
+        "authorization_exact": authorization_exact,
+        "exact_target_path": exact_target_path,
+        "expected_target_path": expected_target,
+        "allowed_write_operation": allowed_write_operation,
+        "rollback_mode": rollback_mode,
+        "launch_permission": launch_permission,
+        "owner_prompt_permission": owner_prompt_permission,
+        "restore_permission": restore_permission,
+        "broad_authorization_accepted": False,
+        "implicit_previous_authorization_accepted": False,
+        "retry_mutation_authorized": False,
+        "original_profile_write_allowed": authorization_exact,
+        "native_original_launch_allowed": authorization_exact,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_readiness_reference_packet(
+    *,
+    readiness_summary_packet: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    expected = (
+        "ORIGINAL_CODEX_VIA_WBP_READINESS_CLASSIFIED_LIVE_ADMISSIBLE_WITH_OWNER_AUTHORIZATION"
+    )
+    final_status = str(readiness_summary_packet.get("final_status", ""))
+    status_ok = readiness_summary_packet.get("status") == "ok" and final_status == expected
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_readiness_reference",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "READINESS_REFERENCE_NOT_ADMISSIBLE",
+        "source_path": source_path,
+        "referenced_final_status": final_status,
+        "referenced_status": readiness_summary_packet.get("status"),
+        "readiness_live_admissible_with_owner_authorization": status_ok,
+        "readiness_counted_as_live_original_proof": False,
+        "readiness_counted_as_route_proof": False,
+        "readiness_counted_as_rollback_execution": False,
+    }
+
+
+def build_original_live_rollback_point_packet(
+    *,
+    profile_before_packet: dict[str, Any],
+    owner_authorization_packet: dict[str, Any],
+    rollback_artifact_path: str = "",
+    rollback_artifact_sha256: str = "",
+    rollback_point_created: bool = False,
+    rollback_point_verified: bool = False,
+) -> dict[str, Any]:
+    config_metadata = (
+        profile_before_packet.get("config_toml")
+        if isinstance(profile_before_packet.get("config_toml"), dict)
+        else {}
+    )
+    before_recorded = bool(
+        config_metadata.get("sha256") or config_metadata.get("state") == "absent"
+    )
+    failed_checks: list[str] = []
+    if owner_authorization_packet.get("status") != "ok":
+        failed_checks.append("owner_authorization_required_before_rollback_point")
+    if not before_recorded:
+        failed_checks.append("before_hash_or_absent_state_required")
+    if rollback_point_created is not True:
+        failed_checks.append("rollback_point_created_required_before_apply")
+    if rollback_point_verified is not True:
+        failed_checks.append("rollback_point_verified_required_before_apply")
+    if config_metadata.get("state") == "present" and not rollback_artifact_sha256:
+        failed_checks.append("rollback_artifact_hash_required_for_present_config")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_rollback_point",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "ROLLBACK_POINT_NOT_READY",
+        "before_state": config_metadata,
+        "before_hash_or_absent_state_recorded": before_recorded,
+        "rollback_mode": owner_authorization_packet.get("rollback_mode", ""),
+        "rollback_artifact_path": rollback_artifact_path,
+        "rollback_artifact_sha256": rollback_artifact_sha256,
+        "rollback_point_created": rollback_point_created,
+        "rollback_point_verified": rollback_point_verified,
+        "temporary_route_apply_allowed": not failed_checks,
+        "original_profile_write_performed": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_live_temporary_route_apply_admission_packet(
+    *,
+    owner_authorization_packet: dict[str, Any],
+    rollback_point_packet: dict[str, Any],
+    readiness_reference_packet: dict[str, Any],
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if readiness_reference_packet.get("status") != "ok":
+        failed_checks.append("readiness_reference_required")
+    if owner_authorization_packet.get("status") != "ok":
+        failed_checks.append("owner_authorization_required")
+    if rollback_point_packet.get("status") != "ok":
+        failed_checks.append("rollback_point_required_before_apply")
+    apply_admitted = not failed_checks
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_temporary_route_apply_admission",
+        "status": "ok" if apply_admitted else "blocked",
+        "reason_class": "" if apply_admitted else "TEMPORARY_ROUTE_APPLY_NOT_ADMITTED",
+        "temporary_route_apply_admitted": apply_admitted,
+        "exact_target_path": owner_authorization_packet.get("exact_target_path", ""),
+        "original_profile_write_allowed": apply_admitted,
+        "original_profile_write_performed": False,
+        "native_original_launch_allowed": apply_admitted,
+        "native_original_launch_attempted": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_selected_model_trace_claim_packet(
+    *,
+    selected_model: str = "",
+    route_trace_confirmed: bool = False,
+) -> dict[str, Any]:
+    trace_scoped = bool(selected_model) and route_trace_confirmed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "selected_model_trace_claim",
+        "status": "ok" if trace_scoped else "blocked",
+        "reason_class": "" if trace_scoped else "SELECTED_MODEL_TRACE_NOT_PROVEN",
+        "selected_model": selected_model,
+        "route_trace_confirmed": route_trace_confirmed,
+        "allowed_claim": (
+            "selected_model_responded_in_this_original_route_trace"
+            if trace_scoped
+            else ""
+        ),
+        "model_availability_claimed": False,
+        "model_family_availability_claimed": False,
+        "catalog_availability_claimed": False,
+        "gpt_5_5_availability_claimed": False,
+    }
+
+
+def build_original_live_restore_verification_packet(
+    *,
+    rollback_execution_attempted: bool,
+    restore_verified: bool,
+    before_state: dict[str, Any] | None = None,
+    after_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    before_state = before_state if isinstance(before_state, dict) else {}
+    after_state = after_state if isinstance(after_state, dict) else {}
+    before_fingerprint = before_state.get("sha256", before_state.get("state"))
+    after_fingerprint = after_state.get("sha256", after_state.get("state"))
+    restore_matches_before = bool(before_fingerprint) and before_fingerprint == after_fingerprint
+    ok = rollback_execution_attempted and restore_verified and restore_matches_before
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_restore_verification",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "RESTORE_NOT_VERIFIED",
+        "rollback_execution_attempted": rollback_execution_attempted,
+        "restore_verified": restore_verified,
+        "restore_matches_before": restore_matches_before,
+        "before_state": before_state,
+        "after_state": after_state,
+        "second_launch_allowed": ok,
+        "second_launch_attempted_after_failed_restore": False,
+        "normal_original_sanity_allowed": ok,
+    }
+
+
+def build_original_live_summary_packet(
+    *,
+    owner_authorization_packet: dict[str, Any],
+    apply_admission_packet: dict[str, Any],
+    route_trace_packet: dict[str, Any] | None = None,
+    restore_verification_packet: dict[str, Any] | None = None,
+    blocked_by_host_environment: bool = False,
+) -> dict[str, Any]:
+    route_trace_packet = route_trace_packet if isinstance(route_trace_packet, dict) else {}
+    restore_verification_packet = (
+        restore_verification_packet if isinstance(restore_verification_packet, dict) else {}
+    )
+    owner_missing = "owner_authorization_missing" in owner_authorization_packet.get(
+        "failed_checks", []
+    )
+    auth_broad = (
+        owner_authorization_packet.get("status") == "blocked"
+        and not owner_missing
+        and bool(owner_authorization_packet.get("failed_checks"))
+    )
+    route_confirmed = route_trace_packet.get("route_trace_confirmed") is True
+    restore_ok = restore_verification_packet.get("status") == "ok"
+    pass_ready = (
+        apply_admission_packet.get("status") == "ok"
+        and route_confirmed
+        and restore_ok
+        and not blocked_by_host_environment
+    )
+    if pass_ready:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_TEMP_ROUTE_AND_RESTORE_PROVEN_WITH_LIMITS"
+        reason_class = ""
+    elif owner_missing:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_NO_OWNER_AUTHORIZATION"
+        reason_class = "NO_OWNER_AUTHORIZATION"
+    elif auth_broad:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_AUTHORIZATION_TOO_BROAD"
+        reason_class = "OWNER_AUTHORIZATION_TOO_BROAD"
+    elif blocked_by_host_environment:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_HOST_ENVIRONMENT"
+        reason_class = "HOST_ENVIRONMENT_BLOCKED"
+    elif apply_admission_packet.get("status") != "ok":
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_ROLLBACK_UNSAFE"
+        reason_class = "TEMPORARY_ROUTE_APPLY_NOT_ADMITTED"
+    elif not route_confirmed:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_ROUTE_TRACE_MISSING"
+        reason_class = "ROUTE_TRACE_MISSING"
+    else:
+        final_status = "ORIGINAL_CODEX_VIA_WBP_BLOCKED_RESTORE_DRIFT"
+        reason_class = "RESTORE_NOT_VERIFIED"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_summary",
+        "status": "ok" if pass_ready else "blocked",
+        "final_status": final_status,
+        "reason_class": reason_class,
+        "native_original_launch_attempted": route_trace_packet.get(
+            "native_original_launch_attempted", False
+        ),
+        "original_profile_write_performed": route_trace_packet.get(
+            "original_profile_write_performed", False
+        ),
+        "original_route_proven": route_confirmed and pass_ready,
+        "rollback_executed": restore_verification_packet.get(
+            "rollback_execution_attempted", False
+        ),
+        "restore_verified": restore_ok,
+        "normal_original_post_cleanup_proven": False,
+        "direct_egress_absence_proven": False,
+        "model_availability_proven": False,
+        "full_native_ux_proven": False,
+        "final_e2e_proven": False,
+        "blocked_by_host_environment_counted_as_pass": False,
+    }
+
+
+def build_original_live_false_green_audit(
+    *,
+    summary_packet: dict[str, Any],
+    selected_model_trace_claim_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    selected_model_trace_claim_packet = (
+        selected_model_trace_claim_packet
+        if isinstance(selected_model_trace_claim_packet, dict)
+        else {}
+    )
+    checks = [
+        {
+            "name": "direct_egress_not_claimed",
+            "passed": summary_packet.get("direct_egress_absence_proven") is False,
+        },
+        {
+            "name": "model_availability_not_claimed",
+            "passed": summary_packet.get("model_availability_proven") is False
+            and selected_model_trace_claim_packet.get("model_availability_claimed") is not True,
+        },
+        {
+            "name": "full_ux_not_claimed",
+            "passed": summary_packet.get("full_native_ux_proven") is False,
+        },
+        {
+            "name": "final_e2e_not_claimed",
+            "passed": summary_packet.get("final_e2e_proven") is False,
+        },
+        {
+            "name": "blocked_environment_not_pass",
+            "passed": summary_packet.get("blocked_by_host_environment_counted_as_pass")
+            is False,
+        },
+        {
+            "name": "route_requires_restore_for_pass",
+            "passed": (
+                summary_packet.get("original_route_proven") is not True
+                or summary_packet.get("restore_verified") is True
+            ),
+        },
+    ]
+    forbidden_claims_present = any(not check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_false_green_audit",
+        "status": "ok" if not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "readiness_used_as_live_proof": False,
+        "route_trace_used_as_egress_proof": False,
+        "selected_model_used_as_model_availability": False,
+        "owner_ux_used_as_full_ux": False,
+        "rollback_plan_used_as_execution": False,
+    }
+
+
 def build_protected_surface_read_classification_packet() -> dict[str, Any]:
     targets = [
         {"surface": name, "path": str(path), "classification": "inspection_only"}

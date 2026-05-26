@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-26T14:17:35.882917Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "failed_checks": [
+    "owner_authorization_required",
+    "rollback_point_required_before_apply"
+  ],
+  "native_original_launch_allowed": false,
+  "native_original_launch_attempted": false,
+  "original_profile_write_allowed": false,
+  "original_profile_write_performed": false,
+  "packet_kind": "original_live_temporary_route_apply_admission",
+  "reason_class": "TEMPORARY_ROUTE_APPLY_NOT_ADMITTED",
+  "status": "blocked",
+  "temporary_route_apply_admitted": false
+}

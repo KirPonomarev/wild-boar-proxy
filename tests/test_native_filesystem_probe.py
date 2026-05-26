@@ -88,10 +88,18 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_original_process_window_state_packet,
     build_original_profile_inventory_packet,
     build_original_readiness_false_green_audit,
+    build_original_readiness_reference_packet,
     build_original_rollback_feasibility_packet,
+    build_original_live_false_green_audit,
+    build_original_live_owner_authorization_packet,
+    build_original_live_rollback_point_packet,
+    build_original_live_restore_verification_packet,
+    build_original_live_summary_packet,
+    build_original_live_temporary_route_apply_admission_packet,
     build_original_surface_read_classification_packet,
     build_original_temporary_route_strategy_packet,
     build_original_via_wbp_claim_limits_packet,
+    build_selected_model_trace_claim_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
@@ -394,6 +402,291 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 "original_route_proven": False,
                 "final_e2e_proven": False,
             },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_original_live_requires_owner_authorization(self) -> None:
+        packet = build_original_live_owner_authorization_packet(
+            owner_authorized=False,
+            exact_target_path="/Users/test/.codex/config.toml",
+            allowed_write_operation="temporary_wbp_route_config_replace",
+            rollback_mode="restore_prior_bytes",
+            launch_permission=True,
+            owner_prompt_permission=True,
+            restore_permission=True,
+            expected_target_path=Path("/Users/test/.codex/config.toml"),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "NO_OWNER_AUTHORIZATION")
+        self.assertIn("owner_authorization_missing", packet["failed_checks"])
+        self.assertFalse(packet["original_profile_write_allowed"])
+        self.assertFalse(packet["native_original_launch_allowed"])
+
+    def test_original_live_rejects_broad_owner_authorization(self) -> None:
+        packet = build_original_live_owner_authorization_packet(
+            owner_authorized=True,
+            exact_target_path="/Users/test/.codex",
+            allowed_write_operation="do_whatever_is_needed",
+            rollback_mode="best_effort",
+            launch_permission=True,
+            owner_prompt_permission=True,
+            restore_permission=True,
+            expected_target_path=Path("/Users/test/.codex/config.toml"),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "OWNER_AUTHORIZATION_TOO_BROAD")
+        self.assertIn("exact_target_path_required", packet["failed_checks"])
+        self.assertIn("allowed_write_operation_too_broad", packet["failed_checks"])
+        self.assertFalse(packet["broad_authorization_accepted"])
+
+    def test_original_live_requires_before_hash_or_absent_state(self) -> None:
+        auth = build_original_live_owner_authorization_packet(
+            owner_authorized=True,
+            exact_target_path="/Users/test/.codex/config.toml",
+            allowed_write_operation="temporary_wbp_route_config_replace",
+            rollback_mode="restore_prior_bytes",
+            launch_permission=True,
+            owner_prompt_permission=True,
+            restore_permission=True,
+            expected_target_path=Path("/Users/test/.codex/config.toml"),
+        )
+        rollback = build_original_live_rollback_point_packet(
+            profile_before_packet={"config_toml": {"path": "/Users/test/.codex/config.toml"}},
+            owner_authorization_packet=auth,
+            rollback_point_created=True,
+            rollback_point_verified=True,
+        )
+
+        self.assertEqual(rollback["status"], "blocked")
+        self.assertIn("before_hash_or_absent_state_required", rollback["failed_checks"])
+
+    def test_original_live_requires_rollback_point_before_apply(self) -> None:
+        auth = build_original_live_owner_authorization_packet(
+            owner_authorized=True,
+            exact_target_path="/Users/test/.codex/config.toml",
+            allowed_write_operation="temporary_wbp_route_config_replace",
+            rollback_mode="restore_prior_bytes",
+            launch_permission=True,
+            owner_prompt_permission=True,
+            restore_permission=True,
+            expected_target_path=Path("/Users/test/.codex/config.toml"),
+        )
+        readiness = build_original_readiness_reference_packet(
+            readiness_summary_packet={
+                "status": "ok",
+                "final_status": "ORIGINAL_CODEX_VIA_WBP_READINESS_CLASSIFIED_LIVE_ADMISSIBLE_WITH_OWNER_AUTHORIZATION",
+            },
+            source_path="readiness.json",
+        )
+        rollback = build_original_live_rollback_point_packet(
+            profile_before_packet={
+                "config_toml": {
+                    "path": "/Users/test/.codex/config.toml",
+                    "state": "present",
+                    "sha256": "a" * 64,
+                }
+            },
+            owner_authorization_packet=auth,
+            rollback_point_created=False,
+            rollback_point_verified=False,
+        )
+        admission = build_original_live_temporary_route_apply_admission_packet(
+            owner_authorization_packet=auth,
+            rollback_point_packet=rollback,
+            readiness_reference_packet=readiness,
+        )
+
+        self.assertEqual(rollback["status"], "blocked")
+        self.assertEqual(admission["status"], "blocked")
+        self.assertIn("rollback_point_required_before_apply", admission["failed_checks"])
+        self.assertFalse(admission["original_profile_write_performed"])
+
+    def test_original_live_forbids_auth_json_runtime_dependency(self) -> None:
+        inventory = build_original_profile_inventory_packet(
+            codex_home=Path("/tmp/original-codex-home"),
+            app_support_dir=Path("/tmp/original-app-support"),
+        )
+        auth_boundary = build_original_auth_boundary_packet(
+            profile_inventory_packet={
+                **inventory,
+                "current_auth_json_execution_dependency": True,
+            }
+        )
+
+        self.assertEqual(auth_boundary["status"], "blocked")
+        self.assertIn(
+            "current_auth_json_must_not_be_runtime_input",
+            auth_boundary["failed_checks"],
+        )
+
+    def test_original_live_forbids_file_auth_fallback(self) -> None:
+        auth_boundary = build_original_auth_boundary_packet(
+            profile_inventory_packet={
+                "auth_json": {"exists": True, "sha256": "a" * 64},
+                "auth_json_token_value_read": False,
+                "auth_json_parsed": False,
+                "current_auth_json_execution_dependency": False,
+            }
+        )
+
+        self.assertEqual(auth_boundary["status"], "ok")
+        self.assertFalse(auth_boundary["file_auth_used"])
+        self.assertFalse(auth_boundary["proxy_auth_equated_to_file_auth"])
+
+    def test_original_live_route_strategy_not_route_proof(self) -> None:
+        summary = build_original_live_summary_packet(
+            owner_authorization_packet={
+                "status": "ok",
+                "failed_checks": [],
+            },
+            apply_admission_packet={"status": "ok"},
+            route_trace_packet={"route_trace_confirmed": False},
+            restore_verification_packet={"status": "ok"},
+        )
+
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "ORIGINAL_CODEX_VIA_WBP_BLOCKED_ROUTE_TRACE_MISSING",
+        )
+        self.assertFalse(summary["original_route_proven"])
+
+    def test_original_live_requires_wbp_trace_for_route_claim(self) -> None:
+        restore = build_original_live_restore_verification_packet(
+            rollback_execution_attempted=True,
+            restore_verified=True,
+            before_state={"sha256": "a" * 64},
+            after_state={"sha256": "a" * 64},
+        )
+        summary = build_original_live_summary_packet(
+            owner_authorization_packet={"status": "ok", "failed_checks": []},
+            apply_admission_packet={"status": "ok"},
+            route_trace_packet={"route_trace_confirmed": True},
+            restore_verification_packet=restore,
+        )
+
+        self.assertEqual(summary["status"], "ok")
+        self.assertTrue(summary["original_route_proven"])
+        self.assertFalse(summary["direct_egress_absence_proven"])
+        self.assertFalse(summary["final_e2e_proven"])
+
+    def test_original_live_selected_model_claim_is_trace_scoped_only(self) -> None:
+        packet = build_selected_model_trace_claim_packet(
+            selected_model="gpt-5.4-mini",
+            route_trace_confirmed=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["allowed_claim"],
+            "selected_model_responded_in_this_original_route_trace",
+        )
+        self.assertFalse(packet["model_availability_claimed"])
+        self.assertFalse(packet["model_family_availability_claimed"])
+
+    def test_original_live_requires_restore_verification(self) -> None:
+        restore = build_original_live_restore_verification_packet(
+            rollback_execution_attempted=True,
+            restore_verified=False,
+            before_state={"sha256": "a" * 64},
+            after_state={"sha256": "b" * 64},
+        )
+
+        self.assertEqual(restore["status"], "blocked")
+        self.assertFalse(restore["restore_matches_before"])
+        self.assertFalse(restore["second_launch_allowed"])
+
+    def test_original_live_restore_failure_blocks_second_launch(self) -> None:
+        restore = build_original_live_restore_verification_packet(
+            rollback_execution_attempted=True,
+            restore_verified=True,
+            before_state={"state": "absent"},
+            after_state={"state": "present"},
+        )
+
+        self.assertEqual(restore["status"], "blocked")
+        self.assertFalse(restore["second_launch_allowed"])
+        self.assertFalse(restore["normal_original_sanity_allowed"])
+        self.assertFalse(restore["second_launch_attempted_after_failed_restore"])
+
+    def test_original_live_retry_mutation_requires_new_authorization(self) -> None:
+        auth = build_original_live_owner_authorization_packet(
+            owner_authorized=True,
+            exact_target_path="/Users/test/.codex/config.toml",
+            allowed_write_operation="temporary_wbp_route_config_replace",
+            rollback_mode="restore_prior_bytes",
+            launch_permission=True,
+            owner_prompt_permission=True,
+            restore_permission=True,
+            expected_target_path=Path("/Users/test/.codex/config.toml"),
+        )
+
+        self.assertEqual(auth["status"], "ok")
+        self.assertFalse(auth["retry_mutation_authorized"])
+
+    def test_original_live_blocked_environment_not_pass(self) -> None:
+        summary = build_original_live_summary_packet(
+            owner_authorization_packet={"status": "ok", "failed_checks": []},
+            apply_admission_packet={"status": "ok"},
+            route_trace_packet={"route_trace_confirmed": True},
+            restore_verification_packet={"status": "ok"},
+            blocked_by_host_environment=True,
+        )
+        audit = build_original_live_false_green_audit(summary_packet=summary)
+
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "ORIGINAL_CODEX_VIA_WBP_BLOCKED_HOST_ENVIRONMENT",
+        )
+        self.assertFalse(summary["blocked_by_host_environment_counted_as_pass"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_original_live_does_not_claim_direct_egress_absence(self) -> None:
+        audit = build_original_live_false_green_audit(
+            summary_packet={
+                "direct_egress_absence_proven": True,
+                "model_availability_proven": False,
+                "full_native_ux_proven": False,
+                "final_e2e_proven": False,
+                "blocked_by_host_environment_counted_as_pass": False,
+                "original_route_proven": False,
+            }
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_original_live_does_not_claim_model_availability(self) -> None:
+        audit = build_original_live_false_green_audit(
+            summary_packet={
+                "direct_egress_absence_proven": False,
+                "model_availability_proven": False,
+                "full_native_ux_proven": False,
+                "final_e2e_proven": False,
+                "blocked_by_host_environment_counted_as_pass": False,
+                "original_route_proven": False,
+            },
+            selected_model_trace_claim_packet={"model_availability_claimed": True},
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_original_live_does_not_claim_final_e2e(self) -> None:
+        audit = build_original_live_false_green_audit(
+            summary_packet={
+                "direct_egress_absence_proven": False,
+                "model_availability_proven": False,
+                "full_native_ux_proven": False,
+                "final_e2e_proven": True,
+                "blocked_by_host_environment_counted_as_pass": False,
+                "original_route_proven": False,
+            }
         )
 
         self.assertEqual(audit["status"], "blocked")
