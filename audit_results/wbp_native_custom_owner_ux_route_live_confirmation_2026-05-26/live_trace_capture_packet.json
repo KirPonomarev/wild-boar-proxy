@@ -1,0 +1,23 @@
+{
+  "auth_header_recorded": false,
+  "captured_at_utc": "2026-05-26T12:12:27.209746Z",
+  "direct_egress_claimed": false,
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "FRESH_WBP_TRACE_CAPTURED",
+  "forwarded_to_wbp": true,
+  "machine_ui_proof_claimed": false,
+  "nonce": "WBP_OWNER_UX_ROUTE_R1_20260526T120907Z_6FD52F5E",
+  "owner_ux_claimed": false,
+  "packet_kind": "owner_ux_route_live_trace_capture",
+  "prompt_body_recorded": false,
+  "request_body_sha256_present": true,
+  "request_observed": true,
+  "response_body_sha256_present": true,
+  "response_observed": true,
+  "secret_value_recorded": false,
+  "status": "ok",
+  "trace_packet_path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/source_wbp_trace_packet.json",
+  "trace_path": "/v1/responses",
+  "upstream_status": 200
+}

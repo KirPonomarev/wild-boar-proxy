@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05Z",
+  "packet_kind": "owner_visible_response_confirmation",
+  "status": "ok",
+  "owner_saw_response": true,
+  "owner_typed_prompt": true,
+  "owner_reported_agent_answered": true,
+  "owner_reported_config_model_route_untouched": true,
+  "owner_reported_hidden_cleanup_not_performed": true,
+  "owner_confirmation_text": "вижу ответ, конфиг/модель/роут не трогал, hidden cleanup не делал; ввел сообщение - агент мне успел ответить",
+  "machine_ui_input_field_proven": false,
+  "machine_observed_response_text_proven": false,
+  "manual_confirmation_replaces_route_trace": false,
+  "route_trace_replaces_owner_ux": false
+}

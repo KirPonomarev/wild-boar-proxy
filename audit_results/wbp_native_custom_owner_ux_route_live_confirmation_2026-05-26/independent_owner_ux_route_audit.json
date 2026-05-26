@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05.029708Z",
+  "direct_egress_claimed": false,
+  "final_e2e_claimed": false,
+  "manual_ui_waiver_counted_as_route_proof": false,
+  "packet_kind": "independent_owner_ux_route_audit",
+  "referenced_packets": [
+    "owner_manual_ux_check_packet.json",
+    "wbp_trace_observation_packet.json",
+    "native_route_trace_binding_packet.json",
+    "two_lane_result_matrix.json",
+    "native_owner_ux_false_green_audit.json"
+  ],
+  "route_trace_counted_as_machine_ui_proof": false,
+  "status": "ok"
+}

@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05.029695Z",
+  "direct_egress_claim_allowed": false,
+  "filesystem_safety_claim_allowed": false,
+  "final_e2e_claim_allowed": false,
+  "machine_ui_proof_claim_allowed": false,
+  "owner_ux_claim_allowed": true,
+  "packet_kind": "native_owner_ux_allowed_claims_matrix",
+  "route_claim_allowed": true,
+  "status": "ok"
+}
