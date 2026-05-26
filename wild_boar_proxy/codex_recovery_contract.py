@@ -423,6 +423,7 @@ def _owned_session_recovery_readonly_ok(
     readonly = readonly_sources if isinstance(readonly_sources, dict) else {}
     return (
         readonly.get("original_status_ok") is True
+        and readonly.get("custom_status_ok") is True
         and readonly.get("accounts_readonly_ok") is True
         and readonly.get("api_readonly_ok") is True
         and contract.get("rollback_claimed") is False
