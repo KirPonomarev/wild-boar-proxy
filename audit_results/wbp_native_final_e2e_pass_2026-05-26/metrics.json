@@ -1,0 +1,10 @@
+{
+  "contour_id": "WBP_NATIVE_FINAL_E2E_PASS",
+  "date": "2026-05-26",
+  "status": "closed_success",
+  "verdict": "WBP_NATIVE_CODEX_E2E_EXECUTED_WITH_HONEST_GAPS",
+  "proven_count": 7,
+  "not_proven_count": 1,
+  "not_proven_layer": "window input-capable UI",
+  "not_proven_reason": "AX/CG host limitation"
+}
