@@ -10,6 +10,7 @@ from wild_boar_proxy.codex_account_selection import (
     build_account_selection_packet,
     build_account_smoke_dry_run_packet,
     build_accounts_truth_packet,
+    build_model_selection_truth_packet,
     forbidden_account_smoke_fields,
 )
 
@@ -30,7 +31,7 @@ def account(
     status: str = "healthy",
     priority: int = 10,
     manual_hold: bool = False,
-    auth_ref: str | None = "/Users/example/.cli-proxy-api/auth.json",
+    auth_ref: str | None = "managed:auth-ref-fixture",
     last_error: str = "",
     last_error_class: str = "",
     cooldown_until: str | None = None,
@@ -113,6 +114,18 @@ def commands(*, claim_gate: str = "blocked_by_policy_drift") -> dict[str, dict[s
     }
 
 
+def commands_for_selection_truth() -> dict[str, dict[str, object]]:
+    payload = commands(claim_gate="passed")
+    accounts_payload = payload["accounts_list"]["packet"]
+    assert isinstance(accounts_payload, dict)
+    accounts_payload["accounts"] = [
+        account("acct-a", priority=10, auth_ref="managed:acct-a"),
+        account("acct-b", priority=20, auth_ref="managed:acct-b"),
+        account("acct-reserve", pool="reserve", auth_ref="managed:reserve"),
+    ]
+    return payload
+
+
 def operator_status() -> dict[str, object]:
     return {
         "status": {"status": "ok", "machine_error_code": "OK"},
@@ -146,6 +159,11 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["pool_classes"]["hold"], 1)
         self.assertEqual(packet["pool_classes"]["problem"], 1)
         self.assertEqual(packet["quota_classes"]["quota_exhausted"], 1)
+        self.assertEqual(packet["auth_ref_static_classification"]["classification_scope"], "static_dry_run_only")
+        self.assertFalse(packet["auth_ref_static_classification"]["live_validation_performed"])
+        self.assertFalse(packet["auth_ref_static_classification"]["token_validity_proven"])
+        self.assertFalse(packet["auth_ref_static_classification"]["quota_proven"])
+        self.assertFalse(packet["auth_ref_static_classification"]["raw_auth_refs_exposed"])
         self.assertFalse(packet["account_mutation_performed"])
         self.assertTrue(packet["account_ids_redacted"])
         self.assertFalse(packet["raw_backend_ids_exposed"])
@@ -261,6 +279,182 @@ class CodexAccountSelectionTests(unittest.TestCase):
             packet["negative_claim_basis"],
             "account_smoke_dry_run_static_path_no_inference_adapter",
         )
+
+    def test_model_selection_requires_server_issued_model_id(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "invented-model"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "MODEL_NOT_SERVER_ISSUED")
+        self.assertFalse(packet["model_server_issued"])
+        self.assertFalse(packet["selection_policy_proven"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertFalse(packet["account_mutation_performed"])
+
+    def test_model_selection_rejects_browser_route_backend_provider_authority(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {
+                "model_id": "gpt-5.3-codex",
+                "route_id": "browser-route",
+                "backend_id": "browser-backend",
+                "provider": "openai",
+                "base_url": "https://example.invalid/v1",
+                "token": "browser-token",
+            },
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(
+            packet["forbidden_fields"],
+            ["route_id", "backend_id", "provider", "base_url", "token"],
+        )
+        self.assertTrue(all(value is False for value in packet["browser_authority"].values()))
+        self.assertFalse(packet["browser_selected_backend"])
+        self.assertFalse(packet["browser_selected_route"])
+
+    def test_model_selection_classifies_active_reserve_degraded_pool(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-5.3-codex"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["account_pool_truth"]["pool_classes"]["active"], 2)
+        self.assertEqual(packet["account_pool_truth"]["pool_classes"]["reserve"], 1)
+        self.assertEqual(packet["account_pool_truth"]["eligibility_classes"]["live_capable"], 2)
+        self.assertEqual(packet["selection_policy_state"], "gpt_account_policy_classified")
+        self.assertEqual(packet["selected_source_class"], "gpt_account")
+        self.assertTrue(packet["selected_backend_server_issued"])
+        self.assertTrue(packet["selected_backend_ref"])
+        self.assertEqual(packet["selected_backend_source"], "server")
+        self.assertNotIn("acct-a", json.dumps(packet))
+
+    def test_model_selection_does_not_promote_reserve_without_authorization(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-5.3-codex"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertFalse(packet["reserve_promotion_performed"])
+        self.assertFalse(packet["account_mutation_performed"])
+        self.assertEqual(packet["account_pool_truth"]["pool_classes"]["reserve"], 1)
+
+    def test_model_selection_does_not_claim_live_availability_or_account_health(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-5.3-codex"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertFalse(packet["live_model_availability_proven"])
+        self.assertFalse(packet["live_account_truth_checked"])
+        self.assertFalse(packet["account_token_validity_proven"])
+        self.assertFalse(packet["account_quota_proven"])
+        self.assertFalse(packet["upstream_credentials_accepted"])
+        self.assertIn("selected_model_usable_live", packet["forbidden_claims"])
+        self.assertFalse(packet["claim_limits"]["model_listed_means_usable"])
+        self.assertFalse(packet["claim_limits"]["account_exists_means_healthy"])
+
+    def test_model_selection_redacts_auth_refs_and_tokens(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-5.3-codex"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+        serialized = json.dumps(packet)
+
+        self.assertFalse(packet["raw_auth_refs_exposed"])
+        self.assertFalse(packet["raw_secret_exposed"])
+        self.assertNotIn(".cli-proxy-api", serialized)
+        self.assertNotIn("acct-a.json", serialized)
+
+    def test_model_selection_missing_auth_ref_is_not_green(self) -> None:
+        payload = commands_for_selection_truth()
+        accounts_payload = payload["accounts_list"]["packet"]
+        assert isinstance(accounts_payload, dict)
+        accounts_payload["accounts"] = [
+            account("acct-a", auth_ref=None),
+            account("acct-b", auth_ref="managed:acct-b"),
+        ]
+
+        packet = build_model_selection_truth_packet({"model_id": "gpt-5.3-codex"}, payload, operator_status())
+
+        self.assertEqual(packet["status"], "degraded")
+        self.assertEqual(packet["machine_error_code"], "MODEL_SELECTION_STATIC_CLASSIFICATION_DEGRADED")
+        self.assertEqual(packet["auth_ref_static_classification"]["auth_ref_missing_count"], 1)
+        self.assertFalse(packet["auth_ref_static_classification"]["missing_auth_ref_is_green"])
+        self.assertIn("auth_ref_missing_static", packet["static_not_green_reasons"])
+
+    def test_model_selection_duplicate_auth_ref_is_not_green(self) -> None:
+        payload = commands_for_selection_truth()
+        accounts_payload = payload["accounts_list"]["packet"]
+        assert isinstance(accounts_payload, dict)
+        accounts_payload["accounts"] = [
+            account("acct-a", auth_ref="managed:shared"),
+            account("acct-b", auth_ref="managed:shared"),
+        ]
+
+        packet = build_model_selection_truth_packet({"model_id": "gpt-5.3-codex"}, payload, operator_status())
+
+        self.assertEqual(packet["status"], "degraded")
+        self.assertEqual(packet["machine_error_code"], "MODEL_SELECTION_STATIC_CLASSIFICATION_DEGRADED")
+        self.assertEqual(packet["auth_ref_static_classification"]["duplicate_auth_ref_count"], 1)
+        self.assertFalse(packet["auth_ref_static_classification"]["duplicate_auth_ref_is_green"])
+        self.assertIn("duplicate_auth_ref_static", packet["static_not_green_reasons"])
+        self.assertNotIn("shared.json", json.dumps(packet))
+
+    def test_model_selection_active_routing_unchanged_by_dry_run(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-5.3-codex"},
+            commands_for_selection_truth(),
+            operator_status(),
+        )
+
+        self.assertEqual(packet["active_routing_before_refs"], packet["active_routing_after_refs"])
+        self.assertFalse(packet["active_routing_changed"])
+        self.assertFalse(packet["account_mutation_performed"])
+
+    def test_model_selection_classifies_external_route_without_raw_route_or_secret(self) -> None:
+        route_operator_status = {
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "claim_gate": {"status": "passed"},
+            "models": {"ok": True, "server_issued": True, "model_ids": []},
+        }
+        api_snapshot = {
+            "routes": [
+                {
+                    "route_id": "wbp-web-primary-openrouter",
+                    "enabled": True,
+                    "secret_ref": "ROUTE_SECRET_REF_FIXTURE",
+                    "upstream_model": "openrouter/upstream",
+                }
+            ]
+        }
+
+        packet = build_model_selection_truth_packet(
+            {"model_id": "wbp-web-primary-openrouter"},
+            commands_for_selection_truth(),
+            route_operator_status,
+            api_snapshot=api_snapshot,
+        )
+        serialized = json.dumps(packet)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["selected_source_class"], "route_backed")
+        self.assertTrue(packet["selected_route_server_issued"])
+        self.assertEqual(packet["selection_policy_state"], "route_ready_static")
+        self.assertFalse(packet["route_selection_static"]["raw_route_id_exposed"])
+        self.assertFalse(packet["route_selection_static"]["raw_secret_ref_exposed"])
+        self.assertNotIn("ROUTE_SECRET_REF_FIXTURE", serialized)
+        self.assertNotIn("wbp-web-primary-openrouter", packet["selected_route_ref"])
 
     def test_forbidden_account_smoke_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_account_smoke_fields({"model_id": "gpt-5.3-codex"}), [])

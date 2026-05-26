@@ -1,0 +1,64 @@
+{
+  "blocked_or_unproven": [
+    {
+      "command": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_ui tests.test_cli",
+      "error": "ModuleNotFoundError: No module named '_tkinter'",
+      "result": "blocked_by_local_tkinter_unavailable_for_ui_imports",
+      "test_cli_subset_result": "OK when run separately"
+    }
+  ],
+  "captured_at_utc": "2026-05-26T08:36:50.485362Z",
+  "commands": [
+    "python3 -m unittest -q tests.test_codex_account_selection tests.test_wbp_model_catalog_contract tests.test_codex_model_registry tests.test_cli_runner tests.test_operator_surface tests.test_closeout_resilience",
+    "python3 -m unittest -q tests.test_external_models tests.test_cli_external_models tests.test_external_agent_lab",
+    "python3 -m unittest -q tests.test_codex_custom_sessions",
+    "python3 -m unittest -q tests.test_cli",
+    "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_ui tests.test_cli",
+    "python3 - <<PY import tkinter PY",
+    "git diff --check"
+  ],
+  "independent_audit": {
+    "agent": "Dirac",
+    "extra_verification": "python3 -m unittest -q tests.test_codex_account_selection -> 15 tests OK",
+    "packet": "audit_results/wbp_account_route_model_selection_truth_2026-05-26/independent_audit_packet.json",
+    "verdict": "PASS"
+  },
+  "json_parse_check": {
+    "json_files_before_audit_packet": 12,
+    "result": "OK"
+  },
+  "known_warnings": [
+    "ResourceWarning from negative HTTPError tests; expected existing negative HTTP cases."
+  ],
+  "passed": [
+    {
+      "command": "focused_and_regression",
+      "result": "OK",
+      "tests_run": 55
+    },
+    {
+      "command": "external_models_external_agent_lab",
+      "result": "OK",
+      "tests_run": 17
+    },
+    {
+      "command": "codex_custom_sessions",
+      "result": "OK",
+      "tests_run": 51
+    },
+    {
+      "command": "tests.test_cli",
+      "result": "OK",
+      "tests_run": 412
+    },
+    {
+      "command": "git diff --check",
+      "result": "OK"
+    }
+  ],
+  "schema_version": 1,
+  "secret_scan": {
+    "result": "no_matches_for_secret_patterns"
+  },
+  "updated_at_utc": "2026-05-26T08:41:41.005332Z"
+}

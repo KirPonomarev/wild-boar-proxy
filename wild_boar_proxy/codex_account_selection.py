@@ -49,6 +49,19 @@ ELIGIBILITY_CLASS_NAMES = (
     "unknown_unverified",
     "excluded",
 )
+MODEL_SELECTION_ALLOWED_STATUS = "WBP_MODEL_SELECTION_ACCOUNT_ROUTE_TRUTH_CLASSIFIED"
+MODEL_SELECTION_FORBIDDEN_CLAIMS = (
+    "live_model_availability_proven",
+    "selected_model_usable_live",
+    "selected_account_healthy_live",
+    "account_token_validity_proven",
+    "account_quota_proven",
+    "reserve_promoted",
+    "native_codex_proven",
+    "cli_runner_proven",
+    "direct_egress_absent",
+    "final_e2e_proven",
+)
 
 
 def utc_now() -> str:
@@ -216,6 +229,87 @@ def _backend_refs(backend_ids: list[str]) -> list[str]:
     return [_backend_ref(backend_id) for backend_id in backend_ids if backend_id]
 
 
+def _auth_ref_ref(auth_ref: str) -> str:
+    return hashlib.sha256(auth_ref.encode("utf-8")).hexdigest()
+
+
+def _auth_ref_static_classification(accounts: list[dict[str, Any]]) -> dict[str, Any]:
+    auth_ref_counts: dict[str, int] = {}
+    for account in accounts:
+        auth_ref = str(account.get("auth_ref") or "").strip()
+        if auth_ref:
+            auth_ref_counts[auth_ref] = auth_ref_counts.get(auth_ref, 0) + 1
+    duplicate_refs = sorted(ref for ref, count in auth_ref_counts.items() if count > 1)
+    unexpected_format_refs = sorted(
+        ref
+        for ref in auth_ref_counts
+        if not (
+            ref.startswith("managed:")
+            or ".cli-proxy-api" in ref
+            or ref.endswith(".json")
+        )
+    )
+    return {
+        "classification_scope": "static_dry_run_only",
+        "live_validation_performed": False,
+        "token_validity_proven": False,
+        "quota_proven": False,
+        "upstream_credentials_accepted": False,
+        "auth_ref_present_count": sum(1 for account in accounts if account.get("auth_ref")),
+        "auth_ref_missing_count": sum(1 for account in accounts if not account.get("auth_ref")),
+        "duplicate_auth_ref_count": len(duplicate_refs),
+        "duplicate_auth_ref_refs": [_auth_ref_ref(ref) for ref in duplicate_refs],
+        "unexpected_auth_ref_format_count": len(unexpected_format_refs),
+        "unexpected_auth_ref_refs": [_auth_ref_ref(ref) for ref in unexpected_format_refs],
+        "raw_auth_refs_exposed": False,
+        "missing_auth_ref_is_green": False,
+        "duplicate_auth_ref_is_green": False,
+    }
+
+
+def _route_entries(api_snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(api_snapshot, dict):
+        return []
+    routes = api_snapshot.get("routes")
+    return [route for route in routes if isinstance(route, dict)] if isinstance(routes, list) else []
+
+
+def _route_selection_for_model(model_id: str, api_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    route = next(
+        (
+            item
+            for item in _route_entries(api_snapshot)
+            if str(item.get("route_id") or "").strip() == model_id
+        ),
+        None,
+    )
+    if route is None:
+        return {
+            "selected_source_class": "none",
+            "selected_route_ref": "",
+            "selected_route_server_issued": False,
+            "route_policy_state": "not_visible",
+            "route_provenance_required": False,
+            "route_provenance_proven": False,
+        }
+    route_id = str(route.get("route_id") or "").strip()
+    secret_ref = str(route.get("secret_ref") or "").strip()
+    enabled = route.get("enabled") is True
+    route_ready = enabled and bool(secret_ref)
+    return {
+        "selected_source_class": "route_backed" if route_ready else "none",
+        "selected_route_ref": hashlib.sha256(route_id.encode("utf-8")).hexdigest(),
+        "selected_route_server_issued": route_ready,
+        "route_policy_state": "route_ready_static" if route_ready else "route_degraded_static",
+        "route_provenance_required": route_ready,
+        "route_provenance_proven": route_ready,
+        "route_enabled": enabled,
+        "route_secret_ref_present": bool(secret_ref),
+        "raw_route_id_exposed": False,
+        "raw_secret_ref_exposed": False,
+    }
+
+
 def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str, Any]:
     status_packet = _packet_from_command(commands, "status")
     accounts_packet = _packet_from_command(commands, "accounts_list")
@@ -256,6 +350,7 @@ def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str
             "auth_ref_missing": sum(1 for account in accounts if not account.get("auth_ref")),
             "auth_invalid": len(class_ids.get("auth_invalid", [])),
         },
+        "auth_ref_static_classification": _auth_ref_static_classification(accounts),
         "cooldown_classes": {
             "cooldown_present": sum(1 for account in accounts if account.get("cooldown_until")),
             "cooldown_only": len(class_ids.get("cooldown_only", [])),
@@ -286,6 +381,170 @@ def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str
         "accounts_digest": _sanitized_accounts_digest(accounts),
         "accounts": _redacted_account_rows(accounts),
         "command_error_codes": command_errors,
+    }
+
+
+def build_model_selection_truth_packet(
+    payload: dict[str, Any],
+    commands: dict[str, dict[str, Any]],
+    operator_status: dict[str, Any] | None,
+    *,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_account_smoke_fields(payload)
+    accounts_truth = build_accounts_truth_packet(commands)
+    status_packet = _packet_from_command(commands, "status")
+    selected_refs_before = accounts_truth["selected_backend_refs_observed"]
+    selected_refs_after = _backend_refs(_selected_backend_ids(status_packet))
+    auth_classification = accounts_truth["auth_ref_static_classification"]
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "contract_scope": "model_selection_account_route_truth_only",
+        "dry_run": True,
+        "selection_not_inference": True,
+        "live_model_availability_proven": False,
+        "live_account_truth_checked": False,
+        "account_token_validity_proven": False,
+        "account_quota_proven": False,
+        "upstream_credentials_accepted": False,
+        "native_codex_proven": False,
+        "cli_runner_proven": False,
+        "direct_egress_absence_proven": False,
+        "final_e2e_proven": False,
+        "responses_called": False,
+        "chat_completions_called": False,
+        "provider_called": False,
+        "network_calls_made": False,
+        "token_burn": 0,
+        "account_mutation_performed": False,
+        "reserve_promotion_performed": False,
+        "active_routing_before_refs": selected_refs_before,
+        "active_routing_after_refs": selected_refs_after,
+        "active_routing_changed": selected_refs_before != selected_refs_after,
+        "browser_authority": {
+            "route_id": False,
+            "backend_id": False,
+            "account_id": False,
+            "provider": False,
+            "base_url": False,
+            "token": False,
+            "auth_path": False,
+            "path": False,
+        },
+        "browser_selected_backend": False,
+        "browser_selected_route": False,
+        "raw_backend_id_exposed": False,
+        "raw_route_id_exposed": False,
+        "raw_auth_refs_exposed": False,
+        "raw_secret_exposed": False,
+        "auth_ref_static_classification": auth_classification,
+        "account_pool_truth": {
+            "status": accounts_truth["status"],
+            "machine_error_code": accounts_truth["machine_error_code"],
+            "pool_classes": accounts_truth["pool_classes"],
+            "eligibility_classes": accounts_truth["eligibility_classes"],
+            "auth_classes": accounts_truth["auth_classes"],
+            "launch_capable_count": accounts_truth["launch_capable_count"],
+            "account_count_claim_scope": accounts_truth["account_count_claim_scope"],
+        },
+        "allowed_status": MODEL_SELECTION_ALLOWED_STATUS,
+        "forbidden_claims": list(MODEL_SELECTION_FORBIDDEN_CLAIMS),
+        "claim_limits": {
+            "model_listed_means_usable": False,
+            "account_exists_means_healthy": False,
+            "static_auth_ref_means_token_valid": False,
+            "selection_policy_proves_route_response": False,
+            "selection_policy_proves_native": False,
+            "selection_policy_proves_egress": False,
+        },
+    }
+    if forbidden:
+        return base | {
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Model selection accepts only server-issued model_id.",
+            "forbidden_fields": forbidden,
+            "model_server_issued": False,
+            "selection_policy_proven": False,
+        }
+    model_registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    model_ids = [str(entry.get("model_id") or "") for entry in model_registry.get("available_models", [])]
+    model_id = payload.get("model_id")
+    if not isinstance(model_id, str) or model_id not in model_ids:
+        return base | {
+            "status": "rejected",
+            "machine_error_code": "MODEL_NOT_SERVER_ISSUED",
+            "human_message": "Model id was not present in the current server-issued list.",
+            "selected_model": model_id if isinstance(model_id, str) else "",
+            "model_server_issued": False,
+            "selection_policy_proven": False,
+            "server_issued_model_ids": model_ids,
+        }
+
+    if model_id.startswith("gpt-"):
+        selection = build_account_selection_packet(commands, operator_status)
+        selection_status = str(selection.get("status") or "degraded")
+        selection_machine_error = str(selection.get("machine_error_code") or "SELECTION_DEGRADED")
+        policy_state = "gpt_account_policy_classified"
+        route_selection: dict[str, Any] = {
+            "selected_route_ref": "",
+            "selected_route_server_issued": False,
+            "route_policy_state": "not_applicable_for_gpt_account",
+        }
+    else:
+        route_selection = _route_selection_for_model(model_id, api_snapshot)
+        selection_status = "ok" if route_selection["selected_route_server_issued"] else "degraded"
+        selection_machine_error = "OK" if selection_status == "ok" else "ROUTE_POLICY_NOT_READY_STATIC"
+        policy_state = str(route_selection["route_policy_state"])
+        selection = {
+            "selected_source_class": route_selection["selected_source_class"],
+            "selected_backend_ref": "",
+            "selected_backend_server_issued": False,
+            "selected_backend_source": "none",
+            "selected_route_ref": route_selection["selected_route_ref"],
+            "selected_route_server_issued": route_selection["selected_route_server_issued"],
+            "route_provenance_required": route_selection["route_provenance_required"],
+            "route_provenance_proven": route_selection["route_provenance_proven"],
+            "source_provenance_status": policy_state,
+            "selection_dry_run_proven": route_selection["selected_route_server_issued"],
+        }
+
+    not_green_reasons: list[str] = []
+    if auth_classification["auth_ref_missing_count"]:
+        not_green_reasons.append("auth_ref_missing_static")
+    if auth_classification["duplicate_auth_ref_count"]:
+        not_green_reasons.append("duplicate_auth_ref_static")
+    if base["active_routing_changed"]:
+        not_green_reasons.append("active_routing_changed")
+    if base["reserve_promotion_performed"]:
+        not_green_reasons.append("reserve_promotion_performed")
+    if selection_status == "ok" and not_green_reasons:
+        selection_status = "degraded"
+        selection_machine_error = "MODEL_SELECTION_STATIC_CLASSIFICATION_DEGRADED"
+
+    return base | {
+        "status": selection_status,
+        "machine_error_code": selection_machine_error,
+        "human_message": "Model selection account/route policy was classified without live validation.",
+        "selected_model": model_id,
+        "model_server_issued": True,
+        "selection_policy_proven": bool(selection.get("selection_dry_run_proven")),
+        "selection_policy_state": policy_state,
+        "selected_source_class": selection["selected_source_class"],
+        "selected_backend_ref": selection.get("selected_backend_ref", ""),
+        "selected_backend_server_issued": bool(selection.get("selected_backend_server_issued")),
+        "selected_backend_source": str(selection.get("selected_backend_source") or "none"),
+        "selected_route_ref": selection.get("selected_route_ref", ""),
+        "selected_route_server_issued": bool(selection.get("selected_route_server_issued")),
+        "route_provenance_required": bool(selection.get("route_provenance_required")),
+        "route_provenance_proven": bool(selection.get("route_provenance_proven")),
+        "source_provenance_status": str(selection.get("source_provenance_status") or policy_state),
+        "server_issued_model_ids": model_ids,
+        "static_not_green_reasons": not_green_reasons,
+        "route_selection_static": route_selection,
+        "negative_claim_basis": "model_selection_static_dry_run_no_live_validation_or_inference",
     }
 
 

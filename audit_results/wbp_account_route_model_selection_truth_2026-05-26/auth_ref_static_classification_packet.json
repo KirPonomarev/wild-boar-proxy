@@ -1,0 +1,301 @@
+{
+  "captured_at_utc": "2026-05-26T08:36:50.484826Z",
+  "duplicate_auth_ref_result": {
+    "account_mutation_performed": false,
+    "account_pool_truth": {
+      "account_count_claim_scope": "packet_shape_only",
+      "auth_classes": {
+        "auth_invalid": 0,
+        "auth_ref_missing": 0,
+        "auth_ref_present": 2
+      },
+      "eligibility_classes": {
+        "auth_invalid": 0,
+        "cooldown_only": 0,
+        "excluded": 0,
+        "live_capable": 2,
+        "quota_exhausted": 0,
+        "unknown_unverified": 0
+      },
+      "launch_capable_count": 2,
+      "machine_error_code": "OK",
+      "pool_classes": {
+        "active": 2,
+        "hold": 0,
+        "problem": 0,
+        "reserve": 0,
+        "retired": 0
+      },
+      "status": "ok"
+    },
+    "account_quota_proven": false,
+    "account_token_validity_proven": false,
+    "active_routing_after_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_before_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_changed": false,
+    "allowed_status": "WBP_MODEL_SELECTION_ACCOUNT_ROUTE_TRUTH_CLASSIFIED",
+    "auth_ref_static_classification": {
+      "auth_ref_missing_count": 0,
+      "auth_ref_present_count": 2,
+      "classification_scope": "static_dry_run_only",
+      "duplicate_auth_ref_count": 1,
+      "duplicate_auth_ref_is_green": false,
+      "duplicate_auth_ref_refs": [
+        "a9d1de8d282b9dae2b19c25ca5e4467d2efd37081d32805807b40703127e3974"
+      ],
+      "live_validation_performed": false,
+      "missing_auth_ref_is_green": false,
+      "quota_proven": false,
+      "raw_auth_refs_exposed": false,
+      "token_validity_proven": false,
+      "unexpected_auth_ref_format_count": 0,
+      "unexpected_auth_ref_refs": [],
+      "upstream_credentials_accepted": false
+    },
+    "browser_authority": {
+      "account_id": false,
+      "auth_path": false,
+      "backend_id": false,
+      "base_url": false,
+      "path": false,
+      "provider": false,
+      "route_id": false,
+      "token": false
+    },
+    "browser_selected_backend": false,
+    "browser_selected_route": false,
+    "captured_at_utc": "2026-05-26T08:36:50.318511Z",
+    "chat_completions_called": false,
+    "claim_limits": {
+      "account_exists_means_healthy": false,
+      "model_listed_means_usable": false,
+      "selection_policy_proves_egress": false,
+      "selection_policy_proves_native": false,
+      "selection_policy_proves_route_response": false,
+      "static_auth_ref_means_token_valid": false
+    },
+    "cli_runner_proven": false,
+    "contract_scope": "model_selection_account_route_truth_only",
+    "direct_egress_absence_proven": false,
+    "dry_run": true,
+    "final_e2e_proven": false,
+    "forbidden_claims": [
+      "live_model_availability_proven",
+      "selected_model_usable_live",
+      "selected_account_healthy_live",
+      "account_token_validity_proven",
+      "account_quota_proven",
+      "reserve_promoted",
+      "native_codex_proven",
+      "cli_runner_proven",
+      "direct_egress_absent",
+      "final_e2e_proven"
+    ],
+    "human_message": "Model selection account/route policy was classified without live validation.",
+    "live_account_truth_checked": false,
+    "live_model_availability_proven": false,
+    "machine_error_code": "MODEL_SELECTION_STATIC_CLASSIFICATION_DEGRADED",
+    "mode_id": "codex_custom",
+    "model_server_issued": true,
+    "native_codex_proven": false,
+    "negative_claim_basis": "model_selection_static_dry_run_no_live_validation_or_inference",
+    "network_calls_made": false,
+    "provider_called": false,
+    "raw_auth_refs_exposed": false,
+    "raw_backend_id_exposed": false,
+    "raw_route_id_exposed": false,
+    "raw_secret_exposed": false,
+    "reserve_promotion_performed": false,
+    "responses_called": false,
+    "route_provenance_proven": false,
+    "route_provenance_required": false,
+    "route_selection_static": {
+      "route_policy_state": "not_applicable_for_gpt_account",
+      "selected_route_ref": "",
+      "selected_route_server_issued": false
+    },
+    "schema_version": 1,
+    "selected_backend_ref": "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef",
+    "selected_backend_server_issued": true,
+    "selected_backend_source": "server",
+    "selected_model": "gpt-5.3-codex",
+    "selected_route_ref": "",
+    "selected_route_server_issued": false,
+    "selected_source_class": "gpt_account",
+    "selection_not_inference": true,
+    "selection_policy_proven": true,
+    "selection_policy_state": "gpt_account_policy_classified",
+    "server_issued_model_ids": [
+      "gpt-5.3-codex",
+      "gpt-5.4"
+    ],
+    "source_provenance_status": "backend_proven",
+    "static_not_green_reasons": [
+      "duplicate_auth_ref_static"
+    ],
+    "status": "degraded",
+    "token_burn": 0,
+    "upstream_credentials_accepted": false
+  },
+  "healthy_static": {
+    "auth_ref_missing_count": 0,
+    "auth_ref_present_count": 3,
+    "classification_scope": "static_dry_run_only",
+    "duplicate_auth_ref_count": 0,
+    "duplicate_auth_ref_is_green": false,
+    "duplicate_auth_ref_refs": [],
+    "live_validation_performed": false,
+    "missing_auth_ref_is_green": false,
+    "quota_proven": false,
+    "raw_auth_refs_exposed": false,
+    "token_validity_proven": false,
+    "unexpected_auth_ref_format_count": 0,
+    "unexpected_auth_ref_refs": [],
+    "upstream_credentials_accepted": false
+  },
+  "missing_auth_ref_result": {
+    "account_mutation_performed": false,
+    "account_pool_truth": {
+      "account_count_claim_scope": "packet_shape_only",
+      "auth_classes": {
+        "auth_invalid": 0,
+        "auth_ref_missing": 1,
+        "auth_ref_present": 1
+      },
+      "eligibility_classes": {
+        "auth_invalid": 0,
+        "cooldown_only": 0,
+        "excluded": 1,
+        "live_capable": 1,
+        "quota_exhausted": 0,
+        "unknown_unverified": 0
+      },
+      "launch_capable_count": 1,
+      "machine_error_code": "OK",
+      "pool_classes": {
+        "active": 2,
+        "hold": 0,
+        "problem": 0,
+        "reserve": 0,
+        "retired": 0
+      },
+      "status": "ok"
+    },
+    "account_quota_proven": false,
+    "account_token_validity_proven": false,
+    "active_routing_after_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_before_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_changed": false,
+    "allowed_status": "WBP_MODEL_SELECTION_ACCOUNT_ROUTE_TRUTH_CLASSIFIED",
+    "auth_ref_static_classification": {
+      "auth_ref_missing_count": 1,
+      "auth_ref_present_count": 1,
+      "classification_scope": "static_dry_run_only",
+      "duplicate_auth_ref_count": 0,
+      "duplicate_auth_ref_is_green": false,
+      "duplicate_auth_ref_refs": [],
+      "live_validation_performed": false,
+      "missing_auth_ref_is_green": false,
+      "quota_proven": false,
+      "raw_auth_refs_exposed": false,
+      "token_validity_proven": false,
+      "unexpected_auth_ref_format_count": 0,
+      "unexpected_auth_ref_refs": [],
+      "upstream_credentials_accepted": false
+    },
+    "browser_authority": {
+      "account_id": false,
+      "auth_path": false,
+      "backend_id": false,
+      "base_url": false,
+      "path": false,
+      "provider": false,
+      "route_id": false,
+      "token": false
+    },
+    "browser_selected_backend": false,
+    "browser_selected_route": false,
+    "captured_at_utc": "2026-05-26T08:36:50.318378Z",
+    "chat_completions_called": false,
+    "claim_limits": {
+      "account_exists_means_healthy": false,
+      "model_listed_means_usable": false,
+      "selection_policy_proves_egress": false,
+      "selection_policy_proves_native": false,
+      "selection_policy_proves_route_response": false,
+      "static_auth_ref_means_token_valid": false
+    },
+    "cli_runner_proven": false,
+    "contract_scope": "model_selection_account_route_truth_only",
+    "direct_egress_absence_proven": false,
+    "dry_run": true,
+    "final_e2e_proven": false,
+    "forbidden_claims": [
+      "live_model_availability_proven",
+      "selected_model_usable_live",
+      "selected_account_healthy_live",
+      "account_token_validity_proven",
+      "account_quota_proven",
+      "reserve_promoted",
+      "native_codex_proven",
+      "cli_runner_proven",
+      "direct_egress_absent",
+      "final_e2e_proven"
+    ],
+    "human_message": "Model selection account/route policy was classified without live validation.",
+    "live_account_truth_checked": false,
+    "live_model_availability_proven": false,
+    "machine_error_code": "MODEL_SELECTION_STATIC_CLASSIFICATION_DEGRADED",
+    "mode_id": "codex_custom",
+    "model_server_issued": true,
+    "native_codex_proven": false,
+    "negative_claim_basis": "model_selection_static_dry_run_no_live_validation_or_inference",
+    "network_calls_made": false,
+    "provider_called": false,
+    "raw_auth_refs_exposed": false,
+    "raw_backend_id_exposed": false,
+    "raw_route_id_exposed": false,
+    "raw_secret_exposed": false,
+    "reserve_promotion_performed": false,
+    "responses_called": false,
+    "route_provenance_proven": false,
+    "route_provenance_required": false,
+    "route_selection_static": {
+      "route_policy_state": "not_applicable_for_gpt_account",
+      "selected_route_ref": "",
+      "selected_route_server_issued": false
+    },
+    "schema_version": 1,
+    "selected_backend_ref": "d5c59eae1d5659b93a20c16522347ad6e2003db0caea74e8f48c5e788a2a9a7c",
+    "selected_backend_server_issued": true,
+    "selected_backend_source": "server",
+    "selected_model": "gpt-5.3-codex",
+    "selected_route_ref": "",
+    "selected_route_server_issued": false,
+    "selected_source_class": "gpt_account",
+    "selection_not_inference": true,
+    "selection_policy_proven": true,
+    "selection_policy_state": "gpt_account_policy_classified",
+    "server_issued_model_ids": [
+      "gpt-5.3-codex",
+      "gpt-5.4"
+    ],
+    "source_provenance_status": "backend_proven",
+    "static_not_green_reasons": [
+      "auth_ref_missing_static"
+    ],
+    "status": "degraded",
+    "token_burn": 0,
+    "upstream_credentials_accepted": false
+  },
+  "schema_version": 1,
+  "scope": "static_dry_run_only_no_live_validation"
+}
