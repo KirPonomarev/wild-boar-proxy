@@ -109,6 +109,11 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(validate_model_availability_matrix(matrix), [])
         self.assertEqual(model["direct_preflight_status"], "passed")
+        self.assertEqual(
+            model["claim_level"],
+            "direct_wbp_non_stream_response_accepted",
+        )
+        self.assertTrue(model["response_accepted_by_direct_wbp_client"])
 
     def test_model_direct_preflight_does_not_claim_codex_acceptance(self) -> None:
         model = build_model_direct_preflight_packet(
@@ -121,6 +126,7 @@ class ModelAvailabilityTests(unittest.TestCase):
             http_status=200,
             upstream_status=200,
             response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
             request_sent_to_wbp=True,
         )
 
@@ -238,8 +244,11 @@ class ModelAvailabilityTests(unittest.TestCase):
         serialized = json.dumps(model)
         self.assertNotIn("secret prompt", serialized)
         self.assertFalse(model["prompt_body_recorded"])
+        self.assertFalse(model["raw_prompt_recorded"])
         self.assertFalse(model["auth_header_recorded"])
+        self.assertFalse(model["raw_upstream_secret_recorded"])
         self.assertTrue(model["prompt_hash"])
+        self.assertTrue(model["request_hash_recorded"])
 
     def test_gpt_5_5_requires_own_packet_before_claim(self) -> None:
         model = build_model_direct_preflight_packet(
@@ -337,6 +346,52 @@ class ModelAvailabilityTests(unittest.TestCase):
         self.assertFalse(packet["current_truth_allowed"])
         self.assertFalse(packet["stale_validation_used_as_current_truth"])
 
+    def test_model_availability_requires_request_hash_for_attempted_request(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            request_sent_to_wbp=True,
+        )
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        self.assertIn(
+            "models[0].request_hash_recorded",
+            validate_model_availability_matrix(matrix),
+        )
+
+    def test_model_availability_blocks_raw_prompt_or_auth_evidence(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+        )
+        model["raw_prompt_recorded"] = True
+        model["auth_header_recorded"] = True
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        findings = validate_model_availability_matrix(matrix)
+        self.assertIn("models[0].raw_prompt_recorded", findings)
+        self.assertIn("models[0].auth_header_recorded", findings)
+
     def test_validation_freshness_blocks_malformed_timestamp(self) -> None:
         packet = build_validation_freshness_packet(
             observed_at_utc="not-a-timestamp",
@@ -423,6 +478,7 @@ class ModelAvailabilityTests(unittest.TestCase):
             http_status=200,
             upstream_status=200,
             response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
             request_sent_to_wbp=True,
         )
         matrix = build_model_availability_matrix(

@@ -511,27 +511,38 @@ def build_model_direct_preflight_packet(
         "proof_transport": "direct_wbp_http_non_stream",
         "direct_only_contour": True,
         "model_id": model_id,
+        "candidate_source": source,
         "source": source,
         "listed": listed,
         "selectable": selectable,
         "route_selected": route_selected,
+        "route_id_if_exposed": model_id if route_selected else "",
+        "account_id_if_exposed": "",
+        "request_attempted": request_sent_to_wbp,
         "request_sent_to_wbp": request_sent_to_wbp,
         "wbp_trace_id": wbp_trace_id,
         "direct_preflight_status": "passed" if status_ok else "blocked_or_unknown",
         "http_status": http_status,
+        "wbp_status": http_status,
         "upstream_status": upstream_status,
         "request_reaches_wbp": request_sent_to_wbp,
         "upstream_accepts": upstream_status is not None and 200 <= upstream_status < 300,
+        "response_accepted_by_direct_wbp_client": status_ok,
         "response_accepted_by_codex": False,
         "codex_acceptance_status": "not_tested",
         "wbp_response_shape_classified": response_shape_ok,
         "response_body_hash": sha256_text(response_json) if response_json else "",
+        "response_hash_recorded": bool(response_json),
         "response_text_hash": sha256_text(str(response_payload.get("output_text") or "")) if isinstance(response_payload, dict) and response_payload.get("output_text") else "",
         "prompt_hash": sha256_text(prompt_text) if prompt_text else "",
+        "request_hash_recorded": bool(prompt_text),
         "prompt_body_recorded": False,
+        "raw_prompt_recorded": False,
         "auth_header_recorded": False,
+        "raw_upstream_secret_recorded": False,
         "error_shape_classified": isinstance(error_payload, dict),
         "failure_cause": failure_cause,
+        "blocked_reason_if_any": "" if status_ok else failure_cause,
         "catalog_presence_counted_as_availability": False,
         "direct_wbp_200_counted_as_codex_acceptance": False,
         "non_stream_result_counts_for_streaming": False,
@@ -546,6 +557,13 @@ def build_model_direct_preflight_packet(
         "owner_ui_tested": False,
         "account_health_proven": False,
         "allowed_claim": allowed_claim,
+        "claim_level": (
+            "direct_wbp_non_stream_response_accepted"
+            if status_ok
+            else "listed_only"
+            if listed and not request_sent_to_wbp
+            else "blocked_with_reason"
+        ),
         "forbidden_claims": list(FORBIDDEN_MODEL_CLAIMS),
     }
 
@@ -654,6 +672,15 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
             findings.append(f"models[{index}].model_id")
         if model.get("failure_cause") not in FAILURE_CAUSES:
             findings.append(f"models[{index}].failure_cause")
+        if model.get("request_sent_to_wbp") is True:
+            if model.get("request_hash_recorded") is not True:
+                findings.append(f"models[{index}].request_hash_recorded")
+            if model.get("auth_header_recorded") is not False:
+                findings.append(f"models[{index}].auth_header_recorded")
+            if model.get("raw_prompt_recorded") is not False:
+                findings.append(f"models[{index}].raw_prompt_recorded")
+            if model.get("raw_upstream_secret_recorded") is not False:
+                findings.append(f"models[{index}].raw_upstream_secret_recorded")
         if model.get("direct_only_contour") is not True:
             findings.append(f"models[{index}].direct_only_contour")
         if model.get("proof_transport") != "direct_wbp_http_non_stream":

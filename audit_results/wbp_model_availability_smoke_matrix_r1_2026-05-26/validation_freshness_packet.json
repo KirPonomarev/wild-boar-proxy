@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-26T18:45:18.024855Z",
+  "current_truth_allowed": true,
+  "machine_error_code": "OK",
+  "mandatory_revalidation_after": [
+    "401",
+    "403",
+    "429",
+    "503"
+  ],
+  "maximum_allowed_validation_age_seconds": 86400,
+  "packet_kind": "validation_freshness",
+  "revalidation_trigger_policy": [
+    "401",
+    "403",
+    "429",
+    "503",
+    "explicit_route_or_account_change",
+    "long_pause_before_live_contour"
+  ],
+  "schema_version": 1,
+  "stale_validation_used_as_current_truth": false,
+  "status": "ok",
+  "validation_actor": "fresh_direct_wbp_model_availability_smoke",
+  "validation_age_seconds": 22,
+  "validation_route_model_scope": "gpt-5.5,gpt-5.4-mini,gpt-5.4",
+  "validation_timestamp": "2026-05-26T18:44:55.096339+00:00"
+}

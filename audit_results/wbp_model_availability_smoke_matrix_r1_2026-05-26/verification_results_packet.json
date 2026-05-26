@@ -1,0 +1,33 @@
+{
+  "captured_at_utc": "2026-05-26T18:46:00Z",
+  "commands": [
+    {
+      "command": "python3 tools/model_availability_direct_only_smoke_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-26",
+      "exit_code": 0,
+      "observed_result": "model_availability_direct_only_summary_packet.json status ok; direct WBP non-stream passed models: gpt-5.5, gpt-5.4-mini, gpt-5.4"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_model_availability tests.test_wbp_model_catalog_contract tests.test_provider_auth_strategy tests.test_repo_hygiene tests.test_closeout_resilience",
+      "exit_code": 0,
+      "observed_result": "Ran 64 tests in 0.033s; OK"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/model_availability.py tools/model_availability_direct_only_smoke_probe.py tests/test_model_availability.py",
+      "exit_code": 0,
+      "observed_result": "py_compile completed with no output"
+    },
+    {
+      "command": "JSON packet audit and strict secret/prompt scan for audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-26",
+      "exit_code": 0,
+      "observed_result": "json and secret/prompt audit ok: 28 packets checked"
+    }
+  ],
+  "direct_egress_absence_proven": false,
+  "final_e2e_proven": false,
+  "native_launch_attempted": false,
+  "packet_kind": "verification_results",
+  "response_accepted_by_codex": false,
+  "status": "ok",
+  "streaming_classified": false,
+  "tool_loop_classified": false
+}

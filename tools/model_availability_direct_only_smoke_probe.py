@@ -37,6 +37,9 @@ from wild_boar_proxy.runtime import proxyless_urlopen
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
 DIRECT_SMOKE_PROMPT_PREFIX = "WBP_MODEL_AVAILABILITY_R1_DIRECT_ONLY_NONCE_2026_05_26"
+AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26"
+MODEL_CATALOG_DIR = "audit_results/wbp_model_catalog_contract_2026-05-26"
+MODEL_ROUTE_TRUTH_DIR = "audit_results/wbp_account_route_model_selection_truth_2026-05-26"
 
 
 def _utc_now() -> str:
@@ -181,6 +184,59 @@ def _file_hash(path: Path) -> dict[str, Any]:
         return {"path": str(path), "exists": False}
     data = path.read_bytes()
     return {"path": str(path), "exists": True, "sha256": sha256_text(data.decode("utf-8", "replace")), "size": len(data)}
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _reference_packet(
+    *,
+    packet_kind: str,
+    source_path: Path,
+    expected_status: str | None = None,
+    expected_selected_strategy: str | None = None,
+) -> dict[str, Any]:
+    payload = _read_json_file(source_path)
+    status = payload.get("status")
+    allowed_status = payload.get("allowed_status")
+    nested_allowed_status = ""
+    if not allowed_status:
+        for value in payload.values():
+            if isinstance(value, dict) and value.get("allowed_status"):
+                nested_allowed_status = str(value.get("allowed_status") or "")
+                break
+    selected_strategy = payload.get("selected_strategy")
+    failures: list[str] = []
+    if not payload:
+        failures.append("referenced_packet_missing_or_invalid")
+    if expected_status is not None and status != "ok" and not allowed_status and not nested_allowed_status:
+        failures.append("referenced_packet_not_ok")
+    if expected_selected_strategy is not None and selected_strategy != expected_selected_strategy:
+        failures.append("referenced_selected_strategy_mismatch")
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": packet_kind,
+        "status": "ok" if not failures else "blocked",
+        "referenced_packet": str(source_path),
+        "referenced_packet_sha256": _file_hash(source_path).get("sha256", ""),
+        "referenced_packet_exists": bool(payload),
+        "referenced_status": status or "",
+        "referenced_allowed_status": allowed_status or "",
+        "referenced_nested_allowed_status": nested_allowed_status,
+        "referenced_selected_strategy": selected_strategy or "",
+        "reference_only": True,
+        "auth_reproved_in_this_contour": False,
+        "catalog_reproved_in_this_contour": False,
+        "route_policy_reproved_in_this_contour": False,
+        "model_availability_proven_by_reference": False,
+        "validation_failures": failures,
+        "expected_status": expected_status or "",
+    }
 
 
 def _route_account_snapshot(paths_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
@@ -527,6 +583,22 @@ def main() -> int:
         "runtime_healthcheck_packet.json": _summary_status_packet(healthcheck, source="runtime_healthcheck"),
         "runtime_status_after_packet.json": _summary_status_packet(status_after, source="runtime_status_after"),
         "direct_smoke_auth_command_observation_packet.json": auth_packet,
+        "provider_auth_strategy_reference_packet.json": _reference_packet(
+            packet_kind="provider_auth_strategy_reference",
+            source_path=repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_packet.json",
+            expected_status="ok",
+            expected_selected_strategy="auth.command",
+        ),
+        "model_catalog_reference_packet.json": _reference_packet(
+            packet_kind="model_catalog_reference",
+            source_path=repo_root / MODEL_CATALOG_DIR / "model_catalog_generated_packet.json",
+            expected_status="ok",
+        ),
+        "model_route_policy_reference_packet.json": _reference_packet(
+            packet_kind="model_route_policy_reference",
+            source_path=repo_root / MODEL_ROUTE_TRUTH_DIR / "model_to_route_selection_packet.json",
+            expected_status="ok",
+        ),
         "direct_models_endpoint_observation_packet.json": models_packet,
         "candidate_model_list_packet.json": candidate_packet,
         "model_id_normalization_packet.json": normalization,

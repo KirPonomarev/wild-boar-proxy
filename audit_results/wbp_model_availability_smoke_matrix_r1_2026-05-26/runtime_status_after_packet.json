@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-26T18:45:18.092409Z",
+  "changed_files": [],
+  "claim_gate_status": "blocked",
+  "configured_model": "gpt-5.5",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "fallback_reason": "",
+  "fallback_used": false,
+  "launch_readiness_status": "ready",
+  "listener_reachable": true,
+  "liveness": "healthy",
+  "machine_error_code": "OK",
+  "models_surface_reachable": true,
+  "packet_kind": "runtime_status_after_summary",
+  "raw_secret_recorded": false,
+  "responses_proof_passed": true,
+  "status": "ok"
+}
