@@ -1,0 +1,14 @@
+{
+  "after_root_app_pids": [
+    6944
+  ],
+  "before_root_app_pids": [
+    6944
+  ],
+  "captured_at_utc": "2026-05-26T18:56:51.819552Z",
+  "current_codex_touched": false,
+  "default_helper_delta_present": false,
+  "delta_classification": "baseline_preserved",
+  "missing_default_process_lines": [],
+  "missing_root_app_pids": []
+}

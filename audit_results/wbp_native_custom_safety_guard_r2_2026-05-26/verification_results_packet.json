@@ -1,0 +1,41 @@
+{
+  "captured_at_utc": "2026-05-26T18:56:52Z",
+  "commands": [
+    {
+      "command": "python3 -m unittest -q tests.test_native_filesystem_probe tests.test_native_launch_contract tests.test_native_launch_dispatch tests.test_codex_launch_modes tests.test_repo_hygiene tests.test_closeout_resilience",
+      "result": "passed",
+      "summary": "Ran 239 tests in 1.725s; OK"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/native_filesystem_probe.py tools/native_custom_safety_refresh_r3_probe.py tests/test_native_filesystem_probe.py",
+      "result": "passed",
+      "summary": "py_compile passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "summary": "no whitespace errors"
+    },
+    {
+      "command": "python3 tools/native_custom_safety_refresh_r3_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_safety_guard_r2_2026-05-26",
+      "result": "passed",
+      "summary": "emitted native_safety_result_packet with status=blocked and actual_status=NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF"
+    },
+    {
+      "command": "JSON parse and secret-pattern scan over audit_results/wbp_native_custom_safety_guard_r2_2026-05-26",
+      "result": "passed_with_classified_false_positive",
+      "summary": "all JSON parsed; secret-like pattern hits were path metadata false positives in protected-surface relative_path fields, not secret values"
+    }
+  ],
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "unproven_claims": [
+    "native launch",
+    "native UX",
+    "native routing",
+    "response accepted by Codex",
+    "direct egress absence",
+    "Original reversibility",
+    "final E2E"
+  ]
+}

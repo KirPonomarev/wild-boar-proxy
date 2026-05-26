@@ -1,0 +1,17 @@
+{
+  "ambient_authority_used_for_consumer_launch": false,
+  "ambient_env_status": "ok",
+  "browser_supplied_authority": false,
+  "captured_at_utc": "2026-05-26T18:56:51.819857Z",
+  "codex_home_isolated": true,
+  "intended_codex_home": "/private/tmp/wbp-native-safety-r3-59571/profile",
+  "intended_user_data_dir": "/private/tmp/wbp-native-safety-r3-59571/profile/electron-user-data",
+  "native_launch_attempted": false,
+  "openai_api_key_forwarded_to_consumer": false,
+  "packet_kind": "custom_launch_environment",
+  "reason_class": "",
+  "remote_client_supplied_authority": false,
+  "status": "ok",
+  "tmp_root": "/private/tmp/wbp-native-safety-r3-59571",
+  "user_data_dir_isolated": true
+}

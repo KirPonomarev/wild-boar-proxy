@@ -36,14 +36,19 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_keychain_boundary_packet,
     build_layer_separation_packet,
     build_cleanup_reversibility_plan_packet,
+    build_cleanup_authority_limit_packet,
+    build_current_codex_protection_packet,
+    build_custom_launch_environment_packet,
     build_custom_profile_ownership_packet,
     build_custom_profile_write_inventory_packet,
     build_custom_user_data_dir_ownership_packet,
     build_custom_native_launch_safety_packet,
+    build_incidental_routing_observation_packet,
     build_native_safety_layer_boundary_packet,
     build_native_safety_false_green_audit,
     build_native_custom_safety_claims_packet,
     build_native_safety_refresh_false_green_audit,
+    build_no_ambient_authority_safety_packet,
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
     build_current_thread_boundary_packet,
@@ -950,6 +955,115 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(cleanup["status"], "blocked")
         self.assertTrue(cleanup["outside_tmp_root_targets"])
 
+    def test_current_codex_protection_does_not_reuse_normal_codex_as_custom(self) -> None:
+        before = {
+            "captured_at_utc": "2026-05-26T00:00:00Z",
+            "root_app_pids": [100],
+            "default_process_count": 1,
+        }
+        after = {
+            "captured_at_utc": "2026-05-26T00:00:01Z",
+            "root_app_pids": [100],
+            "default_process_count": 1,
+        }
+        packet = build_current_codex_protection_packet(
+            before_process_inventory=before,
+            after_process_inventory=after,
+            current_codex_delta_packet={"current_codex_touched": False},
+            native_launch_attempted=False,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["existing_normal_codex_process_present"])
+        self.assertFalse(packet["existing_normal_codex_reused_as_custom_proof"])
+        self.assertFalse(packet["normal_codex_process_counted_as_isolated_custom"])
+        self.assertTrue(packet["process_inventory_only"])
+
+    def test_no_ambient_authority_safety_blocks_dirty_env_only_if_launch_attempted(self) -> None:
+        ambient = {
+            "status": "blocked",
+            "reason_class": "AMBIENT_ENV_AUTHORITY_UNEXPLAINED",
+        }
+        no_launch = build_no_ambient_authority_safety_packet(
+            ambient_env_packet=ambient,
+            native_launch_attempted=False,
+        )
+        launch = build_no_ambient_authority_safety_packet(
+            ambient_env_packet=ambient,
+            native_launch_attempted=True,
+        )
+
+        self.assertEqual(no_launch["status"], "ok")
+        self.assertTrue(no_launch["ambient_authority_present_but_not_used"])
+        self.assertEqual(launch["status"], "blocked")
+        self.assertFalse(no_launch["current_codex_auth_json_runtime_input"])
+
+    def test_custom_launch_environment_requires_isolated_paths(self) -> None:
+        packet = build_custom_launch_environment_packet(
+            tmp_root=Path("/tmp/wbp-native-safety-r3-fixture"),
+            codex_home=Path("/tmp/wbp-native-safety-r3-fixture/profile/.codex"),
+            user_data_dir=Path("/tmp/wbp-native-safety-r3-fixture/profile/electron-user-data"),
+            ambient_env_packet={"status": "ok"},
+            native_launch_attempted=False,
+        )
+        blocked = build_custom_launch_environment_packet(
+            tmp_root=Path("/tmp/wbp-native-safety-r3-fixture"),
+            codex_home=Path.home() / ".codex",
+            user_data_dir=Path("/tmp/wbp-native-safety-r3-fixture/profile/electron-user-data"),
+            ambient_env_packet={"status": "ok"},
+            native_launch_attempted=False,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["codex_home_isolated"])
+        self.assertTrue(packet["user_data_dir_isolated"])
+        self.assertEqual(blocked["status"], "blocked")
+
+    def test_cleanup_authority_limit_forbids_hidden_cleanup(self) -> None:
+        declared = {"status": "ok"}
+        cleanup = build_cleanup_reversibility_plan_packet(
+            tmp_root=Path("/tmp/wbp-native-safety-r3-fixture"),
+            owned_paths=[Path("/tmp/wbp-native-safety-r3-fixture/profile")],
+        )
+        ok = build_cleanup_authority_limit_packet(
+            cleanup_reversibility_packet=cleanup,
+            declared_write_surfaces_packet=declared,
+        )
+        hidden = dict(cleanup)
+        hidden["hidden_cleanup_performed"] = True
+        blocked = build_cleanup_authority_limit_packet(
+            cleanup_reversibility_packet=hidden,
+            declared_write_surfaces_packet=declared,
+        )
+
+        self.assertEqual(ok["status"], "ok")
+        self.assertFalse(ok["cleanup_executed"])
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertTrue(blocked["stop_and_diagnose_required_for_extra_paths"])
+
+    def test_incidental_routing_observation_never_proves_route_or_ux(self) -> None:
+        packet = build_incidental_routing_observation_packet(
+            custom_native_launch_safety_packet={
+                "native_launch_attempted": False,
+                "incidental_wbp_request_promoted_to_route_proof": False,
+            },
+            wbp_request_observed=True,
+        )
+        blocked = build_incidental_routing_observation_packet(
+            custom_native_launch_safety_packet={
+                "native_launch_attempted": False,
+                "incidental_wbp_request_promoted_to_route_proof": True,
+            },
+            wbp_request_observed=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["wbp_request_observed"])
+        self.assertFalse(packet["native_routing_proven"])
+        self.assertFalse(packet["response_accepted_by_codex_proven"])
+        self.assertFalse(packet["ux_acceptance_proven"])
+        self.assertEqual(blocked["status"], "blocked")
+
     def test_custom_native_launch_safety_blocks_hosted_context_without_route_claim(self) -> None:
         packet = build_custom_native_launch_safety_packet(
             host_context_packet={"status": "blocked"},
@@ -969,7 +1083,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         claims = build_native_custom_safety_claims_packet(
             native_safety_result_packet={
                 "status": "blocked",
-                "actual_status": "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT",
+                "actual_status": "NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF",
             },
             custom_native_launch_safety_packet={
                 "status": "blocked",

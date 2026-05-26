@@ -20,18 +20,25 @@ if str(ROOT) not in sys.path:
 
 from wild_boar_proxy.native_filesystem_probe import (
     build_cleanup_reversibility_plan_packet,
+    build_cleanup_authority_limit_packet,
+    build_current_codex_protection_packet,
+    build_custom_launch_environment_packet,
     build_custom_profile_ownership_packet,
     build_custom_profile_write_inventory_packet,
     build_custom_user_data_dir_ownership_packet,
     build_custom_native_launch_safety_packet,
+    build_incidental_routing_observation_packet,
     build_native_safety_layer_boundary_packet,
     build_native_safety_refresh_false_green_audit,
     build_native_custom_safety_claims_packet,
+    build_no_ambient_authority_safety_packet,
     build_owner_action_boundary_packet,
     build_protected_surface_read_classification_packet,
     classify_host_context,
     classify_keychain_observation,
     classify_quiescent_current_codex_precondition,
+    classify_current_codex_delta,
+    collect_ambient_env_context,
     collect_codex_process_inventory,
     create_native_probe_layout,
     diff_protected_surfaces,
@@ -198,11 +205,11 @@ def _base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
 def _reference_packets(repo_root: Path) -> dict[str, dict[str, Any]]:
     auth_path = (
         repo_root
-        / "audit_results/wbp_provider_auth_strategy_contract_refresh_2026-05-26/provider_auth_strategy_packet.json"
+        / "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26/provider_auth_strategy_packet.json"
     )
     model_path = (
         repo_root
-        / "audit_results/wbp_model_availability_smoke_matrix_refresh_2026-05-26/model_availability_matrix.json"
+        / "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-26/model_availability_matrix.json"
     )
     return {
         "reference_prerequisites_packet.json": {
@@ -244,6 +251,9 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "reference_prerequisites_packet.json",
         "current_codex_running_state_before.json",
         "current_codex_running_state_after.json",
+        "current_codex_protection_packet.json",
+        "custom_launch_environment_packet.json",
+        "no_ambient_authority_packet.json",
         "protected_surface_read_classification_packet.json",
         "protected_surface_recursive_before.json",
         "protected_surface_recursive_after.json",
@@ -253,7 +263,9 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "custom_profile_write_inventory_packet.json",
         "custom_native_launch_safety_packet.json",
         "cleanup_reversibility_packet.json",
+        "cleanup_authority_limit_packet.json",
         "keychain_observation_packet.json",
+        "incidental_routing_observation_packet.json",
         "native_safety_layer_boundary_packet.json",
         "native_custom_safety_claims_packet.json",
         "native_safety_false_green_audit.json",
@@ -293,6 +305,7 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "cleanup_treated_as_original_reversibility": False,
         "auth_or_model_reproved": False,
         "native_launch_attempted": False,
+        "native_launch_admitted": False,
         "adjacent_claims_forbidden": layer.get("native_ux_acceptance_proven") is False
         and layer.get("direct_egress_absence_proven") is False
         and layer.get("final_e2e_proven") is False,
@@ -391,6 +404,25 @@ def main() -> int:
     current_after = collect_codex_process_inventory(
         custom_user_data_dir=str(layout.custom_user_data_dir)
     )
+    current_delta = classify_current_codex_delta(process_inventory, current_after)
+    current_protection = build_current_codex_protection_packet(
+        before_process_inventory=process_inventory,
+        after_process_inventory=current_after,
+        current_codex_delta_packet=current_delta,
+        native_launch_attempted=False,
+    )
+    ambient_env = collect_ambient_env_context()
+    no_ambient = build_no_ambient_authority_safety_packet(
+        ambient_env_packet=ambient_env,
+        native_launch_attempted=False,
+    )
+    custom_launch_environment = build_custom_launch_environment_packet(
+        tmp_root=layout.tmp_root,
+        codex_home=layout.custom_codex_home,
+        user_data_dir=layout.custom_user_data_dir,
+        ambient_env_packet=ambient_env,
+        native_launch_attempted=False,
+    )
     custom_native_launch_safety = build_custom_native_launch_safety_packet(
         host_context_packet=host_context,
         quiescent_precondition_packet=quiescent,
@@ -398,6 +430,14 @@ def main() -> int:
         owner_ui_action_performed=False,
     )
     packets = _base_packets(repo_root, evidence_dir)
+    cleanup_authority = build_cleanup_authority_limit_packet(
+        cleanup_reversibility_packet=cleanup,
+        declared_write_surfaces_packet=packets["declared_write_surfaces_packet.json"],
+    )
+    incidental_routing = build_incidental_routing_observation_packet(
+        custom_native_launch_safety_packet=custom_native_launch_safety,
+        wbp_request_observed=False,
+    )
     packets.update(_reference_packets(repo_root))
     packets.update(
         {
@@ -405,7 +445,12 @@ def main() -> int:
             "owner_action_boundary_packet.json": owner_boundary,
             "current_codex_running_state_before.json": process_inventory,
             "current_codex_running_state_after.json": current_after,
+            "current_codex_delta_packet.json": current_delta,
+            "current_codex_protection_packet.json": current_protection,
             "quiescent_current_codex_precondition_packet.json": quiescent,
+            "ambient_env_context_packet.json": ambient_env,
+            "no_ambient_authority_packet.json": no_ambient,
+            "custom_launch_environment_packet.json": custom_launch_environment,
             "protected_surface_read_classification_packet.json": protected_read,
             "protected_surface_recursive_before.json": protected_before,
             "protected_surface_recursive_after.json": protected_after,
@@ -414,9 +459,11 @@ def main() -> int:
             "custom_user_data_dir_ownership_packet.json": user_data_ownership,
             "custom_profile_write_inventory_packet.json": write_inventory,
             "cleanup_reversibility_packet.json": cleanup,
+            "cleanup_authority_limit_packet.json": cleanup_authority,
             "keychain_observation_packet.json": keychain,
             "native_safety_layer_boundary_packet.json": layer_boundary,
             "custom_native_launch_safety_packet.json": custom_native_launch_safety,
+            "incidental_routing_observation_packet.json": incidental_routing,
         }
     )
     packets["native_safety_false_green_audit.json"] = build_native_safety_refresh_false_green_audit(
@@ -434,22 +481,32 @@ def main() -> int:
     packets["secret_redaction_audit.json"] = _secret_redaction_audit(packets)
     blocked_by_host = host_context.get("status") != "ok" or quiescent.get("status") != "ok"
     actual_status = (
-        "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT"
+        "NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF"
         if host_context.get("status") != "ok"
-        else "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_UNCLEAR_WRITE_SURFACE"
+        else "NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_UNCLEAR_WRITE_SURFACE"
         if any(
             packet.get("status") == "blocked"
-            for packet in (profile_ownership, user_data_ownership, write_inventory, cleanup)
+            for packet in (
+                profile_ownership,
+                user_data_ownership,
+                write_inventory,
+                cleanup,
+                cleanup_authority,
+                current_protection,
+                no_ambient,
+                custom_launch_environment,
+                incidental_routing,
+            )
         )
-        else "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT"
+        else "NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF"
         if blocked_by_host
-        else "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_CLASSIFIED"
+        else "NATIVE_CUSTOM_SAFETY_GUARD_CLASSIFIED"
     )
     packets["native_safety_result_packet.json"] = {
         "captured_at_utc": _utc_now(),
         "packet_kind": "native_safety_result",
-        "status": "blocked" if actual_status != "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_CLASSIFIED" else "ok",
-        "target_status": "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_CLASSIFIED",
+        "status": "blocked" if actual_status != "NATIVE_CUSTOM_SAFETY_GUARD_CLASSIFIED" else "ok",
+        "target_status": "NATIVE_CUSTOM_SAFETY_GUARD_CLASSIFIED",
         "actual_status": actual_status,
         "native_launch_attempted": False,
         "owner_ui_action_performed": False,
@@ -457,6 +514,9 @@ def main() -> int:
         "custom_profile_ownership_classified": profile_ownership.get("status") == "ok",
         "custom_user_data_dir_ownership_classified": user_data_ownership.get("status") == "ok",
         "cleanup_reversibility_classified": cleanup.get("status") == "ok",
+        "cleanup_authority_limit_classified": cleanup_authority.get("status") == "ok",
+        "current_codex_protection_classified": current_protection.get("status") == "ok",
+        "no_ambient_authority_classified": no_ambient.get("status") == "ok",
         "host_context_status": host_context.get("status"),
         "quiescent_precondition_status": quiescent.get("status"),
         "route_claimed": False,

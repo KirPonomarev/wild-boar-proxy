@@ -1,0 +1,17 @@
+{
+  "after_snapshot_captured": true,
+  "before_snapshot_captured": true,
+  "captured_at_utc": "2026-05-26T18:56:51.819569Z",
+  "current_codex_protected": true,
+  "current_codex_touched": false,
+  "existing_normal_codex_classified_before_launch": true,
+  "existing_normal_codex_killed_or_mutated": false,
+  "existing_normal_codex_process_present": true,
+  "existing_normal_codex_reused_as_custom_proof": false,
+  "native_launch_attempted": false,
+  "normal_codex_process_counted_as_isolated_custom": false,
+  "packet_kind": "current_codex_protection",
+  "process_inventory_only": true,
+  "reason_class": "",
+  "status": "ok"
+}

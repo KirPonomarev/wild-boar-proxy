@@ -1453,6 +1453,153 @@ def build_cleanup_reversibility_plan_packet(
     }
 
 
+def build_current_codex_protection_packet(
+    *,
+    before_process_inventory: dict[str, Any],
+    after_process_inventory: dict[str, Any],
+    current_codex_delta_packet: dict[str, Any],
+    native_launch_attempted: bool,
+) -> dict[str, Any]:
+    before_captured = bool(before_process_inventory.get("captured_at_utc"))
+    after_captured = bool(after_process_inventory.get("captured_at_utc"))
+    current_codex_touched = current_codex_delta_packet.get("current_codex_touched") is True
+    existing_normal_present = bool(before_process_inventory.get("root_app_pids")) or (
+        int(before_process_inventory.get("default_process_count", 0) or 0) > 0
+    )
+    protected = before_captured and after_captured and not current_codex_touched
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "current_codex_protection",
+        "status": "ok" if protected else "blocked",
+        "reason_class": "" if protected else "CURRENT_CODEX_PROTECTION_NOT_PROVEN",
+        "before_snapshot_captured": before_captured,
+        "after_snapshot_captured": after_captured,
+        "current_codex_touched": current_codex_touched,
+        "current_codex_protected": protected,
+        "existing_normal_codex_process_present": existing_normal_present,
+        "existing_normal_codex_classified_before_launch": before_captured,
+        "existing_normal_codex_killed_or_mutated": False,
+        "existing_normal_codex_reused_as_custom_proof": False,
+        "normal_codex_process_counted_as_isolated_custom": False,
+        "native_launch_attempted": native_launch_attempted,
+        "process_inventory_only": True,
+    }
+
+
+def build_custom_launch_environment_packet(
+    *,
+    tmp_root: Path,
+    codex_home: Path,
+    user_data_dir: Path,
+    ambient_env_packet: dict[str, Any],
+    native_launch_attempted: bool,
+) -> dict[str, Any]:
+    codex_home_isolated = _path_is_relative_to(codex_home, tmp_root)
+    user_data_dir_isolated = _path_is_relative_to(user_data_dir, tmp_root)
+    ambient_authority_used = native_launch_attempted and ambient_env_packet.get("status") != "ok"
+    status_ok = codex_home_isolated and user_data_dir_isolated and not ambient_authority_used
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_launch_environment",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "CUSTOM_LAUNCH_ENVIRONMENT_UNSAFE",
+        "native_launch_attempted": native_launch_attempted,
+        "tmp_root": str(tmp_root.resolve(strict=False)),
+        "intended_codex_home": str(codex_home.resolve(strict=False)),
+        "intended_user_data_dir": str(user_data_dir.resolve(strict=False)),
+        "codex_home_isolated": codex_home_isolated,
+        "user_data_dir_isolated": user_data_dir_isolated,
+        "ambient_env_status": ambient_env_packet.get("status"),
+        "ambient_authority_used_for_consumer_launch": ambient_authority_used,
+        "openai_api_key_forwarded_to_consumer": False,
+        "browser_supplied_authority": False,
+        "remote_client_supplied_authority": False,
+    }
+
+
+def build_no_ambient_authority_safety_packet(
+    *,
+    ambient_env_packet: dict[str, Any],
+    native_launch_attempted: bool,
+) -> dict[str, Any]:
+    ambient_env_clean = ambient_env_packet.get("status") == "ok"
+    no_launch_safe = native_launch_attempted is False
+    status_ok = ambient_env_clean or no_launch_safe
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "no_ambient_authority",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "AMBIENT_AUTHORITY_WOULD_REACH_CONSUMER",
+        "native_launch_attempted": native_launch_attempted,
+        "ambient_env_clean": ambient_env_clean,
+        "ambient_authority_present_but_not_used": (not ambient_env_clean) and no_launch_safe,
+        "ambient_authority_used_for_consumer_launch": False,
+        "current_codex_auth_json_runtime_input": False,
+        "openai_api_key_forwarded_to_consumer": False,
+        "proxy_env_forwarded_to_consumer": False,
+        "browser_token_path_model_provider_authority": False,
+        "remote_token_path_model_provider_authority": False,
+        "source_packet_status": ambient_env_packet.get("status"),
+        "source_reason_class": ambient_env_packet.get("reason_class", ""),
+    }
+
+
+def build_cleanup_authority_limit_packet(
+    *,
+    cleanup_reversibility_packet: dict[str, Any],
+    declared_write_surfaces_packet: dict[str, Any],
+) -> dict[str, Any]:
+    cleanup_custom_owned_only = (
+        cleanup_reversibility_packet.get("cleanup_removes_only_custom_owned_surfaces")
+        is True
+    )
+    cleanup_executed = cleanup_reversibility_packet.get("cleanup_executed") is True
+    hidden_cleanup = cleanup_reversibility_packet.get("hidden_cleanup_performed") is True
+    declared_ok = declared_write_surfaces_packet.get("status") == "ok"
+    status_ok = cleanup_custom_owned_only and not cleanup_executed and not hidden_cleanup and declared_ok
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "cleanup_authority_limit",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "CLEANUP_AUTHORITY_LIMIT_VIOLATED",
+        "cleanup_may_delete_only_declared_custom_owned_surfaces": True,
+        "cleanup_executed": cleanup_executed,
+        "hidden_cleanup_performed": hidden_cleanup,
+        "cleanup_removes_only_custom_owned_surfaces": cleanup_custom_owned_only,
+        "declared_write_surfaces_status": declared_write_surfaces_packet.get("status"),
+        "extra_paths_detected": False,
+        "extra_paths_deleted": False,
+        "stop_and_diagnose_required_for_extra_paths": True,
+        "original_codex_reversibility_claimed": False,
+    }
+
+
+def build_incidental_routing_observation_packet(
+    *,
+    custom_native_launch_safety_packet: dict[str, Any],
+    wbp_request_observed: bool = False,
+) -> dict[str, Any]:
+    promoted = custom_native_launch_safety_packet.get(
+        "incidental_wbp_request_promoted_to_route_proof"
+    ) is True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "incidental_routing_observation",
+        "status": "blocked" if promoted else "ok",
+        "reason_class": "INCIDENTAL_ROUTE_PROMOTED_TO_PROOF" if promoted else "",
+        "wbp_request_observed": wbp_request_observed,
+        "native_launch_attempted": custom_native_launch_safety_packet.get(
+            "native_launch_attempted"
+        ),
+        "incidental_wbp_request_promoted_to_route_proof": promoted,
+        "native_routing_proven": False,
+        "model_availability_proven": False,
+        "response_accepted_by_codex_proven": False,
+        "ux_acceptance_proven": False,
+        "route_trace_required_for_future_routing_claim": True,
+    }
+
+
 def build_custom_native_launch_safety_packet(
     *,
     host_context_packet: dict[str, Any],
@@ -1512,14 +1659,17 @@ def build_native_custom_safety_claims_packet(
     )
     blocked_by_host = (
         native_safety_result_packet.get("actual_status")
-        == "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT"
+        in {
+            "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT",
+            "NATIVE_CUSTOM_SAFETY_GUARD_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF",
+        }
     )
     return {
         "captured_at_utc": utc_now(),
         "packet_kind": "native_custom_safety_claims",
         "status": "ok" if final_pass else "blocked",
         "allowed_final_claim": (
-            "CODEX_CUSTOM_NATIVE_SAFETY_GUARD_REFRESHED_WITH_LIMITS"
+            "NATIVE_CUSTOM_SAFETY_GUARD_CLASSIFIED"
             if final_pass
             else ""
         ),
