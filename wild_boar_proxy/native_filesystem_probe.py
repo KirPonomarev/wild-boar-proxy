@@ -196,7 +196,18 @@ def scan_tree(root: Path, *, sha256_size_limit: int = DEFAULT_SHA256_SIZE_LIMIT)
     entries: list[dict[str, Any]] = []
     for path in sorted([root, *root.rglob("*")], key=lambda item: str(item)):
         relative = "." if path == root else str(path.relative_to(root))
-        stat = path.stat()
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            entries.append(
+                {
+                    "relative_path": relative,
+                    "kind": "transient_missing_during_scan",
+                    "size": 0,
+                    "mtime_ns": 0,
+                }
+            )
+            continue
         item: dict[str, Any] = {
             "relative_path": relative,
             "kind": "dir" if path.is_dir() else "file" if path.is_file() else "other",
@@ -1439,6 +1450,107 @@ def build_cleanup_reversibility_plan_packet(
         "cleanup_not_required_reason": "profile_not_materialized_in_safety_refresh",
         "hidden_cleanup_performed": False,
         "original_codex_reversibility_claimed": False,
+    }
+
+
+def build_custom_native_launch_safety_packet(
+    *,
+    host_context_packet: dict[str, Any],
+    quiescent_precondition_packet: dict[str, Any],
+    native_launch_attempted: bool,
+    owner_ui_action_performed: bool = False,
+    incidental_wbp_request_observed: bool = False,
+) -> dict[str, Any]:
+    launch_blocked = (
+        host_context_packet.get("status") != "ok"
+        or quiescent_precondition_packet.get("status") != "ok"
+    )
+    failed_checks: list[str] = []
+    if host_context_packet.get("status") != "ok":
+        failed_checks.append("host_context_required_for_native_launch")
+    if quiescent_precondition_packet.get("status") != "ok":
+        failed_checks.append("quiescent_current_codex_required_for_native_launch")
+    if owner_ui_action_performed:
+        failed_checks.append("owner_ui_action_forbidden_in_safety_refresh")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_native_launch_safety",
+        "status": "blocked" if launch_blocked or failed_checks else "ok",
+        "reason_class": "NATIVE_LAUNCH_BLOCKED_BY_HOST_ENVIRONMENT"
+        if launch_blocked
+        else "OWNER_ACTION_BOUNDARY_VIOLATED"
+        if failed_checks
+        else "",
+        "native_launch_attempted": native_launch_attempted,
+        "native_launch_admitted": not launch_blocked and not failed_checks,
+        "owner_ui_action_performed": owner_ui_action_performed,
+        "owner_prompt_required": False,
+        "owner_prompt_submitted": False,
+        "wbp_route_required": False,
+        "incidental_wbp_request_observed": incidental_wbp_request_observed,
+        "incidental_wbp_request_promoted_to_route_proof": False,
+        "native_routing_proven": False,
+        "native_ux_proven": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_native_custom_safety_claims_packet(
+    *,
+    native_safety_result_packet: dict[str, Any],
+    custom_native_launch_safety_packet: dict[str, Any],
+    protected_surface_diff_packet: dict[str, Any],
+    cleanup_reversibility_packet: dict[str, Any],
+    keychain_observation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    final_pass = (
+        native_safety_result_packet.get("status") == "ok"
+        and protected_surface_diff_packet.get("all_protected_surfaces_unchanged")
+        is True
+        and cleanup_reversibility_packet.get("status") == "ok"
+        and keychain_observation_packet.get("status") == "ok"
+    )
+    blocked_by_host = (
+        native_safety_result_packet.get("actual_status")
+        == "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT"
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_custom_safety_claims",
+        "status": "ok" if final_pass else "blocked",
+        "allowed_final_claim": (
+            "CODEX_CUSTOM_NATIVE_SAFETY_GUARD_REFRESHED_WITH_LIMITS"
+            if final_pass
+            else ""
+        ),
+        "actual_status": native_safety_result_packet.get("actual_status", ""),
+        "blocked_by_host_environment": blocked_by_host,
+        "blocked_by_host_environment_counted_as_pass": False,
+        "native_launch_attempted": custom_native_launch_safety_packet.get(
+            "native_launch_attempted"
+        ),
+        "native_launch_safety_packet_status": custom_native_launch_safety_packet.get(
+            "status"
+        ),
+        "protected_surface_diff_clean": protected_surface_diff_packet.get(
+            "all_protected_surfaces_unchanged"
+        )
+        is True,
+        "cleanup_custom_owned_only": cleanup_reversibility_packet.get("status") == "ok",
+        "keychain_mutation_required": keychain_observation_packet.get("status")
+        == "blocked",
+        "native_ux_acceptance_proven": False,
+        "owner_visible_response_proven": False,
+        "machine_ui_input_field_proven": False,
+        "native_wbp_routing_success_proven": False,
+        "response_accepted_by_codex_proven": False,
+        "direct_egress_absence_proven": False,
+        "model_availability_reproved": False,
+        "streaming_compatibility_proven": False,
+        "tool_call_loop_compatibility_proven": False,
+        "full_responses_wire_compatibility_proven": False,
+        "original_codex_reversibility_proven": False,
+        "final_e2e_proven": False,
     }
 
 

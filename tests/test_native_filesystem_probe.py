@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -38,8 +39,10 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_custom_profile_ownership_packet,
     build_custom_profile_write_inventory_packet,
     build_custom_user_data_dir_ownership_packet,
+    build_custom_native_launch_safety_packet,
     build_native_safety_layer_boundary_packet,
     build_native_safety_false_green_audit,
+    build_native_custom_safety_claims_packet,
     build_native_safety_refresh_false_green_audit,
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
@@ -178,6 +181,30 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn("deleted.txt", diff["deleted"])
         changed_paths = {entry["relative_path"] for entry in diff["changed"]}
         self.assertIn("dir/changed.txt", changed_paths)
+
+    def test_recursive_scan_tolerates_transient_missing_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            victim = root / "vanishes.txt"
+            victim.write_text("short lived\n", encoding="utf-8")
+            real_stat = Path.stat
+
+            def flaky_stat(path: Path, *args: object, **kwargs: object) -> os.stat_result:
+                if path == victim:
+                    victim.unlink(missing_ok=True)
+                    raise FileNotFoundError(str(path))
+                return real_stat(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "stat", flaky_stat):
+                packet = scan_tree(root)
+
+        entries = {
+            entry["relative_path"]: entry for entry in packet.get("entries", [])
+        }
+        self.assertEqual(
+            entries["vanishes.txt"]["kind"],
+            "transient_missing_during_scan",
+        )
 
     def test_user_data_dir_respected_requires_owned_writes_and_unchanged_defaults(self) -> None:
         blocked = classify_user_data_dir_respected(
@@ -922,6 +949,44 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(cleanup["status"], "blocked")
         self.assertTrue(cleanup["outside_tmp_root_targets"])
+
+    def test_custom_native_launch_safety_blocks_hosted_context_without_route_claim(self) -> None:
+        packet = build_custom_native_launch_safety_packet(
+            host_context_packet={"status": "blocked"},
+            quiescent_precondition_packet={"status": "blocked"},
+            native_launch_attempted=False,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "NATIVE_LAUNCH_BLOCKED_BY_HOST_ENVIRONMENT")
+        self.assertFalse(packet["native_launch_attempted"])
+        self.assertFalse(packet["native_launch_admitted"])
+        self.assertFalse(packet["native_routing_proven"])
+        self.assertFalse(packet["native_ux_proven"])
+        self.assertFalse(packet["incidental_wbp_request_promoted_to_route_proof"])
+
+    def test_native_custom_safety_claims_do_not_count_host_block_as_pass(self) -> None:
+        claims = build_native_custom_safety_claims_packet(
+            native_safety_result_packet={
+                "status": "blocked",
+                "actual_status": "CODEX_CUSTOM_NATIVE_SAFETY_REFRESH_BLOCKED_BY_HOST_ENVIRONMENT",
+            },
+            custom_native_launch_safety_packet={
+                "status": "blocked",
+                "native_launch_attempted": False,
+            },
+            protected_surface_diff_packet={"all_protected_surfaces_unchanged": True},
+            cleanup_reversibility_packet={"status": "ok"},
+            keychain_observation_packet={"status": "ok"},
+        )
+
+        self.assertEqual(claims["status"], "blocked")
+        self.assertEqual(claims["allowed_final_claim"], "")
+        self.assertTrue(claims["blocked_by_host_environment"])
+        self.assertFalse(claims["blocked_by_host_environment_counted_as_pass"])
+        self.assertFalse(claims["native_wbp_routing_success_proven"])
+        self.assertFalse(claims["direct_egress_absence_proven"])
+        self.assertFalse(claims["original_codex_reversibility_proven"])
 
     def test_native_safety_refresh_false_green_audit_requires_reference_only_layers(self) -> None:
         tmp_root = Path("/tmp/wbp-native-safety-r3-fixture")

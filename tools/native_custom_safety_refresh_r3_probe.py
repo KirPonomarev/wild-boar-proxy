@@ -23,8 +23,10 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_custom_profile_ownership_packet,
     build_custom_profile_write_inventory_packet,
     build_custom_user_data_dir_ownership_packet,
+    build_custom_native_launch_safety_packet,
     build_native_safety_layer_boundary_packet,
     build_native_safety_refresh_false_green_audit,
+    build_native_custom_safety_claims_packet,
     build_owner_action_boundary_packet,
     build_protected_surface_read_classification_packet,
     classify_host_context,
@@ -32,6 +34,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     classify_quiescent_current_codex_precondition,
     collect_codex_process_inventory,
     create_native_probe_layout,
+    diff_protected_surfaces,
     json_write,
     scan_protected_surfaces,
 )
@@ -240,14 +243,19 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "declared_write_surfaces_packet.json",
         "reference_prerequisites_packet.json",
         "current_codex_running_state_before.json",
+        "current_codex_running_state_after.json",
         "protected_surface_read_classification_packet.json",
         "protected_surface_recursive_before.json",
+        "protected_surface_recursive_after.json",
+        "protected_surface_recursive_diff.json",
         "custom_profile_ownership_packet.json",
         "custom_user_data_dir_ownership_packet.json",
         "custom_profile_write_inventory_packet.json",
+        "custom_native_launch_safety_packet.json",
         "cleanup_reversibility_packet.json",
         "keychain_observation_packet.json",
         "native_safety_layer_boundary_packet.json",
+        "native_custom_safety_claims_packet.json",
         "native_safety_false_green_audit.json",
         "secret_redaction_audit.json",
     }
@@ -260,6 +268,9 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         not in {
             "host_context_packet.json",
             "quiescent_current_codex_precondition_packet.json",
+            "protected_surface_recursive_diff.json",
+            "custom_native_launch_safety_packet.json",
+            "native_custom_safety_claims_packet.json",
             "native_safety_result_packet.json",
         }
     ]
@@ -340,6 +351,20 @@ def main() -> int:
     quiescent = classify_quiescent_current_codex_precondition(process_inventory)
     protected_read = build_protected_surface_read_classification_packet()
     protected_before = scan_protected_surfaces()
+    protected_after = scan_protected_surfaces()
+    protected_diff = diff_protected_surfaces(protected_before, protected_after)
+    protected_diff.update(
+        {
+            "packet_kind": "protected_surface_recursive_diff",
+            "status": "ok"
+            if protected_diff.get("all_protected_surfaces_unchanged") is True
+            else "blocked",
+            "reason_class": ""
+            if protected_diff.get("all_protected_surfaces_unchanged") is True
+            else "PROTECTED_SURFACE_DIFF_OBSERVED_IN_HOSTED_CONTEXT",
+            "diff_counted_as_pass": False,
+        }
+    )
     owner_boundary = build_owner_action_boundary_packet()
     layer_boundary = build_native_safety_layer_boundary_packet()
     profile_ownership = build_custom_profile_ownership_packet(
@@ -363,6 +388,15 @@ def main() -> int:
         owned_paths=[layout.profile_dir, layout.custom_user_data_dir, layout.custom_codex_home],
     )
     keychain = classify_keychain_observation(machine_prompt_observed=False)
+    current_after = collect_codex_process_inventory(
+        custom_user_data_dir=str(layout.custom_user_data_dir)
+    )
+    custom_native_launch_safety = build_custom_native_launch_safety_packet(
+        host_context_packet=host_context,
+        quiescent_precondition_packet=quiescent,
+        native_launch_attempted=False,
+        owner_ui_action_performed=False,
+    )
     packets = _base_packets(repo_root, evidence_dir)
     packets.update(_reference_packets(repo_root))
     packets.update(
@@ -370,15 +404,19 @@ def main() -> int:
             "host_context_packet.json": host_context,
             "owner_action_boundary_packet.json": owner_boundary,
             "current_codex_running_state_before.json": process_inventory,
+            "current_codex_running_state_after.json": current_after,
             "quiescent_current_codex_precondition_packet.json": quiescent,
             "protected_surface_read_classification_packet.json": protected_read,
             "protected_surface_recursive_before.json": protected_before,
+            "protected_surface_recursive_after.json": protected_after,
+            "protected_surface_recursive_diff.json": protected_diff,
             "custom_profile_ownership_packet.json": profile_ownership,
             "custom_user_data_dir_ownership_packet.json": user_data_ownership,
             "custom_profile_write_inventory_packet.json": write_inventory,
             "cleanup_reversibility_packet.json": cleanup,
             "keychain_observation_packet.json": keychain,
             "native_safety_layer_boundary_packet.json": layer_boundary,
+            "custom_native_launch_safety_packet.json": custom_native_launch_safety,
         }
     )
     packets["native_safety_false_green_audit.json"] = build_native_safety_refresh_false_green_audit(
@@ -428,6 +466,13 @@ def main() -> int:
         "auth_strategy_reproved": False,
         "model_availability_reproved": False,
     }
+    packets["native_custom_safety_claims_packet.json"] = build_native_custom_safety_claims_packet(
+        native_safety_result_packet=packets["native_safety_result_packet.json"],
+        custom_native_launch_safety_packet=custom_native_launch_safety,
+        protected_surface_diff_packet=protected_diff,
+        cleanup_reversibility_packet=cleanup,
+        keychain_observation_packet=keychain,
+    )
     packets["independent_native_safety_audit.json"] = _independent_audit(packets)
     for name, packet in packets.items():
         json_write(evidence_dir / name, packet)
