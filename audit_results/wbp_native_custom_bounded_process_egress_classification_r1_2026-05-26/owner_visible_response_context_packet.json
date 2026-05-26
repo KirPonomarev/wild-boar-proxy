@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:35.119053Z",
+  "context_only": true,
+  "counts_as_egress_proof": false,
+  "counts_as_final_e2e": false,
+  "counts_as_model_availability": false,
+  "counts_as_native_ux_acceptance": false,
+  "counts_as_route_proof": false,
+  "counts_as_wire_compatibility": false,
+  "owner_confirmation_collected": false,
+  "owner_visible_response_reported": false,
+  "packet_kind": "owner_visible_response_context",
+  "status": "ok"
+}

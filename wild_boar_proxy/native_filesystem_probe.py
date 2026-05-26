@@ -5256,6 +5256,182 @@ def build_native_direct_egress_false_green_audit(
     }
 
 
+def build_bounded_observation_window_packet(
+    *,
+    wait_seconds: int,
+    live_native_launch_attempted: bool = False,
+) -> dict[str, Any]:
+    bounded = wait_seconds > 0
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "bounded_observation_window",
+        "status": "ok" if bounded else "blocked",
+        "reason_class": "" if bounded else "OBSERVATION_WINDOW_REQUIRED",
+        "wait_seconds": wait_seconds,
+        "bounded_observation_window_declared": bounded,
+        "live_native_launch_attempted": live_native_launch_attempted,
+        "global_network_absence_claim_allowed": False,
+        "future_launch_safety_claim_allowed": False,
+    }
+
+
+def build_custom_process_binding_packet(
+    *,
+    launch_packet: dict[str, Any],
+    observer_root_pid_bound: bool,
+) -> dict[str, Any]:
+    custom_process_observed = launch_packet.get("custom_process_observed") is True
+    bound = custom_process_observed and observer_root_pid_bound
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_process_binding",
+        "status": "ok" if bound else "blocked",
+        "reason_class": "" if bound else "CUSTOM_PROCESS_BINDING_MISSING",
+        "custom_process_observed": custom_process_observed,
+        "observer_root_pid_bound": observer_root_pid_bound,
+        "process_binding_proven": bound,
+        "raw_pid_exposed": False,
+        "counts_as_usable_window": False,
+        "counts_as_prompt_entry": False,
+        "counts_as_rendered_response": False,
+        "counts_as_direct_egress_absence": False,
+    }
+
+
+def build_domain_attribution_limit_packet(
+    *,
+    process_network_observation_packet: dict[str, Any],
+    domain_attribution_available: bool = False,
+) -> dict[str, Any]:
+    peer_count = len(process_network_observation_packet.get("peer_endpoints", []) or [])
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "domain_attribution_limit",
+        "status": "ok",
+        "observer_strategy": "process_socket_sampling",
+        "peer_endpoint_count": peer_count,
+        "domain_attribution_available": domain_attribution_available,
+        "ip_or_socket_attribution_available": peer_count > 0,
+        "api_openai_com_absence_claim_allowed": domain_attribution_available,
+        "api_openai_com_absence_proven": False,
+        "no_observed_api_openai_equals_absence": False,
+        "allowed_claim_without_domain_attribution": (
+            "no observed direct non-WBP model peer during bounded attributed window"
+        ),
+        "forbidden_claim_without_domain_attribution": "api.openai.com absent",
+    }
+
+
+def build_owner_visible_response_context_packet(
+    *,
+    owner_visible_response_reported: bool = False,
+    owner_confirmation_collected: bool = False,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_visible_response_context",
+        "status": "ok",
+        "owner_visible_response_reported": owner_visible_response_reported,
+        "owner_confirmation_collected": owner_confirmation_collected,
+        "context_only": True,
+        "counts_as_egress_proof": False,
+        "counts_as_route_proof": False,
+        "counts_as_model_availability": False,
+        "counts_as_native_ux_acceptance": False,
+        "counts_as_wire_compatibility": False,
+        "counts_as_final_e2e": False,
+    }
+
+
+def build_temp_custom_cleanup_packet(
+    *,
+    cleanup_reversibility_packet: dict[str, Any],
+) -> dict[str, Any]:
+    cleanup_ok = cleanup_reversibility_packet.get("status") == "ok"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "temp_custom_cleanup",
+        "status": "ok" if cleanup_ok else "blocked",
+        "reason_class": "" if cleanup_ok else "TEMP_CUSTOM_CLEANUP_NOT_VERIFIED",
+        "cleanup_packet_status": cleanup_reversibility_packet.get("status", ""),
+        "tmp_root_removed": cleanup_reversibility_packet.get("tmp_root_removed") is True,
+        "custom_processes_gone": cleanup_reversibility_packet.get(
+            "custom_processes_gone"
+        )
+        is True,
+        "cleanup_only_temp_custom_owned_surfaces": cleanup_ok,
+        "hidden_cleanup_performed": False,
+        "filesystem_safety_proven": False,
+        "original_reversibility_proven": False,
+    }
+
+
+def build_bounded_process_egress_false_green_audit(
+    *,
+    native_direct_egress_claim_packet: dict[str, Any],
+    domain_attribution_limit_packet: dict[str, Any],
+    owner_visible_response_context_packet: dict[str, Any],
+    temp_custom_cleanup_packet: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        native_direct_egress_claim_packet.get("full_network_absence_proven") is True
+        or native_direct_egress_claim_packet.get("final_e2e_claimed") is True
+        or native_direct_egress_claim_packet.get("native_ux_claimed") is True
+        or native_direct_egress_claim_packet.get("filesystem_safety_claimed") is True
+        or native_direct_egress_claim_packet.get("original_codex_via_wbp_claimed")
+        is True
+        or domain_attribution_limit_packet.get("api_openai_com_absence_proven") is True
+        or owner_visible_response_context_packet.get("counts_as_egress_proof") is True
+        or temp_custom_cleanup_packet.get("filesystem_safety_proven") is True
+        or temp_custom_cleanup_packet.get("original_reversibility_proven") is True
+    )
+    checks = [
+        {
+            "name": "bounded_absence_not_global_absence",
+            "passed": native_direct_egress_claim_packet.get(
+                "full_network_absence_proven"
+            )
+            is False,
+        },
+        {
+            "name": "api_openai_absence_requires_domain_attribution",
+            "passed": (
+                domain_attribution_limit_packet.get("api_openai_com_absence_proven")
+                is False
+                or domain_attribution_limit_packet.get("domain_attribution_available")
+                is True
+            ),
+        },
+        {
+            "name": "owner_visible_response_context_only",
+            "passed": owner_visible_response_context_packet.get("context_only") is True
+            and owner_visible_response_context_packet.get("counts_as_egress_proof")
+            is False,
+        },
+        {
+            "name": "cleanup_not_filesystem_or_original_proof",
+            "passed": temp_custom_cleanup_packet.get("filesystem_safety_proven")
+            is False
+            and temp_custom_cleanup_packet.get("original_reversibility_proven") is False,
+        },
+        {
+            "name": "no_final_e2e_claim",
+            "passed": native_direct_egress_claim_packet.get("final_e2e_claimed")
+            is False,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "bounded_process_egress_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) and not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "owner_visible_response_counted_as_network_proof": False,
+        "api_openai_absence_claimed_without_domain_attribution": False,
+        "cleanup_counted_as_filesystem_safety": False,
+    }
+
+
 def build_egress_prior_blocker_replay_packet(
     *,
     prior_claim_packet: dict[str, Any],

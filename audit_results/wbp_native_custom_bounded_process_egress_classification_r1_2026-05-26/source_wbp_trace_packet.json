@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:35.119075Z",
+  "native_launch_attempted": false,
+  "packet_kind": "source_wbp_trace",
+  "raw_auth_recorded": false,
+  "raw_prompt_recorded": false,
+  "reason_class": "BACKGROUND_CODEX_NOISE",
+  "request_observed": false,
+  "response_observed": false,
+  "status": "blocked",
+  "trace_started": false
+}

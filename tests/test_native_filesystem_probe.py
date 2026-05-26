@@ -67,6 +67,12 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_direct_egress_capability_packet,
     build_native_direct_egress_claim_packet,
     build_native_direct_egress_false_green_audit,
+    build_bounded_observation_window_packet,
+    build_custom_process_binding_packet,
+    build_domain_attribution_limit_packet,
+    build_owner_visible_response_context_packet,
+    build_temp_custom_cleanup_packet,
+    build_bounded_process_egress_false_green_audit,
     build_native_route_trace_binding_packet,
     build_owner_manual_ux_check_packet,
     build_owner_nonce_prompt_packet,
@@ -1281,6 +1287,103 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         )
         self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
 
+    def test_bounded_process_egress_limits_keep_adjacent_layers_out(self) -> None:
+        window = build_bounded_observation_window_packet(wait_seconds=30)
+        binding = build_custom_process_binding_packet(
+            launch_packet={"custom_process_observed": True},
+            observer_root_pid_bound=True,
+        )
+        domain = build_domain_attribution_limit_packet(
+            process_network_observation_packet={
+                "peer_endpoints": [
+                    {"endpoint": "127.0.0.1:8318", "host_class": "local"}
+                ]
+            },
+            domain_attribution_available=False,
+        )
+        owner_context = build_owner_visible_response_context_packet(
+            owner_visible_response_reported=True,
+            owner_confirmation_collected=True,
+        )
+        cleanup = build_temp_custom_cleanup_packet(
+            cleanup_reversibility_packet={
+                "status": "ok",
+                "tmp_root_removed": True,
+                "custom_processes_gone": True,
+            }
+        )
+        claim = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "wbp_forward_only_proven",
+                "direct_non_wbp_model_egress_absent_proven": True,
+                "allowed_local_endpoint_observed": True,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+        )
+        audit = build_bounded_process_egress_false_green_audit(
+            native_direct_egress_claim_packet=claim,
+            domain_attribution_limit_packet=domain,
+            owner_visible_response_context_packet=owner_context,
+            temp_custom_cleanup_packet=cleanup,
+        )
+
+        self.assertEqual(window["status"], "ok")
+        self.assertFalse(window["global_network_absence_claim_allowed"])
+        self.assertEqual(binding["status"], "ok")
+        self.assertFalse(binding["counts_as_usable_window"])
+        self.assertFalse(domain["api_openai_com_absence_proven"])
+        self.assertFalse(domain["no_observed_api_openai_equals_absence"])
+        self.assertTrue(owner_context["context_only"])
+        self.assertFalse(owner_context["counts_as_egress_proof"])
+        self.assertEqual(cleanup["status"], "ok")
+        self.assertFalse(cleanup["filesystem_safety_proven"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_bounded_process_egress_false_green_blocks_api_and_ux_overclaim(self) -> None:
+        claim = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "wbp_forward_only_proven",
+                "direct_non_wbp_model_egress_absent_proven": True,
+                "allowed_local_endpoint_observed": True,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+        )
+        domain = build_domain_attribution_limit_packet(
+            process_network_observation_packet={"peer_endpoints": []},
+            domain_attribution_available=False,
+        )
+        bad_domain = dict(domain)
+        bad_domain["api_openai_com_absence_proven"] = True
+        owner_context = build_owner_visible_response_context_packet()
+        bad_owner = dict(owner_context)
+        bad_owner["counts_as_egress_proof"] = True
+        cleanup = build_temp_custom_cleanup_packet(
+            cleanup_reversibility_packet={
+                "status": "ok",
+                "tmp_root_removed": True,
+                "custom_processes_gone": True,
+            }
+        )
+        blocked_domain = build_bounded_process_egress_false_green_audit(
+            native_direct_egress_claim_packet=claim,
+            domain_attribution_limit_packet=bad_domain,
+            owner_visible_response_context_packet=owner_context,
+            temp_custom_cleanup_packet=cleanup,
+        )
+        blocked_owner = build_bounded_process_egress_false_green_audit(
+            native_direct_egress_claim_packet=claim,
+            domain_attribution_limit_packet=domain,
+            owner_visible_response_context_packet=bad_owner,
+            temp_custom_cleanup_packet=cleanup,
+        )
+
+        self.assertEqual(blocked_domain["status"], "blocked")
+        self.assertTrue(blocked_domain["forbidden_claims_present"])
+        self.assertEqual(blocked_owner["status"], "blocked")
+        self.assertTrue(blocked_owner["forbidden_claims_present"])
+
     def test_egress_prior_blocker_replay_required(self) -> None:
         replay = build_egress_prior_blocker_replay_packet(
             prior_claim_packet={
@@ -1657,6 +1760,81 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             self.assertFalse(summary["direct_egress_absence_proven"])
             self.assertFalse(decision["separate_live_bounded_egress_contour_admissible"])
             self.assertEqual(false_green["status"], "ok")
+
+    def test_bounded_process_egress_probe_stops_before_live_launch_when_hosted(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = (
+            repo_root
+            / "tools"
+            / "native_custom_bounded_process_egress_classification_probe.py"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            evidence_dir = temp_repo / "audit_results" / "bounded_egress"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--hosted-by-codex-context",
+                    "--wait-seconds",
+                    "5",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads(
+                (evidence_dir / "bounded_process_egress_summary_packet.json").read_text()
+            )
+            admission = json.loads(
+                (evidence_dir / "native_launch_admission_packet.json").read_text()
+            )
+            owner_context = json.loads(
+                (evidence_dir / "owner_visible_response_context_packet.json").read_text()
+            )
+            domain_limit = json.loads(
+                (evidence_dir / "domain_attribution_limit_packet.json").read_text()
+            )
+
+            self.assertEqual(
+                summary["final_status"],
+                "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+            )
+            self.assertFalse(summary["native_launch_attempted"])
+            self.assertFalse(summary["live_network_capture_attempted"])
+            self.assertFalse(summary["api_openai_com_absence_proven"])
+            self.assertFalse(admission["native_launch_admitted"])
+            self.assertFalse(owner_context["counts_as_egress_proof"])
+            self.assertFalse(domain_limit["no_observed_api_openai_equals_absence"])
 
     def test_environment_blocked_result_not_counted_as_pass(self) -> None:
         packet = classify_environment_blocked_result(

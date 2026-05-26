@@ -1,0 +1,13 @@
+{
+  "allow_live_requested": false,
+  "background_codex_noise_detected": true,
+  "captured_at_utc": "2026-05-26T20:01:35.118971Z",
+  "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+  "live_network_capture_attempted": false,
+  "native_launch_admitted": false,
+  "native_launch_attempted": false,
+  "observer_capability_ok": true,
+  "packet_kind": "native_launch_admission",
+  "reason_class": "BACKGROUND_CODEX_NOISE",
+  "status": "blocked"
+}

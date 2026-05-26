@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:35.119071Z",
+  "hidden_cleanup_performed": false,
+  "owner_prompt_requested": false,
+  "owner_visible_response_counts_as_context_only": true,
+  "owner_visible_response_report_requested": false,
+  "packet_kind": "owner_action_boundary",
+  "provider_or_model_authority_edited": false,
+  "runtime_authority_edited": false,
+  "status": "ok"
+}

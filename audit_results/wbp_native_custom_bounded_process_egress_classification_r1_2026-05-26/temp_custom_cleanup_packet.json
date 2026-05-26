@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:35.119060Z",
+  "cleanup_only_temp_custom_owned_surfaces": true,
+  "cleanup_packet_status": "ok",
+  "custom_processes_gone": true,
+  "filesystem_safety_proven": false,
+  "hidden_cleanup_performed": false,
+  "original_reversibility_proven": false,
+  "packet_kind": "temp_custom_cleanup",
+  "reason_class": "",
+  "status": "ok",
+  "tmp_root_removed": true
+}

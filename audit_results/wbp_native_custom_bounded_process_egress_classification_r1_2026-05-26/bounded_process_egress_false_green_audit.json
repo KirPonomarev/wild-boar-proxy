@@ -1,0 +1,31 @@
+{
+  "api_openai_absence_claimed_without_domain_attribution": false,
+  "captured_at_utc": "2026-05-26T20:01:35.119068Z",
+  "checks": [
+    {
+      "name": "bounded_absence_not_global_absence",
+      "passed": true
+    },
+    {
+      "name": "api_openai_absence_requires_domain_attribution",
+      "passed": true
+    },
+    {
+      "name": "owner_visible_response_context_only",
+      "passed": true
+    },
+    {
+      "name": "cleanup_not_filesystem_or_original_proof",
+      "passed": true
+    },
+    {
+      "name": "no_final_e2e_claim",
+      "passed": true
+    }
+  ],
+  "cleanup_counted_as_filesystem_safety": false,
+  "forbidden_claims_present": false,
+  "owner_visible_response_counted_as_network_proof": false,
+  "packet_kind": "bounded_process_egress_false_green_audit",
+  "status": "ok"
+}
