@@ -281,6 +281,167 @@ def build_protected_surface_read_classification_packet() -> dict[str, Any]:
     }
 
 
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(parent.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def build_native_safety_layer_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_layer_boundary",
+        "status": "ok",
+        "proves_native_custom_safety_only": True,
+        "native_ux_acceptance_proven": False,
+        "owner_visible_response_proven": False,
+        "machine_ui_input_field_proven": False,
+        "model_availability_reproved": False,
+        "codex_consumer_model_acceptance_proven": False,
+        "direct_egress_absence_proven": False,
+        "original_codex_reversibility_proven": False,
+        "auth_strategy_reproved": False,
+        "route_account_model_provider_mutated": False,
+        "final_e2e_proven": False,
+    }
+
+
+def build_custom_profile_ownership_packet(
+    *,
+    tmp_root: Path,
+    profile_dir: Path,
+    codex_home: Path,
+) -> dict[str, Any]:
+    tmp_root = tmp_root.resolve(strict=False)
+    profile_dir = profile_dir.resolve(strict=False)
+    codex_home = codex_home.resolve(strict=False)
+    profile_owned = _path_is_relative_to(profile_dir, tmp_root)
+    codex_home_owned = _path_is_relative_to(codex_home, profile_dir)
+    protected_overlap = any(
+        _path_is_relative_to(profile_dir, protected_path)
+        or _path_is_relative_to(codex_home, protected_path)
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+    )
+    status_ok = profile_owned and codex_home_owned and not protected_overlap
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_profile_ownership",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "CUSTOM_PROFILE_OWNERSHIP_UNCLEAR",
+        "tmp_root": str(tmp_root),
+        "profile_dir": str(profile_dir),
+        "custom_codex_home": str(codex_home),
+        "profile_under_tmp_root": profile_owned,
+        "codex_home_under_profile": codex_home_owned,
+        "protected_surface_overlap": protected_overlap,
+        "current_codex_auth_json_runtime_dependency": False,
+        "original_profile_write_allowed": False,
+        "profile_materialized": profile_dir.exists(),
+    }
+
+
+def build_custom_user_data_dir_ownership_packet(
+    *,
+    tmp_root: Path,
+    profile_dir: Path,
+    user_data_dir: Path,
+) -> dict[str, Any]:
+    tmp_root = tmp_root.resolve(strict=False)
+    profile_dir = profile_dir.resolve(strict=False)
+    user_data_dir = user_data_dir.resolve(strict=False)
+    under_tmp = _path_is_relative_to(user_data_dir, tmp_root)
+    under_profile = _path_is_relative_to(user_data_dir, profile_dir)
+    protected_overlap = any(
+        _path_is_relative_to(user_data_dir, protected_path)
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+    )
+    status_ok = under_tmp and under_profile and not protected_overlap
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_user_data_dir_ownership",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "CUSTOM_USER_DATA_DIR_OWNERSHIP_UNCLEAR",
+        "tmp_root": str(tmp_root),
+        "profile_dir": str(profile_dir),
+        "custom_user_data_dir": str(user_data_dir),
+        "user_data_dir_under_tmp_root": under_tmp,
+        "user_data_dir_under_profile": under_profile,
+        "protected_surface_overlap": protected_overlap,
+        "default_app_support_dependency": False,
+        "original_profile_write_allowed": False,
+        "user_data_dir_materialized": user_data_dir.exists(),
+    }
+
+
+def build_custom_profile_write_inventory_packet(
+    *,
+    tmp_root: Path,
+    profile_dir: Path,
+    user_data_dir: Path,
+    codex_home: Path,
+) -> dict[str, Any]:
+    owned_paths = [profile_dir, user_data_dir, codex_home]
+    protected_overlaps = [
+        str(path)
+        for path in owned_paths
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+        if _path_is_relative_to(path, protected_path)
+    ]
+    all_owned = all(_path_is_relative_to(path, tmp_root) for path in owned_paths)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_profile_write_inventory",
+        "status": "ok" if all_owned and not protected_overlaps else "blocked",
+        "reason_class": "" if all_owned and not protected_overlaps else "CUSTOM_WRITE_SURFACE_UNCLEAR",
+        "write_inventory_kind": "prelaunch_planned_owned_surfaces",
+        "tmp_root": str(tmp_root.resolve(strict=False)),
+        "owned_write_surfaces": [str(path.resolve(strict=False)) for path in owned_paths],
+        "protected_surface_overlaps": protected_overlaps,
+        "protected_surfaces_write_allowed": False,
+        "original_codex_profile_write_allowed": False,
+        "profile_materialized": profile_dir.exists(),
+        "native_launch_attempted": False,
+    }
+
+
+def build_cleanup_reversibility_plan_packet(
+    *,
+    tmp_root: Path,
+    owned_paths: list[Path],
+) -> dict[str, Any]:
+    tmp_root = tmp_root.resolve(strict=False)
+    outside_targets = [
+        str(path.resolve(strict=False))
+        for path in owned_paths
+        if not _path_is_relative_to(path, tmp_root)
+    ]
+    protected_targets = [
+        str(path.resolve(strict=False))
+        for path in owned_paths
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+        if _path_is_relative_to(path, protected_path)
+    ]
+    cleanup_safe = not outside_targets and not protected_targets
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "cleanup_reversibility",
+        "status": "ok" if cleanup_safe else "blocked",
+        "reason_class": "" if cleanup_safe else "CLEANUP_TARGET_UNCLEAR",
+        "cleanup_plan_kind": "prelaunch_owned_tmp_root_cleanup_plan",
+        "tmp_root": str(tmp_root),
+        "cleanup_targets": [str(path.resolve(strict=False)) for path in owned_paths],
+        "outside_tmp_root_targets": outside_targets,
+        "protected_surface_targets": protected_targets,
+        "cleanup_removes_only_custom_owned_surfaces": cleanup_safe,
+        "cleanup_executed": False,
+        "cleanup_not_required_reason": "profile_not_materialized_in_safety_refresh",
+        "hidden_cleanup_performed": False,
+        "original_codex_reversibility_claimed": False,
+    }
+
+
 def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     before_surfaces = before.get("surfaces", {})
     after_surfaces = after.get("surfaces", {})
@@ -2045,6 +2206,99 @@ def build_native_safety_false_green_audit(
         "checks": checks,
         "forbidden_claims_present": False,
         "allowed_final_status": "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+    }
+
+
+def build_native_safety_refresh_false_green_audit(
+    *,
+    layer_boundary_packet: dict[str, Any],
+    owner_action_boundary_packet: dict[str, Any],
+    protected_surface_read_packet: dict[str, Any],
+    profile_ownership_packet: dict[str, Any],
+    user_data_ownership_packet: dict[str, Any],
+    write_inventory_packet: dict[str, Any],
+    cleanup_reversibility_packet: dict[str, Any],
+    keychain_observation_packet: dict[str, Any],
+    auth_strategy_reference_packet: dict[str, Any],
+    model_availability_reference_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "layer_boundary_forbids_ux_egress_original_final_claims",
+            "passed": layer_boundary_packet.get("native_ux_acceptance_proven") is False
+            and layer_boundary_packet.get("direct_egress_absence_proven") is False
+            and layer_boundary_packet.get("original_codex_reversibility_proven") is False
+            and layer_boundary_packet.get("final_e2e_proven") is False,
+            "evidence": "native_safety_layer_boundary_packet",
+        },
+        {
+            "name": "no_owner_ui_action",
+            "passed": owner_action_boundary_packet.get("status") == "ok"
+            and owner_action_boundary_packet.get("prompt_submitted") is False,
+            "evidence": "owner_action_boundary_packet",
+        },
+        {
+            "name": "protected_reads_are_inspection_only",
+            "passed": protected_surface_read_packet.get("inspection_only") is True
+            and protected_surface_read_packet.get("runtime_auth_input_used") is False,
+            "evidence": "protected_surface_read_classification_packet",
+        },
+        {
+            "name": "custom_profile_owned",
+            "passed": profile_ownership_packet.get("status") == "ok",
+            "evidence": "custom_profile_ownership_packet",
+        },
+        {
+            "name": "custom_user_data_dir_owned",
+            "passed": user_data_ownership_packet.get("status") == "ok",
+            "evidence": "custom_user_data_dir_ownership_packet",
+        },
+        {
+            "name": "write_inventory_custom_owned_only",
+            "passed": write_inventory_packet.get("status") == "ok",
+            "evidence": "custom_profile_write_inventory_packet",
+        },
+        {
+            "name": "cleanup_custom_owned_only",
+            "passed": cleanup_reversibility_packet.get("status") == "ok"
+            and cleanup_reversibility_packet.get("original_codex_reversibility_claimed")
+            is False,
+            "evidence": "cleanup_reversibility_packet",
+        },
+        {
+            "name": "keychain_not_auth_proof",
+            "passed": keychain_observation_packet.get("status") == "ok"
+            and keychain_observation_packet.get("auth_success_claimed") is False,
+            "evidence": "keychain_observation_packet",
+        },
+        {
+            "name": "auth_strategy_reference_only",
+            "passed": auth_strategy_reference_packet.get("auth_strategy_reproved_in_this_contour")
+            is False,
+            "evidence": "auth_strategy_reference_packet",
+        },
+        {
+            "name": "model_availability_reference_only",
+            "passed": model_availability_reference_packet.get(
+                "model_availability_reproved_in_this_contour"
+            )
+            is False,
+            "evidence": "model_availability_reference_packet",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_refresh_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": not all(check["passed"] for check in checks),
+        "native_launch_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "original_reversibility_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+        "route_account_model_provider_mutated": False,
     }
 
 

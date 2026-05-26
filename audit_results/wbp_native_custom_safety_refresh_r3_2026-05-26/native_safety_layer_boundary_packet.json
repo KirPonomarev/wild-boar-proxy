@@ -1,0 +1,16 @@
+{
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T13:21:47.301434Z",
+  "codex_consumer_model_acceptance_proven": false,
+  "direct_egress_absence_proven": false,
+  "final_e2e_proven": false,
+  "machine_ui_input_field_proven": false,
+  "model_availability_reproved": false,
+  "native_ux_acceptance_proven": false,
+  "original_codex_reversibility_proven": false,
+  "owner_visible_response_proven": false,
+  "packet_kind": "native_safety_layer_boundary",
+  "proves_native_custom_safety_only": true,
+  "route_account_model_provider_mutated": false,
+  "status": "ok"
+}

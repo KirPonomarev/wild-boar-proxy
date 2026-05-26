@@ -34,7 +34,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_import_allowed_claims_matrix,
     build_keychain_boundary_packet,
     build_layer_separation_packet,
+    build_cleanup_reversibility_plan_packet,
+    build_custom_profile_ownership_packet,
+    build_custom_profile_write_inventory_packet,
+    build_custom_user_data_dir_ownership_packet,
+    build_native_safety_layer_boundary_packet,
     build_native_safety_false_green_audit,
+    build_native_safety_refresh_false_green_audit,
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
     build_current_thread_boundary_packet,
@@ -176,6 +182,120 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(packet["runtime_provider_authority_used"])
         self.assertFalse(packet["current_auth_json_execution_dependency"])
         self.assertGreaterEqual(len(packet["snapshot_targets"]), 4)
+
+    def test_native_safety_layer_boundary_does_not_claim_adjacent_layers(self) -> None:
+        packet = build_native_safety_layer_boundary_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["proves_native_custom_safety_only"])
+        self.assertFalse(packet["native_ux_acceptance_proven"])
+        self.assertFalse(packet["direct_egress_absence_proven"])
+        self.assertFalse(packet["original_codex_reversibility_proven"])
+        self.assertFalse(packet["auth_strategy_reproved"])
+        self.assertFalse(packet["model_availability_reproved"])
+
+    def test_custom_profile_and_user_data_ownership_require_tmp_root_scope(self) -> None:
+        tmp_root = Path("/tmp/wbp-native-safety-r3-fixture")
+        profile_dir = tmp_root / "profile"
+        user_data_dir = profile_dir / "electron-user-data"
+
+        profile = build_custom_profile_ownership_packet(
+            tmp_root=tmp_root,
+            profile_dir=profile_dir,
+            codex_home=profile_dir,
+        )
+        user_data = build_custom_user_data_dir_ownership_packet(
+            tmp_root=tmp_root,
+            profile_dir=profile_dir,
+            user_data_dir=user_data_dir,
+        )
+
+        self.assertEqual(profile["status"], "ok")
+        self.assertEqual(user_data["status"], "ok")
+        self.assertFalse(profile["current_codex_auth_json_runtime_dependency"])
+        self.assertFalse(user_data["default_app_support_dependency"])
+
+    def test_custom_profile_ownership_blocks_protected_surface_overlap(self) -> None:
+        profile = build_custom_profile_ownership_packet(
+            tmp_root=Path("/tmp/wbp-native-safety-r3-fixture"),
+            profile_dir=Path.home() / ".codex",
+            codex_home=Path.home() / ".codex",
+        )
+
+        self.assertEqual(profile["status"], "blocked")
+        self.assertTrue(profile["protected_surface_overlap"])
+
+    def test_custom_profile_write_inventory_and_cleanup_are_custom_owned_only(self) -> None:
+        tmp_root = Path("/tmp/wbp-native-safety-r3-fixture")
+        profile_dir = tmp_root / "profile"
+        user_data_dir = profile_dir / "electron-user-data"
+        inventory = build_custom_profile_write_inventory_packet(
+            tmp_root=tmp_root,
+            profile_dir=profile_dir,
+            user_data_dir=user_data_dir,
+            codex_home=profile_dir,
+        )
+        cleanup = build_cleanup_reversibility_plan_packet(
+            tmp_root=tmp_root,
+            owned_paths=[profile_dir, user_data_dir],
+        )
+
+        self.assertEqual(inventory["status"], "ok")
+        self.assertFalse(inventory["native_launch_attempted"])
+        self.assertEqual(cleanup["status"], "ok")
+        self.assertTrue(cleanup["cleanup_removes_only_custom_owned_surfaces"])
+        self.assertFalse(cleanup["cleanup_executed"])
+        self.assertFalse(cleanup["original_codex_reversibility_claimed"])
+
+    def test_cleanup_reversibility_blocks_outside_tmp_targets(self) -> None:
+        cleanup = build_cleanup_reversibility_plan_packet(
+            tmp_root=Path("/tmp/wbp-native-safety-r3-fixture"),
+            owned_paths=[Path.home() / ".codex"],
+        )
+
+        self.assertEqual(cleanup["status"], "blocked")
+        self.assertTrue(cleanup["outside_tmp_root_targets"])
+
+    def test_native_safety_refresh_false_green_audit_requires_reference_only_layers(self) -> None:
+        tmp_root = Path("/tmp/wbp-native-safety-r3-fixture")
+        profile_dir = tmp_root / "profile"
+        user_data_dir = profile_dir / "electron-user-data"
+        audit = build_native_safety_refresh_false_green_audit(
+            layer_boundary_packet=build_native_safety_layer_boundary_packet(),
+            owner_action_boundary_packet=build_owner_action_boundary_packet(),
+            protected_surface_read_packet=build_protected_surface_read_classification_packet(),
+            profile_ownership_packet=build_custom_profile_ownership_packet(
+                tmp_root=tmp_root,
+                profile_dir=profile_dir,
+                codex_home=profile_dir,
+            ),
+            user_data_ownership_packet=build_custom_user_data_dir_ownership_packet(
+                tmp_root=tmp_root,
+                profile_dir=profile_dir,
+                user_data_dir=user_data_dir,
+            ),
+            write_inventory_packet=build_custom_profile_write_inventory_packet(
+                tmp_root=tmp_root,
+                profile_dir=profile_dir,
+                user_data_dir=user_data_dir,
+                codex_home=profile_dir,
+            ),
+            cleanup_reversibility_packet=build_cleanup_reversibility_plan_packet(
+                tmp_root=tmp_root,
+                owned_paths=[profile_dir, user_data_dir],
+            ),
+            keychain_observation_packet=classify_keychain_observation(
+                machine_prompt_observed=False
+            ),
+            auth_strategy_reference_packet={"auth_strategy_reproved_in_this_contour": False},
+            model_availability_reference_packet={
+                "model_availability_reproved_in_this_contour": False
+            },
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["ux_claimed"])
+        self.assertFalse(audit["egress_claimed"])
 
     def test_native_safety_keychain_prompt_does_not_equal_auth_success(self) -> None:
         packet = classify_keychain_observation(

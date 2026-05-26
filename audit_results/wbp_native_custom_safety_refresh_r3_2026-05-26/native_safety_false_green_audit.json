@@ -1,0 +1,65 @@
+{
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T13:21:47.448624Z",
+  "checks": [
+    {
+      "evidence": "native_safety_layer_boundary_packet",
+      "name": "layer_boundary_forbids_ux_egress_original_final_claims",
+      "passed": true
+    },
+    {
+      "evidence": "owner_action_boundary_packet",
+      "name": "no_owner_ui_action",
+      "passed": true
+    },
+    {
+      "evidence": "protected_surface_read_classification_packet",
+      "name": "protected_reads_are_inspection_only",
+      "passed": true
+    },
+    {
+      "evidence": "custom_profile_ownership_packet",
+      "name": "custom_profile_owned",
+      "passed": true
+    },
+    {
+      "evidence": "custom_user_data_dir_ownership_packet",
+      "name": "custom_user_data_dir_owned",
+      "passed": true
+    },
+    {
+      "evidence": "custom_profile_write_inventory_packet",
+      "name": "write_inventory_custom_owned_only",
+      "passed": true
+    },
+    {
+      "evidence": "cleanup_reversibility_packet",
+      "name": "cleanup_custom_owned_only",
+      "passed": true
+    },
+    {
+      "evidence": "keychain_observation_packet",
+      "name": "keychain_not_auth_proof",
+      "passed": true
+    },
+    {
+      "evidence": "auth_strategy_reference_packet",
+      "name": "auth_strategy_reference_only",
+      "passed": true
+    },
+    {
+      "evidence": "model_availability_reference_packet",
+      "name": "model_availability_reference_only",
+      "passed": true
+    }
+  ],
+  "egress_claimed": false,
+  "forbidden_claims_present": false,
+  "model_availability_reproved": false,
+  "native_launch_claimed": false,
+  "original_reversibility_claimed": false,
+  "packet_kind": "native_safety_refresh_false_green_audit",
+  "route_account_model_provider_mutated": false,
+  "status": "ok",
+  "ux_claimed": false
+}
