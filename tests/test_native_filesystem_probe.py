@@ -93,6 +93,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_egress_prior_blocker_replay_packet,
     build_historical_route_context_packet,
     build_native_egress_observer_false_green_audit,
+    build_native_egress_observer_readiness_packet,
+    build_wbp_endpoint_observation_limit_packet,
+    build_process_attribution_limit_packet,
+    build_absence_claim_limit_packet,
+    build_owner_egress_handoff_instruction_packet,
+    build_historical_route_context_reference_packet,
+    build_egress_readiness_false_green_audit,
     build_wbp_trace_observation_packet,
     build_network_claim_limits_packet,
     build_network_observer_feasibility_decision_packet,
@@ -1427,6 +1434,126 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(decision["fresh_native_launch_attempted"])
         self.assertFalse(decision["direct_egress_absence_proven"])
         self.assertFalse(decision["api_openai_com_absence_proven"])
+
+    def test_egress_readiness_limits_do_not_claim_route_or_absence(self) -> None:
+        capability = build_native_direct_egress_capability_packet(
+            lsof_path="/usr/sbin/lsof",
+            process_tree_observer_available=True,
+        )
+        noise = build_current_background_codex_noise_packet(
+            current_process_inventory_packet={
+                "line_count": 2,
+                "root_app_pids": [123],
+                "default_process_count": 1,
+                "custom_process_count": 0,
+            },
+            hosted_by_codex_context=True,
+        )
+        quiescent = build_quiescent_network_precondition_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=noise,
+        )
+        readiness = build_native_egress_observer_readiness_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=noise,
+            quiescent_network_precondition_packet=quiescent,
+        )
+        wbp_limit = build_wbp_endpoint_observation_limit_packet(
+            wbp_endpoint_observed=True,
+            endpoint="http://127.0.0.1:12345/v1/responses",
+        )
+        attribution_limit = build_process_attribution_limit_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=noise,
+        )
+        absence_limit = build_absence_claim_limit_packet(
+            quiescent_network_precondition_packet=quiescent,
+            process_attribution_limit_packet=attribution_limit,
+            observation_window_seconds=0,
+        )
+
+        self.assertEqual(readiness["status"], "blocked")
+        self.assertEqual(
+            readiness["final_status"],
+            "NATIVE_DIRECT_EGRESS_OBSERVER_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF",
+        )
+        self.assertFalse(readiness["fresh_native_launch_attempted"])
+        self.assertFalse(readiness["live_network_capture_attempted"])
+        self.assertFalse(readiness["api_openai_com_absence_proven"])
+        self.assertTrue(wbp_limit["counts_as_network_peer_observation_only"])
+        self.assertFalse(wbp_limit["counts_as_route_proof"])
+        self.assertFalse(wbp_limit["counts_as_direct_egress_absence"])
+        self.assertFalse(
+            attribution_limit["process_attribution_counts_as_usable_window"]
+        )
+        self.assertFalse(
+            attribution_limit["process_attribution_counts_as_direct_egress_absence"]
+        )
+        self.assertFalse(absence_limit["direct_egress_absence_claim_allowed_now"])
+        self.assertFalse(absence_limit["no_observed_api_openai_equals_absence"])
+
+    def test_egress_readiness_false_green_blocks_cross_layer_claims(self) -> None:
+        capability = build_native_direct_egress_capability_packet(
+            lsof_path="/usr/sbin/lsof",
+            process_tree_observer_available=True,
+        )
+        clean_noise = build_current_background_codex_noise_packet(
+            current_process_inventory_packet={
+                "line_count": 0,
+                "root_app_pids": [],
+                "default_process_count": 0,
+                "custom_process_count": 0,
+            },
+            hosted_by_codex_context=False,
+        )
+        quiescent = build_quiescent_network_precondition_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=clean_noise,
+        )
+        readiness = build_native_egress_observer_readiness_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=clean_noise,
+            quiescent_network_precondition_packet=quiescent,
+        )
+        wbp_limit = build_wbp_endpoint_observation_limit_packet()
+        attribution_limit = build_process_attribution_limit_packet(
+            observer_capability_packet=capability,
+            current_background_codex_noise_packet=clean_noise,
+        )
+        absence_limit = build_absence_claim_limit_packet(
+            quiescent_network_precondition_packet=quiescent,
+            process_attribution_limit_packet=attribution_limit,
+            observation_window_seconds=30,
+        )
+        network_limits = build_network_claim_limits_packet()
+        route_reference = build_historical_route_context_reference_packet(
+            source_packets=["audit_results/example/native_route_trace_packet.json"]
+        )
+        clean = build_egress_readiness_false_green_audit(
+            native_egress_observer_readiness_packet=readiness,
+            wbp_endpoint_observation_limit_packet=wbp_limit,
+            process_attribution_limit_packet=attribution_limit,
+            absence_claim_limit_packet=absence_limit,
+            network_claim_limits_packet=network_limits,
+            historical_route_context_reference_packet=route_reference,
+        )
+        bad_readiness = dict(readiness)
+        bad_readiness["final_e2e_proven"] = True
+        blocked = build_egress_readiness_false_green_audit(
+            native_egress_observer_readiness_packet=bad_readiness,
+            wbp_endpoint_observation_limit_packet=wbp_limit,
+            process_attribution_limit_packet=attribution_limit,
+            absence_claim_limit_packet=absence_limit,
+            network_claim_limits_packet=network_limits,
+            historical_route_context_reference_packet=route_reference,
+        )
+        handoff = build_owner_egress_handoff_instruction_packet()
+
+        self.assertEqual(clean["status"], "ok")
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertTrue(blocked["forbidden_claims_present"])
+        self.assertTrue(handoff["owner_or_detached_handoff_required_for_live_egress"])
+        self.assertFalse(handoff["handoff_counts_as_live_egress_proof"])
 
     def test_egress_observer_feasibility_probe_is_no_launch(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

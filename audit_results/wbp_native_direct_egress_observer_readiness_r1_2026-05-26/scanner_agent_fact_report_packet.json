@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-05-26T19:52:03Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agent_model": "gpt-5.4-mini",
+  "mode": "read_only",
+  "commands_reported": [
+    "rg -n",
+    "rg --files",
+    "nl -ba"
+  ],
+  "edits_performed": false,
+  "live_native_launch_attempted": false,
+  "live_network_capture_attempted": false,
+  "reported_existing_code_seams": [
+    "wild_boar_proxy/native_filesystem_probe.py:1744-1773 collect_codex_process_inventory",
+    "wild_boar_proxy/native_filesystem_probe.py:5082-5566 native direct egress capability/claim/limits/false-green builders",
+    "tools/native_wbp_route_network_observer_feasibility_probe.py:21-330 no-launch observer feasibility orchestrator",
+    "tools/native_custom_direct_egress_classification_probe.py:30-509 live direct-egress classifier seam, not run"
+  ],
+  "reported_existing_test_coverage": [
+    "tests/test_native_filesystem_probe.py:1172-1431 egress capability, claim limits, background noise, no-launch feasibility",
+    "tests/test_native_filesystem_probe.py:3470-3694 quiescent/current-Codex readiness",
+    "tests/test_cli_runner.py:308-401 direct-egress claim boundaries"
+  ],
+  "reported_missing_positive_claims": [
+    "direct_egress_absence_proven",
+    "api.openai.com_absence_proven",
+    "full_network_absence_proven",
+    "fresh_native_launch_attempted",
+    "native_ux_proven",
+    "filesystem_safety_proven",
+    "model_availability_proven",
+    "Original Codex via WBP proven",
+    "final E2E proven"
+  ],
+  "reported_stop_or_layer_mix_risks": [
+    "owner UX and screenshots must not become network proof",
+    "route trace alone must not become egress absence",
+    "hosted/protected Codex executor context blocks clean native proof",
+    "current Codex not quiescent blocks clean observer attribution"
+  ],
+  "orchestrator_assessment": "accepted_as_fact_report; independently cross-checked with local rg/sed/tests; no agent claim used without file-backed evidence"
+}

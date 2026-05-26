@@ -1,0 +1,36 @@
+{
+  "blocked_observer_counted_as_pass": false,
+  "captured_at_utc": "2026-05-26T19:52:02.633317Z",
+  "checks": [
+    {
+      "name": "readiness_not_counted_as_live_capture",
+      "passed": true
+    },
+    {
+      "name": "wbp_endpoint_observation_is_peer_only",
+      "passed": true
+    },
+    {
+      "name": "process_attribution_socket_owner_only",
+      "passed": true
+    },
+    {
+      "name": "absence_claim_not_allowed_now",
+      "passed": true
+    },
+    {
+      "name": "historical_route_reference_not_current_egress",
+      "passed": true
+    },
+    {
+      "name": "network_limits_no_absence_claim",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "historical_route_counted_as_current_egress_proof": false,
+  "packet_kind": "egress_readiness_false_green_audit",
+  "process_attribution_counted_as_native_ux": false,
+  "status": "ok",
+  "wbp_endpoint_counted_as_route_or_absence": false
+}
