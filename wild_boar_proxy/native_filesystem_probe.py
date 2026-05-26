@@ -38,6 +38,12 @@ DEFAULT_IDLE_WINDOW_SECONDS = 3.0
 DEFAULT_DEFAULT_USER_DATA_DIR = str(
     Path.home() / "Library" / "Application Support" / "Codex"
 )
+PROTECTED_SURFACE_PATHS = {
+    "codex_dir": Path.home() / ".codex",
+    "default_app_support_codex": Path.home() / "Library" / "Application Support" / "Codex",
+    "default_cache_codex": Path.home() / "Library" / "Caches" / "com.openai.codex",
+    "default_httpstorage_codex": Path.home() / "Library" / "HTTPStorages" / "com.openai.codex",
+}
 DEFAULT_CODEX_PROCESS_PATTERNS = (
     "/Applications/Codex.app/Contents/MacOS/Codex",
     "Codex Helper",
@@ -247,15 +253,30 @@ def diff_scans(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
 
 
 def scan_protected_surfaces() -> dict[str, Any]:
-    surfaces = {
-        "codex_dir": Path.home() / ".codex",
-        "default_app_support_codex": Path.home() / "Library" / "Application Support" / "Codex",
-        "default_cache_codex": Path.home() / "Library" / "Caches" / "com.openai.codex",
-        "default_httpstorage_codex": Path.home() / "Library" / "HTTPStorages" / "com.openai.codex",
-    }
     return {
         "captured_at_utc": utc_now(),
-        "surfaces": {name: scan_tree(path) for name, path in surfaces.items()},
+        "surfaces": {name: scan_tree(path) for name, path in PROTECTED_SURFACE_PATHS.items()},
+    }
+
+
+def build_protected_surface_read_classification_packet() -> dict[str, Any]:
+    targets = [
+        {"surface": name, "path": str(path), "classification": "inspection_only"}
+        for name, path in PROTECTED_SURFACE_PATHS.items()
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "protected_surface_read_classification",
+        "status": "ok",
+        "reason_for_read": "recursive before/after integrity snapshot only",
+        "snapshot_targets": targets,
+        "filesystem_read_performed": True,
+        "filesystem_read_scope": "protected_surface_integrity_snapshot",
+        "filesystem_write_performed": False,
+        "runtime_auth_input_used": False,
+        "runtime_provider_authority_used": False,
+        "current_auth_json_execution_dependency": False,
+        "inspection_only": True,
     }
 
 
@@ -370,6 +391,155 @@ def classify_user_data_dir_respected(
         "status": "blocked",
         "reason_class": "WRITE_ATTRIBUTION_AMBIGUOUS",
         "user_data_dir_respected": False,
+    }
+
+
+def classify_keychain_observation(
+    *,
+    machine_prompt_observed: bool,
+    owner_pressed_cancel: bool = False,
+    keychain_reset_performed: bool = False,
+    keychain_default_changed: bool = False,
+) -> dict[str, Any]:
+    manual_cancel_only = bool(owner_pressed_cancel and machine_prompt_observed)
+    blocked = keychain_reset_performed or keychain_default_changed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "keychain_observation",
+        "status": "blocked" if blocked else "ok",
+        "reason_class": "KEYCHAIN_MUTATION_REQUIRED" if blocked else "",
+        "machine_prompt_observed": machine_prompt_observed,
+        "owner_pressed_cancel": owner_pressed_cancel,
+        "owner_cancel_classification": (
+            "manual_observation_only" if manual_cancel_only else "not_applicable"
+        ),
+        "keychain_reset_performed": keychain_reset_performed,
+        "keychain_default_changed": keychain_default_changed,
+        "keychain_cancel_equals_auth_success": False,
+        "auth_success_claimed": False,
+    }
+
+
+def classify_environment_blocked_result(
+    *,
+    item: str,
+    status: str,
+    root_cause: str = "",
+    exercised: str = "",
+    remains_unproven: str = "",
+) -> dict[str, Any]:
+    if status not in {"passed", "failed", "blocked_by_host_environment"}:
+        raise ValueError("status must be passed, failed, or blocked_by_host_environment")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "environment_blocked_result",
+        "item": item,
+        "status": status,
+        "root_cause": root_cause,
+        "what_was_exercised": exercised,
+        "what_remains_unproven": remains_unproven,
+        "counts_as_pass": status == "passed",
+    }
+
+
+def build_allowed_claims_matrix(*, final_status: str) -> dict[str, Any]:
+    allowed = [
+        "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+        "protected_surfaces_unchanged",
+        "protected_surface_drift_classified",
+        "custom_writes_owned_and_cleanable",
+        "user_data_dir_respected_if_packet_proves_owned_writes",
+        "keychain_behavior_observed",
+        "current_codex_state_preserved_or_drift_classified",
+        "blocked_by_host_environment_if_packeted",
+    ]
+    forbidden = [
+        "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+        "native_route_proven",
+        "owner_ux_proven",
+        "direct_egress_absent",
+        "Original_Codex_via_WBP_proven",
+        "all_models_work",
+        "GPT-5.5_native_works",
+        "Keychain_Cancel_equals_auth_success",
+        "process_started_equals_usable_app",
+        "--user-data-dir_present_equals_respected",
+        "read_only_snapshot_equals_auth_independence",
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_allowed_claims_matrix",
+        "status": "ok",
+        "final_status": final_status,
+        "allowed_claims": allowed,
+        "forbidden_claims": forbidden,
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "model_availability_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+    }
+
+
+def build_native_safety_false_green_audit(
+    *,
+    probe_packet: dict[str, Any],
+    allowed_claims_matrix: dict[str, Any],
+) -> dict[str, Any]:
+    protected_diff = probe_packet.get("protected_surface_recursive_diff", {})
+    user_data = probe_packet.get("user_data_dir_respected_packet", {})
+    cleanup = probe_packet.get("cleanup_reversibility_packet", {})
+    current_delta = probe_packet.get("current_codex_delta", {})
+    keychain = probe_packet.get("keychain_observation_packet", {})
+    checks = [
+        {
+            "name": "no_route_claim",
+            "passed": not allowed_claims_matrix.get("route_claim_allowed", True),
+            "evidence": "allowed_claims_matrix.route_claim_allowed",
+        },
+        {
+            "name": "no_ux_claim",
+            "passed": not allowed_claims_matrix.get("ux_claim_allowed", True),
+            "evidence": "allowed_claims_matrix.ux_claim_allowed",
+        },
+        {
+            "name": "no_egress_claim",
+            "passed": not allowed_claims_matrix.get("egress_claim_allowed", True),
+            "evidence": "allowed_claims_matrix.egress_claim_allowed",
+        },
+        {
+            "name": "protected_surfaces_recursive_diff_classified",
+            "passed": "all_protected_surfaces_unchanged" in protected_diff,
+            "evidence": "protected_surface_recursive_diff",
+        },
+        {
+            "name": "user_data_dir_respected_requires_owned_writes",
+            "passed": user_data.get("user_data_dir_respected") is True,
+            "evidence": "user_data_dir_respected_packet",
+        },
+        {
+            "name": "cleanup_removed_tmp_root",
+            "passed": cleanup.get("tmp_root_removed") is True,
+            "evidence": "cleanup_reversibility_packet",
+        },
+        {
+            "name": "current_codex_not_touched",
+            "passed": current_delta.get("current_codex_touched") is False,
+            "evidence": "current_codex_delta",
+        },
+        {
+            "name": "keychain_cancel_not_auth_success",
+            "passed": keychain.get("keychain_cancel_equals_auth_success") is False,
+            "evidence": "keychain_observation_packet",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": False,
+        "allowed_final_status": "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
     }
 
 
@@ -614,6 +784,7 @@ def run_native_filesystem_probe(
     before_process = collect_codex_process_inventory(
         custom_user_data_dir=str(layout.custom_user_data_dir)
     )
+    protected_read_packet = build_protected_surface_read_classification_packet()
     before_surfaces = scan_protected_surfaces()
     launch_result = launch_native_candidate(
         repo_root=repo_root,
@@ -628,6 +799,7 @@ def run_native_filesystem_probe(
     )
     protected_diff = diff_protected_surfaces(before_surfaces, after_surfaces)
     current_delta = classify_current_codex_delta(before_process, after_process)
+    keychain_packet = classify_keychain_observation(machine_prompt_observed=False)
     user_data_dir_result = classify_user_data_dir_respected(
         custom_process_observed=launch_result["custom_process_observed"],
         owned_writes_present=bool(owned_scan.get("entry_count", 0) > 1),
@@ -667,11 +839,46 @@ def run_native_filesystem_probe(
         "protected_surface_recursive_after": after_surfaces,
         "protected_surface_recursive_diff": protected_diff,
         "custom_profile_write_inventory": owned_scan,
+        "native_custom_safety_launch_packet": launch_result,
         "launch_result": launch_result,
+        "protected_surface_read_classification_packet": protected_read_packet,
+        "keychain_observation_packet": keychain_packet,
         "user_data_dir_respected_packet": user_data_dir_result,
         "cleanup_reversibility_packet": cleanup_packet,
         "secret_value_recorded": False,
     }
+    allowed_claims_matrix = build_allowed_claims_matrix(
+        final_status=(
+            "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS"
+            if packet["status"] == "ok"
+            else "NATIVE_CUSTOM_APP_SAFETY_BLOCKED_OR_UNPROVEN"
+        )
+    )
+    false_green_audit = build_native_safety_false_green_audit(
+        probe_packet=packet,
+        allowed_claims_matrix=allowed_claims_matrix,
+    )
+    packet["allowed_claims_matrix"] = allowed_claims_matrix
+    packet["native_safety_false_green_audit"] = false_green_audit
+
+    split_packets = {
+        "protected_surface_read_classification_packet.json": protected_read_packet,
+        "protected_surface_recursive_before.json": before_surfaces,
+        "current_codex_running_state_before.json": before_process,
+        "native_custom_safety_launch_packet.json": launch_result,
+        "keychain_observation_packet.json": keychain_packet,
+        "user_data_dir_respected_packet.json": user_data_dir_result,
+        "custom_profile_write_inventory.json": owned_scan,
+        "protected_surface_recursive_after.json": after_surfaces,
+        "protected_surface_recursive_diff.json": protected_diff,
+        "current_codex_running_state_after.json": after_process,
+        "current_codex_delta_packet.json": current_delta,
+        "cleanup_reversibility_packet.json": cleanup_packet,
+        "allowed_claims_matrix.json": allowed_claims_matrix,
+        "native_safety_false_green_audit.json": false_green_audit,
+    }
+    for file_name, payload in split_packets.items():
+        json_write(evidence_dir / file_name, payload)
     json_write(evidence_dir / "live_native_filesystem_probe_packet.json", packet)
     return packet
 

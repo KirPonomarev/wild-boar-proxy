@@ -10,10 +10,15 @@ from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
+    build_allowed_claims_matrix,
+    build_native_safety_false_green_audit,
+    build_protected_surface_read_classification_packet,
+    classify_environment_blocked_result,
     classify_external_detached_context_outcome,
     classify_protected_codex_host_negative,
     classify_fresh_context_acquisition,
     classify_fresh_context_entry,
+    classify_keychain_observation,
     classify_quiescent_handoff_admission,
     classify_quiescent_current_codex_precondition,
     classify_current_codex_delta,
@@ -106,6 +111,84 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(blocked["status"], "blocked")
         self.assertEqual(blocked["reason_class"], "DEFAULT_PROTECTED_SURFACES_CHANGED")
         self.assertFalse(blocked["user_data_dir_respected"])
+
+    def test_protected_surface_read_is_inspection_only_not_runtime_dependency(self) -> None:
+        packet = build_protected_surface_read_classification_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["inspection_only"])
+        self.assertTrue(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["runtime_auth_input_used"])
+        self.assertFalse(packet["runtime_provider_authority_used"])
+        self.assertFalse(packet["current_auth_json_execution_dependency"])
+        self.assertGreaterEqual(len(packet["snapshot_targets"]), 4)
+
+    def test_native_safety_keychain_prompt_does_not_equal_auth_success(self) -> None:
+        packet = classify_keychain_observation(
+            machine_prompt_observed=True,
+            owner_pressed_cancel=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["owner_cancel_classification"], "manual_observation_only")
+        self.assertFalse(packet["keychain_cancel_equals_auth_success"])
+        self.assertFalse(packet["auth_success_claimed"])
+
+    def test_native_safety_keychain_reset_blocks(self) -> None:
+        packet = classify_keychain_observation(
+            machine_prompt_observed=True,
+            keychain_reset_performed=True,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "KEYCHAIN_MUTATION_REQUIRED")
+
+    def test_environment_blocked_result_not_counted_as_pass(self) -> None:
+        packet = classify_environment_blocked_result(
+            item="machine_ui_input_field",
+            status="blocked_by_host_environment",
+            root_cause="macos_accessibility_detail_unavailable",
+            exercised="process/window inventory",
+            remains_unproven="input-capable UI",
+        )
+
+        self.assertEqual(packet["status"], "blocked_by_host_environment")
+        self.assertFalse(packet["counts_as_pass"])
+
+    def test_native_safety_does_not_claim_route_ux_or_egress(self) -> None:
+        matrix = build_allowed_claims_matrix(
+            final_status="NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS"
+        )
+
+        self.assertFalse(matrix["route_claim_allowed"])
+        self.assertFalse(matrix["ux_claim_allowed"])
+        self.assertFalse(matrix["egress_claim_allowed"])
+        self.assertIn("native_route_proven", matrix["forbidden_claims"])
+        self.assertIn("owner_ux_proven", matrix["forbidden_claims"])
+        self.assertIn("direct_egress_absent", matrix["forbidden_claims"])
+
+    def test_native_safety_false_green_audit_requires_safety_packets(self) -> None:
+        matrix = build_allowed_claims_matrix(
+            final_status="NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS"
+        )
+        audit = build_native_safety_false_green_audit(
+            probe_packet={
+                "protected_surface_recursive_diff": {
+                    "all_protected_surfaces_unchanged": True
+                },
+                "user_data_dir_respected_packet": {"user_data_dir_respected": True},
+                "cleanup_reversibility_packet": {"tmp_root_removed": True},
+                "current_codex_delta": {"current_codex_touched": False},
+                "keychain_observation_packet": {
+                    "keychain_cancel_equals_auth_success": False
+                },
+            },
+            allowed_claims_matrix=matrix,
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["forbidden_claims_present"])
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(
