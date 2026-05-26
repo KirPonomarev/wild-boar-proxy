@@ -2096,6 +2096,31 @@ def build_external_detached_handoff_allowed_claims_matrix() -> dict[str, Any]:
     }
 
 
+def _forbidden_claims_present(
+    allowed_claims_matrix: dict[str, Any],
+    *,
+    extra_claimed_fields: dict[str, Any] | None = None,
+) -> bool:
+    forbidden_claims = set(allowed_claims_matrix.get("forbidden_claims", []))
+    allowed_claims = set(allowed_claims_matrix.get("allowed_claims", []))
+    if forbidden_claims.intersection(allowed_claims):
+        return True
+
+    forbidden_boolean_fields = (
+        "route_claim_allowed",
+        "ux_claim_allowed",
+        "egress_claim_allowed",
+        "native_safety_pass_claim_allowed",
+        "auth_strategy_reproof_allowed",
+        "model_availability_reproof_allowed",
+    )
+    if any(allowed_claims_matrix.get(field) is True for field in forbidden_boolean_fields):
+        return True
+
+    extra_claimed_fields = extra_claimed_fields or {}
+    return any(value is True for value in extra_claimed_fields.values())
+
+
 def build_external_detached_handoff_false_green_audit(
     *,
     command_admission_packet: dict[str, Any],
@@ -2129,12 +2154,19 @@ def build_external_detached_handoff_false_green_audit(
             "passed": not allowed_claims_matrix.get("native_safety_pass_claim_allowed", True),
         },
     ]
+    forbidden_claims_present = _forbidden_claims_present(allowed_claims_matrix)
+    checks.append(
+        {
+            "name": "forbidden_claims_absent",
+            "passed": not forbidden_claims_present,
+        }
+    )
     return {
         "captured_at_utc": utc_now(),
         "packet_kind": "external_detached_handoff_false_green_audit",
         "status": "ok" if all(check["passed"] for check in checks) else "blocked",
         "checks": checks,
-        "forbidden_claims_present": False,
+        "forbidden_claims_present": forbidden_claims_present,
     }
 
 
@@ -2525,12 +2557,30 @@ def build_native_safety_import_false_green_audit(
             == "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
         },
     ]
+    forbidden_claims_present = _forbidden_claims_present(
+        allowed_claims_matrix,
+        extra_claimed_fields={
+            "route_claimed": classification_packet.get("route_claimed"),
+            "ux_claimed": classification_packet.get("ux_claimed"),
+            "egress_claimed": classification_packet.get("egress_claimed"),
+            "auth_strategy_reproved": classification_packet.get("auth_strategy_reproved"),
+            "model_availability_reproved": classification_packet.get(
+                "model_availability_reproved"
+            ),
+        },
+    )
+    checks.append(
+        {
+            "name": "forbidden_claims_absent",
+            "passed": not forbidden_claims_present,
+        }
+    )
     return {
         "captured_at_utc": utc_now(),
         "packet_kind": "native_safety_import_false_green_audit",
         "status": "ok" if all(check["passed"] for check in checks) else "blocked",
         "checks": checks,
-        "forbidden_claims_present": False,
+        "forbidden_claims_present": forbidden_claims_present,
     }
 
 

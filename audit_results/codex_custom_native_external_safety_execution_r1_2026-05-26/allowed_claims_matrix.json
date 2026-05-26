@@ -1,0 +1,29 @@
+{
+  "allowed_claims": [
+    "EXTERNAL_DETACHED_NATIVE_SAFETY_RETRY_HANDOFF_READY",
+    "external_command_bounded",
+    "operator_boundary_defined",
+    "import_contract_defined",
+    "no_launch_from_current_thread_proven"
+  ],
+  "captured_at_utc": "2026-05-26T18:14:50.274973Z",
+  "egress_claim_allowed": false,
+  "forbidden_claims": [
+    "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+    "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+    "native_safety_passed",
+    "native_route_proven",
+    "owner_ux_proven",
+    "direct_egress_absent",
+    "Original_Codex_via_WBP_proven",
+    "model_availability_reproven",
+    "auth_strategy_reproven",
+    "external_result_passed_before_import",
+    "external_result_classified_in_handoff_only_mode"
+  ],
+  "native_safety_pass_claim_allowed": false,
+  "packet_kind": "external_detached_handoff_allowed_claims_matrix",
+  "route_claim_allowed": false,
+  "status": "ok",
+  "ux_claim_allowed": false
+}

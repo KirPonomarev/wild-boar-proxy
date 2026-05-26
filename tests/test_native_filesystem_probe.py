@@ -1638,6 +1638,34 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["forbidden_claims_present"])
 
+    def test_external_detached_handoff_audit_detects_forbidden_claims(self) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "wbp_external_EXTERNAL_2026",
+        )
+        admission = build_external_detached_command_admission_packet(
+            command,
+            repo_root=repo_root,
+        )
+        import_contract = build_external_detached_import_contract_packet()
+        no_launch = build_no_launch_from_current_thread_packet()
+        matrix = build_external_detached_handoff_allowed_claims_matrix()
+        matrix["allowed_claims"].append("native_safety_passed")
+        audit = build_external_detached_handoff_false_green_audit(
+            command_admission_packet=admission,
+            import_contract_packet=import_contract,
+            no_launch_packet=no_launch,
+            allowed_claims_matrix=matrix,
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+        self.assertIn(
+            {"name": "forbidden_claims_absent", "passed": False},
+            audit["checks"],
+        )
+
     def test_external_result_import_requires_handoff_packet(self) -> None:
         repo_root = Path("/repo").resolve()
         command = build_external_detached_handoff_command_packet(
@@ -1741,6 +1769,37 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
         )
         self.assertFalse(classification["route_claimed"])
+
+    def test_external_result_import_audit_detects_forbidden_classification_claims(
+        self,
+    ) -> None:
+        classification = classify_native_safety_retry_import(
+            command_integrity_packet={"status": "ok"},
+            validation_packet={"status": "ok", "parsed_packets": {}},
+            secret_scan_packet={"status": "ok"},
+            protected_surface_summary_packet={"status": "ok"},
+            keychain_boundary_packet={"status": "ok"},
+        )
+        classification["route_claimed"] = True
+        audit = build_native_safety_import_false_green_audit(
+            execution_ownership_packet=build_external_result_execution_ownership_packet(),
+            command_integrity_packet={"status": "ok"},
+            validation_packet={"status": "ok"},
+            secret_scan_packet={"status": "ok"},
+            classification_packet=classification,
+            allowed_claims_matrix=build_import_allowed_claims_matrix(),
+            layer_separation_packet=build_layer_separation_packet(),
+            keychain_boundary_packet=build_keychain_boundary_packet(
+                keychain_packet={}
+            ),
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+        self.assertIn(
+            {"name": "forbidden_claims_absent", "passed": False},
+            audit["checks"],
+        )
 
     def test_external_result_import_pass_requires_protected_surface_diff(self) -> None:
         validation = {
