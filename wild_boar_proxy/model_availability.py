@@ -114,6 +114,8 @@ def build_layer_boundary_packet() -> dict[str, Any]:
         "packet_kind": "model_availability_layer_boundary",
         "captured_at_utc": utc_now(),
         "status": "ok",
+        "proof_transport": "direct_wbp_http_non_stream",
+        "direct_only_contour": True,
         "proves_model_availability_only": True,
         "native_app_usability_proven": False,
         "codex_cli_acceptance_proven": False,
@@ -124,6 +126,9 @@ def build_layer_boundary_packet() -> dict[str, Any]:
         "account_promotion_allowed": False,
         "wire_fidelity_repair_allowed": False,
         "final_e2e_proven": False,
+        "previous_matrix_import_allowed_as_current_truth": False,
+        "live_native_launch_allowed": False,
+        "live_codex_cli_launch_allowed": False,
     }
 
 
@@ -503,6 +508,8 @@ def build_model_direct_preflight_packet(
         "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
         "packet_kind": "model_direct_preflight",
         "captured_at_utc": utc_now(),
+        "proof_transport": "direct_wbp_http_non_stream",
+        "direct_only_contour": True,
         "model_id": model_id,
         "source": source,
         "listed": listed,
@@ -525,6 +532,10 @@ def build_model_direct_preflight_packet(
         "auth_header_recorded": False,
         "error_shape_classified": isinstance(error_payload, dict),
         "failure_cause": failure_cause,
+        "catalog_presence_counted_as_availability": False,
+        "direct_wbp_200_counted_as_codex_acceptance": False,
+        "non_stream_result_counts_for_streaming": False,
+        "non_stream_result_counts_for_tool_loop": False,
         "streaming_tested": False,
         "tool_loop_tested": False,
         "streaming_classified": "live_not_tested",
@@ -569,6 +580,8 @@ def build_model_availability_matrix(
         "status": "ok" if not overclaims and model_packets else "blocked",
         "machine_error_code": "OK" if not overclaims and model_packets else "MODEL_AVAILABILITY_BLOCKED",
         "target_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+        "proof_transport": "direct_wbp_http_non_stream",
+        "direct_only_contour": True,
         "runtime_ready": runtime_packet.get("runtime_ready") is True,
         "candidate_count": candidate_packet.get("candidate_count", 0),
         "sampling_limit": candidate_packet.get("sampling_limit", SAMPLE_LIMIT),
@@ -583,6 +596,10 @@ def build_model_availability_matrix(
         "streaming_compatible": False,
         "tool_loop_compatible": False,
         "codex_acceptance_proven": False,
+        "catalog_presence_counted_as_availability": False,
+        "non_stream_result_counts_for_streaming": False,
+        "non_stream_result_counts_for_tool_loop": False,
+        "previous_matrix_imported_as_current_truth": False,
         "forbidden_claims": list(FORBIDDEN_MODEL_CLAIMS),
         "overclaim_findings": overclaims,
         "models": model_packets,
@@ -607,6 +624,10 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
         findings.append("schema_version")
     if packet.get("all_model_sweep_attempted") is not False:
         findings.append("all_model_sweep_attempted")
+    if packet.get("direct_only_contour") is not True:
+        findings.append("direct_only_contour")
+    if packet.get("proof_transport") != "direct_wbp_http_non_stream":
+        findings.append("proof_transport")
     for field in (
         "native_launch_attempted",
         "codex_cli_tested",
@@ -614,6 +635,10 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
         "account_pool_health_proven",
         "streaming_compatible",
         "tool_loop_compatible",
+        "catalog_presence_counted_as_availability",
+        "non_stream_result_counts_for_streaming",
+        "non_stream_result_counts_for_tool_loop",
+        "previous_matrix_imported_as_current_truth",
     ):
         if packet.get(field) is not False:
             findings.append(field)
@@ -629,6 +654,10 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
             findings.append(f"models[{index}].model_id")
         if model.get("failure_cause") not in FAILURE_CAUSES:
             findings.append(f"models[{index}].failure_cause")
+        if model.get("direct_only_contour") is not True:
+            findings.append(f"models[{index}].direct_only_contour")
+        if model.get("proof_transport") != "direct_wbp_http_non_stream":
+            findings.append(f"models[{index}].proof_transport")
         for field in (
             "native_tested",
             "codex_cli_tested",
@@ -636,6 +665,10 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
             "owner_ui_tested",
             "account_health_proven",
             "response_accepted_by_codex",
+            "catalog_presence_counted_as_availability",
+            "direct_wbp_200_counted_as_codex_acceptance",
+            "non_stream_result_counts_for_streaming",
+            "non_stream_result_counts_for_tool_loop",
         ):
             if model.get(field) is not False:
                 findings.append(f"models[{index}].{field}")
@@ -658,10 +691,18 @@ def build_model_availability_false_green_audit(
         findings.append("stale_validation_used_as_current_truth")
     if layer_boundary_packet.get("native_app_usability_proven") is not False:
         findings.append("native_layer_overclaim")
+    if layer_boundary_packet.get("direct_only_contour") is not True:
+        findings.append("layer_boundary_not_direct_only")
     if matrix_packet.get("codex_acceptance_proven") is not False:
         findings.append("codex_acceptance_overclaim")
+    if matrix_packet.get("direct_only_contour") is not True:
+        findings.append("matrix_not_direct_only")
     if matrix_packet.get("all_model_sweep_attempted") is not False:
         findings.append("all_model_sweep_overclaim")
+    if matrix_packet.get("catalog_presence_counted_as_availability") is not False:
+        findings.append("catalog_presence_counted_as_availability")
+    if matrix_packet.get("previous_matrix_imported_as_current_truth") is not False:
+        findings.append("previous_matrix_imported_as_current_truth")
     if mutation_guard_packet.get("status") != "ok":
         findings.append("route_or_account_mutation")
     if normalization_packet.get("status") != "ok":

@@ -126,8 +126,11 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertTrue(model["request_reaches_wbp"])
         self.assertTrue(model["upstream_accepts"])
+        self.assertTrue(model["direct_only_contour"])
+        self.assertEqual(model["proof_transport"], "direct_wbp_http_non_stream")
         self.assertFalse(model["response_accepted_by_codex"])
         self.assertEqual(model["codex_acceptance_status"], "not_tested")
+        self.assertFalse(model["direct_wbp_200_counted_as_codex_acceptance"])
 
     def test_model_availability_matrix_rejects_codex_acceptance_overclaim(self) -> None:
         model = build_model_direct_preflight_packet(
@@ -334,6 +337,19 @@ class ModelAvailabilityTests(unittest.TestCase):
         self.assertFalse(packet["current_truth_allowed"])
         self.assertFalse(packet["stale_validation_used_as_current_truth"])
 
+    def test_validation_freshness_blocks_malformed_timestamp(self) -> None:
+        packet = build_validation_freshness_packet(
+            observed_at_utc="not-a-timestamp",
+            captured_at_utc="2026-05-26T12:00:00Z",
+            validation_actor="fixture",
+            validation_scope="gpt-5.4-mini",
+            max_age_seconds=60,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIsNone(packet["validation_age_seconds"])
+        self.assertFalse(packet["current_truth_allowed"])
+
     def test_validation_freshness_allows_recent_truth(self) -> None:
         packet = build_validation_freshness_packet(
             observed_at_utc="2026-05-26T11:59:30Z",
@@ -376,10 +392,22 @@ class ModelAvailabilityTests(unittest.TestCase):
         self.assertTrue(packet["route_mutated"])
         self.assertFalse(packet["route_account_mutation_allowed"])
 
+    def test_no_route_account_mutation_guard_blocks_account_drift(self) -> None:
+        packet = build_no_route_account_mutation_packet(
+            account_snapshot_before={"active": ["stable"]},
+            account_snapshot_after={"active": ["changed"]},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["account_mutated"])
+        self.assertFalse(packet["route_account_mutation_allowed"])
+
     def test_layer_boundary_keeps_native_egress_and_final_e2e_out(self) -> None:
         packet = build_layer_boundary_packet()
 
         self.assertTrue(packet["proves_model_availability_only"])
+        self.assertTrue(packet["direct_only_contour"])
+        self.assertEqual(packet["proof_transport"], "direct_wbp_http_non_stream")
         self.assertFalse(packet["native_app_usability_proven"])
         self.assertFalse(packet["direct_egress_absence_proven"])
         self.assertFalse(packet["final_e2e_proven"])
