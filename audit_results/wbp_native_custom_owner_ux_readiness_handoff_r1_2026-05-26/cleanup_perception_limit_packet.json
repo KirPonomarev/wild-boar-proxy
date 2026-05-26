@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T19:41:29.643485Z",
+  "cleanup_perception_counts_as_cleanup_reversibility": false,
+  "cleanup_perception_counts_as_filesystem_proof": false,
+  "cleanup_perception_counts_as_original_reversibility": false,
+  "cleanup_perception_counts_as_protected_surface_diff": false,
+  "filesystem_cleanup_proven": false,
+  "owner_cleanup_confirmation_collected": false,
+  "owner_cleanup_perception_status": "not_collected",
+  "packet_kind": "cleanup_perception_limit",
+  "status": "ok"
+}

@@ -61,6 +61,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_owner_execution_layer_separation_packet,
     build_owner_execution_observation_packet,
     build_owner_historical_observation_import_packet,
+    build_owner_handoff_instruction_packet,
     build_machine_ui_waiver_packet,
     build_native_owner_ux_false_green_audit,
     build_native_direct_egress_capability_packet,
@@ -69,11 +70,16 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_route_trace_binding_packet,
     build_owner_manual_ux_check_packet,
     build_owner_nonce_prompt_packet,
+    build_owner_ux_readiness_false_green_audit,
+    build_owner_ux_readiness_packet,
     build_owner_ux_action_boundary_packet,
     build_owner_ux_historical_false_green_audit,
     build_owner_ux_layer_boundary_packet,
     build_owner_action_boundary_packet,
     build_owner_visible_response_observation_packet,
+    build_provider_marker_observation_limit_packet,
+    build_cleanup_perception_limit_packet,
+    build_historical_or_incidental_route_context_packet,
     build_owner_external_execution_result_packet,
     build_owner_execution_boundary_packet,
     build_protected_surface_import_summary,
@@ -3091,6 +3097,103 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         )
 
         self.assertEqual(clean["status"], "ok")
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertTrue(blocked["forbidden_claims_present"])
+
+    def test_owner_ux_readiness_does_not_count_as_live_proof(self) -> None:
+        packet = build_owner_ux_readiness_packet(
+            native_launch_from_hosted_context_allowed=False,
+            owner_confirmation_collected=False,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["native_launch_attempted"])
+        self.assertFalse(packet["readiness_counts_as_owner_ux_acceptance"])
+        self.assertFalse(packet["readiness_counts_as_routing"])
+        self.assertTrue(packet["owner_confirmation_required_for_live_pass"])
+
+    def test_owner_handoff_instruction_hashes_prompt_without_recording_raw_prompt(self) -> None:
+        packet = build_owner_handoff_instruction_packet(
+            exact_prompt="WBP_OWNER_UX_READINESS_NONCE: reply WBP_OK",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["owner_handoff_required_for_live_ux"])
+        self.assertTrue(packet["exact_prompt_sha256"])
+        self.assertFalse(packet["exact_prompt_recorded_raw"])
+        self.assertFalse(packet["handoff_counts_as_live_proof"])
+
+    def test_provider_marker_observation_limit_is_ui_only(self) -> None:
+        packet = build_provider_marker_observation_limit_packet(
+            provider_marker_visible=True
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["provider_marker_counts_as_ui_observation_only"])
+        self.assertFalse(packet["provider_marker_counts_as_route_proof"])
+        self.assertFalse(packet["provider_marker_counts_as_model_availability"])
+        self.assertFalse(packet["provider_marker_counts_as_egress_absence"])
+
+    def test_cleanup_perception_limit_does_not_replace_filesystem_proof(self) -> None:
+        packet = build_cleanup_perception_limit_packet(
+            owner_cleanup_perception_packet={
+                "status": "ok",
+                "owner_reported_hidden_cleanup_not_performed": True,
+            }
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["owner_cleanup_confirmation_collected"])
+        self.assertFalse(packet["cleanup_perception_counts_as_filesystem_proof"])
+        self.assertFalse(packet["cleanup_perception_counts_as_cleanup_reversibility"])
+        self.assertFalse(packet["filesystem_cleanup_proven"])
+
+    def test_historical_or_incidental_route_context_never_proves_route(self) -> None:
+        packet = build_historical_or_incidental_route_context_packet(
+            historical_routing_trace_reference_packet={"status": "ok"},
+            incidental_wbp_request_observed=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["historical_or_incidental_context_only"])
+        self.assertFalse(packet["fresh_route_reproved_in_this_contour"])
+        self.assertFalse(packet["routing_proven"])
+        self.assertFalse(packet["response_accepted_by_codex_proven"])
+        self.assertFalse(packet["direct_egress_absence_proven"])
+
+    def test_owner_ux_readiness_false_green_audit_blocks_adjacent_claims(self) -> None:
+        readiness = build_owner_ux_readiness_packet(
+            native_launch_from_hosted_context_allowed=False,
+            owner_confirmation_collected=False,
+        )
+        handoff = build_owner_handoff_instruction_packet(
+            exact_prompt="WBP_OWNER_UX_READINESS_NONCE: reply WBP_OK",
+        )
+        marker = build_provider_marker_observation_limit_packet()
+        cleanup = build_cleanup_perception_limit_packet()
+        route_context = build_historical_or_incidental_route_context_packet()
+        layer = build_owner_ux_layer_boundary_packet()
+        clean = build_owner_ux_readiness_false_green_audit(
+            readiness_packet=readiness,
+            handoff_instruction_packet=handoff,
+            provider_marker_limit_packet=marker,
+            cleanup_perception_limit_packet=cleanup,
+            route_context_packet=route_context,
+            layer_boundary_packet=layer,
+        )
+        bad_layer = dict(layer)
+        bad_layer["final_e2e_claimed"] = True
+        blocked = build_owner_ux_readiness_false_green_audit(
+            readiness_packet=readiness,
+            handoff_instruction_packet=handoff,
+            provider_marker_limit_packet=marker,
+            cleanup_perception_limit_packet=cleanup,
+            route_context_packet=route_context,
+            layer_boundary_packet=bad_layer,
+        )
+
+        self.assertEqual(clean["status"], "ok")
+        self.assertFalse(clean["forbidden_claims_present"])
         self.assertEqual(blocked["status"], "blocked")
         self.assertTrue(blocked["forbidden_claims_present"])
 

@@ -4784,6 +4784,190 @@ def build_owner_ux_layer_boundary_packet() -> dict[str, Any]:
     }
 
 
+def build_owner_ux_readiness_packet(
+    *,
+    native_launch_from_hosted_context_allowed: bool,
+    owner_confirmation_collected: bool,
+) -> dict[str, Any]:
+    ready = not native_launch_from_hosted_context_allowed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_ux_readiness",
+        "status": "ok" if ready else "blocked",
+        "reason_class": "" if ready else "HOSTED_NATIVE_LAUNCH_WOULD_BE_UNSAFE",
+        "readiness_status": "classified" if ready else "blocked",
+        "native_launch_from_current_hosted_context_allowed": native_launch_from_hosted_context_allowed,
+        "native_launch_attempted": False,
+        "owner_confirmation_collected": owner_confirmation_collected,
+        "owner_confirmation_required_for_live_pass": True,
+        "machine_ui_waiver_required_for_owner_observation": True,
+        "routing_required_for_route_claim": True,
+        "readiness_counts_as_owner_ux_acceptance": False,
+        "readiness_counts_as_native_launch": False,
+        "readiness_counts_as_routing": False,
+        "readiness_counts_as_egress": False,
+        "readiness_counts_as_filesystem_safety": False,
+    }
+
+
+def build_owner_handoff_instruction_packet(*, exact_prompt: str) -> dict[str, Any]:
+    prompt_hash = _sha256_text(exact_prompt)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_handoff_instruction",
+        "status": "ok" if exact_prompt else "blocked",
+        "reason_class": "" if exact_prompt else "OWNER_PROMPT_REQUIRED",
+        "native_launch_from_current_hosted_context_allowed": False,
+        "owner_handoff_required_for_live_ux": True,
+        "exact_prompt_sha256": prompt_hash,
+        "exact_prompt_recorded_raw": False,
+        "minimal_owner_tasks": [
+            "use an already visible isolated Custom window or a separately authorized detached launch flow",
+            "type the exact prompt identified by this packet",
+            "confirm whether a visible response appeared",
+            "confirm no config/model/route/provider edits were made",
+            "confirm no hidden cleanup was performed",
+        ],
+        "forbidden_owner_tasks": [
+            "edit config",
+            "change route/account/model/provider",
+            "move profile paths",
+            "patch app/runtime",
+            "perform cleanup outside declared packet surfaces",
+        ],
+        "handoff_counts_as_live_proof": False,
+    }
+
+
+def build_provider_marker_observation_limit_packet(
+    *,
+    provider_marker_visible: bool = False,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_marker_observation_limit",
+        "status": "ok",
+        "provider_marker_visible": provider_marker_visible,
+        "provider_marker_observation_allowed": True,
+        "provider_marker_counts_as_ui_observation_only": True,
+        "provider_marker_counts_as_route_proof": False,
+        "provider_marker_counts_as_account_proof": False,
+        "provider_marker_counts_as_model_availability": False,
+        "provider_marker_counts_as_wbp_acceptance": False,
+        "provider_marker_counts_as_egress_absence": False,
+    }
+
+
+def build_cleanup_perception_limit_packet(
+    *,
+    owner_cleanup_perception_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    perception = owner_cleanup_perception_packet or {}
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "cleanup_perception_limit",
+        "status": "ok",
+        "owner_cleanup_perception_status": perception.get("status", "not_collected"),
+        "owner_cleanup_confirmation_collected": bool(perception),
+        "cleanup_perception_counts_as_filesystem_proof": False,
+        "cleanup_perception_counts_as_protected_surface_diff": False,
+        "cleanup_perception_counts_as_cleanup_reversibility": False,
+        "cleanup_perception_counts_as_original_reversibility": False,
+        "filesystem_cleanup_proven": False,
+    }
+
+
+def build_historical_or_incidental_route_context_packet(
+    *,
+    historical_routing_trace_reference_packet: dict[str, Any] | None = None,
+    incidental_wbp_request_observed: bool = False,
+) -> dict[str, Any]:
+    historical = historical_routing_trace_reference_packet or {}
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "historical_or_incidental_route_context",
+        "status": "ok",
+        "historical_route_context_present": bool(historical),
+        "historical_route_context_status": historical.get("status", "not_collected"),
+        "incidental_wbp_request_observed": incidental_wbp_request_observed,
+        "historical_or_incidental_context_only": True,
+        "fresh_route_reproved_in_this_contour": False,
+        "routing_proven": False,
+        "model_availability_proven": False,
+        "response_accepted_by_codex_proven": False,
+        "direct_egress_absence_proven": False,
+        "owner_observation_replaces_route_trace": False,
+    }
+
+
+def build_owner_ux_readiness_false_green_audit(
+    *,
+    readiness_packet: dict[str, Any],
+    handoff_instruction_packet: dict[str, Any],
+    provider_marker_limit_packet: dict[str, Any],
+    cleanup_perception_limit_packet: dict[str, Any],
+    route_context_packet: dict[str, Any],
+    layer_boundary_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "readiness_not_live_ux_acceptance",
+            "passed": readiness_packet.get("readiness_counts_as_owner_ux_acceptance") is False
+            and readiness_packet.get("native_launch_attempted") is False,
+        },
+        {
+            "name": "handoff_not_live_proof",
+            "passed": handoff_instruction_packet.get("handoff_counts_as_live_proof") is False,
+        },
+        {
+            "name": "provider_marker_ui_only",
+            "passed": provider_marker_limit_packet.get("provider_marker_counts_as_route_proof") is False
+            and provider_marker_limit_packet.get("provider_marker_counts_as_model_availability") is False,
+        },
+        {
+            "name": "cleanup_perception_not_filesystem_proof",
+            "passed": cleanup_perception_limit_packet.get("cleanup_perception_counts_as_filesystem_proof") is False
+            and cleanup_perception_limit_packet.get("cleanup_perception_counts_as_cleanup_reversibility") is False,
+        },
+        {
+            "name": "route_context_not_route_proof",
+            "passed": route_context_packet.get("fresh_route_reproved_in_this_contour") is False
+            and route_context_packet.get("routing_proven") is False,
+        },
+        {
+            "name": "layer_boundary_forbids_adjacent_claims",
+            "passed": not any(
+                layer_boundary_packet.get(key) is True
+                for key in (
+                    "fresh_live_native_launch_claimed",
+                    "fresh_route_claimed",
+                    "machine_ui_proof_claimed",
+                    "filesystem_safety_claimed",
+                    "direct_egress_claimed",
+                    "auth_strategy_reproved",
+                    "model_availability_reproved",
+                    "original_codex_via_wbp_claimed",
+                    "final_e2e_claimed",
+                )
+            ),
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_ux_readiness_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": not all(check["passed"] for check in checks),
+        "native_launch_claimed": False,
+        "owner_ux_acceptance_claimed": False,
+        "routing_claimed": False,
+        "egress_claimed": False,
+        "filesystem_safety_claimed": False,
+        "original_reversibility_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
 def build_owner_ux_historical_false_green_audit(
     *,
     historical_observation_import_packet: dict[str, Any],
