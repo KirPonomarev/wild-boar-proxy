@@ -420,6 +420,165 @@ def classify_keychain_observation(
     }
 
 
+def build_owner_action_boundary_packet(
+    *,
+    ordinary_codex_close_requested: bool = False,
+    ordinary_codex_close_confirmed: bool = False,
+    prompt_submitted: bool = False,
+    runtime_authority_edited: bool = False,
+    hidden_cleanup_performed: bool = False,
+) -> dict[str, Any]:
+    violation = prompt_submitted or runtime_authority_edited or hidden_cleanup_performed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_action_boundary",
+        "status": "blocked" if violation else "ok",
+        "reason_class": "OWNER_ACTION_BOUNDARY_VIOLATED" if violation else "",
+        "allowed_actions": [
+            "close ordinary Codex",
+            "confirm ordinary Codex is closed",
+            "press Cancel on Keychain prompt if it appears",
+            "confirm no prompt was typed",
+        ],
+        "forbidden_actions": [
+            "edit config",
+            "edit model/provider/route/account",
+            "move profile paths",
+            "patch app/runtime",
+            "manually delete hidden profile/protected files",
+            "type prompt into Custom window",
+        ],
+        "ordinary_codex_close_requested": ordinary_codex_close_requested,
+        "ordinary_codex_close_confirmed": ordinary_codex_close_confirmed,
+        "prompt_submitted": prompt_submitted,
+        "runtime_authority_edited": runtime_authority_edited,
+        "hidden_cleanup_performed": hidden_cleanup_performed,
+    }
+
+
+def classify_host_context(host_process_chain: list[dict[str, Any]]) -> dict[str, Any]:
+    host_negative = classify_protected_codex_host_negative(host_process_chain)
+    if not host_process_chain:
+        context = "unproven"
+        status = "blocked"
+        reason_class = "HOST_CONTEXT_UNPROVEN"
+    elif host_negative.get("hosted_by_protected_codex_session"):
+        context = "protected_codex_hosted"
+        status = "blocked"
+        reason_class = "PROTECTED_CODEX_HOSTED_EXECUTOR"
+    else:
+        context = "detached_external"
+        status = "ok"
+        reason_class = ""
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "host_context",
+        "status": status,
+        "reason_class": reason_class,
+        "executor_context": context,
+        "host_process_chain": host_process_chain,
+        "host_process_chain_length": len(host_process_chain),
+        "hosted_by_protected_codex_session": host_negative.get(
+            "hosted_by_protected_codex_session"
+        ),
+        "protected_codex_ancestry_disproven": host_negative.get(
+            "protected_codex_ancestry_disproven"
+        ),
+        "machine_filesystem_proof_environment_constrained": context
+        == "protected_codex_hosted",
+    }
+
+
+def build_quiescent_retry_launch_admission_packet(
+    *,
+    host_context_packet: dict[str, Any],
+    owner_action_boundary_packet: dict[str, Any],
+    quiescent_precondition_packet: dict[str, Any],
+    idle_stability_packet: dict[str, Any] | None = None,
+    declared_write_surfaces_packet: dict[str, Any] | None = None,
+    protected_surface_read_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if host_context_packet.get("status") != "ok":
+        failed_checks.append("host_context_required")
+    if owner_action_boundary_packet.get("status") != "ok":
+        failed_checks.append("owner_action_boundary_required")
+    if not quiescent_precondition_packet.get(
+        "quiescent_current_codex_precondition_satisfied"
+    ):
+        failed_checks.append("quiescent_current_codex_required")
+    if idle_stability_packet is None:
+        failed_checks.append("idle_stability_required")
+    elif idle_stability_packet.get("final_verdict") != "ACTIVE_CURRENT_CODEX_BASELINE_STABLE":
+        failed_checks.append("idle_stability_required")
+    if declared_write_surfaces_packet is None or declared_write_surfaces_packet.get("status") != "ok":
+        failed_checks.append("declared_write_surfaces_required")
+    if protected_surface_read_packet is None or not protected_surface_read_packet.get(
+        "inspection_only"
+    ):
+        failed_checks.append("protected_surface_read_classification_required")
+    launch_admitted = not failed_checks
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "quiescent_retry_launch_admission",
+        "status": "ok" if launch_admitted else "blocked",
+        "reason_class": "" if launch_admitted else "PRELAUNCH_GATE_BLOCKED",
+        "native_launch_admitted": launch_admitted,
+        "native_launch_attempted": False,
+        "failed_checks": failed_checks,
+        "host_context": host_context_packet.get("executor_context"),
+        "quiescent_precondition_satisfied": quiescent_precondition_packet.get(
+            "quiescent_current_codex_precondition_satisfied"
+        ),
+        "idle_stability_final_verdict": (
+            idle_stability_packet or {}
+        ).get("final_verdict"),
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+    }
+
+
+def build_quiescent_retry_blocker_packet(
+    *,
+    launch_admission_packet: dict[str, Any],
+    host_context_packet: dict[str, Any],
+    quiescent_precondition_packet: dict[str, Any],
+    idle_stability_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if host_context_packet.get("executor_context") == "protected_codex_hosted":
+        actual_status = "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_HOSTED_EXECUTOR_CONTEXT"
+    elif not quiescent_precondition_packet.get(
+        "quiescent_current_codex_precondition_satisfied"
+    ):
+        actual_status = "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_NON_QUIESCENT_CURRENT_CODEX"
+    elif idle_stability_packet and idle_stability_packet.get(
+        "final_verdict"
+    ) != "ACTIVE_CURRENT_CODEX_BASELINE_STABLE":
+        actual_status = "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_IDLE_PROTECTED_SURFACE_DRIFT"
+    else:
+        actual_status = "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_PRELAUNCH_GATE"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "quiescent_retry_blocker",
+        "status": "blocked",
+        "target_status": "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+        "target_status_achieved": False,
+        "actual_status": actual_status,
+        "reason_class": launch_admission_packet.get(
+            "reason_class", "PRELAUNCH_GATE_BLOCKED"
+        ),
+        "failed_checks": launch_admission_packet.get("failed_checks", []),
+        "native_launch_attempted": False,
+        "filesystem_retry_attempted": False,
+        "route_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+    }
+
+
 def classify_environment_blocked_result(
     *,
     item: str,

@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T10:03:32.714293Z",
+  "declared_write_surfaces": [
+    "fresh evidence directory only",
+    "server-owned isolated temp Custom profile under /tmp/wbp-native-fs-* if launch admitted",
+    "server-owned isolated CODEX_HOME under /tmp/wbp-native-fs-* if launch admitted",
+    "server-owned isolated user-data-dir under /tmp/wbp-native-fs-* if launch admitted"
+  ],
+  "original_codex_bundle_write_allowed": false,
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "declared_write_surfaces",
+  "protected_surfaces_write_allowed": false,
+  "status": "ok"
+}

@@ -1,0 +1,33 @@
+{
+  "captured_at_utc": "2026-05-26T10:03:32.714286Z",
+  "executor_context": "protected_codex_hosted",
+  "host_process_chain": [
+    {
+      "command": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python tools/native_custom_quiescent_safety_retry_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_2026-05-26",
+      "pid": 62642,
+      "ppid": 61167
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+      "pid": 61167,
+      "ppid": 61052
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/MacOS/Codex",
+      "pid": 61052,
+      "ppid": 1
+    },
+    {
+      "command": "/sbin/launchd",
+      "pid": 1,
+      "ppid": 0
+    }
+  ],
+  "host_process_chain_length": 4,
+  "hosted_by_protected_codex_session": true,
+  "machine_filesystem_proof_environment_constrained": true,
+  "packet_kind": "host_context",
+  "protected_codex_ancestry_disproven": false,
+  "reason_class": "PROTECTED_CODEX_HOSTED_EXECUTOR",
+  "status": "blocked"
+}

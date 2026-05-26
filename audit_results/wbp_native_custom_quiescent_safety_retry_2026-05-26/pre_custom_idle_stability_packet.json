@@ -1,0 +1,10 @@
+{
+  "blocked_by_host_context": true,
+  "blocked_by_quiescent_precondition": true,
+  "captured_at_utc": "2026-05-26T10:03:32.714367Z",
+  "final_verdict": "PRELAUNCH_GATE_BLOCKED_BEFORE_IDLE_STABILITY",
+  "idle_windows_attempted": false,
+  "packet_kind": "pre_custom_idle_stability",
+  "reason_class": "PRELAUNCH_GATE_BLOCKED_BEFORE_IDLE_STABILITY",
+  "status": "blocked"
+}

@@ -12,9 +12,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
     build_native_safety_false_green_audit,
+    build_owner_action_boundary_packet,
     build_protected_surface_read_classification_packet,
+    build_quiescent_retry_blocker_packet,
+    build_quiescent_retry_launch_admission_packet,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
+    classify_host_context,
     classify_protected_codex_host_negative,
     classify_fresh_context_acquisition,
     classify_fresh_context_entry,
@@ -189,6 +193,91 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["forbidden_claims_present"])
+
+    def test_quiescent_retry_host_context_required(self) -> None:
+        packet = classify_host_context(
+            [
+                {"pid": 100, "ppid": 90, "command": "/usr/bin/python3"},
+                {
+                    "pid": 90,
+                    "ppid": 80,
+                    "command": "/Applications/Codex.app/Contents/Resources/codex app-server",
+                },
+            ]
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["executor_context"], "protected_codex_hosted")
+        self.assertTrue(packet["machine_filesystem_proof_environment_constrained"])
+
+    def test_quiescent_retry_owner_action_boundary_required(self) -> None:
+        packet = build_owner_action_boundary_packet(prompt_submitted=True)
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "OWNER_ACTION_BOUNDARY_VIOLATED")
+
+    def test_quiescent_retry_does_not_launch_before_prelaunch_gates(self) -> None:
+        admission = build_quiescent_retry_launch_admission_packet(
+            host_context_packet={"status": "blocked", "executor_context": "protected_codex_hosted"},
+            owner_action_boundary_packet={"status": "ok"},
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+            idle_stability_packet=None,
+            declared_write_surfaces_packet={"status": "ok"},
+            protected_surface_read_packet={"inspection_only": True},
+        )
+
+        self.assertEqual(admission["status"], "blocked")
+        self.assertFalse(admission["native_launch_admitted"])
+        self.assertFalse(admission["native_launch_attempted"])
+        self.assertIn("host_context_required", admission["failed_checks"])
+        self.assertIn("quiescent_current_codex_required", admission["failed_checks"])
+        self.assertIn("idle_stability_required", admission["failed_checks"])
+
+    def test_quiescent_retry_blocks_when_idle_drift_repeats(self) -> None:
+        admission = build_quiescent_retry_launch_admission_packet(
+            host_context_packet={"status": "ok", "executor_context": "detached_external"},
+            owner_action_boundary_packet={"status": "ok"},
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": True
+            },
+            idle_stability_packet={
+                "status": "ok",
+                "final_verdict": "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE",
+            },
+            declared_write_surfaces_packet={"status": "ok"},
+            protected_surface_read_packet={"inspection_only": True},
+        )
+
+        self.assertEqual(admission["status"], "blocked")
+        self.assertIn("idle_stability_required", admission["failed_checks"])
+
+    def test_quiescent_retry_blocked_result_is_closed_evidence(self) -> None:
+        admission = build_quiescent_retry_launch_admission_packet(
+            host_context_packet={"status": "blocked", "executor_context": "protected_codex_hosted"},
+            owner_action_boundary_packet={"status": "ok"},
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+        )
+        blocker = build_quiescent_retry_blocker_packet(
+            launch_admission_packet=admission,
+            host_context_packet={"executor_context": "protected_codex_hosted"},
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+        )
+
+        self.assertEqual(blocker["status"], "blocked")
+        self.assertEqual(
+            blocker["actual_status"],
+            "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_HOSTED_EXECUTOR_CONTEXT",
+        )
+        self.assertFalse(blocker["native_launch_attempted"])
+        self.assertFalse(blocker["route_claimed"])
+        self.assertFalse(blocker["ux_claimed"])
+        self.assertFalse(blocker["egress_claimed"])
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(
