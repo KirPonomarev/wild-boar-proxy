@@ -820,7 +820,13 @@ def build_original_live_temporary_route_apply_admission_packet(
     owner_authorization_packet: dict[str, Any],
     rollback_point_packet: dict[str, Any],
     readiness_reference_packet: dict[str, Any],
+    last_chance_dry_run_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    last_chance_dry_run_packet = (
+        last_chance_dry_run_packet
+        if isinstance(last_chance_dry_run_packet, dict)
+        else {}
+    )
     failed_checks: list[str] = []
     if readiness_reference_packet.get("status") != "ok":
         failed_checks.append("readiness_reference_required")
@@ -828,6 +834,11 @@ def build_original_live_temporary_route_apply_admission_packet(
         failed_checks.append("owner_authorization_required")
     if rollback_point_packet.get("status") != "ok":
         failed_checks.append("rollback_point_required_before_apply")
+    if last_chance_dry_run_packet:
+        if last_chance_dry_run_packet.get("status") != "ok":
+            failed_checks.append("last_chance_dry_run_required_before_apply")
+        if last_chance_dry_run_packet.get("temporary_route_apply_performed") is True:
+            failed_checks.append("dry_run_must_not_apply_route")
     apply_admitted = not failed_checks
     return {
         "captured_at_utc": utc_now(),
@@ -840,6 +851,219 @@ def build_original_live_temporary_route_apply_admission_packet(
         "original_profile_write_performed": False,
         "native_original_launch_allowed": apply_admitted,
         "native_original_launch_attempted": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_strategy_reference_packet(
+    *,
+    provider_auth_strategy_packet: dict[str, Any],
+    source_path: str = "",
+    auth_command_edited: bool = False,
+    file_auth_fallback_used: bool = False,
+    current_auth_json_runtime_dependency: bool = False,
+) -> dict[str, Any]:
+    auth_command = (
+        provider_auth_strategy_packet.get("auth_command")
+        if isinstance(provider_auth_strategy_packet.get("auth_command"), dict)
+        else {}
+    )
+    failed_checks: list[str] = []
+    if provider_auth_strategy_packet.get("status") != "ok":
+        failed_checks.append("provider_auth_strategy_reference_must_be_ok")
+    if provider_auth_strategy_packet.get("selected_strategy") != "auth.command":
+        failed_checks.append("selected_strategy_must_remain_auth_command")
+    if auth_command.get("server_owned_path") is not True:
+        failed_checks.append("auth_command_path_must_be_server_owned")
+    if auth_command.get("raw_upstream_secret") is not False:
+        failed_checks.append("auth_command_must_not_emit_raw_upstream_secret")
+    if auth_command_edited:
+        failed_checks.append("auth_command_must_not_be_edited_in_original_live_contour")
+    if file_auth_fallback_used:
+        failed_checks.append("file_auth_fallback_deferred_to_separate_contour")
+    if current_auth_json_runtime_dependency:
+        failed_checks.append("current_auth_json_must_not_be_runtime_dependency")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_strategy_reference",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "AUTH_STRATEGY_REFERENCE_NOT_ADMISSIBLE",
+        "referenced_packet": source_path,
+        "referenced_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED"
+        if provider_auth_strategy_packet.get("status") == "ok"
+        else "",
+        "selected_strategy": provider_auth_strategy_packet.get("selected_strategy", ""),
+        "auth_command_path": auth_command.get("path", ""),
+        "auth_strategy_reproved": False,
+        "auth_command_edited": auth_command_edited,
+        "file_auth_fallback_used": file_auth_fallback_used,
+        "current_auth_json_runtime_dependency": current_auth_json_runtime_dependency,
+        "raw_upstream_secret_used": auth_command.get("raw_upstream_secret") is True,
+        "temporary_route_apply_allowed": not failed_checks,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_live_temporary_config_candidate_packet(
+    *,
+    owner_authorization_packet: dict[str, Any],
+    provider_auth_strategy_reference_packet: dict[str, Any],
+    endpoint: str = "http://127.0.0.1:8318/v1",
+    model: str = "gpt-5.4-mini",
+) -> dict[str, Any]:
+    auth_command_path = str(
+        provider_auth_strategy_reference_packet.get("auth_command_path") or ""
+    )
+    candidate_text = (
+        f'model = "{model}"\n'
+        'model_provider = "wbp"\n'
+        'approval_policy = "never"\n'
+        'sandbox_mode = "read-only"\n\n'
+        "[model_providers.wbp]\n"
+        'name = "Wild Boar Proxy"\n'
+        f'base_url = "{endpoint}"\n'
+        'wire_api = "responses"\n'
+        "requires_openai_auth = false\n\n"
+        "[model_providers.wbp.auth]\n"
+        f'command = "{auth_command_path}"\n'
+    )
+    failed_checks: list[str] = []
+    if owner_authorization_packet.get("status") != "ok":
+        failed_checks.append("owner_authorization_required_for_candidate")
+    if provider_auth_strategy_reference_packet.get("status") != "ok":
+        failed_checks.append("provider_auth_strategy_reference_required")
+    if not auth_command_path:
+        failed_checks.append("auth_command_path_required")
+    if "experimental_bearer_token" in candidate_text:
+        failed_checks.append("experimental_bearer_token_forbidden_in_original_live_r2")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_temporary_config_candidate",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "TEMPORARY_CONFIG_CANDIDATE_NOT_ADMISSIBLE",
+        "exact_target_path": owner_authorization_packet.get("exact_target_path", ""),
+        "candidate_sha256": hashlib.sha256(candidate_text.encode("utf-8")).hexdigest(),
+        "candidate_byte_length": len(candidate_text.encode("utf-8")),
+        "expected_diff_summary": [
+            "set model_provider=wbp",
+            f"set model={model}",
+            f"set model_providers.wbp.base_url={endpoint}",
+            "set model_providers.wbp.wire_api=responses",
+            "set model_providers.wbp.requires_openai_auth=false",
+            "set model_providers.wbp.auth.command=server_owned_path",
+        ],
+        "candidate_text_recorded": False,
+        "raw_auth_token_in_candidate": False,
+        "auth_command_reference_only": True,
+        "experimental_bearer_token_in_candidate": False,
+        "temporary_route_apply_performed": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_live_last_chance_dry_run_packet(
+    *,
+    owner_authorization_packet: dict[str, Any],
+    rollback_point_packet: dict[str, Any],
+    temporary_config_candidate_packet: dict[str, Any],
+    provider_auth_strategy_reference_packet: dict[str, Any],
+) -> dict[str, Any]:
+    owner_target = str(owner_authorization_packet.get("exact_target_path") or "")
+    candidate_target = str(temporary_config_candidate_packet.get("exact_target_path") or "")
+    failed_checks: list[str] = []
+    if owner_authorization_packet.get("status") != "ok":
+        failed_checks.append("owner_authorization_required_after_dry_run")
+    if rollback_point_packet.get("status") != "ok":
+        failed_checks.append("rollback_point_required_after_dry_run")
+    if temporary_config_candidate_packet.get("status") != "ok":
+        failed_checks.append("temporary_config_candidate_required_after_dry_run")
+    if provider_auth_strategy_reference_packet.get("status") != "ok":
+        failed_checks.append("auth_strategy_reference_required_after_dry_run")
+    if not owner_target or candidate_target != owner_target:
+        failed_checks.append("candidate_target_must_match_owner_authorization")
+    if not temporary_config_candidate_packet.get("expected_diff_summary"):
+        failed_checks.append("expected_diff_summary_required")
+    if temporary_config_candidate_packet.get("raw_auth_token_in_candidate") is not False:
+        failed_checks.append("raw_auth_token_must_not_be_in_candidate")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_last_chance_dry_run",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "LAST_CHANCE_DRY_RUN_NOT_ADMISSIBLE",
+        "dry_run_performed": True,
+        "owner_authorization_current_after_dry_run": owner_authorization_packet.get("status")
+        == "ok",
+        "exact_target_path": owner_target,
+        "candidate_target_path": candidate_target,
+        "candidate_sha256": temporary_config_candidate_packet.get("candidate_sha256", ""),
+        "temporary_route_apply_allowed": not failed_checks,
+        "temporary_route_apply_performed": False,
+        "original_profile_write_performed": False,
+        "raw_auth_token_recorded": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_live_trace_timeout_policy_packet(
+    *,
+    trace_observed: bool,
+    restore_attempted_after_timeout: bool,
+    restore_verified_after_timeout: bool,
+    timeout_seconds: int = 60,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if timeout_seconds <= 0:
+        failed_checks.append("positive_timeout_required")
+    if not trace_observed and not restore_attempted_after_timeout:
+        failed_checks.append("restore_attempt_required_after_trace_timeout")
+    if not trace_observed and not restore_verified_after_timeout:
+        failed_checks.append("restore_verification_required_after_trace_timeout")
+    ok = trace_observed or not failed_checks
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_trace_timeout_policy",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "TRACE_TIMEOUT_RESTORE_FIRST_NOT_PROVEN",
+        "timeout_seconds": timeout_seconds,
+        "trace_observed": trace_observed,
+        "restore_first_after_timeout": True,
+        "restore_attempted_after_timeout": restore_attempted_after_timeout,
+        "restore_verified_after_timeout": restore_verified_after_timeout,
+        "retry_mutation_allowed": False,
+        "second_launch_allowed_before_restore": False,
+        "blocked_status_if_timeout": "ORIGINAL_CODEX_VIA_WBP_BLOCKED_ROUTE_TRACE_MISSING",
+        "failed_checks": failed_checks,
+    }
+
+
+def build_original_live_restore_failure_lockdown_packet(
+    *,
+    restore_verified: bool,
+    second_launch_attempted: bool = False,
+    retry_apply_attempted: bool = False,
+    hidden_cleanup_performed: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if not restore_verified:
+        failed_checks.append("restore_not_verified_requires_stop_and_diagnose")
+    if second_launch_attempted:
+        failed_checks.append("second_launch_forbidden_after_failed_restore")
+    if retry_apply_attempted:
+        failed_checks.append("retry_apply_forbidden_after_failed_restore")
+    if hidden_cleanup_performed:
+        failed_checks.append("hidden_cleanup_forbidden_after_failed_restore")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_live_restore_failure_lockdown",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "RESTORE_FAILURE_LOCKDOWN",
+        "restore_verified": restore_verified,
+        "stop_and_diagnose_required": not restore_verified,
+        "second_launch_allowed": restore_verified,
+        "normal_mode_sanity_allowed": restore_verified,
+        "second_launch_attempted": second_launch_attempted,
+        "retry_apply_attempted": retry_apply_attempted,
+        "hidden_cleanup_performed": hidden_cleanup_performed,
         "failed_checks": failed_checks,
     }
 
@@ -967,6 +1191,7 @@ def build_original_live_summary_packet(
         "normal_original_post_cleanup_proven": False,
         "direct_egress_absence_proven": False,
         "model_availability_proven": False,
+        "wire_compatibility_proven": False,
         "full_native_ux_proven": False,
         "final_e2e_proven": False,
         "blocked_by_host_environment_counted_as_pass": False,
@@ -1000,6 +1225,10 @@ def build_original_live_false_green_audit(
         {
             "name": "final_e2e_not_claimed",
             "passed": summary_packet.get("final_e2e_proven") is False,
+        },
+        {
+            "name": "wire_compatibility_not_claimed",
+            "passed": summary_packet.get("wire_compatibility_proven") is not True,
         },
         {
             "name": "blocked_environment_not_pass",

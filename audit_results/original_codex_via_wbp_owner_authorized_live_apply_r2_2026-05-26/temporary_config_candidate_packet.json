@@ -1,0 +1,25 @@
+{
+  "auth_command_reference_only": true,
+  "candidate_byte_length": 333,
+  "candidate_sha256": "417a32c88d78ec32e70ee53c2c417f384b640fda20a984c6bfd1661ff4af2d58",
+  "candidate_text_recorded": false,
+  "captured_at_utc": "2026-05-26T14:28:06.622867Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "expected_diff_summary": [
+    "set model_provider=wbp",
+    "set model=gpt-5.4-mini",
+    "set model_providers.wbp.base_url=http://127.0.0.1:8318/v1",
+    "set model_providers.wbp.wire_api=responses",
+    "set model_providers.wbp.requires_openai_auth=false",
+    "set model_providers.wbp.auth.command=server_owned_path"
+  ],
+  "experimental_bearer_token_in_candidate": false,
+  "failed_checks": [
+    "owner_authorization_required_for_candidate"
+  ],
+  "packet_kind": "original_live_temporary_config_candidate",
+  "raw_auth_token_in_candidate": false,
+  "reason_class": "TEMPORARY_CONFIG_CANDIDATE_NOT_ADMISSIBLE",
+  "status": "blocked",
+  "temporary_route_apply_performed": false
+}

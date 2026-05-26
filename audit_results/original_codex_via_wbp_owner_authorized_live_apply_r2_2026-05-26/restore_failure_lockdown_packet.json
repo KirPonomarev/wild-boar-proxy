@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-26T14:28:06.622894Z",
+  "failed_checks": [
+    "restore_not_verified_requires_stop_and_diagnose"
+  ],
+  "hidden_cleanup_performed": false,
+  "normal_mode_sanity_allowed": false,
+  "packet_kind": "original_live_restore_failure_lockdown",
+  "reason_class": "RESTORE_FAILURE_LOCKDOWN",
+  "restore_verified": false,
+  "retry_apply_attempted": false,
+  "second_launch_allowed": false,
+  "second_launch_attempted": false,
+  "status": "blocked",
+  "stop_and_diagnose_required": true
+}

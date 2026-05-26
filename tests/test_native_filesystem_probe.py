@@ -84,6 +84,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_network_observer_feasibility_decision_packet,
     build_quiescent_network_precondition_packet,
     build_original_auth_boundary_packet,
+    build_original_live_last_chance_dry_run_packet,
     build_original_live_admissibility_decision_packet,
     build_original_process_window_state_packet,
     build_original_profile_inventory_packet,
@@ -94,11 +95,15 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_original_live_owner_authorization_packet,
     build_original_live_rollback_point_packet,
     build_original_live_restore_verification_packet,
+    build_original_live_restore_failure_lockdown_packet,
     build_original_live_summary_packet,
     build_original_live_temporary_route_apply_admission_packet,
+    build_original_live_temporary_config_candidate_packet,
+    build_original_live_trace_timeout_policy_packet,
     build_original_surface_read_classification_packet,
     build_original_temporary_route_strategy_packet,
     build_original_via_wbp_claim_limits_packet,
+    build_provider_auth_strategy_reference_packet,
     build_selected_model_trace_claim_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
@@ -627,6 +632,159 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(auth["status"], "ok")
         self.assertFalse(auth["retry_mutation_authorized"])
+
+    def test_original_live_provider_auth_reference_is_not_reproof(self) -> None:
+        packet = build_provider_auth_strategy_reference_packet(
+            provider_auth_strategy_packet={
+                "status": "ok",
+                "selected_strategy": "auth.command",
+                "auth_command": {
+                    "path": "/repo/wbp_codex_auth_command.py",
+                    "server_owned_path": True,
+                    "raw_upstream_secret": False,
+                },
+            },
+            source_path="/repo/audit_results/auth/provider_auth_strategy_packet.json",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["auth_strategy_reproved"])
+        self.assertFalse(packet["file_auth_fallback_used"])
+        self.assertFalse(packet["current_auth_json_runtime_dependency"])
+
+    def test_original_live_forbids_auth_command_edit(self) -> None:
+        packet = build_provider_auth_strategy_reference_packet(
+            provider_auth_strategy_packet={
+                "status": "ok",
+                "selected_strategy": "auth.command",
+                "auth_command": {
+                    "path": "/repo/wbp_codex_auth_command.py",
+                    "server_owned_path": True,
+                    "raw_upstream_secret": False,
+                },
+            },
+            auth_command_edited=True,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIn(
+            "auth_command_must_not_be_edited_in_original_live_contour",
+            packet["failed_checks"],
+        )
+
+    def test_original_live_requires_last_chance_dry_run(self) -> None:
+        apply_admission = build_original_live_temporary_route_apply_admission_packet(
+            owner_authorization_packet={"status": "ok", "exact_target_path": "/x"},
+            rollback_point_packet={"status": "ok"},
+            readiness_reference_packet={"status": "ok"},
+            last_chance_dry_run_packet={"status": "blocked"},
+        )
+
+        self.assertEqual(apply_admission["status"], "blocked")
+        self.assertIn(
+            "last_chance_dry_run_required_before_apply",
+            apply_admission["failed_checks"],
+        )
+        self.assertFalse(apply_admission["original_profile_write_allowed"])
+
+    def test_original_live_dry_run_candidate_must_match_authorization(self) -> None:
+        dry_run = build_original_live_last_chance_dry_run_packet(
+            owner_authorization_packet={
+                "status": "ok",
+                "exact_target_path": "/Users/test/.codex/config.toml",
+            },
+            rollback_point_packet={"status": "ok"},
+            temporary_config_candidate_packet={
+                "status": "ok",
+                "exact_target_path": "/Users/test/.codex/other.toml",
+                "expected_diff_summary": ["set model_provider=wbp"],
+                "raw_auth_token_in_candidate": False,
+            },
+            provider_auth_strategy_reference_packet={"status": "ok"},
+        )
+
+        self.assertEqual(dry_run["status"], "blocked")
+        self.assertIn(
+            "candidate_target_must_match_owner_authorization",
+            dry_run["failed_checks"],
+        )
+        self.assertFalse(dry_run["temporary_route_apply_performed"])
+
+    def test_original_live_temporary_config_candidate_records_hash_not_secret(self) -> None:
+        candidate = build_original_live_temporary_config_candidate_packet(
+            owner_authorization_packet={
+                "status": "ok",
+                "exact_target_path": "/Users/test/.codex/config.toml",
+            },
+            provider_auth_strategy_reference_packet={
+                "status": "ok",
+                "auth_command_path": "/repo/wbp_codex_auth_command.py",
+            },
+        )
+
+        self.assertEqual(candidate["status"], "ok")
+        self.assertEqual(len(candidate["candidate_sha256"]), 64)
+        self.assertFalse(candidate["candidate_text_recorded"])
+        self.assertFalse(candidate["raw_auth_token_in_candidate"])
+        self.assertTrue(candidate["auth_command_reference_only"])
+
+    def test_original_live_trace_timeout_restores_first(self) -> None:
+        packet = build_original_live_trace_timeout_policy_packet(
+            trace_observed=False,
+            restore_attempted_after_timeout=False,
+            restore_verified_after_timeout=False,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["retry_mutation_allowed"])
+        self.assertFalse(packet["second_launch_allowed_before_restore"])
+        self.assertIn(
+            "restore_attempt_required_after_trace_timeout",
+            packet["failed_checks"],
+        )
+
+    def test_original_live_restore_failure_lockdown_blocks_second_launch(self) -> None:
+        packet = build_original_live_restore_failure_lockdown_packet(
+            restore_verified=False,
+            second_launch_attempted=True,
+            retry_apply_attempted=True,
+            hidden_cleanup_performed=True,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["stop_and_diagnose_required"])
+        self.assertFalse(packet["second_launch_allowed"])
+        self.assertIn(
+            "second_launch_forbidden_after_failed_restore",
+            packet["failed_checks"],
+        )
+
+    def test_original_live_normal_sanity_not_final_e2e(self) -> None:
+        summary = build_original_live_summary_packet(
+            owner_authorization_packet={"status": "ok", "failed_checks": []},
+            apply_admission_packet={"status": "ok"},
+            route_trace_packet={"route_trace_confirmed": True},
+            restore_verification_packet={"status": "ok"},
+        )
+
+        self.assertFalse(summary["normal_original_post_cleanup_proven"])
+        self.assertFalse(summary["final_e2e_proven"])
+
+    def test_original_live_does_not_claim_wire_compatibility(self) -> None:
+        audit = build_original_live_false_green_audit(
+            summary_packet={
+                "direct_egress_absence_proven": False,
+                "model_availability_proven": False,
+                "wire_compatibility_proven": True,
+                "full_native_ux_proven": False,
+                "final_e2e_proven": False,
+                "blocked_by_host_environment_counted_as_pass": False,
+                "original_route_proven": False,
+            }
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
 
     def test_original_live_blocked_environment_not_pass(self) -> None:
         summary = build_original_live_summary_packet(

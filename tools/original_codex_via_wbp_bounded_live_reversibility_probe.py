@@ -26,13 +26,18 @@ if str(ROOT) not in sys.path:
 from wild_boar_proxy.native_filesystem_probe import (
     build_original_auth_boundary_packet,
     build_original_live_false_green_audit,
+    build_original_live_last_chance_dry_run_packet,
     build_original_live_owner_authorization_packet,
     build_original_live_rollback_point_packet,
+    build_original_live_restore_failure_lockdown_packet,
     build_original_live_summary_packet,
+    build_original_live_temporary_config_candidate_packet,
     build_original_live_temporary_route_apply_admission_packet,
+    build_original_live_trace_timeout_policy_packet,
     build_original_process_window_state_packet,
     build_original_profile_inventory_packet,
     build_original_readiness_reference_packet,
+    build_provider_auth_strategy_reference_packet,
     build_selected_model_trace_claim_packet,
     collect_codex_process_inventory,
     json_write,
@@ -48,6 +53,10 @@ SECRET_PATTERNS = (
 READINESS_SUMMARY = (
     "audit_results/original_codex_via_wbp_reversibility_readiness_2026-05-26/"
     "original_readiness_summary_packet.json"
+)
+AUTH_STRATEGY_PACKET = (
+    "audit_results/wbp_provider_auth_strategy_contract_refresh_2026-05-26/"
+    "provider_auth_strategy_packet.json"
 )
 
 
@@ -202,8 +211,13 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "original_profile_before_packet.json",
         "original_auth_boundary_packet.json",
         "original_process_window_before_packet.json",
+        "provider_auth_strategy_reference_packet.json",
         "rollback_point_packet.json",
+        "temporary_config_candidate_packet.json",
+        "last_chance_dry_run_packet.json",
         "temporary_route_apply_admission_packet.json",
+        "trace_timeout_policy_packet.json",
+        "restore_failure_lockdown_packet.json",
         "selected_model_trace_claim_packet.json",
         "original_via_wbp_summary_packet.json",
         "original_via_wbp_false_green_audit.json",
@@ -216,6 +230,10 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     summary = packets.get("original_via_wbp_summary_packet.json", {})
     owner_auth = packets.get("owner_authorization_packet.json", {})
     false_green = packets.get("original_via_wbp_false_green_audit.json", {})
+    dry_run = packets.get("last_chance_dry_run_packet.json", {})
+    timeout_policy = packets.get("trace_timeout_policy_packet.json", {})
+    lockdown = packets.get("restore_failure_lockdown_packet.json", {})
+    auth_reference = packets.get("provider_auth_strategy_reference_packet.json", {})
     return {
         "captured_at_utc": _utc_now(),
         "packet_kind": "independent_original_via_wbp_audit",
@@ -233,9 +251,22 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
             owner_auth.get("status") != "ok"
             and summary.get("native_original_launch_attempted") is False
         ),
+        "last_chance_dry_run_present": bool(dry_run),
+        "dry_run_did_not_write": dry_run.get("temporary_route_apply_performed") is False,
+        "auth_strategy_reference_only": auth_reference.get("auth_strategy_reproved") is False,
+        "trace_timeout_policy_restores_first": (
+            timeout_policy.get("restore_first_after_timeout") is True
+            and timeout_policy.get("retry_mutation_allowed") is False
+        ),
+        "restore_failure_lockdown_present": bool(lockdown),
+        "restore_failure_does_not_allow_second_launch": lockdown.get(
+            "second_launch_allowed"
+        )
+        is False,
         "false_green_audit_ok": false_green.get("status") == "ok",
         "direct_egress_absence_claimed": summary.get("direct_egress_absence_proven") is True,
         "model_availability_claimed": summary.get("model_availability_proven") is True,
+        "wire_compatibility_claimed": summary.get("wire_compatibility_proven") is True,
         "final_e2e_claimed": summary.get("final_e2e_proven") is True,
     }
 
@@ -265,6 +296,10 @@ def main() -> int:
 
     readiness_path = repo_root / READINESS_SUMMARY
     readiness_summary = _read_json(readiness_path) if readiness_path.exists() else {}
+    auth_strategy_path = repo_root / AUTH_STRATEGY_PACKET
+    auth_strategy_packet = (
+        _read_json(auth_strategy_path) if auth_strategy_path.exists() else {}
+    )
     owner_auth = build_original_live_owner_authorization_packet(
         owner_authorized=args.owner_authorized,
         exact_target_path=args.exact_target_path,
@@ -301,10 +336,33 @@ def main() -> int:
         rollback_point_created=False,
         rollback_point_verified=False,
     )
+    auth_strategy_reference = build_provider_auth_strategy_reference_packet(
+        provider_auth_strategy_packet=auth_strategy_packet,
+        source_path=str(auth_strategy_path),
+    )
+    temporary_candidate = build_original_live_temporary_config_candidate_packet(
+        owner_authorization_packet=owner_auth,
+        provider_auth_strategy_reference_packet=auth_strategy_reference,
+    )
+    last_chance_dry_run = build_original_live_last_chance_dry_run_packet(
+        owner_authorization_packet=owner_auth,
+        rollback_point_packet=rollback_point,
+        temporary_config_candidate_packet=temporary_candidate,
+        provider_auth_strategy_reference_packet=auth_strategy_reference,
+    )
     apply_admission = build_original_live_temporary_route_apply_admission_packet(
         owner_authorization_packet=owner_auth,
         rollback_point_packet=rollback_point,
         readiness_reference_packet=packets["original_readiness_reference_packet.json"],
+        last_chance_dry_run_packet=last_chance_dry_run,
+    )
+    trace_timeout_policy = build_original_live_trace_timeout_policy_packet(
+        trace_observed=False,
+        restore_attempted_after_timeout=False,
+        restore_verified_after_timeout=False,
+    )
+    restore_failure_lockdown = build_original_live_restore_failure_lockdown_packet(
+        restore_verified=False,
     )
     selected_model = build_selected_model_trace_claim_packet()
     summary = build_original_live_summary_packet(
@@ -321,7 +379,12 @@ def main() -> int:
             "original_auth_boundary_packet.json": auth_boundary,
             "original_process_window_before_packet.json": process_window,
             "rollback_point_packet.json": rollback_point,
+            "provider_auth_strategy_reference_packet.json": auth_strategy_reference,
+            "temporary_config_candidate_packet.json": temporary_candidate,
+            "last_chance_dry_run_packet.json": last_chance_dry_run,
             "temporary_route_apply_admission_packet.json": apply_admission,
+            "trace_timeout_policy_packet.json": trace_timeout_policy,
+            "restore_failure_lockdown_packet.json": restore_failure_lockdown,
             "selected_model_trace_claim_packet.json": selected_model,
             "original_via_wbp_summary_packet.json": summary,
             "original_via_wbp_false_green_audit.json": false_green,
