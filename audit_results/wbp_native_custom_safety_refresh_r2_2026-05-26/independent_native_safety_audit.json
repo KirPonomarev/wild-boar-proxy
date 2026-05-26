@@ -1,0 +1,76 @@
+{
+  "captured_at_utc": "2026-05-26T11:43:00Z",
+  "packet_kind": "independent_native_safety_audit",
+  "status": "ok",
+  "final_status_verified": "NATIVE_CUSTOM_SAFETY_REFRESH_BLOCKED_PROTECTED_CODEX_HOST",
+  "audited_packets": [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "host_context_packet.json",
+    "quiescent_current_codex_precondition_packet.json",
+    "launch_admission_packet.json",
+    "protected_surface_read_classification_packet.json",
+    "native_safety_blocker_packet.json",
+    "native_safety_false_green_audit.json",
+    "mode_a_precheck_summary_packet.json",
+    "environment_blocker_packet.json"
+  ],
+  "findings": [],
+  "checks": [
+    {
+      "name": "mode_a_completed_before_mode_b",
+      "passed": true,
+      "evidence": "mode_a_precheck_summary_packet.json mode_a_completed=true"
+    },
+    {
+      "name": "mode_b_not_attempted_after_mode_a_block",
+      "passed": true,
+      "evidence": "mode_a_precheck_summary_packet.json mode_b_attempted=false"
+    },
+    {
+      "name": "native_launch_not_attempted",
+      "passed": true,
+      "evidence": "native_safety_blocker_packet.json native_launch_attempted=false"
+    },
+    {
+      "name": "no_prompt_or_route_or_ux_or_egress_claim",
+      "passed": true,
+      "evidence": "mode_a_precheck_summary_packet.json prompt_typed=false route_claimed=false ux_claimed=false egress_claimed=false"
+    },
+    {
+      "name": "protected_surface_read_inspection_only",
+      "passed": true,
+      "evidence": "protected_surface_read_classification_packet.json inspection_only=true"
+    },
+    {
+      "name": "host_context_blocks_current_codex_host",
+      "passed": true,
+      "evidence": "host_context_packet.json reason_class=PROTECTED_CODEX_HOSTED_EXECUTOR"
+    },
+    {
+      "name": "quiescent_precondition_blocks_running_current_codex",
+      "passed": true,
+      "evidence": "quiescent_current_codex_precondition_packet.json reason_class=CURRENT_CODEX_NOT_QUIESCENT"
+    },
+    {
+      "name": "false_green_audit_clean",
+      "passed": true,
+      "evidence": "native_safety_false_green_audit.json status=ok forbidden_claims_present=false"
+    },
+    {
+      "name": "historical_dirty_quarantined",
+      "passed": true,
+      "evidence": "historical_dirt_quarantine_packet.json current_contour_relies_on_quarantined_paths=false"
+    }
+  ],
+  "allowed_claim": "Mode A native safety refresh admission was blocked before launch",
+  "forbidden_claims": [
+    "Native Custom filesystem safety proven",
+    "Native Custom routing proven",
+    "Native Custom UX proven",
+    "direct egress absence proven",
+    "model availability reproven",
+    "Original Codex reversibility proven",
+    "final E2E proven"
+  ]
+}
