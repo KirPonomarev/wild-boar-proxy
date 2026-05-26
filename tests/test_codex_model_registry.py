@@ -70,7 +70,21 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertIn("provider_class", first_model)
         self.assertTrue(first_model["codex_compatible"])
         self.assertTrue(first_model["responses_supported"])
+        self.assertEqual(first_model["responses_supported_claim_scope"], "shape_declared_not_live_proven")
+        self.assertFalse(first_model["responses_live_acceptance_proven"])
         self.assertTrue(first_model["chat_completions_supported"])
+        self.assertEqual(
+            first_model["chat_completions_supported_claim_scope"],
+            "shape_declared_not_live_proven",
+        )
+        self.assertFalse(first_model["chat_completions_live_acceptance_proven"])
+        self.assertEqual(first_model["availability_claim_level"], "listed_not_live_proven")
+        self.assertFalse(first_model["live_availability_proven"])
+        self.assertFalse(first_model["account_health_proven"])
+        self.assertFalse(first_model["native_proven_by_registry"])
+        self.assertFalse(first_model["direct_egress_proven_by_registry"])
+        self.assertFalse(packet["claim_limits"]["model_listed_means_usable"])
+        self.assertFalse(packet["claim_limits"]["registry_proves_live_availability"])
 
     def test_api_compat_only_declares_openai_shape_without_live_calls(self) -> None:
         packet = build_custom_api_compat_packet(operator_status(claim_gate="passed"))

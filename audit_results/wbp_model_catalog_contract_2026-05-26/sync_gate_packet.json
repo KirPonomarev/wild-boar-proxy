@@ -1,0 +1,25 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-26T08:14:28.612661Z",
+  "contour": "WBP_MODEL_CATALOG_CONTRACT_CONTOUR_R1",
+  "git_status_short_branch": {
+    "args": [
+      "git",
+      "status",
+      "--short",
+      "--branch"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json\n M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json\n M tests/test_codex_model_registry.py\n M wild_boar_proxy/codex_model_registry.py\n?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/\n?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/\n?? tests/test_wbp_model_catalog_contract.py"
+  },
+  "head": "9c5fb9c8783c29910fc8746ab4532cb093d18069",
+  "schema_version": 1,
+  "status": "classified_dirty_historical_evidence_present",
+  "stop_token_triggered": false,
+  "unrelated_dirty_surfaces_not_touched": [
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/*",
+    "audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+    "audit_results/wbp_host_quartz_enabled_retry_2026-05-25/"
+  ]
+}

@@ -49,6 +49,27 @@ FORBIDDEN_INFERENCE_SURFACES = (
 )
 CONFIGURED_MODEL_PROVIDER = "cliproxy"
 CONFIGURED_WIRE_API = "responses"
+MODEL_CATALOG_CONTRACT_SCHEMA_VERSION = 1
+CATALOG_ALLOWED_CLAIMS = (
+    "catalog_generated_from_server_owned_sources",
+    "catalog_schema_validated",
+    "model_ids_are_server_issued",
+    "default_model_is_explicit",
+    "capability_claims_are_classified",
+    "unsupported_capabilities_not_advertised",
+    "browser_authority_blocked",
+    "current_codex_auth_json_not_required",
+)
+CATALOG_FORBIDDEN_CLAIMS = (
+    "live_model_availability_proven",
+    "gpt_5_5_works",
+    "all_models_work",
+    "account_health_proven",
+    "native_codex_proven",
+    "cli_runner_proven",
+    "direct_egress_absent",
+    "final_e2e_proven",
+)
 
 
 def utc_now() -> str:
@@ -118,9 +139,19 @@ def _model_entry(model_id: str) -> dict[str, Any]:
         "codex_compatible": True,
         "codex_config_compatible": True,
         "responses_supported": True,
+        "responses_supported_claim_scope": "shape_declared_not_live_proven",
+        "responses_live_acceptance_proven": False,
         "chat_completions_supported": True,
+        "chat_completions_supported_claim_scope": "shape_declared_not_live_proven",
+        "chat_completions_live_acceptance_proven": False,
         "server_issued": True,
         "model_source_hint": source,
+        "availability_claim_level": "listed_not_live_proven",
+        "live_availability_proven": False,
+        "account_health_proven": False,
+        "native_proven_by_registry": False,
+        "direct_egress_proven_by_registry": False,
+        "unsupported_capabilities_advertised": False,
     }
 
 
@@ -159,6 +190,205 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
         )
         entries.append(entry)
     return entries
+
+
+def _catalog_capabilities(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "responses": {
+            "status": "shape_declared",
+            "live_acceptance_proven_by_catalog": False,
+        },
+        "chat_completions": {
+            "status": "shape_declared",
+            "live_acceptance_proven_by_catalog": False,
+        },
+        "streaming": {
+            "status": "classified_elsewhere",
+            "live_acceptance_proven_by_catalog": False,
+        },
+        "tools": {
+            "status": "unclassified",
+            "advertised": False,
+        },
+        "images": {
+            "status": "unclassified",
+            "advertised": False,
+        },
+        "reasoning": {
+            "status": "unclassified",
+            "advertised": False,
+        },
+        "context_window": {
+            "status": "unclassified",
+            "value": None,
+        },
+        "provider_class": entry.get("provider_class", "unknown"),
+    }
+
+
+def _catalog_model_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    model_id = str(entry.get("model_id") or "")
+    return {
+        "model_id": model_id,
+        "label": str(entry.get("label") or model_id),
+        "source": str(entry.get("source") or entry.get("model_source_hint") or "unknown"),
+        "provider_class": str(entry.get("provider_class") or "unknown"),
+        "server_issued": entry.get("server_issued") is True,
+        "model_id_authority": "server_issued",
+        "availability_claim_level": "listed_not_live_proven",
+        "live_availability_proven": False,
+        "account_health_proven": False,
+        "route_proven_by_catalog": False,
+        "native_proven_by_catalog": False,
+        "direct_egress_proven_by_catalog": False,
+        "capabilities": _catalog_capabilities(entry),
+        "unsupported_capabilities_advertised": False,
+    }
+
+
+def build_wbp_model_catalog_contract_packet(
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    registry = build_custom_model_registry_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+    )
+    catalog_models = [
+        _catalog_model_entry(entry)
+        for entry in sorted(
+            registry["available_models"],
+            key=lambda item: str(item.get("model_id") or ""),
+        )
+    ]
+    default_model = str(recommended_default_model or registry["recommended_default_model"])
+    return {
+        "schema_version": MODEL_CATALOG_CONTRACT_SCHEMA_VERSION,
+        "status": registry["status"],
+        "machine_error_code": registry["machine_error_code"],
+        "captured_at_utc": utc_now(),
+        "contract_scope": "provider_catalog_only",
+        "model_provider": CONFIGURED_MODEL_PROVIDER,
+        "base_url": endpoint,
+        "wire_api": CONFIGURED_WIRE_API,
+        "catalog_source": "server_owned_operator_status_plus_enabled_external_routes",
+        "catalog_generated_by": "wbp_server",
+        "catalog_deterministic_order": "model_id_ascending",
+        "server_owned_source": True,
+        "browser_authority": {
+            "catalog_path": False,
+            "model_provider": False,
+            "base_url": False,
+            "wire_api": False,
+            "route_id": False,
+            "backend_id": False,
+            "auth_path": False,
+            "token": False,
+        },
+        "default_model": default_model,
+        "default_model_explicit": True,
+        "default_model_in_catalog": any(entry["model_id"] == default_model for entry in catalog_models),
+        "model_count": len(catalog_models),
+        "models": catalog_models,
+        "allowed_browser_fields": ["model_id"],
+        "forbidden_browser_fields": sorted(CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS),
+        "live_api_checked": False,
+        "network_calls_made": False,
+        "inference_called": False,
+        "provider_called": False,
+        "account_health_proven": False,
+        "native_codex_proven": False,
+        "cli_runner_proven": False,
+        "direct_egress_absence_proven": False,
+        "final_e2e_proven": False,
+        "current_codex_auth_json_dependency": False,
+        "keychain_dependency": False,
+        "original_codex_mutation": False,
+        "raw_upstream_secret_exposed": False,
+        "allowed_claims": list(CATALOG_ALLOWED_CLAIMS),
+        "forbidden_claims": list(CATALOG_FORBIDDEN_CLAIMS),
+        "claim_limits": {
+            "model_listed_means_usable": False,
+            "catalog_proves_route": False,
+            "catalog_proves_native": False,
+            "catalog_proves_egress": False,
+            "catalog_proves_account_health": False,
+        },
+        "negative_claim_basis": "catalog_contract_only_no_live_api_or_consumer_acceptance_call",
+    }
+
+
+def validate_wbp_model_catalog_contract(packet: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    if packet.get("schema_version") != MODEL_CATALOG_CONTRACT_SCHEMA_VERSION:
+        findings.append("schema_version")
+    if packet.get("contract_scope") != "provider_catalog_only":
+        findings.append("contract_scope")
+    if packet.get("server_owned_source") is not True:
+        findings.append("server_owned_source")
+    if packet.get("default_model_explicit") is not True or not packet.get("default_model"):
+        findings.append("default_model")
+    browser_authority = packet.get("browser_authority")
+    if not isinstance(browser_authority, dict) or any(value is not False for value in browser_authority.values()):
+        findings.append("browser_authority")
+    for negative_field in (
+        "live_api_checked",
+        "network_calls_made",
+        "inference_called",
+        "provider_called",
+        "account_health_proven",
+        "native_codex_proven",
+        "cli_runner_proven",
+        "direct_egress_absence_proven",
+        "final_e2e_proven",
+        "current_codex_auth_json_dependency",
+        "keychain_dependency",
+        "original_codex_mutation",
+        "raw_upstream_secret_exposed",
+    ):
+        if packet.get(negative_field) is not False:
+            findings.append(negative_field)
+    models = packet.get("models")
+    if not isinstance(models, list):
+        findings.append("models")
+        return findings
+    model_ids = [entry.get("model_id") for entry in models if isinstance(entry, dict)]
+    if model_ids != sorted(model_ids):
+        findings.append("catalog_deterministic_order")
+    for index, entry in enumerate(models):
+        if not isinstance(entry, dict):
+            findings.append(f"models[{index}]")
+            continue
+        if not isinstance(entry.get("model_id"), str) or not entry["model_id"]:
+            findings.append(f"models[{index}].model_id")
+        if entry.get("server_issued") is not True:
+            findings.append(f"models[{index}].server_issued")
+        if entry.get("availability_claim_level") != "listed_not_live_proven":
+            findings.append(f"models[{index}].availability_claim_level")
+        for negative_field in (
+            "live_availability_proven",
+            "account_health_proven",
+            "route_proven_by_catalog",
+            "native_proven_by_catalog",
+            "direct_egress_proven_by_catalog",
+            "unsupported_capabilities_advertised",
+        ):
+            if entry.get(negative_field) is not False:
+                findings.append(f"models[{index}].{negative_field}")
+        capabilities = entry.get("capabilities")
+        if not isinstance(capabilities, dict):
+            findings.append(f"models[{index}].capabilities")
+            continue
+        for capability in ("tools", "images", "reasoning"):
+            value = capabilities.get(capability)
+            if not isinstance(value, dict) or value.get("advertised") is not False:
+                findings.append(f"models[{index}].capabilities.{capability}")
+    return findings
 
 
 def build_custom_model_registry_packet(
@@ -233,7 +463,13 @@ def build_custom_model_registry_packet(
         "independent_runtime_meter_attached": False,
         "fresh_truth": True,
         "launch_claim_scope": "model_registry_only",
-        "next_contour": "GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS",
+        "claim_limits": {
+            "model_listed_means_usable": False,
+            "registry_proves_live_availability": False,
+            "registry_proves_native": False,
+            "registry_proves_egress": False,
+            "registry_proves_account_health": False,
+        },
     }
 
 
