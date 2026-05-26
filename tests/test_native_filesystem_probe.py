@@ -47,6 +47,9 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_owner_execution_observation_packet,
     build_machine_ui_waiver_packet,
     build_native_owner_ux_false_green_audit,
+    build_native_direct_egress_capability_packet,
+    build_native_direct_egress_claim_packet,
+    build_native_direct_egress_false_green_audit,
     build_native_route_trace_binding_packet,
     build_owner_manual_ux_check_packet,
     build_owner_nonce_prompt_packet,
@@ -193,6 +196,111 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["reason_class"], "KEYCHAIN_MUTATION_REQUIRED")
+
+    def test_native_direct_egress_capability_requires_lsof_observer(self) -> None:
+        blocked = build_native_direct_egress_capability_packet(
+            lsof_path="",
+            process_tree_observer_available=True,
+        )
+        ok = build_native_direct_egress_capability_packet(
+            lsof_path="/usr/sbin/lsof",
+            process_tree_observer_available=True,
+        )
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertFalse(blocked["observer_usable_for_bounded_native_classification"])
+        self.assertEqual(ok["status"], "ok")
+        self.assertTrue(ok["observer_usable_for_bounded_native_classification"])
+        self.assertFalse(ok["full_network_absence_proven"])
+
+    def test_native_direct_egress_local_only_requires_trace_and_process_binding(self) -> None:
+        packet = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "wbp_forward_only_proven",
+                "direct_non_wbp_model_egress_absent_proven": True,
+                "allowed_local_endpoint_observed": True,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS",
+        )
+        self.assertTrue(packet["direct_non_wbp_model_egress_absent_proven"])
+        self.assertFalse(packet["full_network_absence_proven"])
+        self.assertFalse(packet["native_ux_claimed"])
+
+    def test_native_direct_egress_route_trace_alone_does_not_pass(self) -> None:
+        packet = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "insufficient_observation",
+                "direct_non_wbp_model_egress_absent_proven": False,
+                "allowed_local_endpoint_observed": False,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+        )
+        audit = build_native_direct_egress_false_green_audit(
+            native_direct_egress_claim_packet=packet,
+            process_network_observation_packet={
+                "classification": "insufficient_observation",
+                "direct_non_wbp_model_egress_absent_proven": False,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_native_direct_egress_direct_model_peer_blocks(self) -> None:
+        packet = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "direct_model_egress_observed",
+                "direct_non_wbp_model_egress_absent_proven": False,
+                "allowed_local_endpoint_observed": True,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+        )
+        audit = build_native_direct_egress_false_green_audit(
+            native_direct_egress_claim_packet=packet,
+            process_network_observation_packet={
+                "classification": "direct_model_egress_observed",
+                "direct_non_wbp_model_egress_absent_proven": False,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_DIRECT_EGRESS_OBSERVED",
+        )
+        self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_native_direct_egress_background_noise_blocks_without_direct_claim(self) -> None:
+        packet = build_native_direct_egress_claim_packet(
+            process_network_observation_packet={
+                "classification": "direct_model_egress_observed",
+                "direct_non_wbp_model_egress_absent_proven": False,
+                "allowed_local_endpoint_observed": True,
+            },
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            custom_process_bound=True,
+            background_codex_noise_detected=True,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+        )
+        self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
 
     def test_environment_blocked_result_not_counted_as_pass(self) -> None:
         packet = classify_environment_blocked_result(

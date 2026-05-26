@@ -3021,3 +3021,180 @@ def build_native_owner_ux_false_green_audit(
         "checks": checks,
         "forbidden_claims_present": forbidden_claims_present,
     }
+
+
+def build_native_direct_egress_capability_packet(
+    *,
+    lsof_path: str,
+    tcpdump_path: str = "",
+    nettop_path: str = "",
+    process_tree_observer_available: bool = True,
+) -> dict[str, Any]:
+    """Classify local observer availability without implying a live egress result."""
+
+    lsof_available = bool(lsof_path)
+    unsafe_packet_capture_tools_present = bool(tcpdump_path or nettop_path)
+    observer_usable = lsof_available and process_tree_observer_available
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_direct_egress_observer_capability",
+        "status": "ok" if observer_usable else "blocked",
+        "observer_strategy": "lsof_process_tree_sampling",
+        "lsof_path": lsof_path,
+        "lsof_available": lsof_available,
+        "process_tree_observer_available": process_tree_observer_available,
+        "tcpdump_path": tcpdump_path,
+        "nettop_path": nettop_path,
+        "packet_capture_used": False,
+        "unsafe_packet_capture_tools_present": unsafe_packet_capture_tools_present,
+        "observer_usable_for_bounded_native_classification": observer_usable,
+        "full_network_absence_proven": False,
+    }
+
+
+def build_native_direct_egress_claim_packet(
+    *,
+    process_network_observation_packet: dict[str, Any],
+    wbp_trace_observation_packet: dict[str, Any],
+    custom_process_bound: bool,
+    background_codex_noise_detected: bool = False,
+) -> dict[str, Any]:
+    classification = str(
+        process_network_observation_packet.get("classification")
+        or "insufficient_observation"
+    )
+    route_confirmed = wbp_trace_observation_packet.get("route_status") == "confirmed"
+    observer_absent = (
+        process_network_observation_packet.get("direct_non_wbp_model_egress_absent_proven")
+        is True
+    )
+    allowed_local_endpoint_observed = (
+        process_network_observation_packet.get("allowed_local_endpoint_observed") is True
+    )
+    direct_model_egress_observed = classification == "direct_model_egress_observed"
+    if background_codex_noise_detected:
+        status = "blocked"
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE"
+        reason_class = "BACKGROUND_CODEX_NOISE"
+        bounded_absent = False
+    elif direct_model_egress_observed:
+        status = "blocked"
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_DIRECT_EGRESS_OBSERVED"
+        reason_class = "DIRECT_NON_WBP_MODEL_EGRESS_OBSERVED"
+        bounded_absent = False
+    elif not custom_process_bound:
+        status = "blocked"
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_OBSERVER_INSUFFICIENT"
+        reason_class = "CUSTOM_PROCESS_BINDING_MISSING"
+        bounded_absent = False
+    elif classification == "insufficient_observation":
+        status = "blocked"
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_OBSERVER_INSUFFICIENT"
+        reason_class = "INSUFFICIENT_NETWORK_OBSERVATION"
+        bounded_absent = False
+    elif observer_absent and route_confirmed and allowed_local_endpoint_observed:
+        status = "ok"
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS"
+        )
+        reason_class = ""
+        bounded_absent = True
+    else:
+        status = "blocked"
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_UNPROVEN_WITH_OBSERVER_LIMITS"
+        )
+        reason_class = "ROUTE_OR_LOCAL_ENDPOINT_BINDING_UNPROVEN"
+        bounded_absent = False
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_direct_egress_claim",
+        "status": status,
+        "final_status": final_status,
+        "reason_class": reason_class,
+        "observer_classification": classification,
+        "custom_process_bound": custom_process_bound,
+        "route_trace_confirmed": route_confirmed,
+        "allowed_local_endpoint_observed": allowed_local_endpoint_observed,
+        "direct_model_egress_observed": direct_model_egress_observed,
+        "direct_non_wbp_model_egress_absent_proven": bounded_absent,
+        "bounded_observation_absence_proven": bounded_absent,
+        "full_network_absence_proven": False,
+        "native_ux_claimed": False,
+        "machine_ui_proof_claimed": False,
+        "filesystem_safety_claimed": False,
+        "provider_compatibility_claimed": False,
+        "original_codex_via_wbp_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def build_native_direct_egress_false_green_audit(
+    *,
+    native_direct_egress_claim_packet: dict[str, Any],
+    process_network_observation_packet: dict[str, Any],
+    wbp_trace_observation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    direct_absent = (
+        native_direct_egress_claim_packet.get("direct_non_wbp_model_egress_absent_proven")
+        is True
+    )
+    observer_absent = (
+        process_network_observation_packet.get("direct_non_wbp_model_egress_absent_proven")
+        is True
+    )
+    forbidden_claims_present = any(
+        native_direct_egress_claim_packet.get(key) is True
+        for key in (
+            "native_ux_claimed",
+            "machine_ui_proof_claimed",
+            "filesystem_safety_claimed",
+            "provider_compatibility_claimed",
+            "original_codex_via_wbp_claimed",
+            "final_e2e_claimed",
+            "full_network_absence_proven",
+        )
+    )
+    checks = [
+        {
+            "name": "route_trace_alone_not_counted_as_egress_absence",
+            "passed": not (
+                direct_absent
+                and not observer_absent
+                and wbp_trace_observation_packet.get("route_status") == "confirmed"
+            ),
+        },
+        {
+            "name": "observer_insufficient_not_counted_as_pass",
+            "passed": not (
+                direct_absent
+                and process_network_observation_packet.get("classification")
+                == "insufficient_observation"
+            ),
+        },
+        {
+            "name": "direct_model_egress_blocks",
+            "passed": not (
+                direct_absent
+                and process_network_observation_packet.get("classification")
+                == "direct_model_egress_observed"
+            ),
+        },
+        {
+            "name": "bounded_absence_not_global_absence",
+            "passed": native_direct_egress_claim_packet.get("full_network_absence_proven")
+            is False,
+        },
+        {
+            "name": "no_cross_layer_claims",
+            "passed": not forbidden_claims_present,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_direct_egress_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "route_trace_counted_as_egress_absence": direct_absent and not observer_absent,
+    }
