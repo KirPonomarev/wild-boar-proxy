@@ -8,9 +8,14 @@ import unittest
 
 from wild_boar_proxy.model_availability import (
     build_candidate_model_list,
+    build_layer_boundary_packet,
     build_model_availability_matrix,
     build_model_direct_preflight_packet,
+    build_model_availability_false_green_audit,
+    build_model_id_normalization_packet,
+    build_no_route_account_mutation_packet,
     build_runtime_readiness_packet,
+    build_validation_freshness_packet,
     classify_failure_cause,
     forbidden_model_browser_fields,
     validate_model_availability_matrix,
@@ -35,6 +40,8 @@ def routes_packet() -> dict[str, object]:
                 {
                     "route_id": "wbp-web-primary-openrouter",
                     "enabled": True,
+                    "provider": {"id": "openrouter"},
+                    "upstream_model": "openai/gpt-5.4-mini",
                     "auth": {"secret_ref": "OPENROUTER_API_KEY"},
                 }
             ]
@@ -102,6 +109,47 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(validate_model_availability_matrix(matrix), [])
         self.assertEqual(model["direct_preflight_status"], "passed")
+
+    def test_model_direct_preflight_does_not_claim_codex_acceptance(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            request_sent_to_wbp=True,
+        )
+
+        self.assertTrue(model["request_reaches_wbp"])
+        self.assertTrue(model["upstream_accepts"])
+        self.assertFalse(model["response_accepted_by_codex"])
+        self.assertEqual(model["codex_acceptance_status"], "not_tested")
+
+    def test_model_availability_matrix_rejects_codex_acceptance_overclaim(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+        )
+        model["response_accepted_by_codex"] = True
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        self.assertIn("gpt-5.4-mini.response_accepted_by_codex", matrix["overclaim_findings"])
+        self.assertIn(
+            "models[0].response_accepted_by_codex",
+            validate_model_availability_matrix(matrix),
+        )
 
     def test_model_listed_does_not_imply_usable(self) -> None:
         model = build_model_direct_preflight_packet(
@@ -272,6 +320,107 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertIn("route_id", findings)
         self.assertIn("token", findings)
+
+    def test_validation_freshness_blocks_stale_current_truth(self) -> None:
+        packet = build_validation_freshness_packet(
+            observed_at_utc="2026-05-25T00:00:00Z",
+            captured_at_utc="2026-05-26T12:00:00Z",
+            validation_actor="fixture",
+            validation_scope="gpt-5.4-mini",
+            max_age_seconds=60,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["current_truth_allowed"])
+        self.assertFalse(packet["stale_validation_used_as_current_truth"])
+
+    def test_validation_freshness_allows_recent_truth(self) -> None:
+        packet = build_validation_freshness_packet(
+            observed_at_utc="2026-05-26T11:59:30Z",
+            captured_at_utc="2026-05-26T12:00:00Z",
+            validation_actor="fixture",
+            validation_scope="gpt-5.4-mini",
+            max_age_seconds=60,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["current_truth_allowed"])
+
+    def test_model_id_normalization_separates_catalog_and_route_identity(self) -> None:
+        candidates = build_candidate_model_list(
+            configured_model="gpt-5.4-mini",
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        packet = build_model_id_normalization_packet(
+            candidate_packet=candidates,
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        rows = {row["wbp_model_id"]: row for row in packet["rows"]}
+        self.assertEqual(rows["gpt-5.4-mini"]["selection_source"], "catalog")
+        self.assertEqual(rows["wbp-web-primary-openrouter"]["route_id"], "wbp-web-primary-openrouter")
+        self.assertEqual(rows["wbp-web-primary-openrouter"]["route_provider"], "openrouter")
+        self.assertEqual(rows["wbp-web-primary-openrouter"]["upstream_model"], "openai/gpt-5.4-mini")
+        self.assertNotIn("OPENROUTER_API_KEY", json.dumps(packet))
+
+    def test_no_route_account_mutation_guard_blocks_drift(self) -> None:
+        packet = build_no_route_account_mutation_packet(
+            route_snapshot_before={"routes": ["a"]},
+            route_snapshot_after={"routes": ["b"]},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["route_mutated"])
+        self.assertFalse(packet["route_account_mutation_allowed"])
+
+    def test_layer_boundary_keeps_native_egress_and_final_e2e_out(self) -> None:
+        packet = build_layer_boundary_packet()
+
+        self.assertTrue(packet["proves_model_availability_only"])
+        self.assertFalse(packet["native_app_usability_proven"])
+        self.assertFalse(packet["direct_egress_absence_proven"])
+        self.assertFalse(packet["final_e2e_proven"])
+
+    def test_model_availability_false_green_audit_ties_required_packets(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            request_sent_to_wbp=True,
+        )
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+        audit = build_model_availability_false_green_audit(
+            matrix_packet=matrix,
+            freshness_packet=build_validation_freshness_packet(
+                observed_at_utc="2026-05-26T11:59:30Z",
+                captured_at_utc="2026-05-26T12:00:00Z",
+                validation_actor="fixture",
+                validation_scope="gpt-5.4-mini",
+                max_age_seconds=60,
+            ),
+            layer_boundary_packet=build_layer_boundary_packet(),
+            mutation_guard_packet=build_no_route_account_mutation_packet(),
+            normalization_packet=build_model_id_normalization_packet(
+                candidate_packet={"candidate_model_ids": ["gpt-5.4-mini"]},
+                catalog_packet=catalog_packet(),
+            ),
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["direct_wbp_200_counted_as_codex_acceptance"])
 
 
 if __name__ == "__main__":

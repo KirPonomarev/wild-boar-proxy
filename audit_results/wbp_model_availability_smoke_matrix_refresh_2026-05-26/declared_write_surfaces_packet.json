@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T13:10:59.835245Z",
+  "codex_cli_launch_allowed": false,
+  "codex_cli_launch_attempted": false,
+  "declared_write_surfaces": [
+    "fresh evidence directory only"
+  ],
+  "native_launch_allowed": false,
+  "native_launch_attempted": false,
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "declared_write_surfaces",
+  "route_account_mutation_allowed": false,
+  "route_account_mutation_attempted": false,
+  "status": "ok"
+}

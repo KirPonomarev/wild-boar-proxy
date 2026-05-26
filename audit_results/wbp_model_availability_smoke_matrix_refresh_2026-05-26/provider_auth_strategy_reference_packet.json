@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-26T13:10:59.874129Z",
+  "model_availability_reproved_by_auth_contour": false,
+  "packet_kind": "provider_auth_strategy_reference",
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_refresh_2026-05-26/provider_auth_strategy_packet.json",
+  "referenced_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "selected_strategy": "auth.command",
+  "status": "ok"
+}

@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-26T13:10:59.875510Z",
+  "codex_acceptance_proven": false,
+  "codex_cli_launch_attempted": false,
+  "direct_egress_absence_proven": false,
+  "direct_wbp_non_stream_passed_models": [
+    "gpt-5.5",
+    "gpt-5.4-mini",
+    "gpt-5.4"
+  ],
+  "final_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "gpt_5_5_claim": "own_packet_direct_wbp_non_stream_proven",
+  "models_tested": [
+    "gpt-5.5",
+    "gpt-5.4-mini",
+    "gpt-5.4",
+    "wbp-web-primary-openrouter"
+  ],
+  "native_launch_attempted": false,
+  "packet_kind": "model_availability_refresh_summary",
+  "refresh_kind": "guard_refresh_with_previous_live_smoke_reference",
+  "route_account_mutation_attempted": false,
+  "status": "ok",
+  "validation_freshness_status": "ok"
+}

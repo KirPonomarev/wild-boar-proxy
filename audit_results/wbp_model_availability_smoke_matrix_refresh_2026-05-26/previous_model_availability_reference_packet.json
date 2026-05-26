@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T13:10:59.874468Z",
+  "codex_cli_launch_attempted": false,
+  "live_revalidation_attempted_in_refresh": false,
+  "native_launch_attempted": false,
+  "packet_kind": "previous_model_availability_reference",
+  "previous_live_smoke_imported": true,
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_availability_matrix.json",
+  "referenced_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "status": "ok"
+}
