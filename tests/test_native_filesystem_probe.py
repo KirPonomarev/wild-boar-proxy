@@ -48,6 +48,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_safety_false_green_audit,
     build_native_custom_safety_claims_packet,
     build_native_safety_refresh_false_green_audit,
+    build_native_safety_execution_mode_decision_packet,
+    build_native_safety_isolated_path_packet,
+    build_native_cleanup_rollback_expectation_packet,
+    build_native_safety_reference_packet,
+    build_native_integrity_packet,
+    build_native_custom_admission_packet,
+    build_native_safety_admission_false_green_audit,
     build_no_ambient_authority_safety_packet,
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
@@ -157,6 +164,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     scan_tree,
     summarize_idle_baseline_windows,
     validate_external_evidence_packets,
+    validate_native_safety_admission_contour_packets,
 )
 
 
@@ -1169,6 +1177,211 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["ux_claimed"])
         self.assertFalse(audit["egress_claimed"])
+
+    def _native_safety_admission_fixture(self) -> dict[str, dict[str, object]]:
+        tmp_root = Path("/tmp/wbp-native-safety-admission-r1-fixture")
+        profile_dir = tmp_root / "profile"
+        codex_home = profile_dir / ".codex"
+        user_data_dir = profile_dir / "electron-user-data"
+        execution_mode = build_native_safety_execution_mode_decision_packet(
+            execution_mode="inspection_only",
+            native_launch_attempted=False,
+            temp_surface_action_performed=False,
+        )
+        protected_read = build_protected_surface_read_classification_packet()
+        no_ambient = build_no_ambient_authority_safety_packet(
+            ambient_env_packet={"status": "blocked", "reason_class": "ambient_present"},
+            native_launch_attempted=False,
+        )
+        cleanup = build_native_cleanup_rollback_expectation_packet(
+            tmp_root=tmp_root,
+            owned_paths=[profile_dir, codex_home, user_data_dir],
+            temp_surface_action_performed=False,
+            native_launch_attempted=False,
+        )
+        integrity = build_native_integrity_packet(
+            native_launch_attempted=False,
+            temp_surface_action_performed=False,
+            protected_surface_read_packet=protected_read,
+        )
+        isolated_codex_home = build_native_safety_isolated_path_packet(
+            packet_kind="isolated_codex_home",
+            tmp_root=tmp_root,
+            path=codex_home,
+            path_role="CODEX_HOME",
+            execution_mode="inspection_only",
+        )
+        isolated_user_data = build_native_safety_isolated_path_packet(
+            packet_kind="isolated_user_data_dir",
+            tmp_root=tmp_root,
+            path=user_data_dir,
+            path_role="electron_user_data_dir",
+            execution_mode="inspection_only",
+        )
+        admission = build_native_custom_admission_packet(
+            execution_mode_packet=execution_mode,
+            isolated_codex_home_packet=isolated_codex_home,
+            isolated_user_data_dir_packet=isolated_user_data,
+            no_ambient_authority_packet=no_ambient,
+            protected_surface_read_packet=protected_read,
+            cleanup_rollback_expectation_packet=cleanup,
+            native_integrity_packet=integrity,
+        )
+        auth_ref = build_native_safety_reference_packet(
+            packet_kind="provider_auth_strategy_reference",
+            source_path="audit_results/auth/provider_auth_strategy_packet.json",
+            expected_status="WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        )
+        model_ref = build_native_safety_reference_packet(
+            packet_kind="model_availability_reference",
+            source_path="audit_results/model/model_availability_matrix.json",
+            expected_status="WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+        )
+        cli_ref = build_native_safety_reference_packet(
+            packet_kind="cli_runner_reference",
+            source_path="audit_results/cli/cli_runner_closeout_packet.json",
+            expected_status="CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP",
+        )
+        false_green = build_native_safety_admission_false_green_audit(
+            native_custom_admission_packet=admission,
+            auth_strategy_reference_packet=auth_ref,
+            model_availability_reference_packet=model_ref,
+            cli_runner_reference_packet=cli_ref,
+        )
+        return {
+            "execution_mode_decision_packet.json": execution_mode,
+            "native_custom_admission_packet.json": admission,
+            "isolated_codex_home_packet.json": isolated_codex_home,
+            "isolated_user_data_dir_packet.json": isolated_user_data,
+            "no_ambient_authority_packet.json": no_ambient,
+            "protected_surface_read_classification_packet.json": protected_read,
+            "cleanup_rollback_expectation_packet.json": cleanup,
+            "native_integrity_packet.json": integrity,
+            "provider_auth_strategy_reference_packet.json": auth_ref,
+            "model_availability_reference_packet.json": model_ref,
+            "cli_runner_reference_packet.json": cli_ref,
+            "native_safety_false_green_audit.json": false_green,
+        }
+
+    def test_native_safety_execution_mode_required(self) -> None:
+        packet = build_native_safety_execution_mode_decision_packet(
+            execution_mode="surprise_live_mode",
+            native_launch_attempted=False,
+            temp_surface_action_performed=False,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "NATIVE_SAFETY_EXECUTION_MODE_CONTRADICTION")
+
+    def test_native_safety_inspection_only_forbids_launch_packets(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        packets["native_process_observation_packet.json"] = {
+            "packet_kind": "native_process_observation"
+        }
+        validation = validate_native_safety_admission_contour_packets(packets)
+
+        self.assertEqual(validation["status"], "blocked")
+        self.assertIn(
+            "native_process_observation_packet.json",
+            validation["forbidden_launch_packets_present"],
+        )
+
+    def test_native_safety_temp_action_requires_after_diff_cleanup(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        packets["execution_mode_decision_packet.json"] = (
+            build_native_safety_execution_mode_decision_packet(
+                execution_mode="temp_surface_probe",
+                native_launch_attempted=False,
+                temp_surface_action_performed=True,
+            )
+        )
+        validation = validate_native_safety_admission_contour_packets(packets)
+
+        self.assertEqual(validation["status"], "blocked")
+        self.assertIn(
+            "protected_surface_recursive_diff.json",
+            validation["missing_conditional_packets"],
+        )
+        self.assertIn(
+            "cleanup_reversibility_packet.json",
+            validation["missing_conditional_packets"],
+        )
+
+    def test_native_safety_native_launch_attempt_requires_after_diff_cleanup(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        packets["execution_mode_decision_packet.json"] = (
+            build_native_safety_execution_mode_decision_packet(
+                execution_mode="native_launch",
+                native_launch_attempted=True,
+                temp_surface_action_performed=False,
+            )
+        )
+        validation = validate_native_safety_admission_contour_packets(packets)
+
+        self.assertEqual(validation["status"], "blocked")
+        self.assertIn(
+            "protected_surface_recursive_after.json",
+            validation["missing_conditional_packets"],
+        )
+        self.assertIn(
+            "custom_profile_write_inventory_packet.json",
+            validation["missing_conditional_packets"],
+        )
+
+    def test_native_safety_admission_ready_not_launch_executed(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        admission = packets["native_custom_admission_packet.json"]
+        validation = validate_native_safety_admission_contour_packets(packets)
+
+        self.assertEqual(admission["status"], "ok")
+        self.assertTrue(admission["admission_ready"])
+        self.assertFalse(admission["launch_executed"])
+        self.assertEqual(validation["status"], "ok")
+
+    def test_native_safety_reference_packets_not_reproof(self) -> None:
+        packets = self._native_safety_admission_fixture()
+
+        self.assertTrue(packets["provider_auth_strategy_reference_packet.json"]["reference_only"])
+        self.assertFalse(
+            packets["provider_auth_strategy_reference_packet.json"][
+                "auth_strategy_reproved_in_this_contour"
+            ]
+        )
+        self.assertFalse(
+            packets["model_availability_reference_packet.json"][
+                "model_availability_reproved_in_this_contour"
+            ]
+        )
+
+    def test_native_safety_cli_runner_reference_not_native_proof(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        cli_ref = packets["cli_runner_reference_packet.json"]
+
+        self.assertTrue(cli_ref["reference_only"])
+        self.assertFalse(cli_ref["native_proof_claimed_from_reference"])
+        self.assertFalse(
+            packets["native_custom_admission_packet.json"][
+                "cli_runner_counted_as_native_proof"
+            ]
+        )
+
+    def test_native_safety_no_route_ux_egress_claims(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        admission = packets["native_custom_admission_packet.json"]
+        audit = packets["native_safety_false_green_audit.json"]
+
+        self.assertFalse(admission["native_route_proof_claimed"])
+        self.assertFalse(admission["ux_claimed"])
+        self.assertFalse(admission["egress_claimed"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_native_safety_protected_read_is_inspection_only(self) -> None:
+        packets = self._native_safety_admission_fixture()
+        protected_read = packets["protected_surface_read_classification_packet.json"]
+
+        self.assertTrue(protected_read["inspection_only"])
+        self.assertFalse(protected_read["runtime_auth_input_used"])
+        self.assertEqual(packets["native_integrity_packet.json"]["status"], "ok")
 
     def test_native_safety_keychain_prompt_does_not_equal_auth_success(self) -> None:
         packet = classify_keychain_observation(

@@ -3614,6 +3614,466 @@ def build_native_safety_refresh_false_green_audit(
     }
 
 
+NATIVE_SAFETY_ADMISSION_EXECUTION_MODES = (
+    "inspection_only",
+    "temp_surface_probe",
+    "native_launch",
+)
+
+NATIVE_SAFETY_ADMISSION_ALWAYS_REQUIRED_PACKETS = (
+    "execution_mode_decision_packet.json",
+    "native_custom_admission_packet.json",
+    "isolated_codex_home_packet.json",
+    "isolated_user_data_dir_packet.json",
+    "no_ambient_authority_packet.json",
+    "protected_surface_read_classification_packet.json",
+    "cleanup_rollback_expectation_packet.json",
+    "native_integrity_packet.json",
+    "native_safety_false_green_audit.json",
+)
+
+NATIVE_SAFETY_ADMISSION_TEMP_ACTION_REQUIRED_PACKETS = (
+    "protected_surface_recursive_after.json",
+    "protected_surface_recursive_diff.json",
+    "custom_profile_write_inventory_packet.json",
+    "cleanup_reversibility_packet.json",
+)
+
+
+def build_native_safety_execution_mode_decision_packet(
+    *,
+    execution_mode: str,
+    native_launch_attempted: bool,
+    temp_surface_action_performed: bool,
+    decision_basis: str = "platform_safe_admission_refresh",
+) -> dict[str, Any]:
+    mode_valid = execution_mode in NATIVE_SAFETY_ADMISSION_EXECUTION_MODES
+    inspection_only_violation = (
+        execution_mode == "inspection_only"
+        and (native_launch_attempted or temp_surface_action_performed)
+    )
+    native_launch_violation = execution_mode != "native_launch" and native_launch_attempted
+    ok = mode_valid and not inspection_only_violation and not native_launch_violation
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_execution_mode_decision",
+        "status": "ok" if ok else "blocked",
+        "reason_class": ""
+        if ok
+        else "NATIVE_SAFETY_EXECUTION_MODE_CONTRADICTION",
+        "execution_mode": execution_mode,
+        "allowed_execution_modes": list(NATIVE_SAFETY_ADMISSION_EXECUTION_MODES),
+        "decision_basis": decision_basis,
+        "native_launch_attempted": native_launch_attempted,
+        "temp_surface_action_performed": temp_surface_action_performed,
+        "inspection_only": execution_mode == "inspection_only",
+        "native_launch_allowed": execution_mode == "native_launch",
+        "native_launch_required_for_pass": False,
+        "forbidden_launch_packet_kinds_in_inspection_only": [
+            "native_custom_dispatch",
+            "native_process_observation",
+            "native_window_observation",
+            "native_route_trace_binding",
+            "native_direct_egress_claim",
+        ],
+        "conditional_packets_required": list(
+            NATIVE_SAFETY_ADMISSION_TEMP_ACTION_REQUIRED_PACKETS
+            if temp_surface_action_performed or native_launch_attempted
+            else ()
+        ),
+    }
+
+
+def build_native_safety_isolated_path_packet(
+    *,
+    packet_kind: str,
+    tmp_root: Path,
+    path: Path,
+    path_role: str,
+    execution_mode: str,
+    materialized: bool = False,
+) -> dict[str, Any]:
+    tmp_root = tmp_root.resolve(strict=False)
+    path = path.resolve(strict=False)
+    under_tmp_root = _path_is_relative_to(path, tmp_root)
+    protected_overlap = any(
+        _path_is_relative_to(path, protected_path)
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+    )
+    ok = under_tmp_root and not protected_overlap and execution_mode in NATIVE_SAFETY_ADMISSION_EXECUTION_MODES
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": packet_kind,
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "ISOLATED_PATH_STRATEGY_UNSAFE",
+        "execution_mode": execution_mode,
+        "path_role": path_role,
+        "tmp_root": str(tmp_root),
+        "intended_path": str(path),
+        "path_under_tmp_root": under_tmp_root,
+        "protected_surface_overlap": protected_overlap,
+        "path_materialized": materialized,
+        "filesystem_write_performed": materialized,
+        "original_codex_profile_write_allowed": False,
+        "current_codex_auth_json_runtime_dependency": False,
+    }
+
+
+def build_native_cleanup_rollback_expectation_packet(
+    *,
+    tmp_root: Path,
+    owned_paths: list[Path],
+    temp_surface_action_performed: bool,
+    native_launch_attempted: bool,
+) -> dict[str, Any]:
+    tmp_root = tmp_root.resolve(strict=False)
+    outside_tmp = [
+        str(path.resolve(strict=False))
+        for path in owned_paths
+        if not _path_is_relative_to(path, tmp_root)
+    ]
+    protected_targets = [
+        str(path.resolve(strict=False))
+        for path in owned_paths
+        for protected_path in PROTECTED_SURFACE_PATHS.values()
+        if _path_is_relative_to(path, protected_path)
+    ]
+    cleanup_safe = not outside_tmp and not protected_targets
+    cleanup_required = temp_surface_action_performed or native_launch_attempted
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "cleanup_rollback_expectation",
+        "status": "ok" if cleanup_safe else "blocked",
+        "reason_class": "" if cleanup_safe else "CLEANUP_ROLLBACK_TARGET_UNSAFE",
+        "tmp_root": str(tmp_root),
+        "owned_paths": [str(path.resolve(strict=False)) for path in owned_paths],
+        "outside_tmp_root_targets": outside_tmp,
+        "protected_surface_targets": protected_targets,
+        "cleanup_required": cleanup_required,
+        "rollback_required": native_launch_attempted,
+        "cleanup_executed": False,
+        "rollback_executed": False,
+        "cleanup_not_required_reason": ""
+        if cleanup_required
+        else "inspection_only_no_temp_surface_materialized",
+        "cleanup_removes_only_custom_owned_surfaces": cleanup_safe,
+        "original_codex_reversibility_claimed": False,
+    }
+
+
+def build_native_safety_reference_packet(
+    *,
+    packet_kind: str,
+    source_path: str,
+    expected_status: str,
+    source_status: str = "present",
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": packet_kind,
+        "status": "ok" if source_status == "present" else "blocked",
+        "reason_class": "" if source_status == "present" else "REFERENCE_PACKET_MISSING",
+        "reference_only": True,
+        "source_path": source_path,
+        "source_status": source_status,
+        "expected_status": expected_status,
+        "auth_strategy_reproved_in_this_contour": False,
+        "model_availability_reproved_in_this_contour": False,
+        "cli_runner_reproved_in_this_contour": False,
+        "native_proof_claimed_from_reference": False,
+        "runtime_route_claimed_from_reference": False,
+    }
+
+
+def build_native_integrity_packet(
+    *,
+    native_launch_attempted: bool,
+    temp_surface_action_performed: bool,
+    protected_surface_read_packet: dict[str, Any],
+) -> dict[str, Any]:
+    inspection_only_read = (
+        protected_surface_read_packet.get("inspection_only") is True
+        and protected_surface_read_packet.get("runtime_auth_input_used") is False
+        and protected_surface_read_packet.get("filesystem_write_performed") is False
+    )
+    ok = inspection_only_read and not native_launch_attempted
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_integrity",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "NATIVE_INTEGRITY_NOT_PRESERVED",
+        "native_launch_attempted": native_launch_attempted,
+        "temp_surface_action_performed": temp_surface_action_performed,
+        "original_codex_app_bundle_touched": False,
+        "original_codex_profile_touched": False,
+        "original_codex_permanent_config_mutated": False,
+        "route_account_model_provider_mutated": False,
+        "keychain_reset_required": False,
+        "protected_surface_read_classification": protected_surface_read_packet.get("status"),
+        "protected_surface_read_is_runtime_dependency": False,
+    }
+
+
+def build_native_custom_admission_packet(
+    *,
+    execution_mode_packet: dict[str, Any],
+    isolated_codex_home_packet: dict[str, Any],
+    isolated_user_data_dir_packet: dict[str, Any],
+    no_ambient_authority_packet: dict[str, Any],
+    protected_surface_read_packet: dict[str, Any],
+    cleanup_rollback_expectation_packet: dict[str, Any],
+    native_integrity_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "execution_mode_ok",
+            "passed": execution_mode_packet.get("status") == "ok",
+            "evidence": "execution_mode_decision_packet.json",
+        },
+        {
+            "name": "isolated_codex_home_planned",
+            "passed": isolated_codex_home_packet.get("status") == "ok"
+            and isolated_codex_home_packet.get("path_under_tmp_root") is True,
+            "evidence": "isolated_codex_home_packet.json",
+        },
+        {
+            "name": "isolated_user_data_dir_planned",
+            "passed": isolated_user_data_dir_packet.get("status") == "ok"
+            and isolated_user_data_dir_packet.get("path_under_tmp_root") is True,
+            "evidence": "isolated_user_data_dir_packet.json",
+        },
+        {
+            "name": "ambient_authority_not_used",
+            "passed": no_ambient_authority_packet.get("status") == "ok"
+            and no_ambient_authority_packet.get(
+                "ambient_authority_used_for_consumer_launch"
+            )
+            is False,
+            "evidence": "no_ambient_authority_packet.json",
+        },
+        {
+            "name": "protected_read_inspection_only",
+            "passed": protected_surface_read_packet.get("inspection_only") is True
+            and protected_surface_read_packet.get("runtime_auth_input_used") is False,
+            "evidence": "protected_surface_read_classification_packet.json",
+        },
+        {
+            "name": "cleanup_rollback_expectation_safe",
+            "passed": cleanup_rollback_expectation_packet.get("status") == "ok"
+            and cleanup_rollback_expectation_packet.get(
+                "cleanup_removes_only_custom_owned_surfaces"
+            )
+            is True,
+            "evidence": "cleanup_rollback_expectation_packet.json",
+        },
+        {
+            "name": "native_integrity_preserved",
+            "passed": native_integrity_packet.get("status") == "ok",
+            "evidence": "native_integrity_packet.json",
+        },
+    ]
+    admission_ready = all(check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_custom_admission",
+        "status": "ok" if admission_ready else "blocked",
+        "reason_class": "" if admission_ready else "NATIVE_CUSTOM_ADMISSION_NOT_READY",
+        "allowed_final_claim": (
+            "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+            if admission_ready
+            else ""
+        ),
+        "admission_ready": admission_ready,
+        "launch_executed": False,
+        "native_launch_attempted": execution_mode_packet.get("native_launch_attempted")
+        is True,
+        "native_launch_required_for_pass": False,
+        "usable_window_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "native_route_proof_claimed": False,
+        "model_availability_reproved": False,
+        "cli_runner_counted_as_native_proof": False,
+        "original_codex_reversibility_claimed": False,
+        "final_e2e_claimed": False,
+        "checks": checks,
+    }
+
+
+def build_native_safety_admission_false_green_audit(
+    *,
+    native_custom_admission_packet: dict[str, Any],
+    auth_strategy_reference_packet: dict[str, Any],
+    model_availability_reference_packet: dict[str, Any],
+    cli_runner_reference_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "admission_not_launch",
+            "passed": native_custom_admission_packet.get("admission_ready") is True
+            and native_custom_admission_packet.get("launch_executed") is False
+            and native_custom_admission_packet.get("native_launch_required_for_pass")
+            is False,
+            "evidence": "native_custom_admission_packet.json",
+        },
+        {
+            "name": "no_route_ux_egress_claims",
+            "passed": native_custom_admission_packet.get("native_route_proof_claimed")
+            is False
+            and native_custom_admission_packet.get("ux_claimed") is False
+            and native_custom_admission_packet.get("egress_claimed") is False,
+            "evidence": "native_custom_admission_packet.json",
+        },
+        {
+            "name": "auth_reference_only",
+            "passed": auth_strategy_reference_packet.get("reference_only") is True
+            and auth_strategy_reference_packet.get(
+                "auth_strategy_reproved_in_this_contour"
+            )
+            is False,
+            "evidence": "provider_auth_strategy_reference_packet.json",
+        },
+        {
+            "name": "model_reference_only",
+            "passed": model_availability_reference_packet.get("reference_only") is True
+            and model_availability_reference_packet.get(
+                "model_availability_reproved_in_this_contour"
+            )
+            is False,
+            "evidence": "model_availability_reference_packet.json",
+        },
+        {
+            "name": "cli_runner_reference_not_native_proof",
+            "passed": cli_runner_reference_packet.get("reference_only") is True
+            and cli_runner_reference_packet.get("native_proof_claimed_from_reference")
+            is False,
+            "evidence": "cli_runner_reference_packet.json",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_admission_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": not all(check["passed"] for check in checks),
+        "native_launch_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "route_claimed": False,
+        "cli_runner_counted_as_native": False,
+    }
+
+
+def validate_native_safety_admission_contour_packets(
+    packets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    missing_required = [
+        name
+        for name in NATIVE_SAFETY_ADMISSION_ALWAYS_REQUIRED_PACKETS
+        if name not in packets
+    ]
+    execution_mode = packets.get("execution_mode_decision_packet.json", {}).get(
+        "execution_mode"
+    )
+    temp_or_launch = (
+        packets.get("execution_mode_decision_packet.json", {}).get(
+            "temp_surface_action_performed"
+        )
+        is True
+        or packets.get("execution_mode_decision_packet.json", {}).get(
+            "native_launch_attempted"
+        )
+        is True
+    )
+    missing_conditional = [
+        name
+        for name in (
+            NATIVE_SAFETY_ADMISSION_TEMP_ACTION_REQUIRED_PACKETS
+            if temp_or_launch
+            else ()
+        )
+        if name not in packets
+    ]
+    forbidden_launch_packets_present = [
+        name
+        for name, packet in packets.items()
+        if execution_mode == "inspection_only"
+        and packet.get("packet_kind")
+        in {
+            "native_custom_dispatch",
+            "native_process_observation",
+            "native_window_observation",
+            "native_route_trace_binding",
+            "native_direct_egress_claim",
+        }
+    ]
+    admission = packets.get("native_custom_admission_packet.json", {})
+    protected_read = packets.get("protected_surface_read_classification_packet.json", {})
+    references = [
+        packets.get("provider_auth_strategy_reference_packet.json", {}),
+        packets.get("model_availability_reference_packet.json", {}),
+        packets.get("cli_runner_reference_packet.json", {}),
+    ]
+    checks = [
+        {
+            "name": "required_packets_present",
+            "passed": not missing_required,
+            "evidence": "packet filenames",
+        },
+        {
+            "name": "conditional_packets_present_when_temp_or_launch",
+            "passed": not missing_conditional,
+            "evidence": "execution_mode_decision_packet.json",
+        },
+        {
+            "name": "execution_mode_valid",
+            "passed": execution_mode in NATIVE_SAFETY_ADMISSION_EXECUTION_MODES,
+            "evidence": "execution_mode_decision_packet.json",
+        },
+        {
+            "name": "inspection_only_forbids_launch_packets",
+            "passed": not forbidden_launch_packets_present,
+            "evidence": "packet_kind scan",
+        },
+        {
+            "name": "admission_ready_not_launch_executed",
+            "passed": admission.get("admission_ready") is True
+            and admission.get("launch_executed") is False,
+            "evidence": "native_custom_admission_packet.json",
+        },
+        {
+            "name": "no_route_ux_egress_claims",
+            "passed": admission.get("native_route_proof_claimed") is False
+            and admission.get("ux_claimed") is False
+            and admission.get("egress_claimed") is False,
+            "evidence": "native_custom_admission_packet.json",
+        },
+        {
+            "name": "protected_read_inspection_only",
+            "passed": protected_read.get("inspection_only") is True
+            and protected_read.get("runtime_auth_input_used") is False,
+            "evidence": "protected_surface_read_classification_packet.json",
+        },
+        {
+            "name": "references_are_reference_only",
+            "passed": all(packet.get("reference_only") is True for packet in references),
+            "evidence": "reference packets",
+        },
+    ]
+    passed = all(check["passed"] for check in checks)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_admission_contour_validation",
+        "status": "ok" if passed else "blocked",
+        "reason_class": "" if passed else "NATIVE_SAFETY_ADMISSION_VALIDATION_FAILED",
+        "checks": checks,
+        "missing_required_packets": missing_required,
+        "missing_conditional_packets": missing_conditional,
+        "forbidden_launch_packets_present": forbidden_launch_packets_present,
+        "blocked_by_host_environment_counted_as_pass": False,
+    }
+
+
 def remove_tree_with_retry(path: Path, *, attempts: int = 12, delay_seconds: float = 0.5) -> str:
     last_error = ""
     for _ in range(attempts):
