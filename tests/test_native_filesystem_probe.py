@@ -194,6 +194,9 @@ from wild_boar_proxy.native_filesystem_probe import (
 from tools.persistent_custom_profile_history_r2_probe import (
     classify_r2_persistent_profile_history_packet,
 )
+from tools.persistent_custom_profile_backup_repair_r1_probe import (
+    classify_backup_surface,
+)
 
 
 class NativeFilesystemProbeTests(unittest.TestCase):
@@ -4905,6 +4908,27 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(first_write["status"], "ok")
         self.assertEqual(existing_without_backup["status"], "blocked")
+
+    def test_persistent_backup_repair_classifies_thread_history_for_copy(self) -> None:
+        packet = classify_backup_surface("sessions/2026/05/thread.jsonl")
+
+        self.assertEqual(packet["decision"], "copy")
+        self.assertEqual(packet["surface_class"], "thread_history")
+
+    def test_persistent_backup_repair_excludes_volatile_runtime_cache(self) -> None:
+        packet = classify_backup_surface(
+            "home/.cache/codex-runtimes/install/payload/node_modules/pkg/index.js"
+        )
+
+        self.assertEqual(packet["decision"], "exclude")
+        self.assertEqual(packet["surface_class"], "cache_or_incidental_state")
+        self.assertEqual(packet["reason"], "volatile_cache_or_runtime_dependency")
+
+    def test_persistent_backup_repair_excludes_auth_surface(self) -> None:
+        packet = classify_backup_surface("auth.json")
+
+        self.assertEqual(packet["decision"], "exclude")
+        self.assertEqual(packet["surface_class"], "secret_or_auth_surface")
 
     def test_persistent_custom_sensitive_state_redacted(self) -> None:
         before = {"root": "/tmp/profile", "exists": True, "entries": []}
