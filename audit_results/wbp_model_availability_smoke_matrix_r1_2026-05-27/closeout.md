@@ -58,8 +58,8 @@ acceptance, provider-family parity, or final E2E proof.
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: 41ed8966d5550971ee3407a38780232c455bb9f7
-- pushed: yes; origin/codex/external-agent-lab-isolated updated with contour commit
+- commit: 209b554fbea9993c97e247de400b5da9ba4565f9 primary contour payload commit before closeout Git finalization
+- pushed: yes; origin/codex/external-agent-lab-isolated already contained predecessor contour commit 41ed8966d5550971ee3407a38780232c455bb9f7 before this closeout-only finalization
 
 ## Scope Check
 
