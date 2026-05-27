@@ -323,6 +323,46 @@ def _catalog_model_entry(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _catalog_registry_row(model: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "lane": model.get("lane"),
+        "model_id": model.get("model_id"),
+        "label": model.get("label"),
+        "display_name": model.get("display_name"),
+        "source": model.get("source"),
+        "source_class": model.get("source_class"),
+        "provider_class": model.get("provider_class"),
+        "provider_model_id": model.get("provider_model_id"),
+        "aliases": list(model.get("aliases") or []),
+        "server_issued": model.get("server_issued") is True,
+        "model_id_authority": model.get("model_id_authority"),
+        "availability_claim_level": model.get("availability_claim_level"),
+        "display_metadata_is_catalog_registry_truth": False,
+        "catalog_registry_truth_is_runtime_binding_truth": False,
+    }
+
+
+def _runtime_binding_row(model: dict[str, Any]) -> dict[str, Any]:
+    lane = str(model.get("lane") or "")
+    provider_model_id = str(model.get("provider_model_id") or "")
+    return {
+        "lane": lane,
+        "model_id": model.get("model_id"),
+        "source_class": model.get("source_class"),
+        "provider_class": model.get("provider_class"),
+        "provider_model_id": provider_model_id,
+        "server_issued": model.get("server_issued") is True,
+        "route_binding_statically_observable": lane == "wbp_api",
+        "provider_binding_statically_observable": lane == "wbp_api" and bool(provider_model_id),
+        "display_metadata_becomes_runtime_binding_truth": False,
+        "catalog_registry_truth_becomes_runtime_binding_truth": False,
+        "route_selected_proven": False,
+        "upstream_accepts_proven": False,
+        "response_accepted_by_codex_proven": False,
+        "model_availability_proven": False,
+    }
+
+
 def build_wbp_model_catalog_contract_packet(
     operator_status: dict[str, Any] | None,
     *,
@@ -556,8 +596,11 @@ def build_model_catalog_fidelity_packets(
         }
         for model in models
     ]
-    runtime_truth_boundary = {
-        "catalog_metadata_becomes_runtime_truth": False,
+    catalog_registry_models = [_catalog_registry_row(model) for model in models]
+    runtime_binding_models = [_runtime_binding_row(model) for model in models]
+    runtime_binding_truth = {
+        "display_metadata_becomes_runtime_binding_truth": False,
+        "catalog_registry_truth_becomes_runtime_binding_truth": False,
         "route_selected_proven": False,
         "upstream_accepts_proven": False,
         "response_accepted_by_codex_proven": False,
@@ -574,12 +617,15 @@ def build_model_catalog_fidelity_packets(
             "streaming_classified",
             "tool_loop_classified",
         ],
+        "rows": runtime_binding_models,
     }
     capability_models = [
         {
             "model_id": model.get("model_id"),
             "lane": model.get("lane"),
             "capabilities": model.get("capabilities"),
+            "catalog_registry_counts_as_capability_proof": False,
+            "runtime_binding_counts_as_capability_proof": False,
             "runtime_truth_counts_as_capability_proof": False,
         }
         for model in models
@@ -622,16 +668,34 @@ def build_model_catalog_fidelity_packets(
             "display_metadata_is_runtime_truth": False,
             "models": display_models,
         },
+        "catalog_registry_truth_packet.json": {
+            "captured_at_utc": utc_now(),
+            "packet_kind": "catalog_registry_truth",
+            "status": "ok",
+            "display_metadata_is_catalog_registry_truth": False,
+            "catalog_registry_truth_is_runtime_binding_truth": False,
+            "models": catalog_registry_models,
+        },
+        "runtime_binding_truth_packet.json": {
+            "captured_at_utc": utc_now(),
+            "packet_kind": "runtime_binding_truth",
+            "status": "ok",
+            **runtime_binding_truth,
+        },
         "runtime_truth_boundary_packet.json": {
             "captured_at_utc": utc_now(),
             "packet_kind": "runtime_truth_boundary",
             "status": "ok",
-            **runtime_truth_boundary,
+            "packet_alias_of": "runtime_binding_truth_packet.json",
+            "catalog_metadata_becomes_runtime_truth": False,
+            **runtime_binding_truth,
         },
         "capability_claims_packet.json": {
             "captured_at_utc": utc_now(),
             "packet_kind": "capability_claims",
             "status": "ok",
+            "catalog_registry_truth_is_capability_proof": False,
+            "runtime_binding_truth_is_capability_proof": False,
             "runtime_truth_boundary_is_capability_proof": False,
             "models": capability_models,
         },
@@ -704,6 +768,8 @@ def build_model_catalog_fidelity_packets(
         "model_listed_claimed_as_usable": False,
         "gpt_5_5_visibility_claimed_as_availability": False,
         "display_metadata_claimed_as_runtime_truth": False,
+        "catalog_registry_truth_claimed_as_runtime_binding_truth": False,
+        "runtime_binding_truth_claimed_as_capability_proof": False,
         "runtime_truth_boundary_claimed_as_capability_proof": False,
         "source_measured_without_measurement_packet": bool(measured_tiers)
         and not measurement_packet_present,
@@ -720,6 +786,8 @@ def build_model_catalog_fidelity_packets(
         "referenced_packets": sorted(packets),
         "text_only_audit": False,
         "lane_separation_checked": True,
+        "catalog_registry_truth_checked": True,
+        "runtime_binding_truth_checked": True,
         "authority_boundary_checked": True,
         "false_green_checked": True,
     }

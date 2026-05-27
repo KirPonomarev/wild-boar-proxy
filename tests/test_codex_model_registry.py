@@ -224,23 +224,40 @@ class CodexModelRegistryTests(unittest.TestCase):
     def test_model_display_metadata_not_runtime_truth(self) -> None:
         packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
         display = packets["model_display_metadata_packet.json"]
-        runtime = packets["runtime_truth_boundary_packet.json"]
+        runtime = packets["runtime_binding_truth_packet.json"]
 
         self.assertEqual(display["status"], "ok")
         self.assertFalse(display["display_metadata_is_runtime_truth"])
         self.assertEqual(runtime["status"], "ok")
-        self.assertFalse(runtime["catalog_metadata_becomes_runtime_truth"])
+        self.assertFalse(runtime["display_metadata_becomes_runtime_binding_truth"])
         self.assertFalse(runtime["route_selected_proven"])
         self.assertFalse(runtime["upstream_accepts_proven"])
         self.assertFalse(runtime["response_accepted_by_codex_proven"])
 
-    def test_runtime_truth_boundary_not_capability_proof(self) -> None:
+    def test_catalog_registry_truth_not_runtime_binding_truth(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        registry = packets["catalog_registry_truth_packet.json"]
+        runtime = packets["runtime_binding_truth_packet.json"]
+
+        self.assertEqual(registry["status"], "ok")
+        self.assertFalse(registry["display_metadata_is_catalog_registry_truth"])
+        self.assertFalse(registry["catalog_registry_truth_is_runtime_binding_truth"])
+        self.assertEqual(runtime["status"], "ok")
+        self.assertFalse(runtime["catalog_registry_truth_becomes_runtime_binding_truth"])
+        for row in runtime["rows"]:
+            self.assertFalse(row["catalog_registry_truth_becomes_runtime_binding_truth"])
+
+    def test_runtime_binding_truth_not_capability_proof(self) -> None:
         packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
         capability = packets["capability_claims_packet.json"]
 
         self.assertEqual(capability["status"], "ok")
+        self.assertFalse(capability["catalog_registry_truth_is_capability_proof"])
+        self.assertFalse(capability["runtime_binding_truth_is_capability_proof"])
         self.assertFalse(capability["runtime_truth_boundary_is_capability_proof"])
         for model in capability["models"]:
+            self.assertFalse(model["catalog_registry_counts_as_capability_proof"])
+            self.assertFalse(model["runtime_binding_counts_as_capability_proof"])
             self.assertFalse(model["runtime_truth_counts_as_capability_proof"])
             self.assertIn("proof_level", model["capabilities"]["tools"])
 

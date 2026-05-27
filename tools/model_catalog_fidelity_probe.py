@@ -167,6 +167,8 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         codex_native_lane_status=packets["codex_native_model_lane_packet.json"].get("status"),
         wbp_api_lane_status=packets["wbp_api_model_lane_packet.json"].get("status"),
         display_metadata_is_runtime_truth=False,
+        catalog_registry_truth_is_runtime_binding_truth=False,
+        runtime_binding_truth_is_capability_proof=False,
         runtime_truth_boundary_is_capability_proof=False,
         model_availability_proven=False,
         native_app_proven=False,
