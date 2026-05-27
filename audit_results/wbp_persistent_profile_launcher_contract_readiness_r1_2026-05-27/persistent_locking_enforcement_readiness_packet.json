@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T05:41:58.598070Z",
+  "concurrent_policy_counts_as_lock_enforcement": false,
+  "concurrent_policy_reference": {
+    "captured_at_utc": "2026-05-27T05:41:58.597958Z",
+    "launcher_enforces_policy": true,
+    "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-profile.lock",
+    "packet_kind": "persistent_concurrent_launch_policy",
+    "policy": "single_writer_only",
+    "reason_class": "",
+    "same_profile_multi_writer_allowed": false,
+    "state_consistency_risk_classified": true,
+    "status": "ok"
+  },
+  "lock_enforcement_claimed": false,
+  "lock_enforcement_ready_to_test": true,
+  "lock_execution_proven": false,
+  "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-profile.lock",
+  "lock_strategy": "single_writer_lockfile_required_before_live_write",
+  "lockfile_created": false,
+  "packet_kind": "persistent_locking_enforcement_readiness",
+  "status": "ok"
+}

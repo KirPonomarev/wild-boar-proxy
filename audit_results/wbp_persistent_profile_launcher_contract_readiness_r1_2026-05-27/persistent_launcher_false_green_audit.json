@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T05:41:58.598084Z",
+  "command_shape_used_as_launch_proof": false,
+  "findings": [],
+  "forbidden_claims_present": false,
+  "identity_used_as_history_proof": false,
+  "packet_kind": "persistent_launcher_false_green_audit",
+  "policy_used_as_execution": false,
+  "readiness_used_as_live_ux": false,
+  "status": "ok"
+}

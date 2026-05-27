@@ -1,0 +1,20 @@
+{
+  "backup_export_policy_is_backup_created": false,
+  "captured_at_utc": "2026-05-27T05:41:58.598079Z",
+  "cleanup_retention_policy_is_cleanup_performed": false,
+  "concurrent_launch_policy_is_lock_enforcement_proof": false,
+  "final_e2e_claimed": false,
+  "keychain_behavior_classified": false,
+  "launcher_command_shape_is_native_launch": false,
+  "launcher_contract_is_launch_execution": false,
+  "lock_readiness_is_lock_execution_proof": false,
+  "migration_import_disabled_is_migration_safety_proven": false,
+  "native_ux_claimed": false,
+  "original_profile_non_dependency_readiness_is_live_runtime_proof": false,
+  "packet_kind": "persistent_launcher_non_substitution",
+  "persistent_launcher_readiness_is_native_ux_acceptance": false,
+  "persistent_profile_identity_is_thread_history_preservation": false,
+  "persistent_profile_root_declared_is_profile_storage_written": false,
+  "profile_root_exists_is_state_persistence_proof": false,
+  "status": "ok"
+}
