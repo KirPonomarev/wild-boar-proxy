@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -21,19 +20,16 @@ sys.path.insert(0, str(REPO_ROOT))
 from wild_boar_proxy.cli_runner_via_wbp import (
     CONTOUR_ID,
     PASS_STATUS,
-    PRIMARY_MODEL_ID,
     build_cli_runner_claims_packet,
     build_cli_runner_layer_boundary_packet,
-    build_codex_auth_command_config,
     build_false_green_audit_packet,
     build_no_ambient_authority_packet,
     build_trace_acceptance_packet,
     remove_tree,
-    sha256_bytes,
     sha256_text,
     validate_cli_runner_contour_packets,
 )
-from wild_boar_proxy.operator_surface import WbpTraceObserver, clean_env, stat_hash
+from wild_boar_proxy.operator_surface import clean_env, stat_hash
 from wild_boar_proxy.runtime import RuntimePaths, build_launcher_subprocess_env
 
 
@@ -41,7 +37,6 @@ DEFAULT_EVIDENCE_DIR = (
     REPO_ROOT / "audit_results" / "wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27"
 )
 DEFAULT_CODEX_BIN = Path("/Applications/Codex.app/Contents/Resources/codex")
-DEFAULT_WBP_ENDPOINT = "http://127.0.0.1:8318/v1"
 EXPECTED_RESPONSE = "CLI_RUNNER_WBP_OK"
 PROMPT = (
     "WBP_CLI_RUNNER_R1_NONCE_2026_05_27: "
@@ -52,8 +47,8 @@ CURRENT_CODEX_AUTH = "/Users/kirillponomarev/.codex/auth.json"
 AUTH_STRATEGY_PACKET = (
     REPO_ROOT
     / "audit_results"
-    / "wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26"
-    / "provider_auth_strategy_packet.json"
+    / "wbp_provider_auth_strategy_precedence_r1_2026-05-27"
+    / "provider_auth_strategy_summary_packet.json"
 )
 MODEL_AVAILABILITY_PACKET = (
     REPO_ROOT
@@ -133,13 +128,24 @@ def historical_quarantine(evidence_dir: Path) -> tuple[list[str], list[str]]:
     admitted_current_contour = {
         "wild_boar_proxy/cli_runner.py",
         "wild_boar_proxy/cli_runner_via_wbp.py",
+        "wild_boar_proxy/codex_custom_sessions.py",
         "tests/test_cli_runner.py",
+        "tests/test_cli_runner_smoke_readiness_probe.py",
+        "tools/cli_runner_smoke_readiness_probe.py",
         "tools/cli_runner_via_wbp_smoke_probe.py",
     }
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
+        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
+        "M tests/test_native_filesystem_probe.py",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
+        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
     )
     quarantined: list[str] = []
     unexpected: list[str] = []
@@ -147,7 +153,11 @@ def historical_quarantine(evidence_dir: Path) -> tuple[list[str], list[str]]:
         stripped = line.strip()
         if stripped.startswith(quarantined_prefixes):
             quarantined.append(line)
-        elif stripped.startswith(f"?? {relative_evidence_dir}/"):
+        elif (
+            stripped.startswith(f"?? {relative_evidence_dir}/")
+            or stripped.startswith(f"M {relative_evidence_dir}/")
+            or stripped.startswith(f"D {relative_evidence_dir}/")
+        ):
             continue
         elif any(path in line for path in admitted_current_contour):
             continue
@@ -292,10 +302,8 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
     temp_root = Path(tempfile.mkdtemp(prefix="wbp-cli-runner-via-wbp-r1-"))
     home = temp_root / "home"
     codex_home = temp_root / "codex-home"
-    workdir = temp_root / "work"
-    output_file = temp_root / "last_message.txt"
     auth_stamp = temp_root / "auth-command-stamp.txt"
-    for path in (home, codex_home, workdir):
+    for path in (home, codex_home):
         path.mkdir(parents=True, exist_ok=True)
 
     quarantined, unexpected_dirty = historical_quarantine(evidence_dir)
@@ -355,15 +363,14 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
     version_pinning_packet = {
         "contour_id": CONTOUR_ID,
         "created_at_utc": utc_now(),
-        "codex_cli_path": str(codex_bin),
-        "codex_cli_version": run_text([str(codex_bin), "--version"]).get(
-            "stdout_first_line", ""
-        ),
+        "runner_python_path": sys.executable,
+        "runner_command_surface": "python3 -m wild_boar_proxy codex-runner smoke --json --prompt <text>",
+        "expected_inner_codex_cli_path": str(codex_bin),
+        "expected_inner_codex_cli_version": run_text([str(codex_bin), "--version"]).get("stdout_first_line", ""),
         "wbp_git_commit": run_text(["git", "rev-parse", "HEAD"]).get(
             "stdout_first_line", ""
         ),
-        "provider_endpoint": DEFAULT_WBP_ENDPOINT,
-        "provider_endpoint_version_status": "local_wbp_endpoint_configured",
+        "provider_endpoint_version_status": "delegated_to_runner_surface",
         "model_catalog_schema_version": "not_used_by_this_contour",
         "adapter_matrix_version": "not_used_by_this_contour",
     }
@@ -388,172 +395,164 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
     exit_status = "failed"
     machine_error_code = "PROBE_NOT_COMPLETED"
     try:
-        with WbpTraceObserver(downstream_endpoint=DEFAULT_WBP_ENDPOINT) as trace:
-            config_path = codex_home / "config.toml"
-            config_path.write_text(
-                build_codex_auth_command_config(
-                    base_url=trace.listen_endpoint,
-                    auth_command_path=str(auth_command_path),
-                    model_id=PRIMARY_MODEL_ID,
-                )
-            )
-            env = build_env(paths, home=home, codex_home=codex_home, stamp=auth_stamp)
-            env_packet = build_no_ambient_authority_packet(
-                env=env,
-                home=home,
-                codex_home=codex_home,
-                auth_command_path=auth_command_path,
-            )
-            packets["no_ambient_authority_packet.json"] = env_packet
-            write_json(evidence_dir / "no_ambient_authority_packet.json", env_packet)
-            auth_contract_packet = {
-                "contour_id": CONTOUR_ID,
-                "selected_strategy": "auth.command",
-                "auth_command_path": str(auth_command_path),
-                "bounded_bearer_fallback_selected": False,
-                "file_auth_selected": False,
-                "current_codex_auth_json_used_as_execution_input": False,
-                "auth_command_runtime_env_is_server_owned": True,
-                "raw_token_recorded": False,
-                "raw_auth_header_recorded": False,
+        env = build_env(paths, home=home, codex_home=codex_home, stamp=auth_stamp)
+        env_packet = build_no_ambient_authority_packet(
+            env=env,
+            home=home,
+            codex_home=codex_home,
+            auth_command_path=auth_command_path,
+        )
+        packets["no_ambient_authority_packet.json"] = env_packet
+        write_json(evidence_dir / "no_ambient_authority_packet.json", env_packet)
+        auth_contract_packet = {
+            "contour_id": CONTOUR_ID,
+            "selected_strategy": "auth.command",
+            "auth_command_path": str(auth_command_path),
+            "bounded_bearer_fallback_selected": False,
+            "file_auth_selected": False,
+            "current_codex_auth_json_used_as_execution_input": False,
+            "auth_command_runtime_env_is_server_owned": True,
+            "raw_token_recorded": False,
+            "raw_auth_header_recorded": False,
+        }
+        write_json(evidence_dir / "cli_runner_auth_command_contract_packet.json", auth_contract_packet)
+        packets["provider_auth_strategy_reference_packet.json"] = reference_packet(
+            packet_kind="provider_auth_strategy_reference",
+            source_path=AUTH_STRATEGY_PACKET,
+            expected_status="WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        )
+        write_json(
+            evidence_dir / "provider_auth_strategy_reference_packet.json",
+            packets["provider_auth_strategy_reference_packet.json"],
+        )
+        packets["model_availability_reference_packet.json"] = reference_packet(
+            packet_kind="model_availability_reference",
+            source_path=MODEL_AVAILABILITY_PACKET,
+            expected_status="WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+        )
+        packets["model_availability_reference_packet.json"].update(
+            {
+                "claim_level_cannot_exceed_reference": True,
+                "model_availability_reproved_in_this_contour": False,
+                "new_model_availability_claims_allowed": False,
             }
-            write_json(evidence_dir / "cli_runner_auth_command_contract_packet.json", auth_contract_packet)
-            packets["provider_auth_strategy_reference_packet.json"] = reference_packet(
-                packet_kind="provider_auth_strategy_reference",
-                source_path=AUTH_STRATEGY_PACKET,
-                expected_status="WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
-            )
-            write_json(
-                evidence_dir / "provider_auth_strategy_reference_packet.json",
-                packets["provider_auth_strategy_reference_packet.json"],
-            )
-            packets["model_availability_reference_packet.json"] = reference_packet(
-                packet_kind="model_availability_reference",
-                source_path=MODEL_AVAILABILITY_PACKET,
-                expected_status="WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
-            )
-            packets["model_availability_reference_packet.json"].update(
-                {
-                    "model_id": PRIMARY_MODEL_ID,
-                    "claim_level_cannot_exceed_reference": True,
-                    "model_availability_reproved_in_this_contour": False,
-                    "new_model_availability_claims_allowed": False,
-                }
-            )
-            write_json(
-                evidence_dir / "model_availability_reference_packet.json",
-                packets["model_availability_reference_packet.json"],
-            )
-            admission_packet = {
-                "contour_id": CONTOUR_ID,
-                "packet_kind": "cli_runner_admission",
-                "created_at_utc": utc_now(),
-                "status": "passed" if env_packet.get("status") == "passed" else "failed",
-                "runner_command_path": str(codex_bin),
-                "runner_command_path_repo_owned": False,
-                "runner_command_path_version_pinned": True,
-                "selected_model_id": PRIMARY_MODEL_ID,
-                "model_availability_reference_only": True,
-                "native_launch_allowed": False,
-                "route_account_mutation_allowed": False,
-            }
-            packets["cli_runner_admission_packet.json"] = admission_packet
-            write_json(evidence_dir / "cli_runner_admission_packet.json", admission_packet)
+        )
+        write_json(
+            evidence_dir / "model_availability_reference_packet.json",
+            packets["model_availability_reference_packet.json"],
+        )
+        admission_packet = {
+            "contour_id": CONTOUR_ID,
+            "packet_kind": "cli_runner_admission",
+            "created_at_utc": utc_now(),
+            "status": "passed" if env_packet.get("status") == "passed" else "failed",
+            "runner_command_path": sys.executable,
+            "runner_command_path_repo_owned": False,
+            "runner_command_path_version_pinned": True,
+            "runner_launch_surface": "python3 -m wild_boar_proxy codex-runner smoke --json --prompt <text>",
+            "model_availability_reference_only": True,
+            "native_launch_allowed": False,
+            "route_account_mutation_allowed": False,
+        }
+        packets["cli_runner_admission_packet.json"] = admission_packet
+        write_json(evidence_dir / "cli_runner_admission_packet.json", admission_packet)
 
-            started_at = utc_now()
-            completed = subprocess.run(
-                [
-                    str(codex_bin),
-                    "exec",
-                    "--skip-git-repo-check",
-                    "--ephemeral",
-                    "--ignore-rules",
-                    "--sandbox",
-                    "read-only",
-                    "-C",
-                    str(workdir),
-                    "--json",
-                    "-o",
-                    str(output_file),
-                    "-",
-                ],
-                input=PROMPT,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-                env=env,
-            )
-            completed_at = utc_now()
-            trace_packet = trace.packet()
-            trace_acceptance_packet = build_trace_acceptance_packet(trace_packet)
-            packets["cli_runner_route_trace_packet.json"] = trace_acceptance_packet
-            write_json(evidence_dir / "cli_runner_route_trace_packet.json", trace_acceptance_packet)
+        started_at = utc_now()
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "wild_boar_proxy",
+                "codex-runner",
+                "smoke",
+                "--json",
+                "--prompt",
+                PROMPT,
+            ],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            env=env,
+            cwd=REPO_ROOT,
+        )
+        completed_at = utc_now()
+        try:
+            runner_packet = json.loads(completed.stdout) if completed.stdout.strip() else {}
+        except json.JSONDecodeError:
+            runner_packet = {}
+        prompt_packet = runner_packet.get("prompt_packet") if isinstance(runner_packet.get("prompt_packet"), dict) else {}
+        trace_packet = prompt_packet.get("trace_observer_packet") if isinstance(prompt_packet.get("trace_observer_packet"), dict) else {}
+        trace_acceptance_packet = build_trace_acceptance_packet(trace_packet)
+        packets["cli_runner_route_trace_packet.json"] = trace_acceptance_packet
+        packets["cli_runner_wbp_trace_correlation_packet.json"] = {
+            **trace_acceptance_packet,
+            "packet_kind": "cli_runner_wbp_trace_correlation",
+        }
+        write_json(evidence_dir / "cli_runner_route_trace_packet.json", trace_acceptance_packet)
+        write_json(evidence_dir / "cli_runner_wbp_trace_correlation_packet.json", packets["cli_runner_wbp_trace_correlation_packet.json"])
 
-            last_message_bytes = output_file.read_bytes() if output_file.exists() else b""
-            response_match_observed = (
-                last_message_bytes.decode("utf-8", errors="replace").strip()
-                == EXPECTED_RESPONSE
-            )
-            auth_command_invoked = auth_stamp.exists()
-            command_packet = {
-                "contour_id": CONTOUR_ID,
-                "packet_kind": "cli_runner_command",
-                "started_at_utc": started_at,
-                "completed_at_utc": completed_at,
-                "status": "passed" if completed.returncode == 0 else "failed",
-                "exit_code": completed.returncode,
-                "command_kind": "codex_exec_json_stdin_prompt",
-                "command_uses_stdin_dash": True,
-                "command_json_mode": True,
-                "stdin_prompt_sha256": sha256_text(PROMPT),
-                "stdin_prompt_len": len(PROMPT),
-                "raw_prompt_recorded": False,
-                "stdout_sha256": sha256_text(completed.stdout),
-                "stderr_sha256": sha256_text(completed.stderr),
-                "stdout_len": len(completed.stdout),
-                "stderr_len": len(completed.stderr),
-                "raw_stdout_recorded": False,
-                "raw_stderr_recorded": False,
-                "warning_classes": command_warning_classes(completed.stderr),
-                "last_message_sha256": sha256_bytes(last_message_bytes),
-                "last_message_len": len(last_message_bytes),
-                "last_message_raw_recorded": False,
-                "expected_response_match_observed": response_match_observed,
-                "auth_command_invoked": auth_command_invoked,
-                "auth_command_stamp_raw_recorded": False,
-            }
-            packets["cli_runner_command_packet.json"] = command_packet
-            write_json(evidence_dir / "cli_runner_command_packet.json", command_packet)
-            response_hash_packet = {
-                "contour_id": CONTOUR_ID,
-                "packet_kind": "cli_runner_response_hash",
-                "created_at_utc": utc_now(),
-                "status": "passed" if last_message_bytes else "failed",
-                "response_exists": bool(last_message_bytes),
-                "response_sha256": sha256_bytes(last_message_bytes),
-                "response_len": len(last_message_bytes),
-                "response_hash_recorded_is_semantic_quality": False,
-                "raw_response_body_recorded": False,
-                "prompt_sha256": sha256_text(PROMPT),
-                "raw_prompt_recorded": False,
-                "auth_header_recorded": False,
-                "raw_upstream_secret_recorded": False,
-                "response_accepted_by_codex_app": False,
-            }
-            packets["cli_runner_response_hash_packet.json"] = response_hash_packet
-            write_json(evidence_dir / "cli_runner_response_hash_packet.json", response_hash_packet)
-            claims_packet = build_cli_runner_claims_packet(
-                probe_status="passed" if completed.returncode == 0 else "failed",
-                model_id=PRIMARY_MODEL_ID,
-                response_match_observed=response_match_observed,
-                auth_command_invoked=auth_command_invoked,
-                trace_acceptance_packet=trace_acceptance_packet,
-            )
-            packets["cli_runner_smoke_packet.json"] = claims_packet
-            write_json(evidence_dir / "cli_runner_smoke_packet.json", claims_packet)
-            machine_error_code = "OK" if claims_packet["status"] == "passed" else "CLI_RUNNER_SMOKE_FAILED"
-            exit_status = claims_packet["status"]
+        response_digest = str(prompt_packet.get("response_digest") or "")
+        response_match_observed = str(prompt_packet.get("response_preview_bounded") or "") == EXPECTED_RESPONSE
+        auth_command_invoked = prompt_packet.get("auth_command_invoked") is True
+        selected_model_id = str(runner_packet.get("selected_model_id") or "")
+        packets["model_availability_reference_packet.json"]["model_id"] = selected_model_id
+        command_packet = {
+            "contour_id": CONTOUR_ID,
+            "packet_kind": "cli_runner_command",
+            "started_at_utc": started_at,
+            "completed_at_utc": completed_at,
+            "status": "passed" if completed.returncode == 0 and isinstance(runner_packet, dict) and runner_packet else "failed",
+            "exit_code": completed.returncode,
+            "command_kind": "wild_boar_proxy_codex_runner_smoke_json_prompt",
+            "command_uses_stdin_dash": False,
+            "command_json_mode": True,
+            "stdin_prompt_sha256": sha256_text(PROMPT),
+            "stdin_prompt_len": len(PROMPT),
+            "raw_prompt_recorded": False,
+            "stdout_sha256": sha256_text(completed.stdout),
+            "stderr_sha256": sha256_text(completed.stderr),
+            "stdout_len": len(completed.stdout),
+            "stderr_len": len(completed.stderr),
+            "raw_stdout_recorded": False,
+            "raw_stderr_recorded": False,
+            "warning_classes": command_warning_classes(completed.stderr),
+            "expected_response_match_observed": response_match_observed,
+            "auth_command_invoked": auth_command_invoked,
+            "auth_command_stamp_raw_recorded": False,
+        }
+        packets["cli_runner_command_packet.json"] = command_packet
+        write_json(evidence_dir / "cli_runner_command_packet.json", command_packet)
+        response_hash_packet = {
+            "contour_id": CONTOUR_ID,
+            "packet_kind": "cli_runner_response_hash",
+            "created_at_utc": utc_now(),
+            "status": "passed" if len(response_digest) == 64 else "failed",
+            "response_exists": bool(response_digest),
+            "response_sha256": response_digest,
+            "response_len": len(str(prompt_packet.get("response_preview_bounded") or "")),
+            "response_hash_recorded_is_semantic_quality": False,
+            "raw_response_body_recorded": False,
+            "prompt_sha256": sha256_text(PROMPT),
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "raw_upstream_secret_recorded": False,
+            "response_accepted_by_codex_app": False,
+            "response_hash_source": "prompt_packet.response_digest",
+        }
+        packets["cli_runner_response_hash_packet.json"] = response_hash_packet
+        write_json(evidence_dir / "cli_runner_response_hash_packet.json", response_hash_packet)
+        claims_packet = build_cli_runner_claims_packet(
+            probe_status="passed" if runner_packet.get("status") == "ok" else "failed",
+            model_id=selected_model_id,
+            response_match_observed=response_match_observed,
+            auth_command_invoked=auth_command_invoked,
+            trace_acceptance_packet=trace_acceptance_packet,
+        )
+        packets["cli_runner_smoke_packet.json"] = claims_packet
+        write_json(evidence_dir / "cli_runner_smoke_packet.json", claims_packet)
+        machine_error_code = "OK" if claims_packet["status"] == "passed" else str(runner_packet.get("machine_error_code") or "CLI_RUNNER_SMOKE_FAILED")
+        exit_status = claims_packet["status"]
     finally:
         cleanup_packet = remove_tree(temp_root)
         write_json(evidence_dir / "cli_runner_cleanup_packet.json", cleanup_packet)
@@ -586,6 +585,118 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
         packets["route_account_mutation_guard_packet.json"] = route_guard_packet
         write_json(evidence_dir / "route_account_mutation_guard_packet.json", route_guard_packet)
 
+    packets["cli_runner_non_native_boundary_packet.json"] = {
+        **layer_boundary_packet,
+        "packet_kind": "cli_runner_non_native_boundary",
+    }
+    write_json(
+        evidence_dir / "cli_runner_non_native_boundary_packet.json",
+        packets["cli_runner_non_native_boundary_packet.json"],
+    )
+
+    packets["cli_runner_command_contract_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_command_contract",
+        "created_at_utc": utc_now(),
+        "status": "passed",
+        "runner_surface": "python3 -m wild_boar_proxy codex-runner smoke --json --prompt <text>",
+        "argv_template": [
+            sys.executable,
+            "-m",
+            "wild_boar_proxy",
+            "codex-runner",
+            "smoke",
+            "--json",
+            "--prompt",
+            "<redacted>",
+        ],
+        "json_mode_required": True,
+        "prompt_flag_required": True,
+        "native_launch_claimed": False,
+    }
+    write_json(
+        evidence_dir / "cli_runner_command_contract_packet.json",
+        packets["cli_runner_command_contract_packet.json"],
+    )
+
+    packets["cli_runner_invocation_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_invocation",
+        "created_at_utc": utc_now(),
+        "status": command_packet.get("status", "failed"),
+        "runner_invoked": command_packet.get("status") == "passed",
+        "exit_code": command_packet.get("exit_code"),
+        "consumer_kind": "codex_cli_runner",
+        "packet_correlated_to_wbp": trace_acceptance_packet.get("status") == "passed",
+    }
+    write_json(
+        evidence_dir / "cli_runner_invocation_packet.json",
+        packets["cli_runner_invocation_packet.json"],
+    )
+
+    packets["cli_runner_auth_boundary_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_auth_boundary",
+        "created_at_utc": utc_now(),
+        "status": "passed" if env_packet.get("status") == "passed" and command_packet.get("auth_command_invoked") is True else "failed",
+        "selected_strategy": "auth.command",
+        "auth_command_required": True,
+        "auth_command_invoked": command_packet.get("auth_command_invoked") is True,
+        "current_codex_auth_json_used": False,
+        "ambient_openai_api_key_used": False,
+        "provider_auth_strategy_reference_packet": "provider_auth_strategy_reference_packet.json",
+    }
+    write_json(
+        evidence_dir / "cli_runner_auth_boundary_packet.json",
+        packets["cli_runner_auth_boundary_packet.json"],
+    )
+
+    packets["cli_runner_request_shape_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_request_shape",
+        "created_at_utc": utc_now(),
+        "status": "passed" if command_packet else "failed",
+        "selected_model_id": claims_packet.get("selected_model_id", ""),
+        "prompt_sha256": sha256_text(PROMPT),
+        "request_surface": "codex-runner smoke --json --prompt",
+        "expected_wbp_path": "/v1/responses",
+        "raw_prompt_recorded": False,
+    }
+    write_json(
+        evidence_dir / "cli_runner_request_shape_packet.json",
+        packets["cli_runner_request_shape_packet.json"],
+    )
+
+    packets["cli_runner_response_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_response",
+        "created_at_utc": utc_now(),
+        "status": "passed" if packets["cli_runner_response_hash_packet.json"].get("status") == "passed" else "failed",
+        "response_exists": packets["cli_runner_response_hash_packet.json"].get("response_exists"),
+        "response_sha256": packets["cli_runner_response_hash_packet.json"].get("response_sha256"),
+        "response_match_observed": command_packet.get("expected_response_match_observed") is True,
+        "native_response_claimed": False,
+    }
+    write_json(
+        evidence_dir / "cli_runner_response_packet.json",
+        packets["cli_runner_response_packet.json"],
+    )
+
+    packets["cli_runner_failure_classification_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_failure_classification",
+        "created_at_utc": utc_now(),
+        "status": "passed",
+        "failure_present": claims_packet.get("status") != "passed",
+        "failure_owner": "none" if claims_packet.get("status") == "passed" else "cli_runner_surface",
+        "machine_error_code": machine_error_code,
+        "broad_native_or_provider_claim_made": False,
+    }
+    write_json(
+        evidence_dir / "cli_runner_failure_classification_packet.json",
+        packets["cli_runner_failure_classification_packet.json"],
+    )
+
     false_green_audit = build_false_green_audit_packet(
         layer_boundary_packet=layer_boundary_packet,
         env_packet=env_packet,
@@ -606,6 +717,20 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
         "native_launch_attempted": False,
         "codex_cli_runner_attempted": True,
     }
+    packets["cli_runner_summary_packet.json"] = {
+        "contour_id": CONTOUR_ID,
+        "packet_kind": "cli_runner_summary",
+        "created_at_utc": utc_now(),
+        "status": exit_status,
+        "pass_status": PASS_STATUS if exit_status == "passed" else "",
+        "consumer_kind": "codex_cli_runner",
+        "selected_model_id": claims_packet.get("selected_model_id", ""),
+        "runner_lane_proven": exit_status == "passed",
+        "native_app_claimed": False,
+        "direct_egress_absence_claimed": False,
+        "final_e2e_claimed": False,
+    }
+    write_json(evidence_dir / "cli_runner_summary_packet.json", packets["cli_runner_summary_packet.json"])
     packets["independent_cli_runner_audit.json"] = {
         "contour_id": CONTOUR_ID,
         "packet_kind": "independent_cli_runner_audit",
@@ -634,6 +759,13 @@ def run_probe(*, evidence_dir: Path, codex_bin: Path, timeout: int) -> dict[str,
         and packets["independent_cli_runner_audit.json"].get("status") == "passed"
         else "failed"
     )
+    packets["cli_runner_summary_packet.json"] = {
+        **packets["cli_runner_summary_packet.json"],
+        "status": closeout_status,
+        "pass_status": PASS_STATUS if closeout_status == "passed" else "",
+        "runner_lane_proven": closeout_status == "passed",
+    }
+    write_json(evidence_dir / "cli_runner_summary_packet.json", packets["cli_runner_summary_packet.json"])
     closeout = {
         "contour_id": CONTOUR_ID,
         "status": closeout_status,

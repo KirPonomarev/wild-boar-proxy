@@ -25,9 +25,9 @@ from wild_boar_proxy.native_filesystem_probe import json_write
 TARGET_STATUS = "CODEX_CLI_RUNNER_VIA_WBP_SMOKE_READINESS_CLASSIFIED"
 PARENT_STATUS = "CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP"
 AUTH_STRATEGY_STATUS = "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED"
-MODEL_READINESS_STATUS = "WBP_MODEL_AVAILABILITY_SMOKE_MATRIX_READINESS_CLASSIFIED"
-AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27"
-MODEL_READINESS_DIR = "audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27"
+MODEL_READINESS_STATUS = "WBP_MODEL_CATALOG_AND_AVAILABILITY_READINESS_RECONCILIATION_NO_LIVE_R1_CLASSIFIED"
+AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27"
+MODEL_READINESS_DIR = "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27"
 EVIDENCE_DIR_NAME = "audit_results/wbp_codex_cli_runner_via_wbp_smoke_readiness_r1_2026-05-27"
 PROMPT_PLACEHOLDER = "<redacted-future-cli-runner-prompt>"
 
@@ -77,10 +77,18 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
     admitted_current_contour = {
         "tools/cli_runner_smoke_readiness_probe.py",
         "tests/test_cli_runner_smoke_readiness_probe.py",
+        "wild_boar_proxy/cli_runner.py",
+        "wild_boar_proxy/cli_runner_via_wbp.py",
+        "wild_boar_proxy/codex_custom_sessions.py",
+        "tests/test_cli_runner.py",
+        "tools/cli_runner_via_wbp_smoke_probe.py",
     }
     admitted_current_evidence_prefixes = (
         f"?? {relative_evidence_dir}/",
         f"?? {EVIDENCE_DIR_NAME}/",
+        "?? audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/",
+        "M audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/",
+        " M audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/",
     )
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",

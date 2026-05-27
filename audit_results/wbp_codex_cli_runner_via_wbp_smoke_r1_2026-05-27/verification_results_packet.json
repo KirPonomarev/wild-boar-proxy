@@ -1,67 +1,32 @@
 {
-  "captured_at_utc": "2026-05-26T21:21:30Z",
+  "codex_cli_runner_attempted": true,
   "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "created_at_utc": "2026-05-27T09:46:49Z",
+  "final_manual_verification_packet_may_extend_this": false,
+  "native_launch_attempted": false,
   "packet_kind": "verification_results",
+  "probe_execution_status": "passed",
+  "secret_scan_matches": 0,
   "status": "passed",
-  "commands": [
+  "top_level_status_packet_count": 28,
+  "verification_commands": [
     {
-      "command": "python3 -m py_compile wild_boar_proxy/cli_runner.py wild_boar_proxy/cli_runner_via_wbp.py tools/cli_runner_via_wbp_smoke_probe.py",
-      "status": "passed"
+      "command": "python3 -m py_compile wild_boar_proxy/cli_runner.py wild_boar_proxy/cli_runner_via_wbp.py wild_boar_proxy/codex_custom_sessions.py tests/test_cli_runner.py tools/cli_runner_smoke_readiness_probe.py tools/cli_runner_via_wbp_smoke_probe.py",
+      "result": "passed"
     },
     {
-      "command": "python3 -m unittest -q tests.test_cli_runner",
-      "status": "passed",
-      "test_count": 17
+      "command": "python3 -m pytest -q tests/test_cli_runner.py tests/test_cli_runner_smoke_readiness_probe.py tests/test_codex_custom_sessions.py tests/test_model_availability.py",
+      "result": "passed",
+      "summary": "86 passed"
     },
     {
       "command": "python3 tools/cli_runner_via_wbp_smoke_probe.py --evidence-dir audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27",
-      "status": "passed",
-      "summary_packet": "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_closeout_packet.json"
+      "result": "passed",
+      "summary": "pass_status=CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP"
     },
     {
-      "command": "python3 -m unittest -q tests.test_cli_runner tests.test_model_availability tests.test_repo_hygiene tests.test_closeout_resilience",
-      "status": "passed",
-      "test_count": 64
-    },
-    {
-      "command": "python3 tools/check_closeout_resilience.py",
-      "status": "passed"
-    },
-    {
-      "command": "validate_cli_runner_contour_packets over fresh evidence directory",
-      "status": "passed",
-      "packet_count": 27,
-      "validation_failures": []
-    },
-    {
-      "command": "JSON parse all audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/**/*.json",
-      "status": "passed",
-      "json_file_count": 27
-    },
-    {
-      "command": "secret marker scan against generated evidence packets",
-      "status": "passed",
-      "matches": 0
-    },
-    {
-      "command": "git diff --check",
-      "status": "passed"
+      "command": "python3 tools/check_closeout_resilience.py audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/closeout.md",
+      "result": "passed"
     }
-  ],
-  "live_runtime_scope": {
-    "codex_cli_runner_attempted": true,
-    "native_launch_attempted": false,
-    "original_codex_profile_mutation_attempted": false,
-    "direct_egress_absence_claimed": false,
-    "streaming_claimed": false,
-    "tool_loop_claimed": false,
-    "model_availability_reproved_in_this_contour": false
-  },
-  "result": {
-    "pass_status": "CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP",
-    "route_trace_state": "route_trace_observed",
-    "response_hash_recorded": true,
-    "raw_prompt_recorded": false,
-    "raw_token_recorded": false
-  }
+  ]
 }

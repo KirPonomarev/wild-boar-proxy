@@ -55,6 +55,8 @@ def _account(backend_id: str) -> dict[str, object]:
 
 
 class FakeOperatorSurfaceSession:
+    config = mock.Mock(codex_bin=Path("/Applications/Codex.app/Contents/Resources/codex"))
+
     def status_payload(self) -> dict[str, object]:
         return {
             "status": {
@@ -109,68 +111,67 @@ class FakeOperatorSurfaceSession:
         raise AssertionError(f"unexpected args: {args}")
 
     def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
-        assert trace_wbp is True
-        assert payload == {
-            "prompt": "Reply with exactly CLI_RUNNER_OK.",
-            "model_id": "wbp-web-primary-openrouter",
-        }
-        return {
-            "status": "ok",
-            "machine_error_code": "OK",
-            "final_message": "CLI_RUNNER_OK",
-            "duration_seconds": 0.125,
-            "stdin_prompt_used": True,
-            "temp_root_removed": True,
+        raise AssertionError("run_prompt should not be called directly by CLI runner smoke")
+
+
+def _successful_runner_result() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "final_message": "CLI_RUNNER_OK",
+        "duration_seconds": 0.125,
+        "stdin_prompt_used": True,
+        "temp_root_removed": True,
+        "secret_value_recorded": False,
+        "configured_provider": "wbp",
+        "configured_wire_api": "responses",
+        "wbp_endpoint_configured": True,
+        "config_endpoint_matches": True,
+        "config_provider_matches": True,
+        "config_wire_api_matches": True,
+        "command_uses_stdin_dash": True,
+        "command_json_mode": True,
+        "env_codex_home_is_temp": True,
+        "env_home_is_temp": True,
+        "workdir_is_temp": True,
+        "command_workdir_is_temp": True,
+        "command_output_file_is_temp": True,
+        "current_codex_home_used": False,
+        "independent_wbp_trace_observed": True,
+        "trace_observer_packet": {
+            "request_observed": True,
+            "response_observed": True,
+            "forwarded_to_wbp": True,
+            "forwarded_endpoint": "http://127.0.0.1:8318/v1",
+            "method": "POST",
+            "path": "/v1/responses",
+            "upstream_status": 200,
+            "prompt_body_recorded": False,
+            "auth_header_recorded": False,
             "secret_value_recorded": False,
-            "configured_provider": "cliproxy",
-            "configured_wire_api": "responses",
-            "wbp_endpoint_configured": True,
-            "config_endpoint_matches": True,
-            "config_provider_matches": True,
-            "config_wire_api_matches": True,
-            "command_uses_stdin_dash": True,
-            "command_json_mode": True,
-            "env_codex_home_is_temp": True,
-            "env_home_is_temp": True,
-            "workdir_is_temp": True,
-            "command_workdir_is_temp": True,
-            "command_output_file_is_temp": True,
-            "current_codex_home_used": False,
-            "independent_wbp_trace_observed": True,
-            "trace_observer_packet": {
-                "request_observed": True,
-                "response_observed": True,
-                "forwarded_to_wbp": True,
-                "forwarded_endpoint": "http://127.0.0.1:8318/v1",
-                "method": "POST",
-                "path": "/v1/responses",
-                "upstream_status": 200,
-                "prompt_body_recorded": False,
-                "auth_header_recorded": False,
-                "secret_value_recorded": False,
-                "raw_account_id_recorded": False,
-                "raw_backend_id_recorded": False,
-                "machine_error_code": "OK",
-                "observer_closed": False,
-            },
-            "process_network_observation_packet": {
-                "status": "ok",
-                "machine_error_code": "OK",
-                "process_tree_observed": True,
-                "sample_count": 2,
-                "observed_process_count_max": 1,
-                "allowed_local_endpoints": ["127.0.0.1:8318"],
-                "allowed_local_endpoint_observed": True,
-                "peer_endpoints": [{"endpoint": "127.0.0.1:8318", "host_class": "local", "command_basename": "codex"}],
-                "non_local_peer_endpoints_present": False,
-                "classification": "wbp_forward_only_proven",
-                "direct_non_wbp_model_egress_absent_proven": True,
-                "raw_pid_exposed": False,
-                "pid_not_exposed_to_browser": True,
-                "secret_value_recorded": False,
-            },
-            "warning_classes": ["remote_plugin_sync_401"],
-        }
+            "raw_account_id_recorded": False,
+            "raw_backend_id_recorded": False,
+            "machine_error_code": "OK",
+            "observer_closed": False,
+        },
+        "process_network_observation_packet": {
+            "status": "ok",
+            "machine_error_code": "INSUFFICIENT_OBSERVATION",
+            "classification": "insufficient_observation",
+            "direct_non_wbp_model_egress_absent_proven": False,
+            "process_tree_observed": False,
+            "sample_count": 0,
+            "observed_process_count_max": 0,
+            "allowed_local_endpoints": [],
+            "peer_endpoints": [],
+            "non_local_peer_endpoints_present": False,
+            "raw_pid_exposed": False,
+            "pid_not_exposed_to_browser": True,
+            "secret_value_recorded": False,
+        },
+        "warning_classes": ["remote_plugin_sync_401"],
+        "auth_command_invoked": True,
+    }
 
 
 class NoModelsOperatorSurfaceSession(FakeOperatorSurfaceSession):
@@ -351,7 +352,7 @@ class CliRunnerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "passed")
         self.assertEqual(
             packet["model_claim_level"],
-            "gpt-5.4-mini_cli_runner_non_stream_wbp_200_proven",
+            "cli_runner_non_stream_wbp_200_proven",
         )
         self.assertFalse(packet["model_availability_expansion_claimed"])
         self.assertFalse(packet["model_availability_reproved_in_this_contour"])
@@ -403,6 +404,10 @@ class CliRunnerTests(unittest.TestCase):
         with (
             mock.patch("wild_boar_proxy.cli_runner.OperatorSurfaceSession", FakeOperatorSurfaceSession),
             mock.patch(
+                "wild_boar_proxy.cli_runner._run_wbp_cli_prompt",
+                return_value=_successful_runner_result(),
+            ),
+            mock.patch(
                 "wild_boar_proxy.cli_runner._targeted_current_codex_snapshot",
                 side_effect=[
                     {"codex_config": snapshot, "codex_auth": snapshot},
@@ -418,15 +423,12 @@ class CliRunnerTests(unittest.TestCase):
         self.assertFalse(packet["native_app_claimed"])
         self.assertTrue(packet["reusable_runner_launch_surface"])
         self.assertEqual(packet["runner_launch_surface"], "wild-boar-proxy codex-runner smoke --json --prompt <text>")
-        self.assertEqual(packet["selected_model_id"], "wbp-web-primary-openrouter")
-        self.assertEqual(packet["selection_packet"]["selected_source_class"], "route_backed")
-        self.assertEqual(
-            packet["selection_packet"]["selected_route_ref"],
-            "wbp-web-primary-openrouter",
-        )
-        self.assertTrue(packet["selection_packet"]["selected_route_server_issued"])
-        self.assertTrue(packet["selection_packet"]["route_provenance_proven"])
+        self.assertEqual(packet["selected_model_id"], "gpt-5.5")
+        self.assertEqual(packet["selection_packet"]["selected_source_class"], "gpt_account")
+        self.assertEqual(packet["selection_packet"]["selected_route_ref"], "")
+        self.assertFalse(packet["selection_packet"]["selected_route_server_issued"])
         self.assertEqual(packet["prompt_packet"]["response_preview_bounded"], "CLI_RUNNER_OK")
+        self.assertTrue(packet["prompt_packet"]["wbp_path_proven"])
         self.assertEqual(packet["direct_egress_negative_status"], "not_claimed_in_cli_runner_contour")
         self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
         self.assertFalse(packet["process_network_observation_counts_as_egress_proof"])

@@ -1,0 +1,11 @@
+{
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "created_at_utc": "2026-05-27T09:46:49.143523Z",
+  "expected_wbp_path": "/v1/responses",
+  "packet_kind": "cli_runner_request_shape",
+  "prompt_sha256": "5d5141fc93b3fafba00991e6db57f9bdbcc349d685a80ce13003342e2764fe4a",
+  "raw_prompt_recorded": false,
+  "request_surface": "codex-runner smoke --json --prompt",
+  "selected_model_id": "gpt-5.5",
+  "status": "passed"
+}

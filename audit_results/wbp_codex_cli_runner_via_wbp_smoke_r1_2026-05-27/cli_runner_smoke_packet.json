@@ -6,7 +6,7 @@
   "final_e2e_claimed": false,
   "model_availability_expansion_claimed": false,
   "model_availability_reproved_in_this_contour": false,
-  "model_claim_level": "gpt-5.4-mini_cli_runner_non_stream_wbp_200_proven",
+  "model_claim_level": "cli_runner_non_stream_wbp_200_proven",
   "native_app_claimed": false,
   "new_model_availability_claims_allowed": false,
   "original_codex_lane_claimed": false,
@@ -14,7 +14,7 @@
   "response_accepted_by_codex_app": false,
   "response_hash_recorded_is_semantic_quality": false,
   "response_match_observed": true,
-  "selected_model_id": "gpt-5.4-mini",
+  "selected_model_id": "gpt-5.5",
   "status": "passed",
   "streaming_claimed": false,
   "tool_loop_claimed": false

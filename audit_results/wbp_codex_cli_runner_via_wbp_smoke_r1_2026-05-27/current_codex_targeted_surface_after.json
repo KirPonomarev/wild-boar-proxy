@@ -10,9 +10,9 @@
   "current_codex_config": {
     "exists": true,
     "is_dir": false,
-    "mtime_ns": 1779827595248828124,
+    "mtime_ns": 1779872312056064347,
     "path_label": "~/.codex/config.toml",
-    "sha256": "148b4f3cc3606ed070f60b40935f2323fa212bba9b4bb2999440c3321cbfe8b5",
-    "size": 5549
+    "sha256": "45c363290f0346a623caf04784f339d4d9f2394c3c0b37729a25ef34c5a91194",
+    "size": 5691
   }
 }

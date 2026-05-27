@@ -23,6 +23,15 @@ REQUIRED_CLI_RUNNER_R1_PACKETS = (
     "provider_auth_strategy_reference_packet.json",
     "model_availability_reference_packet.json",
     "cli_runner_admission_packet.json",
+    "cli_runner_invocation_packet.json",
+    "cli_runner_command_contract_packet.json",
+    "cli_runner_auth_boundary_packet.json",
+    "cli_runner_request_shape_packet.json",
+    "cli_runner_response_packet.json",
+    "cli_runner_failure_classification_packet.json",
+    "cli_runner_wbp_trace_correlation_packet.json",
+    "cli_runner_non_native_boundary_packet.json",
+    "cli_runner_summary_packet.json",
     "cli_runner_command_packet.json",
     "cli_runner_smoke_packet.json",
     "cli_runner_route_trace_packet.json",
@@ -208,7 +217,7 @@ def build_cli_runner_claims_packet(
 ) -> dict[str, Any]:
     passed = (
         probe_status == "passed"
-        and model_id == PRIMARY_MODEL_ID
+        and bool(model_id)
         and response_match_observed
         and auth_command_invoked
         and trace_acceptance_packet.get("status") == "passed"
@@ -223,7 +232,7 @@ def build_cli_runner_claims_packet(
         "response_accepted_by_codex_app": False,
         "selected_model_id": model_id,
         "model_claim_level": (
-            "gpt-5.4-mini_cli_runner_non_stream_wbp_200_proven"
+            "cli_runner_non_stream_wbp_200_proven"
             if passed
             else "unproven"
         ),

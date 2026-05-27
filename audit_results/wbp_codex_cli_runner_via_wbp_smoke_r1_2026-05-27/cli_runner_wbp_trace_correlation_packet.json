@@ -5,6 +5,7 @@
   "exit_code_counted_as_route_proof": false,
   "forwarded_to_wbp": true,
   "full_wire_claimed": false,
+  "packet_kind": "cli_runner_wbp_trace_correlation",
   "path": "/v1/responses",
   "prompt_body_recorded": false,
   "raw_account_id_recorded": false,

@@ -2,36 +2,39 @@
 
 ## Goal
 
-Prove Codex CLI runner as a separate non-native WBP consumer lane with isolated command execution, WBP route trace, response hash, no ambient authority, reference-only model availability, no route/account mutation, and no native/UX/egress/streaming/tool-loop/final claim.
+Prove that the explicit Codex CLI runner command surface can operate through WBP
+as a separate non-native consumer lane, with packet-correlated WBP trace,
+auth.command boundary proof, bounded response classification, and no substitution
+into native Codex.app, UX, direct egress, Original Codex, or final E2E claims.
 
 ## Result
 
 - status: `CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP`
-- final verdict: CLI runner executed through WBP with route trace observed and response hash recorded; this is explicitly non-native and does not prove Codex.app UX, Original reversibility, direct egress absence, streaming, tool loop, expanded model availability, or final E2E.
+- final verdict: `python3 -m wild_boar_proxy codex-runner smoke --json --prompt <text>` executed through WBP, `auth.command` was invoked, WBP trace correlation was observed on `/v1/responses` with `upstream_status=200`, and the bounded runner response matched the smoke expectation. This proof remains explicitly non-native and does not claim Codex.app UX, direct egress absence, streaming/tool-loop compatibility, Original Codex reversibility, or final E2E.
 - closure state: CLOSED
 
 ## Contour Capsule
 
-- goal: classify CLI runner via WBP as a non-native consumer lane without substituting native app proof or expanding model availability
+- goal: classify the explicit CLI runner command surface via WBP as one bounded non-native consumer lane without substituting native app proof or widening model/provider claims
 - branch: codex/external-agent-lab-isolated
-- head: 10e0f7cc7286985f855a2ff3e9694da946089b91 before this contour commit
-- touched files: wild_boar_proxy/cli_runner.py; wild_boar_proxy/cli_runner_via_wbp.py; tests/test_cli_runner.py; tools/cli_runner_via_wbp_smoke_probe.py; audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27
-- tests run: py_compile; cli runner probe; tests.test_cli_runner; tests.test_model_availability; tests.test_repo_hygiene; tests.test_closeout_resilience; contour packet validation; JSON parse; secret scan; git diff --check
-- blocked risks: no blocking risk remains for this contour; residual limits record that native app, UX, egress absence, streaming, tool loop, Original reversibility, and final E2E remain outside this proof
+- head: bf00560e852d5649256fbc0079ebeb9f17812011 before this contour commit
+- touched files: wild_boar_proxy/cli_runner.py; wild_boar_proxy/cli_runner_via_wbp.py; wild_boar_proxy/codex_custom_sessions.py; tests/test_cli_runner.py; tools/cli_runner_smoke_readiness_probe.py; tools/cli_runner_via_wbp_smoke_probe.py; audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/*
+- tests run: python3 -m py_compile wild_boar_proxy/cli_runner.py wild_boar_proxy/cli_runner_via_wbp.py wild_boar_proxy/codex_custom_sessions.py tests/test_cli_runner.py tools/cli_runner_smoke_readiness_probe.py tools/cli_runner_via_wbp_smoke_probe.py; python3 -m pytest -q tests/test_cli_runner.py tests/test_cli_runner_smoke_readiness_probe.py tests/test_codex_custom_sessions.py tests/test_model_availability.py; python3 tools/cli_runner_via_wbp_smoke_probe.py --evidence-dir audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27; top-level JSON status sweep; secret scan; python3 tools/check_closeout_resilience.py audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/closeout.md
+- blocked risks: residual limits remain outside this proof: native Codex.app acceptance, native UX, detached native execution, direct api.openai.com egress absence, Responses streaming/tool-loop re-proof, Original Codex reversibility, and final E2E
 - closure state: CLOSED
 
 ## Verification
 
-- tests: `python3 -m unittest -q tests.test_cli_runner` passed 17 tests; broader CLI/model/repo subset passed after this closeout.
-- build: `python3 -m py_compile wild_boar_proxy/cli_runner.py wild_boar_proxy/cli_runner_via_wbp.py tools/cli_runner_via_wbp_smoke_probe.py` passed.
-- manual: `validate_cli_runner_contour_packets` returned no failures for the generated evidence packets; independent audit and false-green audit packets are `passed`.
-- live verification: Codex CLI binary lane was exercised through temp `HOME` and `CODEX_HOME`; native Codex.app launch, owner UI, direct egress absence proof, streaming, tool loop, Original profile mutation, and final E2E were not attempted.
+- tests: `python3 -m pytest -q tests/test_cli_runner.py tests/test_cli_runner_smoke_readiness_probe.py tests/test_codex_custom_sessions.py tests/test_model_availability.py` passed with `86 passed`.
+- build: `python3 -m py_compile wild_boar_proxy/cli_runner.py wild_boar_proxy/cli_runner_via_wbp.py wild_boar_proxy/codex_custom_sessions.py tests/test_cli_runner.py tools/cli_runner_smoke_readiness_probe.py tools/cli_runner_via_wbp_smoke_probe.py` passed.
+- manual: top-level JSON status sweep reported `28 passed` status packets in `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27`; secret scan found `0` matches; `independent_cli_runner_audit.json` and `cli_runner_false_green_audit.json` are both `passed`.
+- live verification: the explicit CLI runner command surface ran through isolated `HOME` and `CODEX_HOME`, selected `gpt-5.5`, recorded `auth.command` invocation, and correlated a WBP `/v1/responses` trace with `upstream_status=200`. Native Codex.app launch, owner UI, direct egress absence proof, streaming/tool-loop proof, Original profile mutation, and final E2E were not attempted.
 
 ## Artifacts
 
 - spec: thread-owned contour instructions; no repo-resident planning artifact added.
 - packet: `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_closeout_packet.json`
-- report: `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/independent_cli_runner_audit.json`; `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/scanner_agent_fact_report_packet.json`
+- report: `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/independent_cli_runner_audit.json`; `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/scanner_agent_fact_report_packet.json`; `audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/verification_results_packet.json`
 
 ## Git
 
@@ -46,5 +49,5 @@ Prove Codex CLI runner as a separate non-native WBP consumer lane with isolated 
 
 ## Notes
 
-- blockers encountered: one path-normalization bug and one self-validation ordering bug were found before closure; both were localized, fixed, and re-verified.
+- blockers encountered: the prior proof path was proving the wrong surface, the runner helper cleaned temp artifacts before reading the auth stamp/output, and the summary packet was initially emitted too late for the independent audit. All three issues were localized, fixed, and re-verified with fresh live evidence.
 - resume from here: CLOSED

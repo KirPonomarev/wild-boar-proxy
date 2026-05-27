@@ -456,7 +456,7 @@ class CodexCustomSessionManager:
             and result.get("current_codex_home_used") is False
         )
         route_backed_source = session.get("selected_source_class") == "route_backed"
-        allowed_providers = {"cliproxy", "external_route"} if route_backed_source else {"cliproxy"}
+        allowed_providers = {"cliproxy", "external_route", "wbp"} if route_backed_source else {"cliproxy", "wbp"}
         allowed_wire_apis = {"responses", "chat_completions"} if route_backed_source else {"responses"}
         path_config_proven = (
             result.get("configured_provider") in allowed_providers
@@ -596,6 +596,7 @@ class CodexCustomSessionManager:
             "path_proof_status": "independently_observed" if wbp_path_proven else "configured_not_independently_observed",
             "path_proof_basis": "operator_surface_isolated_codex_exec_config_requires_independent_trace",
             "fallback_attempted": False,
+            "auth_command_invoked": result.get("auth_command_invoked") is True,
             "raw_backend_id_exposed": False,
             "raw_auth_ref_exposed": False,
             "secret_value_recorded": secret_value_recorded,

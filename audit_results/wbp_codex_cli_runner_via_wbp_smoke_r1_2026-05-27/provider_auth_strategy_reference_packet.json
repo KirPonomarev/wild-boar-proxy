@@ -1,7 +1,7 @@
 {
   "auth_strategy_reproved_in_this_contour": false,
   "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
-  "created_at_utc": "2026-05-26T21:20:48.682368Z",
+  "created_at_utc": "2026-05-27T09:46:32.186239Z",
   "model_availability_expansion_claimed": false,
   "model_availability_reproved_in_this_contour": false,
   "native_model_availability_claimed": false,
@@ -9,14 +9,14 @@
   "packet_kind": "provider_auth_strategy_reference",
   "reference_only": true,
   "referenced_status": "ok",
-  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26/provider_auth_strategy_packet.json",
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
   "source_packet_snapshot": {
     "exists": true,
     "is_dir": false,
-    "mtime_ns": 1779828002629734053,
-    "path_label": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26/provider_auth_strategy_packet.json",
-    "sha256": "ebb15458b8202ad7183399c03888b108c43c5501b63789d274eee15909dcaefd",
-    "size": 3994
+    "mtime_ns": 1779864577891772024,
+    "path_label": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
+    "sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126",
+    "size": 1600
   },
   "status": "passed",
   "validation_failures": []

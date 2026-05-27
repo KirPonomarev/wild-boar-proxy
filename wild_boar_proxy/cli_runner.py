@@ -4,17 +4,22 @@
 
 from __future__ import annotations
 
+import subprocess
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
+from .cli_runner_via_wbp import PRIMARY_MODEL_ID, build_codex_auth_command_config, remove_tree
 from .codex_account_selection import build_account_selection_packet
 from .codex_custom_sessions import CodexCustomSessionManager
 from .codex_model_registry import build_custom_model_registry_packet
-from .operator_surface import OperatorSurfaceSession, stat_hash
-from .runtime import RuntimePaths, build_command_payload
+from .operator_surface import DEFAULT_ENDPOINT, OperatorSurfaceSession, WbpTraceObserver, clean_env, stat_hash
+from .runtime import RuntimePaths, build_command_payload, build_launcher_subprocess_env
 
 
 RUNNER_SURFACE = "wild-boar-proxy codex-runner smoke --json --prompt <text>"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _targeted_current_codex_snapshot() -> dict[str, dict[str, Any]]:
@@ -51,6 +56,190 @@ def _targeted_files_unchanged(comparisons: dict[str, dict[str, Any]]) -> bool:
         and entry.get("sha256_unchanged") is True
         for entry in comparisons.values()
     )
+
+
+def _runner_warning_classes(stderr: str) -> list[str]:
+    warnings: list[str] = []
+    if "Failed to sync remote plugins" in stderr or "plugins/featured failed with status 401" in stderr:
+        warnings.append("remote_plugin_sync_401")
+    if "failed to refresh available models" in stderr:
+        warnings.append("model_refresh_warning")
+    return warnings
+
+
+def _build_runner_env(paths: RuntimePaths, *, home: Path, codex_home: Path, auth_stamp: Path) -> dict[str, str]:
+    env = clean_env()
+    runtime_env = build_launcher_subprocess_env(paths)
+    for key, value in runtime_env.items():
+        if key.startswith("WBP_"):
+            env[key] = value
+    env["HOME"] = str(home)
+    env["CODEX_HOME"] = str(codex_home)
+    env["WBP_TOKEN_COMMAND_AUDIT_STAMP_PATH"] = str(auth_stamp)
+    env.pop("OPENAI_API_KEY", None)
+    for key in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        env.pop(key, None)
+    return env
+
+
+def _default_process_network_observation() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "machine_error_code": "INSUFFICIENT_OBSERVATION",
+        "classification": "insufficient_observation",
+        "direct_non_wbp_model_egress_absent_proven": False,
+        "process_tree_observed": False,
+        "sample_count": 0,
+        "observed_process_count_max": 0,
+        "allowed_local_endpoints": [],
+        "peer_endpoints": [],
+        "non_local_peer_endpoints_present": False,
+        "raw_pid_exposed": False,
+        "pid_not_exposed_to_browser": True,
+        "secret_value_recorded": False,
+    }
+
+
+def _run_wbp_cli_prompt(
+    paths: RuntimePaths,
+    *,
+    codex_bin: Path,
+    model_id: str,
+    prompt: str,
+    timeout_seconds: int = 120,
+) -> dict[str, Any]:
+    auth_command_path = REPO_ROOT / "wbp_codex_auth_command.py"
+    tmp_root = Path(tempfile.mkdtemp(prefix="wbp-cli-runner-surface-"))
+    home = tmp_root / "home"
+    codex_home = tmp_root / "codex-home"
+    workdir = tmp_root / "work"
+    output_file = tmp_root / "last_message.txt"
+    auth_stamp = tmp_root / "auth-command-stamp.txt"
+    for path in (home, codex_home, workdir):
+        path.mkdir(parents=True, exist_ok=True)
+
+    env = _build_runner_env(paths, home=home, codex_home=codex_home, auth_stamp=auth_stamp)
+    config_path = codex_home / "config.toml"
+    config_text = ""
+    completed: subprocess.CompletedProcess[str] | None = None
+    trace_packet: dict[str, Any] = {}
+    started = time.time()
+    try:
+        with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
+            config_text = build_codex_auth_command_config(
+                base_url=trace.listen_endpoint,
+                auth_command_path=str(auth_command_path),
+                model_id=model_id,
+            )
+            config_path.write_text(config_text, encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    str(codex_bin),
+                    "exec",
+                    "--skip-git-repo-check",
+                    "--ephemeral",
+                    "--ignore-rules",
+                    "--sandbox",
+                    "read-only",
+                    "-C",
+                    str(workdir),
+                    "--json",
+                    "-o",
+                    str(output_file),
+                    "-",
+                ],
+                input=prompt,
+                text=True,
+                capture_output=True,
+                timeout=timeout_seconds,
+                check=False,
+                env=env,
+            )
+            trace_packet = trace.packet()
+    except subprocess.TimeoutExpired as exc:
+        cleanup_packet = remove_tree(tmp_root)
+        return {
+            "status": "failed",
+            "machine_error_code": "ENGINE_PROMPT_TIMEOUT",
+            "human_message": "Codex CLI runner prompt timed out.",
+            "final_message": "",
+            "duration_seconds": round(time.time() - started, 3),
+            "stdin_prompt_used": True,
+            "temp_root_removed": cleanup_packet.get("status") == "passed",
+            "secret_value_recorded": False,
+            "configured_provider": "wbp",
+            "configured_wire_api": "responses",
+            "wbp_endpoint_configured": True,
+            "config_endpoint_matches": True,
+            "config_provider_matches": True,
+            "config_wire_api_matches": True,
+            "command_uses_stdin_dash": True,
+            "command_json_mode": True,
+            "env_codex_home_is_temp": True,
+            "env_home_is_temp": True,
+            "workdir_is_temp": True,
+            "command_workdir_is_temp": True,
+            "command_output_file_is_temp": True,
+            "current_codex_home_used": False,
+            "independent_wbp_trace_observed": False,
+            "trace_observer_packet": trace_packet,
+            "process_network_observation_packet": _default_process_network_observation(),
+            "warning_classes": _runner_warning_classes(str(exc.stderr or "")),
+            "auth_command_invoked": auth_stamp.exists(),
+        }
+
+    stdout = completed.stdout if completed is not None else ""
+    stderr = completed.stderr if completed is not None else ""
+    final_message = output_file.read_text(encoding="utf-8", errors="replace").strip() if output_file.exists() else ""
+    auth_command_invoked = auth_stamp.exists()
+    cleanup_packet = remove_tree(tmp_root)
+    return {
+        "status": "ok" if completed is not None and completed.returncode == 0 and bool(final_message) else "failed",
+        "machine_error_code": "OK" if completed is not None and completed.returncode == 0 and bool(final_message) else str(trace_packet.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
+        "human_message": "Codex CLI runner prompt completed." if completed is not None and completed.returncode == 0 and bool(final_message) else "Codex CLI runner prompt failed.",
+        "final_message": final_message,
+        "duration_seconds": round(time.time() - started, 3),
+        "stdin_prompt_used": True,
+        "temp_root_removed": cleanup_packet.get("status") == "passed",
+        "secret_value_recorded": False,
+        "configured_provider": "wbp",
+        "configured_wire_api": "responses",
+        "wbp_endpoint_configured": True,
+        "config_endpoint_matches": 'base_url = "' in config_text,
+        "config_provider_matches": 'model_provider = "wbp"' in config_text,
+        "config_wire_api_matches": 'wire_api = "responses"' in config_text,
+        "command_uses_stdin_dash": True,
+        "command_json_mode": True,
+        "env_codex_home_is_temp": True,
+        "env_home_is_temp": True,
+        "workdir_is_temp": True,
+        "command_workdir_is_temp": True,
+        "command_output_file_is_temp": True,
+        "current_codex_home_used": False,
+        "independent_wbp_trace_observed": (
+            trace_packet.get("request_observed") is True
+            and trace_packet.get("response_observed") is True
+            and trace_packet.get("forwarded_to_wbp") is True
+            and trace_packet.get("path") == "/v1/responses"
+            and isinstance(trace_packet.get("upstream_status"), int)
+            and 200 <= int(trace_packet.get("upstream_status")) < 400
+            and trace_packet.get("prompt_body_recorded") is False
+            and trace_packet.get("auth_header_recorded") is False
+            and trace_packet.get("secret_value_recorded") is False
+        ),
+        "trace_observer_packet": trace_packet,
+        "process_network_observation_packet": _default_process_network_observation(),
+        "warning_classes": _runner_warning_classes(stderr),
+        "auth_command_invoked": auth_command_invoked,
+        "stdout_sha256_present": bool(stdout),
+    }
 
 
 def _normalize_wbp_command_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -197,6 +386,21 @@ def _choose_server_model_id(
     api_snapshot: dict[str, Any] | None,
 ) -> str:
     registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    available = [
+        str(entry.get("model_id") or "")
+        for entry in registry.get("available_models", [])
+        if isinstance(entry, dict) and str(entry.get("model_id") or "")
+    ]
+    reported = str(registry.get("reported_configured_model") or "")
+    if reported and reported in available and reported.startswith("gpt-"):
+        return reported
+    if PRIMARY_MODEL_ID in available:
+        return PRIMARY_MODEL_ID
+    preferred_gpt = next((model_id for model_id in available if model_id.startswith("gpt-")), "")
+    if preferred_gpt:
+        return preferred_gpt
+    if reported and reported in available:
+        return reported
     if isinstance(api_snapshot, dict):
         routes = api_snapshot.get("routes")
         if isinstance(routes, list):
@@ -205,14 +409,6 @@ def _choose_server_model_id(
                     route_id = str(route.get("route_id") or "")
                     if route_id:
                         return route_id
-    available = [
-        str(entry.get("model_id") or "")
-        for entry in registry.get("available_models", [])
-        if isinstance(entry, dict) and str(entry.get("model_id") or "")
-    ]
-    reported = str(registry.get("reported_configured_model") or "")
-    if reported and reported in available:
-        return reported
     if available:
         return available[0]
     return ""
@@ -278,7 +474,12 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
         if session_id:
             def runner(payload: dict[str, Any]) -> dict[str, Any]:
                 nonlocal raw_runner_result
-                raw_runner_result = operator.run_prompt(payload, trace_wbp=True)
+                raw_runner_result = _run_wbp_cli_prompt(
+                    paths,
+                    codex_bin=operator.config.codex_bin,
+                    model_id=str(payload.get("model_id") or model_id),
+                    prompt=str(payload.get("prompt") or ""),
+                )
                 return raw_runner_result
 
             prompt_packet = manager.prompt_packet(
