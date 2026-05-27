@@ -7,6 +7,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from wild_boar_proxy.model_availability import (
+    AVAILABILITY_LEVELS,
+    CATALOG_AVAILABILITY_CLAIM_LEVELS,
+    CATALOG_AVAILABILITY_EVIDENCE_SCOPES,
+)
 from wild_boar_proxy.operator_surface import DEFAULT_ENDPOINT, DEFAULT_MODEL
 
 
@@ -294,8 +299,29 @@ def _catalog_capabilities(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _catalog_model_entry(entry: dict[str, Any]) -> dict[str, Any]:
+def _availability_rows_by_model_id(packet: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    rows = packet.get("rows") if isinstance(packet, dict) else []
+    if not isinstance(rows, list):
+        return {}
+    return {
+        str(row.get("model_id") or ""): row
+        for row in rows
+        if isinstance(row, dict) and str(row.get("model_id") or "")
+    }
+
+
+def _catalog_model_entry(
+    entry: dict[str, Any],
+    availability_row: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     model_id = str(entry.get("model_id") or "")
+    availability_row = availability_row if isinstance(availability_row, dict) else {}
+    availability_levels = availability_row.get("availability_levels")
+    if not isinstance(availability_levels, list) or not availability_levels:
+        availability_levels = ["listed"]
+    bounded_limitations = availability_row.get("bounded_limitations")
+    if not isinstance(bounded_limitations, list):
+        bounded_limitations = []
     return {
         "lane": str(entry.get("lane") or _model_lane(model_id)),
         "model_id": model_id,
@@ -312,8 +338,21 @@ def _catalog_model_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "speed_tier": dict(entry.get("speed_tier") or _tier_unknown()),
         "server_issued": entry.get("server_issued") is True,
         "model_id_authority": "server_issued",
-        "availability_claim_level": "listed_not_live_proven",
-        "live_availability_proven": False,
+        "availability_claim_level": str(
+            availability_row.get("availability_claim_level") or "listed_not_live_proven"
+        ),
+        "availability_evidence_scope": str(
+            availability_row.get("availability_evidence_scope") or "current_operator_catalog_only"
+        ),
+        "availability_levels": [str(level) for level in availability_levels],
+        "live_availability_proven": availability_row.get("live_availability_proven") is True,
+        "direct_wbp_non_stream_response_accepted": (
+            availability_row.get("direct_wbp_non_stream_response_accepted") is True
+        ),
+        "request_reaches_wbp_proven": availability_row.get("request_reaches_wbp_proven") is True,
+        "upstream_accepts_proven": availability_row.get("upstream_accepts_proven") is True,
+        "current_stability_proven": availability_row.get("current_stability_proven") is True,
+        "bounded_limitations": [str(item) for item in bounded_limitations],
         "account_health_proven": False,
         "route_proven_by_catalog": False,
         "native_proven_by_catalog": False,
@@ -369,6 +408,7 @@ def build_wbp_model_catalog_contract_packet(
     endpoint: str = DEFAULT_ENDPOINT,
     recommended_default_model: str = DEFAULT_MODEL,
     api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     registry = build_custom_model_registry_packet(
         operator_status,
@@ -376,8 +416,12 @@ def build_wbp_model_catalog_contract_packet(
         recommended_default_model=recommended_default_model,
         api_snapshot=api_snapshot,
     )
+    availability_rows = _availability_rows_by_model_id(availability_lattice_packet)
     catalog_models = [
-        _catalog_model_entry(entry)
+        _catalog_model_entry(
+            entry,
+            availability_rows.get(str(entry.get("model_id") or "")),
+        )
         for entry in sorted(
             registry["available_models"],
             key=lambda item: str(item.get("model_id") or ""),
@@ -412,6 +456,13 @@ def build_wbp_model_catalog_contract_packet(
         "default_model_in_catalog": any(entry["model_id"] == default_model for entry in catalog_models),
         "model_count": len(catalog_models),
         "models": catalog_models,
+        "availability_lattice_imported": bool(availability_rows),
+        "availability_lattice_status": (
+            str(availability_lattice_packet.get("status") or "not_supplied")
+            if isinstance(availability_lattice_packet, dict)
+            else "not_supplied"
+        ),
+        "availability_lattice_model_count": len(availability_rows),
         "allowed_browser_fields": ["model_id"],
         "forbidden_browser_fields": sorted(CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS),
         "live_api_checked": False,
@@ -485,8 +536,15 @@ def validate_wbp_model_catalog_contract(packet: dict[str, Any]) -> list[str]:
             findings.append(f"models[{index}].model_id")
         if entry.get("server_issued") is not True:
             findings.append(f"models[{index}].server_issued")
-        if entry.get("availability_claim_level") != "listed_not_live_proven":
+        if entry.get("availability_claim_level") not in CATALOG_AVAILABILITY_CLAIM_LEVELS:
             findings.append(f"models[{index}].availability_claim_level")
+        if entry.get("availability_evidence_scope") not in CATALOG_AVAILABILITY_EVIDENCE_SCOPES:
+            findings.append(f"models[{index}].availability_evidence_scope")
+        availability_levels = entry.get("availability_levels")
+        if not isinstance(availability_levels, list) or not availability_levels:
+            findings.append(f"models[{index}].availability_levels")
+        elif any(str(level) not in AVAILABILITY_LEVELS for level in availability_levels):
+            findings.append(f"models[{index}].availability_levels")
         lane = entry.get("lane")
         if lane not in {"codex_native", "wbp_api"}:
             findings.append(f"models[{index}].lane")
@@ -508,7 +566,6 @@ def validate_wbp_model_catalog_contract(packet: dict[str, Any]) -> list[str]:
             if tier.get("source") == "measured":
                 findings.append(f"models[{index}].{tier_name}.measured_without_packet")
         for negative_field in (
-            "live_availability_proven",
             "account_health_proven",
             "route_proven_by_catalog",
             "native_proven_by_catalog",
@@ -517,6 +574,35 @@ def validate_wbp_model_catalog_contract(packet: dict[str, Any]) -> list[str]:
         ):
             if entry.get(negative_field) is not False:
                 findings.append(f"models[{index}].{negative_field}")
+        claim_level = entry.get("availability_claim_level")
+        if claim_level == "listed_not_live_proven":
+            for field in (
+                "live_availability_proven",
+                "direct_wbp_non_stream_response_accepted",
+                "request_reaches_wbp_proven",
+                "upstream_accepts_proven",
+                "current_stability_proven",
+            ):
+                if entry.get(field) is not False:
+                    findings.append(f"models[{index}].{field}")
+            if entry.get("availability_evidence_scope") != "current_operator_catalog_only":
+                findings.append(f"models[{index}].availability_evidence_scope")
+        elif claim_level == "direct_wbp_non_stream_response_accepted":
+            if entry.get("live_availability_proven") is not True:
+                findings.append(f"models[{index}].live_availability_proven")
+            if entry.get("direct_wbp_non_stream_response_accepted") is not True:
+                findings.append(f"models[{index}].direct_wbp_non_stream_response_accepted")
+            if entry.get("availability_evidence_scope") != "current_thread_direct_wbp_non_stream":
+                findings.append(f"models[{index}].availability_evidence_scope")
+        elif claim_level == "historically_direct_wbp_non_stream_response_accepted":
+            if entry.get("live_availability_proven") is not False:
+                findings.append(f"models[{index}].live_availability_proven")
+            if entry.get("direct_wbp_non_stream_response_accepted") is not True:
+                findings.append(f"models[{index}].direct_wbp_non_stream_response_accepted")
+            if entry.get("availability_evidence_scope") != "pass2_selected_external_route_closed_truth":
+                findings.append(f"models[{index}].availability_evidence_scope")
+            if entry.get("current_stability_proven") is not False:
+                findings.append(f"models[{index}].current_stability_proven")
         capabilities = entry.get("capabilities")
         if not isinstance(capabilities, dict):
             findings.append(f"models[{index}].capabilities")
@@ -534,12 +620,14 @@ def _catalog_fidelity_base(
     endpoint: str = DEFAULT_ENDPOINT,
     recommended_default_model: str = DEFAULT_MODEL,
     api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return build_wbp_model_catalog_contract_packet(
         operator_status,
         endpoint=endpoint,
         recommended_default_model=recommended_default_model,
         api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
     )
 
 
@@ -556,6 +644,7 @@ def build_model_catalog_fidelity_packets(
     endpoint: str = DEFAULT_ENDPOINT,
     recommended_default_model: str = DEFAULT_MODEL,
     api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
     measurement_packet_present: bool = False,
 ) -> dict[str, dict[str, Any]]:
     catalog = _catalog_fidelity_base(
@@ -563,6 +652,7 @@ def build_model_catalog_fidelity_packets(
         endpoint=endpoint,
         recommended_default_model=recommended_default_model,
         api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
     )
     findings = validate_wbp_model_catalog_contract(catalog)
     models = [model for model in catalog.get("models", []) if isinstance(model, dict)]

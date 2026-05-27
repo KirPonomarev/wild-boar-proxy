@@ -14,6 +14,10 @@ from wild_boar_proxy.codex_model_registry import (
     forbidden_custom_model_fields,
     validate_wbp_model_catalog_contract,
 )
+from wild_boar_proxy.model_availability import (
+    build_catalog_availability_lattice_packet,
+    build_model_direct_preflight_packet,
+)
 
 
 def operator_status(*, claim_gate: str = "blocked") -> dict[str, object]:
@@ -30,6 +34,53 @@ def operator_status(*, claim_gate: str = "blocked") -> dict[str, object]:
             "server_issued": True,
         },
     }
+
+
+def availability_lattice() -> dict[str, object]:
+    catalog = {
+        "models": [
+            {"model_id": "gpt-5.3-codex", "lane": "codex_native"},
+            {"model_id": "gpt-5.4", "lane": "codex_native"},
+            {"model_id": "direct-mistral-devstral-2512", "lane": "wbp_api"},
+        ]
+    }
+    current_packets = [
+        build_model_direct_preflight_packet(
+            model_id="gpt-5.3-codex",
+            source="current_thread_anchor",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="codex_native_account_route",
+        )
+    ]
+    historical_packets = [
+        build_model_direct_preflight_packet(
+            model_id="direct-mistral-devstral-2512",
+            source="historical_external_anchor",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="wbp_api_external_route",
+        )
+    ]
+    return build_catalog_availability_lattice_packet(
+        catalog_packet=catalog,
+        current_model_packets=current_packets,
+        historical_model_packets=historical_packets,
+    )
 
 
 class CodexModelRegistryTests(unittest.TestCase):
@@ -310,6 +361,13 @@ class CodexModelRegistryTests(unittest.TestCase):
             "source": "measured",
             "proof_level": "declared",
         }
+        mutated["models"][0]["availability_evidence_scope"] = "current_operator_catalog_only"
+        mutated["models"][0]["availability_levels"] = ["listed"]
+        mutated["models"][0]["direct_wbp_non_stream_response_accepted"] = False
+        mutated["models"][0]["request_reaches_wbp_proven"] = False
+        mutated["models"][0]["upstream_accepts_proven"] = False
+        mutated["models"][0]["current_stability_proven"] = False
+        mutated["models"][0]["bounded_limitations"] = []
 
         self.assertIn(
             "models[0].speed_tier.measured_without_packet",
@@ -368,6 +426,32 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(matrix["route_selected_proven"])
         self.assertFalse(matrix["upstream_accepts_proven"])
         self.assertFalse(matrix["response_accepted_by_codex_proven"])
+
+    def test_catalog_fidelity_can_import_availability_lattice_without_collapsing_lanes(self) -> None:
+        packets = build_model_catalog_fidelity_packets(
+            operator_status(claim_gate="passed"),
+            availability_lattice_packet=availability_lattice(),
+        )
+
+        native_models = {
+            model["model_id"]: model
+            for model in packets["codex_native_model_lane_packet.json"]["models"]
+        }
+        wbp_models = {
+            model["model_id"]: model
+            for model in packets["wbp_api_model_lane_packet.json"]["models"]
+        }
+
+        self.assertEqual(
+            native_models["gpt-5.3-codex"]["availability_claim_level"],
+            "direct_wbp_non_stream_response_accepted",
+        )
+        self.assertTrue(native_models["gpt-5.3-codex"]["live_availability_proven"])
+        self.assertEqual(
+            wbp_models["direct-mistral-devstral-2512"]["availability_claim_level"],
+            "historically_direct_wbp_non_stream_response_accepted",
+        )
+        self.assertFalse(wbp_models["direct-mistral-devstral-2512"]["live_availability_proven"])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import unittest
 
 from wild_boar_proxy.model_availability import (
     build_candidate_model_list,
+    build_catalog_availability_lattice_packet,
     build_candidate_partition_packet,
     build_default_model_source_packet,
     build_external_route_admission_packet,
@@ -824,6 +825,87 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["admitted_smoke_candidates"], [])
+
+    def test_catalog_availability_lattice_distinguishes_current_and_historical_proof(self) -> None:
+        catalog = {
+            "models": [
+                {"model_id": "gpt-5.4-mini", "lane": "codex_native"},
+                {"model_id": "wbp-web-primary-openrouter", "lane": "wbp_api"},
+                {"model_id": "gpt-image-2", "lane": "codex_native"},
+            ]
+        }
+        current = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="current_thread_anchor",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="codex_native_account_route",
+        )
+        historical = build_model_direct_preflight_packet(
+            model_id="wbp-web-primary-openrouter",
+            source="pass2_selected_route",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="wbp_api_external_route",
+        )
+        lattice = build_catalog_availability_lattice_packet(
+            catalog_packet=catalog,
+            current_model_packets=[current],
+            historical_model_packets=[historical],
+        )
+
+        self.assertEqual(lattice["status"], "ok")
+        rows = {row["model_id"]: row for row in lattice["rows"]}
+        self.assertEqual(
+            rows["gpt-5.4-mini"]["availability_claim_level"],
+            "direct_wbp_non_stream_response_accepted",
+        )
+        self.assertTrue(rows["gpt-5.4-mini"]["live_availability_proven"])
+        self.assertEqual(
+            rows["wbp-web-primary-openrouter"]["availability_claim_level"],
+            "historically_direct_wbp_non_stream_response_accepted",
+        )
+        self.assertFalse(rows["wbp-web-primary-openrouter"]["live_availability_proven"])
+        self.assertEqual(rows["gpt-image-2"]["availability_claim_level"], "listed_not_live_proven")
+
+    def test_catalog_availability_lattice_keeps_out_of_catalog_negative_observation(self) -> None:
+        negative = build_model_direct_preflight_packet(
+            model_id="gpt-5.3-codex-spark",
+            source="fresh_negative_anchor",
+            listed=False,
+            selectable=False,
+            route_selected=False,
+            runtime_ready=True,
+            http_status=400,
+            error_payload={"error": {"type": "unsupported_model_for_chatgpt_account"}},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="codex_native_account_route",
+        )
+        lattice = build_catalog_availability_lattice_packet(
+            catalog_packet={"models": [{"model_id": "gpt-5.5", "lane": "codex_native"}]},
+            out_of_catalog_model_packets=[negative],
+        )
+
+        self.assertEqual(len(lattice["out_of_catalog_observations"]), 1)
+        observation = lattice["out_of_catalog_observations"][0]
+        self.assertEqual(observation["model_id"], "gpt-5.3-codex-spark")
+        self.assertFalse(observation["listed_in_current_operator_catalog"])
+        self.assertFalse(observation["catalog_expansion_allowed"])
 
 
 if __name__ == "__main__":

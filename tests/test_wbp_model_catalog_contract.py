@@ -10,6 +10,10 @@ from wild_boar_proxy.codex_model_registry import (
     build_wbp_model_catalog_contract_packet,
     validate_wbp_model_catalog_contract,
 )
+from wild_boar_proxy.model_availability import (
+    build_catalog_availability_lattice_packet,
+    build_model_direct_preflight_packet,
+)
 
 
 def operator_status(*, model_ids: list[str] | None = None, claim_gate: str = "passed") -> dict[str, object]:
@@ -48,6 +52,54 @@ def api_snapshot() -> dict[str, object]:
             },
         ]
     }
+
+
+def availability_lattice_for(*model_ids: str) -> dict[str, object]:
+    catalog = build_wbp_model_catalog_contract_packet(
+        operator_status(model_ids=list(model_ids)),
+        api_snapshot=api_snapshot(),
+    )
+    current_packets = [
+        build_model_direct_preflight_packet(
+            model_id=model_id,
+            source="current_thread_anchor",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+            route_family="codex_native_account_route",
+        )
+        for model_id in model_ids
+        if model_id.startswith("gpt-")
+    ]
+    historical_packets = []
+    if "wbp-web-primary-openrouter" in model_ids:
+        historical_packets.append(
+            build_model_direct_preflight_packet(
+                model_id="wbp-web-primary-openrouter",
+                source="pass2_selected_route",
+                listed=True,
+                selectable=True,
+                route_selected=True,
+                runtime_ready=True,
+                http_status=200,
+                upstream_status=200,
+                response_payload={"status": "completed", "output_text": "OK"},
+                prompt_text="Reply OK",
+                request_sent_to_wbp=True,
+                route_family="wbp_api_external_route",
+            )
+        )
+    return build_catalog_availability_lattice_packet(
+        catalog_packet=catalog,
+        current_model_packets=current_packets,
+        historical_model_packets=historical_packets,
+    )
 
 
 class WbpModelCatalogContractTests(unittest.TestCase):
@@ -170,6 +222,46 @@ class WbpModelCatalogContractTests(unittest.TestCase):
         self.assertTrue(all(entry["live_availability_proven"] is False for entry in packet["models"]))
         self.assertTrue(
             all(entry["availability_claim_level"] == "listed_not_live_proven" for entry in packet["models"])
+        )
+
+    def test_wbp_model_catalog_imports_current_native_availability_lattice(self) -> None:
+        lattice = availability_lattice_for("gpt-5.4", "gpt-5.3-codex")
+        packet = build_wbp_model_catalog_contract_packet(
+            operator_status(model_ids=["gpt-5.4", "gpt-5.3-codex"]),
+            api_snapshot=api_snapshot(),
+            availability_lattice_packet=lattice,
+        )
+
+        rows = {entry["model_id"]: entry for entry in packet["models"]}
+        self.assertTrue(packet["availability_lattice_imported"])
+        self.assertEqual(packet["availability_lattice_status"], "ok")
+        self.assertEqual(
+            rows["gpt-5.4"]["availability_claim_level"],
+            "direct_wbp_non_stream_response_accepted",
+        )
+        self.assertTrue(rows["gpt-5.4"]["live_availability_proven"])
+        self.assertEqual(
+            rows["gpt-5.4"]["availability_evidence_scope"],
+            "current_thread_direct_wbp_non_stream",
+        )
+
+    def test_wbp_model_catalog_imports_historical_external_lane_boundedly(self) -> None:
+        lattice = availability_lattice_for("gpt-5.4", "wbp-web-primary-openrouter")
+        packet = build_wbp_model_catalog_contract_packet(
+            operator_status(model_ids=["gpt-5.4"]),
+            api_snapshot=api_snapshot(),
+            availability_lattice_packet=lattice,
+        )
+
+        rows = {entry["model_id"]: entry for entry in packet["models"]}
+        self.assertEqual(
+            rows["wbp-web-primary-openrouter"]["availability_claim_level"],
+            "historically_direct_wbp_non_stream_response_accepted",
+        )
+        self.assertFalse(rows["wbp-web-primary-openrouter"]["live_availability_proven"])
+        self.assertEqual(
+            rows["wbp-web-primary-openrouter"]["availability_evidence_scope"],
+            "pass2_selected_external_route_closed_truth",
         )
 
     def test_wbp_model_catalog_does_not_claim_native_or_egress_proof(self) -> None:

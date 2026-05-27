@@ -49,6 +49,16 @@ AVAILABILITY_LEVELS = {
     "blocked_by_host_environment",
     "failed",
 }
+CATALOG_AVAILABILITY_CLAIM_LEVELS = {
+    "listed_not_live_proven",
+    "direct_wbp_non_stream_response_accepted",
+    "historically_direct_wbp_non_stream_response_accepted",
+}
+CATALOG_AVAILABILITY_EVIDENCE_SCOPES = {
+    "current_operator_catalog_only",
+    "current_thread_direct_wbp_non_stream",
+    "pass2_selected_external_route_closed_truth",
+}
 MODEL_FORBIDDEN_BROWSER_FIELDS = {
     "api_key",
     "apikey",
@@ -1104,4 +1114,167 @@ def build_model_availability_false_green_audit(
         "streaming_claimed": False,
         "tool_loop_claimed": False,
         "account_pool_health_claimed": False,
+    }
+
+
+def _catalog_availability_row_from_model_packet(
+    packet: dict[str, Any],
+    *,
+    evidence_scope: str,
+) -> dict[str, Any]:
+    model_id = str(packet.get("model_id") or "")
+    direct_passed = packet.get("direct_preflight_status") == "passed"
+    historical_scope = evidence_scope == "pass2_selected_external_route_closed_truth"
+    claim_level = (
+        "historically_direct_wbp_non_stream_response_accepted"
+        if direct_passed and historical_scope
+        else "direct_wbp_non_stream_response_accepted"
+        if direct_passed
+        else "listed_not_live_proven"
+    )
+    return {
+        "model_id": model_id,
+        "availability_claim_level": claim_level,
+        "availability_levels": list(packet.get("availability_levels") or ["listed"]),
+        "live_availability_proven": direct_passed and not historical_scope,
+        "direct_wbp_non_stream_response_accepted": direct_passed,
+        "request_reaches_wbp_proven": packet.get("request_reaches_wbp") is True,
+        "upstream_accepts_proven": packet.get("upstream_accepts") is True,
+        "response_accepted_by_codex_proven": False,
+        "current_stability_proven": direct_passed and not historical_scope,
+        "availability_evidence_scope": evidence_scope,
+        "bounded_limitations": [
+            "response_accepted_by_codex_not_proven",
+            "streaming_not_proven",
+            "tool_loop_not_proven",
+        ]
+        + (
+            ["current_live_stability_not_proven"]
+            if historical_scope
+            else []
+        ),
+        "failure_cause": str(packet.get("failure_cause") or "none"),
+        "blocked_reason_if_any": str(packet.get("blocked_reason_if_any") or ""),
+        "route_family": str(packet.get("route_family") or "unknown_unrouted"),
+    }
+
+
+def build_catalog_availability_lattice_packet(
+    *,
+    catalog_packet: dict[str, Any] | None,
+    current_model_packets: list[dict[str, Any]] | None = None,
+    historical_model_packets: list[dict[str, Any]] | None = None,
+    out_of_catalog_model_packets: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    models = catalog_packet.get("models") if isinstance(catalog_packet, dict) else []
+    current_by_id = {
+        str(packet.get("model_id") or ""): packet
+        for packet in (current_model_packets or [])
+        if isinstance(packet, dict) and str(packet.get("model_id") or "")
+    }
+    historical_by_id = {
+        str(packet.get("model_id") or ""): packet
+        for packet in (historical_model_packets or [])
+        if isinstance(packet, dict) and str(packet.get("model_id") or "")
+    }
+    rows: list[dict[str, Any]] = []
+    catalog_ids: set[str] = set()
+    for model in models if isinstance(models, list) else []:
+        if not isinstance(model, dict):
+            continue
+        model_id = str(model.get("model_id") or "").strip()
+        if not model_id:
+            continue
+        catalog_ids.add(model_id)
+        row = {
+            "model_id": model_id,
+            "lane": str(model.get("lane") or ""),
+            "availability_claim_level": "listed_not_live_proven",
+            "availability_levels": ["listed"],
+            "live_availability_proven": False,
+            "direct_wbp_non_stream_response_accepted": False,
+            "request_reaches_wbp_proven": False,
+            "upstream_accepts_proven": False,
+            "response_accepted_by_codex_proven": False,
+            "current_stability_proven": False,
+            "availability_evidence_scope": "current_operator_catalog_only",
+            "bounded_limitations": [
+                "live_acceptance_not_proven",
+                "response_accepted_by_codex_not_proven",
+                "streaming_not_proven",
+                "tool_loop_not_proven",
+            ],
+            "failure_cause": "none",
+            "blocked_reason_if_any": "",
+            "route_family": "",
+        }
+        packet = current_by_id.get(model_id)
+        if packet is not None:
+            row.update(
+                _catalog_availability_row_from_model_packet(
+                    packet,
+                    evidence_scope="current_thread_direct_wbp_non_stream",
+                )
+            )
+        else:
+            packet = historical_by_id.get(model_id)
+            if packet is not None:
+                row.update(
+                    _catalog_availability_row_from_model_packet(
+                        packet,
+                        evidence_scope="pass2_selected_external_route_closed_truth",
+                    )
+                )
+        rows.append(row)
+    out_of_catalog_observations: list[dict[str, Any]] = []
+    for packet in out_of_catalog_model_packets or []:
+        if not isinstance(packet, dict):
+            continue
+        model_id = str(packet.get("model_id") or "").strip()
+        if not model_id or model_id in catalog_ids:
+            continue
+        out_of_catalog_observations.append(
+            {
+                "model_id": model_id,
+                "listed_in_current_operator_catalog": False,
+                "direct_preflight_status": str(packet.get("direct_preflight_status") or ""),
+                "http_status": packet.get("http_status"),
+                "failure_cause": str(packet.get("failure_cause") or "unknown"),
+                "blocked_reason_if_any": str(packet.get("blocked_reason_if_any") or ""),
+                "route_family": str(packet.get("route_family") or "unknown_unrouted"),
+                "catalog_expansion_allowed": False,
+            }
+        )
+    listed_only = [
+        row["model_id"]
+        for row in rows
+        if row["availability_claim_level"] == "listed_not_live_proven"
+    ]
+    current_live_proven = [
+        row["model_id"]
+        for row in rows
+        if row["availability_claim_level"] == "direct_wbp_non_stream_response_accepted"
+    ]
+    historical_bounded = [
+        row["model_id"]
+        for row in rows
+        if row["availability_claim_level"] == "historically_direct_wbp_non_stream_response_accepted"
+    ]
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "catalog_availability_lattice",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if rows else "blocked",
+        "claim_level_values": sorted(CATALOG_AVAILABILITY_CLAIM_LEVELS),
+        "evidence_scope_values": sorted(CATALOG_AVAILABILITY_EVIDENCE_SCOPES),
+        "availability_level_values": sorted(AVAILABILITY_LEVELS),
+        "rows": rows,
+        "listed_only_model_ids": listed_only,
+        "current_live_proven_model_ids": current_live_proven,
+        "historically_bounded_model_ids": historical_bounded,
+        "out_of_catalog_observations": out_of_catalog_observations,
+        "response_accepted_by_codex_proven": False,
+        "streaming_proven": False,
+        "tool_loop_proven": False,
+        "all_listed_models_equally_usable": False,
     }
