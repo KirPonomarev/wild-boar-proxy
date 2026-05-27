@@ -1,7 +1,7 @@
 {
   "authorization_status": "authorized_by_owner_gate",
   "broad_authorization_accepted": false,
-  "captured_at_utc": "2026-05-27T07:58:51.748336Z",
+  "captured_at_utc": "2026-05-27T08:51:00.088229Z",
   "exact_owner_authorization_required": true,
   "generic_start_phrase_accepted": false,
   "live_request_allowed": true,

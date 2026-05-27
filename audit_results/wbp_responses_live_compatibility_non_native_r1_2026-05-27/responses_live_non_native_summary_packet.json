@@ -1,9 +1,10 @@
 {
   "blocked_packets": [],
-  "captured_at_utc": "2026-05-27T07:58:54.196955Z",
+  "captured_at_utc": "2026-05-27T08:51:25.022151Z",
   "codex_cli_acceptance_proven": false,
   "direct_egress_absence_proven": false,
   "direct_non_stream_response_shape_accepted": true,
+  "failure_semantics_compatibility_proven": true,
   "final_e2e_proven": false,
   "final_status": "WBP_RESPONSES_LIVE_COMPATIBILITY_NON_NATIVE_R1_CLASSIFIED",
   "live_request_attempted": true,
@@ -17,7 +18,8 @@
   "route_selected": true,
   "status": "ok",
   "stopped_before_live_provider_model_request": false,
-  "streaming_compatibility_proven": false,
-  "tool_loop_compatibility_proven": false,
+  "streaming_compatibility_proven": true,
+  "surface_limits": [],
+  "tool_loop_compatibility_proven": true,
   "upstream_accepts": true
 }

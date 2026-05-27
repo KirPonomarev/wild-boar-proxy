@@ -34,6 +34,9 @@ from wild_boar_proxy.runtime import proxyless_urlopen  # noqa: E402
 
 
 TARGET_STATUS = "WBP_RESPONSES_LIVE_COMPATIBILITY_NON_NATIVE_R1_CLASSIFIED"
+TARGET_STATUS_WITH_LIMITS = (
+    "WBP_RESPONSES_LIVE_COMPATIBILITY_NON_NATIVE_R1_CLASSIFIED_WITH_LIMITS"
+)
 BLOCKED_NO_OWNER_AUTHORIZATION = (
     "WBP_RESPONSES_LIVE_COMPATIBILITY_NON_NATIVE_R1_BLOCKED_NO_OWNER_AUTHORIZATION"
 )
@@ -102,8 +105,8 @@ def run_text(repo_root: Path, command: list[str]) -> str:
     return process.stdout.strip() if process.returncode == 0 else process.stderr.strip()
 
 
-def load_request_fixture() -> dict[str, Any]:
-    return json.loads((FIXTURE_DIR / "non_stream_text_request.json").read_text(encoding="utf-8"))
+def load_fixture(name: str) -> dict[str, Any]:
+    return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
 def auth_token_packet(repo_root: Path) -> tuple[dict[str, Any], str]:
@@ -141,6 +144,7 @@ def http_json(
     token: str,
     payload: dict[str, Any],
     timeout: int,
+    accept: str = "application/json",
 ) -> dict[str, Any]:
     body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
     request = urllib.request.Request(
@@ -149,7 +153,7 @@ def http_json(
         method="POST",
         headers={
             "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
+            "Accept": accept,
             "Content-Type": "application/json",
             "OpenAI-Beta": "responses=v1",
             "X-Session-ID": f"wbp-responses-live-r1-{sha256_text(utc_now())[:16]}",
@@ -165,8 +169,10 @@ def http_json(
                 parsed = {}
             return {
                 "http_status": int(response.status),
+                "content_type": str(response.headers.get("Content-Type") or ""),
                 "body_hash": sha256_text(decoded),
                 "body_len": len(response_body),
+                "body_text": decoded,
                 "payload": parsed if isinstance(parsed, dict) else {},
                 "exception_type": "",
             }
@@ -179,24 +185,30 @@ def http_json(
             parsed = {}
         return {
             "http_status": int(exc.code),
+            "content_type": str(exc.headers.get("Content-Type") or ""),
             "body_hash": sha256_text(decoded),
             "body_len": len(response_body),
+            "body_text": decoded,
             "payload": parsed if isinstance(parsed, dict) else {},
             "exception_type": "HTTPError",
         }
     except TimeoutError:
         return {
             "http_status": None,
+            "content_type": "",
             "body_hash": "",
             "body_len": 0,
+            "body_text": "",
             "payload": {},
             "exception_type": "TimeoutError",
         }
     except Exception as exc:  # noqa: BLE001
         return {
             "http_status": None,
+            "content_type": "",
             "body_hash": "",
             "body_len": 0,
+            "body_text": "",
             "payload": {},
             "exception_type": type(exc).__name__,
         }
@@ -214,6 +226,99 @@ def response_shape_accepted(payload: dict[str, Any]) -> tuple[bool, str]:
         and (isinstance(output, list) or isinstance(text, str))
     )
     return accepted, status
+
+
+def event_names(body: str) -> list[str]:
+    return [
+        line.removeprefix("event: ").strip()
+        for line in body.splitlines()
+        if line.startswith("event: ")
+    ]
+
+
+def stream_frames(body: str) -> list[dict[str, Any]]:
+    frames: list[dict[str, Any]] = []
+    for chunk in body.strip().split("\n\n"):
+        if not chunk.strip():
+            continue
+        event_name = ""
+        data_text = ""
+        for line in chunk.splitlines():
+            if line.startswith("event: "):
+                event_name = line.removeprefix("event: ").strip()
+            if line.startswith("data: "):
+                data_text = line.removeprefix("data: ").strip()
+        parsed: dict[str, Any] | None = None
+        parse_error = ""
+        try:
+            parsed = json.loads(data_text)
+        except json.JSONDecodeError as exc:
+            parse_error = str(exc)
+        frames.append(
+            {
+                "event": event_name,
+                "data_type": parsed.get("type") if isinstance(parsed, dict) else None,
+                "data_type_matches_event": (
+                    isinstance(parsed, dict) and parsed.get("type") == event_name
+                ),
+                "parse_error": parse_error,
+                "response_status": (
+                    parsed.get("response", {}).get("status")
+                    if isinstance(parsed, dict)
+                    and isinstance(parsed.get("response"), dict)
+                    else None
+                ),
+            }
+        )
+    return frames
+
+
+def stream_shape_accepted(
+    *,
+    http_status: int | None,
+    content_type: str,
+    body_len: int,
+    exception_type: str,
+    observed_events: list[str],
+    expected_events: list[str],
+    data_type_matches_event: bool,
+    data_parse_errors: list[str],
+    terminal_response_status: str,
+) -> bool:
+    return (
+        http_status is not None
+        and 200 <= http_status < 300
+        and "text/event-stream" in content_type.lower()
+        and body_len > 0
+        and exception_type == ""
+        and observed_events == expected_events
+        and data_type_matches_event
+        and not data_parse_errors
+        and terminal_response_status == "completed"
+    )
+
+
+def extract_function_call(payload: dict[str, Any]) -> dict[str, str]:
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return {}
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("type") or "") == "function_call":
+            return {
+                "call_id": str(item.get("call_id") or item.get("id") or ""),
+                "name": str(item.get("name") or ""),
+                "arguments": str(item.get("arguments") or ""),
+            }
+    return {}
+
+
+def response_output_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return []
+    return [item for item in output if isinstance(item, dict)]
 
 
 def classify_http_failure(http_status: int | None, payload: dict[str, Any], exception_type: str) -> str:
@@ -242,6 +347,11 @@ def build_live_request_runner(
     timeout: int,
 ) -> tuple[RequestRunner, dict[str, Any]]:
     auth_packet, token = auth_token_packet(repo_root)
+    expected_stream_events = [
+        json.loads(line)["event"]
+        for line in (FIXTURE_DIR / "stream_text_events.ndjson").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
     def runner(request_spec: dict[str, Any]) -> dict[str, Any]:
         if not token:
@@ -256,28 +366,210 @@ def build_live_request_runner(
                 "failure_cause": "auth_failure",
                 "auth_command_status": auth_packet["status"],
             }
+        surface = str(request_spec.get("surface") or "non_stream")
         prompt = f"{LIVE_PROMPT_PREFIX}_{sha256_text(utc_now())[:16]}: answer exactly OK"
-        observed = http_json(
-            endpoint=endpoint,
-            path="responses",
-            token=token,
-            payload={
+        payload: dict[str, Any]
+        if surface == "stream":
+            payload = {
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "input": prompt,
+                "max_output_tokens": 16,
+                "stream": True,
+            }
+        elif surface == "tool_loop":
+            payload = {
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "input": "Call the ping tool once, then finish.",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "ping",
+                        "description": "Return pong",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": False,
+                        },
+                    }
+                ],
+                "max_output_tokens": 64,
+                "stream": False,
+            }
+        elif surface == "failure_semantics":
+            payload = {
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "input": [],
+                "max_output_tokens": 16,
+                "stream": False,
+            }
+        else:
+            payload = {
                 "model": model_id or str(request_spec.get("model_id") or ""),
                 "input": prompt,
                 "max_output_tokens": 16,
                 "stream": False,
-            },
+            }
+        accept = "text/event-stream" if surface == "stream" else "application/json"
+        observed = http_json(
+            endpoint=endpoint,
+            path="responses",
+            token=token,
+            payload=payload,
             timeout=timeout,
+            accept=accept,
         )
         http_status = observed["http_status"]
-        payload = observed["payload"]
-        shape_accepted, response_status = response_shape_accepted(payload)
-        success = http_status is not None and 200 <= http_status < 300
-        failure_cause = "none" if success and shape_accepted else classify_http_failure(
-            http_status,
-            payload,
-            str(observed["exception_type"]),
+        response_payload = observed["payload"]
+        shape_accepted, response_status = response_shape_accepted(response_payload)
+        observed_events = event_names(str(observed.get("body_text") or ""))
+        stream_frame_rows = stream_frames(str(observed.get("body_text") or ""))
+        data_parse_errors = [
+            str(row.get("parse_error") or "")
+            for row in stream_frame_rows
+            if str(row.get("parse_error") or "")
+        ]
+        data_type_matches_event = bool(stream_frame_rows) and all(
+            row.get("data_type_matches_event") is True for row in stream_frame_rows
         )
+        terminal_response_status = str(
+            next(
+                (
+                    row.get("response_status")
+                    for row in reversed(stream_frame_rows)
+                    if row.get("response_status")
+                ),
+                "",
+            )
+            or ""
+        )
+        stream_accepted = stream_shape_accepted(
+            http_status=http_status,
+            content_type=str(observed.get("content_type") or ""),
+            body_len=int(observed["body_len"]),
+            exception_type=str(observed["exception_type"]),
+            observed_events=observed_events,
+            expected_events=expected_stream_events,
+            data_type_matches_event=data_type_matches_event,
+            data_parse_errors=data_parse_errors,
+            terminal_response_status=terminal_response_status,
+        )
+        tool_call = extract_function_call(response_payload)
+        tool_output_submitted = False
+        followup_response_shape_accepted = False
+        assistant_continuation_observed = False
+        followup_status_code = 0
+        followup_response_status = ""
+        followup_request_shape_mode = ""
+        followup_replayed_output_item_count = 0
+        negative_control_status_code = 0
+        negative_control_failure_cause = "unknown"
+        negative_control_error_type = ""
+        negative_control_error_param = ""
+        negative_control_error_code = ""
+        negative_control_response_shape_accepted = False
+        if surface == "tool_loop" and tool_call.get("call_id"):
+            negative_control_payload = {
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "previous_response_id": str(response_payload.get("id") or ""),
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": tool_call["call_id"],
+                        "output": "pong",
+                    }
+                ],
+                "max_output_tokens": 64,
+                "stream": False,
+            }
+            negative_control = http_json(
+                endpoint=endpoint,
+                path="responses",
+                token=token,
+                payload=negative_control_payload,
+                timeout=timeout,
+            )
+            negative_control_payload_body = negative_control["payload"]
+            negative_control_response_shape_accepted, _ = response_shape_accepted(
+                negative_control_payload_body
+            )
+            negative_control_status_code = int(negative_control.get("http_status") or 0)
+            negative_control_failure_cause = classify_http_failure(
+                negative_control.get("http_status"),
+                negative_control_payload_body,
+                str(negative_control.get("exception_type") or ""),
+            )
+            negative_control_error = (
+                negative_control_payload_body.get("error")
+                if isinstance(negative_control_payload_body, dict)
+                else {}
+            )
+            if isinstance(negative_control_error, dict):
+                negative_control_error_type = str(negative_control_error.get("type") or "")
+                negative_control_error_param = str(negative_control_error.get("param") or "")
+                negative_control_error_code = str(negative_control_error.get("code") or "")
+
+            prior_output_items = response_output_items(response_payload)
+            followup_payload = {
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "tools": payload.get("tools") if isinstance(payload.get("tools"), list) else [],
+                "input": [
+                    *prior_output_items,
+                    {
+                        "type": "function_call_output",
+                        "call_id": tool_call["call_id"],
+                        "output": "pong",
+                    },
+                ],
+                "max_output_tokens": 64,
+                "stream": False,
+            }
+            followup = http_json(
+                endpoint=endpoint,
+                path="responses",
+                token=token,
+                payload=followup_payload,
+                timeout=timeout,
+            )
+            followup_payload_body = followup["payload"]
+            followup_response_shape_accepted, followup_response_status = response_shape_accepted(
+                followup_payload_body
+            )
+            tool_output_submitted = True
+            followup_status_code = int(followup.get("http_status") or 0)
+            assistant_continuation_observed = followup_response_shape_accepted and (
+                followup_response_status in {"completed", "incomplete"}
+            )
+            followup_request_shape_mode = "prior_output_replay_plus_function_call_output"
+            followup_replayed_output_item_count = len(prior_output_items)
+        success = http_status is not None and 200 <= http_status < 300
+        if surface == "failure_semantics":
+            failure_cause = classify_http_failure(
+                http_status,
+                response_payload,
+                str(observed["exception_type"]),
+            )
+        elif surface == "stream":
+            failure_cause = "none" if stream_accepted else classify_http_failure(
+                http_status,
+                response_payload,
+                str(observed["exception_type"]),
+            )
+        elif surface == "tool_loop":
+            failure_cause = (
+                "none"
+                if success and shape_accepted and tool_output_submitted and assistant_continuation_observed
+                else classify_http_failure(
+                    http_status,
+                    response_payload,
+                    str(observed["exception_type"]),
+                )
+            )
+        else:
+            failure_cause = "none" if success and shape_accepted else classify_http_failure(
+                http_status,
+                response_payload,
+                str(observed["exception_type"]),
+            )
         return {
             "request_attempted": True,
             "request_reaches_wbp": http_status is not None,
@@ -287,12 +579,43 @@ def build_live_request_runner(
             "upstream_status_code": http_status or 0,
             "upstream_accepts": success,
             "response_shape_accepted": shape_accepted,
+            "stream_shape_accepted": stream_accepted,
             "response_status": response_status,
             "failure_cause": failure_cause,
             "http_body_sha256": observed["body_hash"],
             "http_body_len": observed["body_len"],
             "exception_type": observed["exception_type"],
             "auth_command_status": auth_packet["status"],
+            "content_type": str(observed.get("content_type") or ""),
+            "observed_events": observed_events,
+            "expected_events": expected_stream_events,
+            "event_count": len(observed_events),
+            "data_type_sequence": [str(row.get("data_type") or "") for row in stream_frame_rows],
+            "data_type_matches_event": data_type_matches_event,
+            "data_parse_errors": data_parse_errors,
+            "terminal_response_status": terminal_response_status,
+            "completed_event_observed": observed_events[-1:] == ["response.completed"],
+            "tool_call_observed": bool(tool_call),
+            "tool_call_id_present": bool(tool_call.get("call_id")),
+            "tool_call_name": str(tool_call.get("name") or ""),
+            "tool_output_submitted": tool_output_submitted,
+            "followup_response_shape_accepted": followup_response_shape_accepted,
+            "assistant_continuation_observed": assistant_continuation_observed,
+            "followup_upstream_status_code": followup_status_code,
+            "followup_response_status": followup_response_status,
+            "followup_request_shape_mode": followup_request_shape_mode,
+            "followup_replayed_output_item_count": followup_replayed_output_item_count,
+            "negative_control_request_shape_mode": (
+                "previous_response_id_plus_function_call_output_only"
+                if tool_call.get("call_id")
+                else ""
+            ),
+            "negative_control_status_code": negative_control_status_code,
+            "negative_control_failure_cause": negative_control_failure_cause,
+            "negative_control_error_type": negative_control_error_type,
+            "negative_control_error_param": negative_control_error_param,
+            "negative_control_error_code": negative_control_error_code,
+            "negative_control_response_shape_accepted": negative_control_response_shape_accepted,
         }
 
     return runner, auth_packet
@@ -304,16 +627,11 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
         relative_evidence_dir = str(evidence_dir.relative_to(repo_root))
     except ValueError:
         relative_evidence_dir = ""
+    default_evidence_surface = str(DEFAULT_EVIDENCE_DIR.relative_to(repo_root))
     admitted_current_contour = {
         "tools/responses_live_non_native_probe.py",
         "tests/test_responses_live_non_native_probe.py",
     }
-    admitted_current_evidence_prefixes = (
-        f"A  {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
-        f"AM {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
-        f" M {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
-        f"?? {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
-    )
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
         "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
@@ -330,15 +648,21 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
     quarantined = [
         line for line in status_lines if line.strip().startswith(quarantined_prefixes)
     ]
+
+    def status_path(line: str) -> str:
+        return line[3:] if len(line) > 3 else line.strip()
+
     unexpected_dirty = [
         line
         for line in status_lines
         if line not in quarantined
         and not (
-            relative_evidence_dir
-            and line.strip().startswith(f"?? {relative_evidence_dir}/")
+            (
+                relative_evidence_dir
+                and status_path(line).startswith(f"{relative_evidence_dir}/")
+            )
+            or status_path(line).startswith(f"{default_evidence_surface}/")
         )
-        and not line.strip().startswith(admitted_current_evidence_prefixes)
         and not any(path in line for path in admitted_current_contour)
     ]
     return quarantined, unexpected_dirty
@@ -375,9 +699,11 @@ def build_packets(
     model_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     quarantined, unexpected_dirty = historical_quarantine(repo_root, evidence_dir)
-    fixture = load_request_fixture()
-    model = str(model_id or fixture.get("model") or "")
-    input_items = fixture.get("input")
+    non_stream_fixture = load_fixture("non_stream_text_request.json")
+    stream_fixture = load_fixture("stream_text_request.json")
+    tool_loop_fixture = load_fixture("tool_call_request.json")
+    model = str(model_id or non_stream_fixture.get("model") or "")
+    input_items = non_stream_fixture.get("input")
     input_count = len(input_items) if isinstance(input_items, list) else 0
     try:
         evidence_surface = str(evidence_dir.relative_to(repo_root))
@@ -386,7 +712,7 @@ def build_packets(
     request_body = {
         "model": model,
         "input_count": input_count,
-        "stream": fixture.get("stream") is True,
+        "stream": non_stream_fixture.get("stream") is True,
     }
     request_body_hash = sha256_text(json.dumps(request_body, ensure_ascii=True, sort_keys=True))
     owner_authorized = owner_authorization_phrase_present(owner_authorization_phrase)
@@ -475,6 +801,62 @@ def build_packets(
             stopped_before_live_provider_model_request=not owner_authorized,
             request_prepared_counts_as_live_proof=False,
         ),
+        "direct_stream_request_shape_packet.json": packet(
+            "direct_stream_request_shape",
+            endpoint_path="/v1/responses",
+            endpoint=endpoint,
+            request_shape_classified=True,
+            model_id=model,
+            input_item_count=len(stream_fixture.get("input") or []),
+            stream_requested=True,
+            request_body_sha256=sha256_text(
+                json.dumps(
+                    {
+                        "model": model,
+                        "input_count": len(stream_fixture.get("input") or []),
+                        "stream": True,
+                    },
+                    ensure_ascii=True,
+                    sort_keys=True,
+                )
+            ),
+            request_body_recorded=False,
+            raw_prompt_recorded=False,
+            auth_header_recorded=False,
+            live_request_allowed=owner_authorized,
+            live_request_attempted=False,
+            stopped_before_live_provider_model_request=not owner_authorized,
+            request_prepared_counts_as_live_proof=False,
+        ),
+        "direct_tool_loop_request_shape_packet.json": packet(
+            "direct_tool_loop_request_shape",
+            endpoint_path="/v1/responses",
+            endpoint=endpoint,
+            request_shape_classified=True,
+            model_id=model,
+            input_item_count=len(tool_loop_fixture.get("input") or []),
+            tools_declared_count=len(tool_loop_fixture.get("tools") or []),
+            stream_requested=False,
+            request_body_sha256=sha256_text(
+                json.dumps(
+                    {
+                        "model": model,
+                        "input_count": len(tool_loop_fixture.get("input") or []),
+                        "tools_declared_count": len(tool_loop_fixture.get("tools") or []),
+                        "stream": False,
+                    },
+                    ensure_ascii=True,
+                    sort_keys=True,
+                )
+            ),
+            request_body_recorded=False,
+            raw_prompt_recorded=False,
+            auth_header_recorded=False,
+            live_request_allowed=owner_authorized,
+            live_request_attempted=False,
+            stopped_before_live_provider_model_request=not owner_authorized,
+            request_prepared_counts_as_live_proof=False,
+        ),
         "failure_taxonomy_packet.json": packet(
             "failure_taxonomy",
             allowed_failure_causes=sorted(FAILURE_CAUSES),
@@ -528,6 +910,90 @@ def build_packets(
                     direct_client_accepted_response=False,
                     blocked_reason_class="owner_authorization_missing",
                 ),
+                "direct_stream_response_shape_packet.json": packet(
+                    "direct_stream_response_shape",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    stream_shape_accepted=False,
+                    stream_sse_envelope_observed=False,
+                    event_count=0,
+                    observed_events=[],
+                    expected_events=[],
+                    data_type_sequence=[],
+                    data_type_matches_event=False,
+                    data_parse_errors=[],
+                    terminal_response_status="",
+                    completed_event_required=True,
+                    stream_classification_fields_observed=False,
+                    stream_started_counts_as_compatible=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_packet.json": packet(
+                    "responses_tool_loop",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    tool_loop_shape_accepted=False,
+                    tool_call_observed=False,
+                    tool_result_roundtrip_observed=False,
+                    assistant_followup_after_tool_observed=False,
+                    tool_call_emitted_counts_as_tool_loop=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_followup_request_packet.json": packet(
+                    "responses_tool_loop_followup_request",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    canonical_followup_request_classified=False,
+                    negative_control_request_classified=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_followup_response_packet.json": packet(
+                    "responses_tool_loop_followup_response",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    assistant_continuation_observed=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_followup_failure_packet.json": packet(
+                    "responses_tool_loop_followup_failure",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    failure_observed=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_followup_root_cause_classification_packet.json": packet(
+                    "responses_tool_loop_followup_root_cause_classification",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    best_supported_cause="owner_authorization_missing",
+                    root_cause_proven=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
+                "responses_tool_loop_followup_false_green_audit.json": packet(
+                    "responses_tool_loop_followup_false_green_audit",
+                    status="ok",
+                    findings=[],
+                    tool_loop_followup_success_implies_broad_tools_capability=False,
+                    tool_loop_followup_failure_implies_model_unavailable=False,
+                    tool_loop_followup_failure_implies_provider_incompatible=False,
+                ),
+                "failure_semantics_packet.json": packet(
+                    "failure_semantics",
+                    status="blocked",
+                    machine_error_code="OWNER_AUTHORIZATION_REQUIRED",
+                    request_attempted=False,
+                    failure_cause="unknown",
+                    controlled_negative_cases_exercised=False,
+                    negative_case_http_status=0,
+                    negative_case_response_shape_accepted=False,
+                    retry_recommended=False,
+                    blocked_reason_class="owner_authorization_missing",
+                ),
             }
         )
     else:
@@ -546,13 +1012,42 @@ def build_packets(
         else:
             runner_result = request_runner(
                 {
+                    "surface": "non_stream",
                     "endpoint_path": "/v1/responses",
                     "model_id": model,
                     "request_body_sha256": request_body_hash,
                     "stream": False,
                 }
             )
+            stream_result = request_runner(
+                {
+                    "surface": "stream",
+                    "endpoint_path": "/v1/responses",
+                    "model_id": model,
+                    "stream": True,
+                }
+            )
+            tool_loop_result = request_runner(
+                {
+                    "surface": "tool_loop",
+                    "endpoint_path": "/v1/responses",
+                    "model_id": model,
+                    "stream": False,
+                }
+            )
+            failure_result = request_runner(
+                {
+                    "surface": "failure_semantics",
+                    "endpoint_path": "/v1/responses",
+                    "model_id": model,
+                    "stream": False,
+                }
+            )
             runner_error = ""
+        if request_runner is None:
+            stream_result = dict(runner_result)
+            tool_loop_result = dict(runner_result)
+            failure_result = dict(runner_result)
 
         failure_cause = classify_failure(runner_result)
         request_attempted = runner_result.get("request_attempted") is True
@@ -560,6 +1055,56 @@ def build_packets(
         route_selected = runner_result.get("route_selected") is True
         upstream_accepts = runner_result.get("upstream_accepts") is True
         response_shape_accepted = runner_result.get("response_shape_accepted") is True
+        stream_shape_ok = stream_result.get("stream_shape_accepted") is True
+        stream_sse_envelope_observed = (
+            stream_result.get("stream_sse_envelope_observed") is True
+            or bool(stream_result.get("observed_events"))
+        )
+        stream_event_count = int(
+            stream_result.get("event_count")
+            or stream_result.get("stream_packets_observed")
+            or 0
+        )
+        stream_observed_events = list(stream_result.get("observed_events") or [])
+        stream_expected_events = list(stream_result.get("expected_events") or [])
+        stream_data_type_sequence = list(stream_result.get("data_type_sequence") or [])
+        stream_data_type_matches_event = stream_result.get("data_type_matches_event") is True or (
+            stream_result.get("stream_classification_fields_observed") is True and stream_shape_ok
+        )
+        stream_data_parse_errors = list(stream_result.get("data_parse_errors") or [])
+        stream_terminal_response_status = str(
+            stream_result.get("terminal_response_status") or "completed"
+        )
+        stream_completed_event_observed = (
+            stream_result.get("completed_event_observed") is True
+            or (
+                bool(stream_observed_events)
+                and stream_observed_events[-1:] == ["response.completed"]
+            )
+            or (
+                stream_result.get("stream_classification_fields_observed") is True and stream_shape_ok
+            )
+        )
+        tool_call_observed = tool_loop_result.get("tool_call_observed") is True
+        tool_result_roundtrip_observed = (
+            tool_loop_result.get("tool_output_submitted") is True
+            or tool_loop_result.get("tool_result_roundtrip_observed") is True
+        )
+        assistant_followup_after_tool_observed = (
+            tool_loop_result.get("assistant_continuation_observed") is True
+            or tool_loop_result.get("assistant_followup_after_tool_observed") is True
+        )
+        tool_loop_shape_ok = (
+            tool_loop_result.get("response_shape_accepted") is True
+            and tool_call_observed
+            and tool_result_roundtrip_observed
+            and assistant_followup_after_tool_observed
+        )
+        failure_result_cause = classify_failure(failure_result)
+        failure_result_attempted = failure_result.get("request_attempted") is True
+        failure_cause_classified = failure_result_cause in FAILURE_CAUSES and failure_result_cause != ""
+        failure_negative_status = int(failure_result.get("upstream_status_code") or 0)
+        failure_negative_shape = failure_result.get("response_shape_accepted") is True
         upstream_status_code = int(runner_result.get("upstream_status_code") or 0)
 
         packets["runtime_readiness_packet.json"] = packet(
@@ -639,9 +1184,260 @@ def build_packets(
             direct_non_stream_success_counts_as_native_acceptance=False,
             direct_non_stream_success_counts_as_model_availability=False,
         )
+        packets["direct_stream_response_shape_packet.json"] = packet(
+            "direct_stream_response_shape",
+            status=(
+                "ok"
+                if stream_shape_ok
+                and stream_sse_envelope_observed
+                and stream_data_type_matches_event
+                and not stream_data_parse_errors
+                and stream_completed_event_observed
+                else "blocked"
+            ),
+            machine_error_code=(
+                "OK"
+                if stream_shape_ok
+                and stream_sse_envelope_observed
+                and stream_data_type_matches_event
+                and not stream_data_parse_errors
+                and stream_completed_event_observed
+                else "STREAM_RESPONSE_SHAPE_NOT_ACCEPTED"
+            ),
+            request_attempted=stream_result.get("request_attempted") is True,
+            stream_shape_accepted=stream_shape_ok,
+            stream_sse_envelope_observed=stream_sse_envelope_observed,
+            event_count=stream_event_count,
+            observed_events=stream_observed_events,
+            expected_events=stream_expected_events,
+            data_type_sequence=stream_data_type_sequence,
+            data_type_matches_event=stream_data_type_matches_event,
+            data_parse_errors=stream_data_parse_errors,
+            terminal_response_status=stream_terminal_response_status,
+            completed_event_observed=stream_completed_event_observed,
+            completed_event_required=True,
+            stream_classification_fields_observed=(
+                stream_sse_envelope_observed
+                and stream_event_count > 0
+                and bool(stream_observed_events)
+                and bool(stream_expected_events)
+            ),
+            stream_started_counts_as_compatible=False,
+            upstream_status_code=int(stream_result.get("upstream_status_code") or 0),
+            failure_cause=classify_failure(stream_result),
+            stream_success_counts_as_model_availability=False,
+        )
+        packets["responses_tool_loop_packet.json"] = packet(
+            "responses_tool_loop",
+            status="ok" if tool_loop_shape_ok else "blocked",
+            machine_error_code="OK" if tool_loop_shape_ok else "TOOL_LOOP_RESPONSE_SHAPE_NOT_ACCEPTED",
+            request_attempted=tool_loop_result.get("request_attempted") is True,
+            tool_loop_shape_accepted=tool_loop_shape_ok,
+            tool_call_observed=tool_call_observed,
+            tool_result_roundtrip_observed=tool_result_roundtrip_observed,
+            assistant_followup_after_tool_observed=assistant_followup_after_tool_observed,
+            followup_response_shape_accepted=(
+                tool_loop_result.get("followup_response_shape_accepted") is True
+            ),
+            followup_upstream_status_code=int(
+                tool_loop_result.get("followup_upstream_status_code") or 0
+            ),
+            followup_response_status=str(tool_loop_result.get("followup_response_status") or ""),
+            tool_call_emitted_counts_as_tool_loop=False,
+            upstream_status_code=int(tool_loop_result.get("upstream_status_code") or 0),
+            failure_cause=classify_failure(tool_loop_result),
+            tool_loop_success_counts_as_model_availability=False,
+        )
+        packets["responses_tool_loop_followup_request_packet.json"] = packet(
+            "responses_tool_loop_followup_request",
+            status=(
+                "ok"
+                if tool_loop_result.get("tool_call_observed") is True
+                and tool_loop_result.get("tool_output_submitted") is True
+                else "blocked"
+            ),
+            machine_error_code=(
+                "OK"
+                if tool_loop_result.get("tool_call_observed") is True
+                and tool_loop_result.get("tool_output_submitted") is True
+                else "TOOL_LOOP_FOLLOWUP_REQUEST_NOT_CLASSIFIED"
+            ),
+            request_attempted=tool_loop_result.get("request_attempted") is True,
+            canonical_followup_request_classified=(
+                tool_loop_result.get("tool_output_submitted") is True
+            ),
+            canonical_followup_request_shape_mode=str(
+                tool_loop_result.get("followup_request_shape_mode") or ""
+            ),
+            canonical_followup_replayed_output_item_count=int(
+                tool_loop_result.get("followup_replayed_output_item_count") or 0
+            ),
+            negative_control_request_classified=bool(
+                tool_loop_result.get("negative_control_request_shape_mode")
+            ),
+            negative_control_request_shape_mode=str(
+                tool_loop_result.get("negative_control_request_shape_mode") or ""
+            ),
+            previous_response_id_only_counts_as_canonical=False,
+        )
+        packets["responses_tool_loop_followup_response_packet.json"] = packet(
+            "responses_tool_loop_followup_response",
+            status=(
+                "ok"
+                if tool_loop_result.get("followup_response_shape_accepted") is True
+                and tool_loop_result.get("assistant_continuation_observed") is True
+                else "blocked"
+            ),
+            machine_error_code=(
+                "OK"
+                if tool_loop_result.get("followup_response_shape_accepted") is True
+                and tool_loop_result.get("assistant_continuation_observed") is True
+                else "TOOL_LOOP_FOLLOWUP_RESPONSE_NOT_ACCEPTED"
+            ),
+            request_attempted=tool_loop_result.get("tool_output_submitted") is True,
+            followup_upstream_status_code=int(
+                tool_loop_result.get("followup_upstream_status_code") or 0
+            ),
+            followup_response_shape_accepted=(
+                tool_loop_result.get("followup_response_shape_accepted") is True
+            ),
+            followup_response_status=str(tool_loop_result.get("followup_response_status") or ""),
+            assistant_continuation_observed=(
+                tool_loop_result.get("assistant_continuation_observed") is True
+            ),
+            followup_success_counts_as_broad_tools_capability=False,
+        )
+        packets["responses_tool_loop_followup_failure_packet.json"] = packet(
+            "responses_tool_loop_followup_failure",
+            status=(
+                "ok"
+                if int(tool_loop_result.get("negative_control_status_code") or 0) >= 400
+                else "blocked"
+            ),
+            machine_error_code=(
+                "OK"
+                if int(tool_loop_result.get("negative_control_status_code") or 0) >= 400
+                else "TOOL_LOOP_FOLLOWUP_FAILURE_NOT_OBSERVED"
+            ),
+            request_attempted=bool(tool_loop_result.get("negative_control_request_shape_mode")),
+            failure_observed=int(tool_loop_result.get("negative_control_status_code") or 0) >= 400,
+            negative_control_upstream_status_code=int(
+                tool_loop_result.get("negative_control_status_code") or 0
+            ),
+            negative_control_failure_cause=str(
+                tool_loop_result.get("negative_control_failure_cause") or ""
+            ),
+            negative_control_error_type=str(
+                tool_loop_result.get("negative_control_error_type") or ""
+            ),
+            negative_control_error_param=str(
+                tool_loop_result.get("negative_control_error_param") or ""
+            ),
+            negative_control_error_code=str(
+                tool_loop_result.get("negative_control_error_code") or ""
+            ),
+            negative_control_response_shape_accepted=(
+                tool_loop_result.get("negative_control_response_shape_accepted") is True
+            ),
+            negative_control_failure_counts_as_model_unavailable=False,
+            negative_control_failure_counts_as_provider_incompatible=False,
+        )
+        negative_control_status_code = int(tool_loop_result.get("negative_control_status_code") or 0)
+        canonical_followup_status_code = int(tool_loop_result.get("followup_upstream_status_code") or 0)
+        best_supported_cause = "unclassified"
+        if negative_control_status_code >= 400 and canonical_followup_status_code >= 200:
+            best_supported_cause = (
+                "previous_response_id_only_function_call_output_followup_not_accepted_while_"
+                "prior_output_replay_plus_function_call_output_accepted"
+            )
+        elif canonical_followup_status_code >= 400:
+            best_supported_cause = "canonical_followup_contract_still_not_accepted"
+        packets["responses_tool_loop_followup_root_cause_classification_packet.json"] = packet(
+            "responses_tool_loop_followup_root_cause_classification",
+            status="ok",
+            machine_error_code="OK",
+            best_supported_cause=best_supported_cause,
+            root_cause_proven=False,
+            best_supported_cause_classified=best_supported_cause != "unclassified",
+            canonical_followup_accepted=canonical_followup_status_code >= 200
+            and tool_loop_result.get("followup_response_shape_accepted") is True,
+            negative_control_failed=negative_control_status_code >= 400,
+            broad_tools_capability_inference_forbidden=True,
+            model_unavailable_inference_forbidden=True,
+        )
+        followup_false_green_findings: list[str] = []
+        if (
+            tool_loop_result.get("assistant_continuation_observed") is True
+            and tool_loop_result.get("followup_response_shape_accepted") is not True
+        ):
+            followup_false_green_findings.append(
+                "assistant_continuation_claimed_without_followup_response_shape"
+            )
+        packets["responses_tool_loop_followup_false_green_audit.json"] = packet(
+            "responses_tool_loop_followup_false_green_audit",
+            status="ok" if not followup_false_green_findings else "blocked",
+            findings=followup_false_green_findings,
+            tool_loop_followup_success_implies_broad_tools_capability=False,
+            tool_loop_followup_failure_implies_model_unavailable=False,
+            tool_loop_followup_failure_implies_provider_incompatible=False,
+        )
+        packets["failure_semantics_packet.json"] = packet(
+            "failure_semantics",
+            status="ok" if failure_result_attempted and failure_cause_classified else "blocked",
+            machine_error_code=(
+                "OK"
+                if failure_result_attempted and failure_cause_classified
+                else "FAILURE_SEMANTICS_NOT_CLASSIFIED"
+            ),
+            request_attempted=failure_result_attempted,
+            failure_cause=failure_result_cause,
+            failure_cause_classified=failure_cause_classified,
+            controlled_negative_cases_exercised=failure_result_attempted,
+            negative_case_http_status=failure_negative_status,
+            negative_case_response_shape_accepted=failure_negative_shape,
+            retry_recommended=failure_result_cause in {"quota_or_rate_limit", "provider_error", "timeout"},
+            classified_from_direct_non_stream_surface=False,
+        )
 
     summary = build_summary_packet(packets)
     packets["responses_live_non_native_summary_packet.json"] = summary
+    packets["responses_live_compatibility_matrix.json"] = packet(
+        "responses_live_compatibility_matrix",
+        status="ok",
+        matrix_source_packets=[
+            "direct_non_stream_response_shape_packet.json",
+            "direct_stream_response_shape_packet.json",
+            "responses_tool_loop_packet.json",
+            "failure_semantics_packet.json",
+            "responses_live_non_native_summary_packet.json",
+        ],
+        matrix_is_derived_not_truth_source=True,
+        surfaces=[
+            {
+                "surface": "non_stream",
+                "status": packets["direct_non_stream_response_shape_packet.json"].get("status"),
+                "proven": packets["direct_non_stream_response_shape_packet.json"].get(
+                    "response_shape_accepted"
+                )
+                is True,
+            },
+            {
+                "surface": "streaming",
+                "status": packets["direct_stream_response_shape_packet.json"].get("status"),
+                "proven": summary.get("streaming_compatibility_proven") is True,
+            },
+            {
+                "surface": "tool_loop_followup",
+                "status": packets["responses_tool_loop_packet.json"].get("status"),
+                "proven": summary.get("tool_loop_compatibility_proven") is True,
+            },
+            {
+                "surface": "failure_semantics",
+                "status": packets["failure_semantics_packet.json"].get("status"),
+                "proven": summary.get("failure_semantics_compatibility_proven") is True,
+            },
+        ],
+    )
     packets["responses_live_non_native_false_green_audit.json"] = build_false_green_audit(
         packets, summary
     )
@@ -660,6 +1456,9 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     route = packets["route_selection_observation_packet.json"]
     upstream = packets["upstream_acceptance_or_failure_packet.json"]
     response = packets["direct_non_stream_response_shape_packet.json"]
+    stream = packets["direct_stream_response_shape_packet.json"]
+    tool_loop = packets["responses_tool_loop_packet.json"]
+    failure_semantics = packets["failure_semantics_packet.json"]
 
     blocked_packets = [
         name
@@ -671,9 +1470,30 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "route_selection_observation_packet.json",
             "upstream_acceptance_or_failure_packet.json",
             "direct_non_stream_response_shape_packet.json",
+            "direct_stream_response_shape_packet.json",
+            "responses_tool_loop_packet.json",
+            "failure_semantics_packet.json",
         )
         if packets[name].get("status") != "ok"
     ]
+    streaming_proven = (
+        stream.get("stream_shape_accepted") is True
+        and stream.get("stream_sse_envelope_observed") is True
+        and stream.get("data_type_matches_event") is True
+        and not list(stream.get("data_parse_errors") or [])
+        and stream.get("completed_event_observed") is True
+        and stream.get("terminal_response_status") == "completed"
+    )
+    tool_loop_proven = (
+        tool_loop.get("tool_loop_shape_accepted") is True
+        and tool_loop.get("tool_call_observed") is True
+        and tool_loop.get("tool_result_roundtrip_observed") is True
+        and tool_loop.get("assistant_followup_after_tool_observed") is True
+    )
+    failure_semantics_proven = (
+        failure_semantics.get("failure_cause_classified") is True
+        and failure_semantics.get("controlled_negative_cases_exercised") is True
+    )
     success_ready = (
         sync.get("status") == "ok"
         and auth.get("status") == "ok"
@@ -682,7 +1502,27 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         and route.get("route_selected") is True
         and upstream.get("upstream_accepts") is True
         and response.get("response_shape_accepted") is True
+        and streaming_proven
+        and tool_loop_proven
+        and failure_semantics_proven
     )
+    limited_ready = (
+        sync.get("status") == "ok"
+        and auth.get("status") == "ok"
+        and runtime.get("status") == "ok"
+        and attempt.get("request_reaches_wbp") is True
+        and route.get("route_selected") is True
+        and response.get("response_shape_accepted") is True
+    )
+    surface_limits = [
+        surface
+        for surface, proven in (
+            ("streaming", streaming_proven),
+            ("tool_loop", tool_loop_proven),
+            ("failure_semantics", failure_semantics_proven),
+        )
+        if not proven
+    ]
     if success_ready:
         final_status = TARGET_STATUS
         reason_class = ""
@@ -695,6 +1535,10 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         final_status = BLOCKED_RUNNER_UNCONFIGURED
         reason_class = "RUNNER_UNCONFIGURED"
         status = "blocked"
+    elif limited_ready:
+        final_status = TARGET_STATUS_WITH_LIMITS
+        reason_class = "SURFACE_LIMITS"
+        status = "ok"
     else:
         final_status = BLOCKED_RUNTIME_OR_UPSTREAM_FAILURE
         reason_class = str(upstream.get("failure_cause") or "RUNTIME_OR_UPSTREAM_FAILURE").upper()
@@ -705,6 +1549,7 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         final_status=final_status,
         reason_class=reason_class,
         blocked_packets=blocked_packets,
+        surface_limits=surface_limits,
         owner_authorization_phrase_present=auth.get("owner_authorization_phrase_present") is True,
         live_request_attempted=attempt.get("request_attempted") is True,
         stopped_before_live_provider_model_request=(
@@ -720,8 +1565,9 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         provider_family_compatibility_proven=False,
         native_codex_acceptance_proven=False,
         codex_cli_acceptance_proven=False,
-        streaming_compatibility_proven=False,
-        tool_loop_compatibility_proven=False,
+        streaming_compatibility_proven=streaming_proven,
+        tool_loop_compatibility_proven=tool_loop_proven,
+        failure_semantics_compatibility_proven=failure_semantics_proven,
         direct_egress_absence_proven=False,
         final_e2e_proven=False,
     )
@@ -751,10 +1597,36 @@ def build_false_green_audit(
         findings.append("native_codex_acceptance_proven")
     if summary.get("model_availability_proven") is True:
         findings.append("model_availability_proven")
-    if summary.get("streaming_compatibility_proven") is True:
-        findings.append("streaming_compatibility_proven")
-    if summary.get("tool_loop_compatibility_proven") is True:
-        findings.append("tool_loop_compatibility_proven")
+    if (
+        summary.get("final_status") == TARGET_STATUS
+        and summary.get("streaming_compatibility_proven") is not True
+    ):
+        findings.append("target_status_without_streaming_proof")
+    if (
+        summary.get("final_status") == TARGET_STATUS
+        and summary.get("tool_loop_compatibility_proven") is not True
+    ):
+        findings.append("target_status_without_tool_loop_proof")
+    if (
+        summary.get("final_status") == TARGET_STATUS
+        and summary.get("failure_semantics_compatibility_proven") is not True
+    ):
+        findings.append("target_status_without_failure_semantics_proof")
+    if (
+        summary.get("tool_loop_compatibility_proven") is True
+        and packets["responses_tool_loop_packet.json"].get("tool_result_roundtrip_observed") is not True
+    ):
+        findings.append("tool_loop_claimed_without_roundtrip")
+    if (
+        summary.get("tool_loop_compatibility_proven") is True
+        and packets["responses_tool_loop_packet.json"].get("assistant_followup_after_tool_observed") is not True
+    ):
+        findings.append("tool_loop_claimed_without_assistant_followup")
+    if (
+        summary.get("streaming_compatibility_proven") is True
+        and packets["direct_stream_response_shape_packet.json"].get("data_type_matches_event") is not True
+    ):
+        findings.append("streaming_claimed_without_sse_event_data_alignment")
     return packet(
         "responses_live_non_native_false_green_audit",
         status="ok" if not findings else "blocked",
@@ -783,6 +1655,16 @@ def build_independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any
     else:
         if summary.get("final_status") == BLOCKED_NO_OWNER_AUTHORIZATION:
             findings.append("authorized_run_reported_as_missing_authorization")
+    if (
+        summary.get("final_status") == TARGET_STATUS
+        and summary.get("surface_limits")
+    ):
+        findings.append("full_target_status_reported_with_surface_limits")
+    if (
+        summary.get("tool_loop_compatibility_proven") is True
+        and packets["responses_tool_loop_packet.json"].get("tool_result_roundtrip_observed") is not True
+    ):
+        findings.append("tool_loop_proven_without_roundtrip_packet_truth")
     return packet(
         "independent_responses_live_non_native_audit",
         status="ok" if not findings else "blocked",

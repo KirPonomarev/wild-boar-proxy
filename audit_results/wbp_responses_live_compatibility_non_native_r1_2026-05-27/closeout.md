@@ -2,9 +2,10 @@
 
 ## Goal
 
-Classify bounded live Responses compatibility through a direct WBP non-stream
-request, without native Codex launch, CLI acceptance, streaming, tool-loop,
-model-availability, direct-egress, provider-family, or final E2E claims.
+Classify bounded live Responses compatibility through direct non-native WBP
+exercise across non-stream, streaming, tool-loop follow-up, and failure
+semantics surfaces, without native Codex launch, CLI acceptance, model
+availability, direct-egress, provider-family, or final E2E claims.
 
 ## Result
 
@@ -14,26 +15,38 @@ model-availability, direct-egress, provider-family, or final E2E claims.
 
 ## Contour Capsule
 
-- goal: classify bounded direct WBP live non-stream Responses compatibility
+- goal: classify bounded direct WBP live Responses compatibility across the
+  admitted non-native surfaces
 - branch: codex/external-agent-lab-isolated
-- head: c12de2a2e8812679ae92681ea13a86ac8c39c4a1
+- head: 076f44ca3dde1975baa5ab23aeaaa706afbffe66
 - touched files: tools/responses_live_non_native_probe.py, tests/test_responses_live_non_native_probe.py, audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27
-- tests run: python3 -m py_compile tools/responses_live_non_native_probe.py; python3 -m unittest -q tests.test_responses_live_non_native_probe; probe JSON emission; JSON parse; secret marker scan; closeout resilience
-- blocked risks: native Codex acceptance, CLI acceptance, model availability, streaming compatibility, tool-loop compatibility, provider-family compatibility, direct egress absence, and final E2E remain unclaimed
+- tests run: python3 -m pytest -q tests/test_responses_live_non_native_probe.py; live probe JSON emission; JSON parse; secret marker scan; closeout resilience
+- blocked risks: native Codex acceptance, CLI acceptance, model availability,
+  provider-family compatibility, direct egress absence, and final E2E remain unclaimed
 - closure state: CLOSED
 
 ## Verification
 
-- tests: python3 -m unittest -q tests.test_responses_live_non_native_probe
-- build: python3 -m py_compile tools/responses_live_non_native_probe.py
+- tests: python3 -m pytest -q tests/test_responses_live_non_native_probe.py
+- build: probe packet generation and JSON parse succeeded
 - manual: all emitted JSON packets parsed; secret marker scan was clean; independent audit packet status was ok
-- live verification: direct WBP POST /v1/responses, non-stream, model gpt-5.4-mini, upstream_status_code 200, response_status completed, response shape accepted by direct WBP client
+- live verification: direct WBP POST /v1/responses with model gpt-5.4-mini
+  classified non-stream, streaming, failure semantics, and repaired tool-loop
+  follow-up. Canonical tool-loop follow-up replay passed with
+  followup_upstream_status_code 200 and assistant continuation observed.
+  Negative-control previous_response_id-only follow-up returned 400 and was kept
+  separate from model/provider claims.
 
 ## Artifacts
 
 - spec: thread-only contour definition
 - packet: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_live_non_native_summary_packet.json
 - report: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_live_non_native_false_green_audit.json
+- matrix: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_live_compatibility_matrix.json
+- tool-loop follow-up request: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_tool_loop_followup_request_packet.json
+- tool-loop follow-up response: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_tool_loop_followup_response_packet.json
+- tool-loop follow-up failure classification: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_tool_loop_followup_failure_packet.json
+- tool-loop cause classification: audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_tool_loop_followup_root_cause_classification_packet.json
 
 ## Git
 
@@ -48,5 +61,8 @@ model-availability, direct-egress, provider-family, or final E2E claims.
 
 ## Notes
 
-- blockers encountered: authorized configured-model gpt-5.5 attempt timed out before HTTP status; final classified evidence uses the bounded successful gpt-5.4-mini direct WBP non-stream attempt
+- blockers encountered: initial tool-loop follow-up remained limited when the
+  probe used previous_response_id plus function_call_output only. Reopen repair
+  proved a narrower accepted follow-up shape: prior output replay plus
+  function_call_output.
 - resume from here: CLOSED
