@@ -55,6 +55,8 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         self,
         fixture_name: str,
         *,
+        request_payload: dict[str, object] | None = None,
+        route: dict[str, object] | None = None,
         response_payload: dict[str, object] | None = None,
         response_status: int = 200,
         accept: str = "application/json",
@@ -68,15 +70,20 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
 
         with (
             ExternalRouteResponsesAdapter(
-                route=fixture_route(),
+                route=route if route is not None else fixture_route(),
                 expected_api_key="local-runtime-fixture",
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json),
         ):
+            effective_payload = (
+                request_payload
+                if request_payload is not None
+                else load_json(fixture_name)
+            )
             request = urllib.request.Request(
                 f"{adapter.listen_endpoint}/responses",
-                data=json.dumps(load_json(fixture_name)).encode("utf-8"),
+                data=json.dumps(effective_payload).encode("utf-8"),
                 headers={
                     "Authorization": "Bearer local-runtime-fixture",
                     "Content-Type": "application/json",
@@ -92,7 +99,9 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 status = int(exc.code)
                 body = exc.read().decode("utf-8")
 
-        return status, body, captured, load_json(fixture_name)
+        return status, body, captured, (
+            request_payload if request_payload is not None else load_json(fixture_name)
+        )
 
     def test_fixture_matrix_has_required_cases_and_claim_limits(self) -> None:
         matrix = load_json("fixture_matrix.json")
@@ -240,6 +249,47 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         payload = json.loads(caught.exception.read().decode("utf-8"))
         self.assertEqual(payload["error"]["type"], "provider_runtime_error")
         self.assertTrue(payload["error"]["retryable"])
+
+    def test_empty_responses_input_returns_invalid_request_without_upstream_call(self) -> None:
+        status, body, captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={"model": "wbp-fixture-route", "input": []},
+        )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["type"], "invalid_request_error")
+        self.assertIn("responses input did not contain prompt text", payload["error"]["message"])
+        self.assertEqual(captured, {})
+
+    def test_system_role_transform_profile_maps_system_to_developer(self) -> None:
+        route = fixture_route()
+        route["transform_profile"] = "openai_chat_system_to_developer"
+        status, _body, captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={
+                "model": "wbp-fixture-route",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "system",
+                        "content": [{"type": "input_text", "text": "system fixture"}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "user fixture"}],
+                    },
+                ],
+            },
+            route=route,
+        )
+        upstream_messages = captured["payload"]["messages"]  # type: ignore[index]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(upstream_messages[0]["role"], "developer")
+        self.assertEqual(upstream_messages[0]["content"], "system fixture")
+        self.assertEqual(upstream_messages[1]["role"], "user")
 
     def test_failure_semantics_partial_stream_classified(self) -> None:
         status, body, _captured, _fixture = self.run_adapter_request(

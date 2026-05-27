@@ -74,6 +74,8 @@ def fixture_route() -> dict[str, Any]:
 def run_adapter_request(
     fixture_name: str,
     *,
+    request_payload: dict[str, Any] | None = None,
+    route_overrides: dict[str, Any] | None = None,
     response_payload: dict[str, Any] | None = None,
     response_status: int = 200,
     accept: str = "application/json",
@@ -92,9 +94,13 @@ def run_adapter_request(
         )
         return FakeResponse(status_code=response_status, payload=payload)
 
+    route = fixture_route()
+    if route_overrides:
+        route.update(route_overrides)
+
     with (
         ExternalRouteResponsesAdapter(
-            route=fixture_route(),
+            route=route,
             expected_api_key="local-runtime-fixture",
             route_secret="route-secret-fixture",
         ) as adapter,
@@ -105,7 +111,9 @@ def run_adapter_request(
     ):
         request = urllib.request.Request(
             f"{adapter.listen_endpoint}/responses",
-            data=json.dumps(load_json(fixture_name)).encode("utf-8"),
+            data=json.dumps(
+                request_payload if request_payload is not None else load_json(fixture_name)
+            ).encode("utf-8"),
             headers={
                 "Authorization": "Bearer local-runtime-fixture",
                 "Content-Type": "application/json",
@@ -218,6 +226,29 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             machine_error_code=errors.PROVIDER_NETWORK_FAILED,
             operator_action="retry",
         ),
+    )
+    empty_input = run_adapter_request(
+        "non_stream_text_request.json",
+        request_payload={"model": "wbp-fixture-route", "input": []},
+    )
+    transform_profile = run_adapter_request(
+        "non_stream_text_request.json",
+        request_payload={
+            "model": "wbp-fixture-route",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": "system fixture"}],
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "user fixture"}],
+                },
+            ],
+        },
+        route_overrides={"transform_profile": "openai_chat_system_to_developer"},
     )
     stream_events = event_names(stream["body"])
     expected_events = [
@@ -338,6 +369,34 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             else "failed",
             observed_statuses=[error_401["status_code"], error_503["status_code"]],
             error_returned_counts_as_success=False,
+        ),
+        "responses_empty_input_error_packet.json": packet(
+            "responses_empty_input_error",
+            status="ok"
+            if empty_input["status_code"] == 400
+            and empty_input["payload"].get("error", {}).get("type")
+            == "invalid_request_error"
+            and not empty_input["captured_upstream_payload"]
+            else "failed",
+            http_status=empty_input["status_code"],
+            upstream_call_attempted=bool(empty_input["captured_upstream_payload"]),
+            error_returned_counts_as_success=False,
+        ),
+        "responses_transform_profile_packet.json": packet(
+            "responses_transform_profile",
+            status="ok"
+            if transform_profile["status_code"] == 200
+            and (
+                transform_profile["captured_upstream_payload"].get("messages", [{}])[0].get(
+                    "role"
+                )
+                == "developer"
+            )
+            else "failed",
+            http_status=transform_profile["status_code"],
+            transform_profile="openai_chat_system_to_developer",
+            system_role_forwarded_as_system=False,
+            system_role_mapped_to_developer=True,
         ),
         "failure_semantics_429_packet.json": packet(
             "failure_semantics_429",

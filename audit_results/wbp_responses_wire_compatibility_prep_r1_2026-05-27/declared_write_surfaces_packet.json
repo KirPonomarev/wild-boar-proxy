@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T04:42:14.359825Z",
+  "external_provider_live_call_allowed": false,
+  "external_provider_live_call_attempted": false,
+  "native_launch_allowed": false,
+  "native_launch_attempted": false,
+  "packet_kind": "declared_write_surfaces",
+  "status": "ok",
+  "write_surfaces": [
+    "tools/responses_wire_compatibility_prep_probe.py",
+    "tests/test_responses_wire_compatibility_prep_probe.py",
+    "audit_results/wbp_responses_wire_compatibility_prep_r1_2026-05-27"
+  ]
+}

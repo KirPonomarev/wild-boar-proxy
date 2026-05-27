@@ -1,0 +1,23 @@
+{
+  "blocked_by_host_items_not_counted_as_live_pass": true,
+  "captured_at_utc": "2026-05-27T04:42:14.359890Z",
+  "layer_separation_ok": true,
+  "no_live_native_model_egress_claims": true,
+  "packet_kind": "independent_responses_wire_prep_audit",
+  "referenced_packets": [
+    "declared_write_surfaces_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "responses_failure_semantics_fixture_packet.json",
+    "responses_live_readiness_gate_packet.json",
+    "responses_non_stream_fixture_packet.json",
+    "responses_stream_fixture_packet.json",
+    "responses_tool_loop_fixture_packet.json",
+    "responses_wire_contract_packet.json",
+    "responses_wire_false_green_audit.json",
+    "responses_wire_prep_summary_packet.json",
+    "sync_gate_packet.json"
+  ],
+  "required_packets_present": true,
+  "status": "ok",
+  "text_only_audit": false
+}

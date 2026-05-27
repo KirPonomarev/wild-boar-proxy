@@ -1,0 +1,11 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-27T04:42:14.359695Z",
+  "external_provider_live_call_attempted": false,
+  "head": "2c371360715c5b48a961e924d037fbe3195f95ab",
+  "master_plan_written_to_repo": false,
+  "native_launch_attempted": false,
+  "packet_kind": "sync_gate",
+  "status": "ok",
+  "unexpected_dirty_entries": []
+}
