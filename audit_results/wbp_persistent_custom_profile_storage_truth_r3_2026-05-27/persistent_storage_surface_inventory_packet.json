@@ -1,0 +1,2863 @@
+{
+  "captured_at_utc": "2026-05-27T04:11:06.616224Z",
+  "entry_count": 27542,
+  "kind_counts": {
+    "dirs": 4100,
+    "files": 23304,
+    "other": 0,
+    "symlinks": 138
+  },
+  "max_mtime_ns": 1779855065779467425,
+  "metadata_only": true,
+  "observed_state_classes": [
+    "cache_or_incidental_state",
+    "integration_state",
+    "model_menu_state",
+    "provider_wbp_linkage_state",
+    "session_state",
+    "thread_history",
+    "unknown",
+    "user_settings"
+  ],
+  "packet_kind": "persistent_storage_surface_inventory",
+  "phase": "phase_a_readonly_forensic",
+  "profile_fingerprint_sha256": "fb7b57835ee1693f1a0f1a8aa0acd16cf97f6a06af4d02e2c0eb888e93498a44",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_root_exists": true,
+  "raw_content_recorded": false,
+  "raw_prompt_recorded": false,
+  "raw_thread_content_recorded": false,
+  "reason_class": "",
+  "samples_by_state_class": {
+    "cache_or_incidental_state": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851189108063655,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp",
+        "size": 192,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851188668730119,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851214543528221,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382544000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime",
+        "size": 160,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies",
+        "size": 160,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin",
+        "size": 64,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node",
+        "size": 128,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "size": 119133456,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules",
+        "size": 640,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.modules.yaml",
+        "size": 5345,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm",
+        "size": 2208,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm-workspace-state-v1.json",
+        "size": 1009,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour",
+        "size": 256,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/LICENSE.md",
+        "size": 4433,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/README.md",
+        "size": 562,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/color.cjs",
+        "size": 45136,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/index.cjs",
+        "size": 49,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/index.d.ts",
+        "size": 21569,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+colour@1.1.0/node_modules/@img/colour/package.json",
+        "size": 1515,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img",
+        "size": 128,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64",
+        "size": 192,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64/LICENSE",
+        "size": 10273,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64/README.md",
+        "size": 699,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64/lib",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node",
+        "size": 262296,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-darwin-arm64/package.json",
+        "size": 886,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "symlink",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-darwin-arm64@0.34.5/node_modules/@img/sharp-libvips-darwin-arm64",
+        "size": 91,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules/@img",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules/@img/sharp-libvips-darwin-arm64",
+        "size": 192,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules/@img/sharp-libvips-darwin-arm64/README.md",
+        "size": 4333,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules/@img/sharp-libvips-darwin-arm64/lib",
+        "size": 160,
+        "state_class": "cache_or_incidental_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@img+sharp-libvips-darwin-arm64@1.2.4/node_modules/@img/sharp-libvips-darwin-arm64/lib/glib-2.0",
+        "size": 96,
+        "state_class": "cache_or_incidental_state"
+      }
+    ],
+    "integration_state": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854294971696166,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854294563197212,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854294562884388,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854294562978385,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854294563064966,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json",
+        "size": 627,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854294568245480,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser",
+        "size": 224,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779848022282028334,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/.codex-plugin",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779848022282099986,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/.codex-plugin/plugin.json",
+        "size": 2185,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets/browser.png",
+        "size": 9692,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets/composer-icon.png",
+        "size": 624,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser/viewport.md",
+        "size": 1024,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser/visibility.md",
+        "size": 889,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/tab",
+        "size": 96,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/tab/pageAssets.md",
+        "size": 1871,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts",
+        "size": 128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779848025550234779,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/browser-client.mjs",
+        "size": 872877,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules",
+        "size": 384,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level",
+        "size": 512,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/CHANGELOG.md",
+        "size": 9891,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/LICENSE",
+        "size": 1114,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/README.md",
+        "size": 103917,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/UPGRADING.md",
+        "size": 31614,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-chained-batch.js",
+        "size": 12024,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-iterator.js",
+        "size": 9783,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-level.js",
+        "size": 32570,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-snapshot.js",
+        "size": 2225,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/index.d.ts",
+        "size": 1128,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/index.js",
+        "size": 556,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib",
+        "size": 480,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel-iterator.js",
+        "size": 2961,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel.js",
+        "size": 8580,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/common.js",
+        "size": 706,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/default-chained-batch.js",
+        "size": 669,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/default-kv-iterator.js",
+        "size": 1914,
+        "state_class": "integration_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/deferred-iterator.js",
+        "size": 3376,
+        "state_class": "integration_state"
+      }
+    ],
+    "model_menu_state": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186391123356,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-ios-apps/skills/swiftui-ui-patterns/references/menu-bar.md",
+        "size": 2236,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186392091211,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-ios-apps/skills/swiftui-ui-patterns/references/title-menus.md",
+        "size": 2115,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186394072754,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-macos-apps/skills/appkit-interop/references/responder-menus.md",
+        "size": 834,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186395841802,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-macos-apps/skills/swiftui-patterns/references/commands-menus.md",
+        "size": 1146,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186395986049,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-macos-apps/skills/swiftui-patterns/references/menu-bar-extra.md",
+        "size": 3059,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186414390634,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-web-data-visualization/references/foundations/interaction-models-and-progressive-disclosure.md",
+        "size": 3798,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186458789984,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog",
+        "size": 224,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186458503657,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog/README.md",
+        "size": 7105,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186458588363,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog/api.md",
+        "size": 5991,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186458674695,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog/configuration.md",
+        "size": 5297,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186458756485,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog/gotchas.md",
+        "size": 6068,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186458840691,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/cloudflare/skills/cloudflare/references/r2-data-catalog/patterns.md",
+        "size": 5883,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186483720812,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model",
+        "size": 160,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186483547982,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model/SKILL.md",
+        "size": 4132,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186483639730,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model/agents",
+        "size": 96,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186483680229,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model/agents/openai.yaml",
+        "size": 171,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186483768227,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model/references",
+        "size": 96,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186483813893,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/codex-security/skills/threat-model/references/threat-model-guidance.md",
+        "size": 3429,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186549221359,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hugging-face/skills/transformers.js/references/MODEL_ARCHITECTURES.md",
+        "size": 5590,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186557408318,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes/references/transitions/catalog.md",
+        "size": 6290,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186568827211,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill",
+        "size": 160,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186568675215,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/SKILL.md",
+        "size": 2733,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186568761755,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/agents",
+        "size": 96,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186568793046,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/agents/openai.yaml",
+        "size": 98,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186569006999,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/scripts",
+        "size": 128,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186568965209,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/scripts/rest_request.py",
+        "size": 13525,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186569046374,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/eqtl-catalogue-skill/scripts/test_rest_request.py",
+        "size": 3299,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186571371368,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill",
+        "size": 160,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186571214455,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill/SKILL.md",
+        "size": 2564,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186571303536,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill/agents",
+        "size": 96,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186571336535,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill/agents/openai.yaml",
+        "size": 116,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186571416742,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill/scripts",
+        "size": 96,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186571456825,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/life-science-research/skills/gwas-catalog-skill/scripts/rest_request.py",
+        "size": 10728,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186752992561,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/meeting-sdk/react-native/concepts/auth-and-token-model.md",
+        "size": 514,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/@oai/walnut/wasm/System.ComponentModel.Primitives.dhhwlrh990.wasm",
+        "size": 6933,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/@oai/walnut/wasm/System.ComponentModel.TypeConverter.h2gufmv7x9.wasm",
+        "size": 45333,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/@oai/walnut/wasm/System.ComponentModel.avqctkouua.wasm",
+        "size": 4885,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/@oai/walnut/wasm/System.ObjectModel.b3b9fbn5eq.wasm",
+        "size": 12565,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/menu.js",
+        "size": 337,
+        "state_class": "model_menu_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/menu.js.map",
+        "size": 1426,
+        "state_class": "model_menu_state"
+      }
+    ],
+    "provider_wbp_linkage_state": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186553613187,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry",
+        "size": 192,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553265527,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/SKILL.md",
+        "size": 4278,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186553343900,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/agents",
+        "size": 96,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553383733,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/agents/openai.yaml",
+        "size": 152,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186553540521,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/examples",
+        "size": 128,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553501439,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/examples/add-block.md",
+        "size": 1232,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553575646,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/examples/add-component.md",
+        "size": 1473,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186553939138,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references",
+        "size": 224,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553698477,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references/demo-html-pattern.md",
+        "size": 1884,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553770683,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references/discovery.md",
+        "size": 2704,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553837182,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references/install-locations.md",
+        "size": 1519,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553903681,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references/wiring-blocks.md",
+        "size": 3127,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186553974637,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes-registry/references/wiring-components.md",
+        "size": 2402,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186587602414,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com",
+        "size": 160,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186587464667,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com/.app.json",
+        "size": 106,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186587539665,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com/.codex-plugin",
+        "size": 96,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186587571415,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com/.codex-plugin/plugin.json",
+        "size": 1338,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186587646080,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com/assets",
+        "size": 96,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186587706704,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/myregistry-com/assets/app-icon.png",
+        "size": 8485,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186703846766,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/vercel/skills/ai-sdk/references/providers.md",
+        "size": 2381,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186753368262,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/meeting-sdk/react-native/examples/provider-hook-pattern.md",
+        "size": 332,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent",
+        "size": 192,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/LICENSE",
+        "size": 1101,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/README.md",
+        "size": 2172,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist",
+        "size": 320,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/index.d.ts",
+        "size": 2004,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/index.d.ts.map",
+        "size": 1393,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/index.js",
+        "size": 7451,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/index.js.map",
+        "size": 4591,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/parse-proxy-response.d.ts",
+        "size": 469,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/parse-proxy-response.d.ts.map",
+        "size": 448,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/parse-proxy-response.js",
+        "size": 3908,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/dist/parse-proxy-response.js.map",
+        "size": 2946,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/@oai+artifact-tool@file+local-deps+-oai-artifact-tool-oai-artifact_tool-2.8.0.tgz/node_modules/@oai/artifact-tool/node_modules/https-proxy-agent/package.json",
+        "size": 1223,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/serverRegistry.js",
+        "size": 247054,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/serverRegistry.js.LICENSE",
+        "size": 18617,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/tools/cli-client/registry.js",
+        "size": 6670,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/undici-types@6.21.0/node_modules/undici-types/env-http-proxy-agent.d.ts",
+        "size": 675,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/undici-types@6.21.0/node_modules/undici-types/proxy-agent.d.ts",
+        "size": 780,
+        "state_class": "provider_wbp_linkage_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/undici-types@7.24.6/node_modules/undici-types/env-http-proxy-agent.d.ts",
+        "size": 732,
+        "state_class": "provider_wbp_linkage_state"
+      }
+    ],
+    "session_state": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186728320770,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/cobrowse-sdk/concepts/session-lifecycle.md",
+        "size": 360,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186729131836,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/cobrowse-sdk/examples/session-events.md",
+        "size": 220,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186730408019,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/cobrowse-sdk/references/session-events.md",
+        "size": 150,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186741201092,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/general/use-cases/flutter-video-sessions.md",
+        "size": 910,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186743022013,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/general/use-cases/react-native-video-sessions.md",
+        "size": 953,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186796307975,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/android/examples/session-join-pattern.md",
+        "size": 660,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186797888692,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/flutter/examples/session-join-pattern.md",
+        "size": 466,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186799454953,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/ios/examples/session-join-pattern.md",
+        "size": 604,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186801961360,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/linux/examples/session-join-pattern.md",
+        "size": 21740,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186803448497,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/macos/examples/session-join-pattern.md",
+        "size": 600,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186804950341,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/react-native/examples/session-join-pattern.md",
+        "size": 422,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186806123109,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/references/session-lifecycle.md",
+        "size": 958,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186807222587,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/unity/examples/session-join-pattern.md",
+        "size": 546,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186809355668,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/web/examples/session-join-pattern.md",
+        "size": 10318,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186811942658,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/video-sdk/windows/examples/session-join-pattern.md",
+        "size": 18040,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/tools/cli-client/channelSessions.js",
+        "size": 7087,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/tools/cli-client/session.js",
+        "size": 9948,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/tools/cli-client/skill/references/session-management.md",
+        "size": 5671,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pip/_internal/network/__pycache__/session.cpython-312.pyc",
+        "size": 19474,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pip/_internal/network/session.py",
+        "size": 19555,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382528000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pip/_vendor/requests/__pycache__/sessions.cpython-312.pyc",
+        "size": 27912,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382524000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pip/_vendor/requests/sessions.py",
+        "size": 30503,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854269253324388,
+        "raw_content_recorded": false,
+        "relative_path": "session_index.jsonl",
+        "size": 537,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851207583146064,
+        "raw_content_recorded": false,
+        "relative_path": "sessions",
+        "size": 96,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851207583186563,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026",
+        "size": 96,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851207583227187,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05",
+        "size": 96,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854261366091122,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05/27",
+        "size": 192,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851215937924626,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-06-47-019e6766-2330-74f1-94d8-633b9aca2982.jsonl",
+        "size": 43316,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779853252695368068,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-40-44-019e6785-390e-7a41-8b8a-30d123a9bbb6.jsonl",
+        "size": 37153,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779853376787164056,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-42-35-019e6786-e99b-7681-95ac-0826b3df1fd4.jsonl",
+        "size": 50961,
+        "state_class": "session_state"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854265961405995,
+        "raw_content_recorded": false,
+        "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-57-41-019e6794-bbec-73d1-9944-f392cf9fa942.jsonl",
+        "size": 37082,
+        "state_class": "session_state"
+      }
+    ],
+    "thread_history": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/thread_annotations.h",
+        "size": 1349,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186557157615,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/hyperframes/skills/hyperframes/references/transcript-guide.md",
+        "size": 7994,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186599790542,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/notion/skills/notion-knowledge-capture/evaluations/conversation-to-wiki.json",
+        "size": 2034,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186600079786,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/notion/skills/notion-knowledge-capture/examples/conversation-to-faq.md",
+        "size": 16304,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186651872819,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message",
+        "size": 160,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186651717614,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/SKILL.md",
+        "size": 4462,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186651802613,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186651837487,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/agents/openai.yaml",
+        "size": 389,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186651991859,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/assets",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186651954318,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/assets/slack-small.svg",
+        "size": 707,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186652050024,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/slack/skills/slack-outgoing-message/assets/slack.png",
+        "size": 4367,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186671055056,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/teams/skills/teams-messages",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186671018056,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/teams/skills/teams-messages/SKILL.md",
+        "size": 3175,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186671096138,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/teams/skills/teams-messages/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186671128804,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/teams/skills/teams-messages/agents/openai.yaml",
+        "size": 356,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186685435264,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-intelligence",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186685388765,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-intelligence/SKILL.md",
+        "size": 37163,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186685484555,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-intelligence/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186685517221,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-intelligence/agents/openai.yaml",
+        "size": 231,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186685754008,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-orchestrator",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186685700675,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-orchestrator/SKILL.md",
+        "size": 36880,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186685799507,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-orchestrator/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186685833673,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversation-orchestrator/agents/openai.yaml",
+        "size": 245,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186686029002,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversations-classic-api",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186685983503,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversations-classic-api/SKILL.md",
+        "size": 17072,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186686073918,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversations-classic-api/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186686105001,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-conversations-classic-api/agents/openai.yaml",
+        "size": 245,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186692977028,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-send-message",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186692938862,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-send-message/SKILL.md",
+        "size": 7725,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186693027027,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-send-message/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186693061526,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-send-message/agents/openai.yaml",
+        "size": 219,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186695560476,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sms-send-message",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186695527268,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sms-send-message/SKILL.md",
+        "size": 7553,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186695602474,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sms-send-message/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186695632182,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sms-send-message/agents/openai.yaml",
+        "size": 227,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186696330668,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-voice-conversation-relay",
+        "size": 128,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186696297877,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-voice-conversation-relay/SKILL.md",
+        "size": 7634,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186696375542,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-voice-conversation-relay/agents",
+        "size": 96,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186696403208,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-voice-conversation-relay/agents/openai.yaml",
+        "size": 243,
+        "state_class": "thread_history"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186697583934,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-whatsapp-send-message",
+        "size": 128,
+        "state_class": "thread_history"
+      }
+    ],
+    "unknown": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854295727623098,
+        "raw_content_recorded": false,
+        "relative_path": ".",
+        "size": 992,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854293773092561,
+        "raw_content_recorded": false,
+        "relative_path": ".codex-global-state.json",
+        "size": 2994,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854293780405803,
+        "raw_content_recorded": false,
+        "relative_path": ".codex-global-state.json.bak",
+        "size": 2994,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851183398209282,
+        "raw_content_recorded": false,
+        "relative_path": ".personality_migration",
+        "size": 3,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854236301802072,
+        "raw_content_recorded": false,
+        "relative_path": "auth.json",
+        "size": 84,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854236302410805,
+        "raw_content_recorded": false,
+        "relative_path": "codex-custom-launch.sh",
+        "size": 4131,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779854289096979517,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use",
+        "size": 128,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app",
+        "size": 96,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779389572086987457,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents",
+        "size": 288,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389572086748083,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/CodeResources",
+        "size": 1863,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389572087047249,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Info.plist",
+        "size": 1949,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/MacOS",
+        "size": 96,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389576357157637,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService",
+        "size": 15217120,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/PkgInfo",
+        "size": 8,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources",
+        "size": 288,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389576374735347,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Assets.car",
+        "size": 3236664,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778898496187983970,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/CUAAppIcon.icns",
+        "size": 80213,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_Appshot.bundle",
+        "size": 96,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779389572087335914,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_Appshot.bundle/Contents",
+        "size": 128,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389572087375289,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_Appshot.bundle/Contents/Info.plist",
+        "size": 1173,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_Appshot.bundle/Contents/Resources",
+        "size": 96,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389576391323354,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_Appshot.bundle/Contents/Resources/Appshot.wav",
+        "size": 373904,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle",
+        "size": 96,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779389572087580371,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents",
+        "size": 128,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779389572087619579,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Info.plist",
+        "size": 1181,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources",
+        "size": 128,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778898496189183165,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/Assets.car",
+        "size": 21864,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence",
+        "size": 1504,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_00.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_01.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_02.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_03.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_04.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_05.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_06.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_07.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_08.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_09.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_10.png",
+        "size": 18693,
+        "state_class": "unknown"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1778782995000000000,
+        "raw_content_recorded": false,
+        "relative_path": "computer-use/Codex Computer Use.app/Contents/Resources/Package_ComputerUse.bundle/Contents/Resources/LensSequence/Lens_frame_11.png",
+        "size": 18693,
+        "state_class": "unknown"
+      }
+    ],
+    "user_settings": [
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186390899569,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-ios-apps/skills/swiftui-ui-patterns/references/macos-settings.md",
+        "size": 1997,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186396064756,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/build-macos-apps/skills/swiftui-patterns/references/settings.md",
+        "size": 1413,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186694065506,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sendgrid-email-settings",
+        "size": 128,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186694030131,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sendgrid-email-settings/SKILL.md",
+        "size": 4008,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "dir",
+        "mtime_ns": 1779851186694107963,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sendgrid-email-settings/agents",
+        "size": 96,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186694138004,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/twilio-developer-kit/skills/twilio-sendgrid-email-settings/agents/openai.yaml",
+        "size": 241,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779851186730487142,
+        "raw_content_recorded": false,
+        "relative_path": ".tmp/plugins/plugins/zoom/skills/cobrowse-sdk/references/settings-reference.md",
+        "size": 193,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779854295727509810,
+        "raw_content_recorded": false,
+        "relative_path": "config.toml",
+        "size": 1525,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382526000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/settings-2.js",
+        "size": 413,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382526000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/settings-2.js.map",
+        "size": 1852,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/settings.js",
+        "size": 675,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/lucide@1.8.0/node_modules/lucide/dist/esm/icons/settings.js.map",
+        "size": 3892,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/cjs/core/interactive/ViewerPreferences.d.ts",
+        "size": 13423,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/cjs/core/interactive/ViewerPreferences.d.ts.map",
+        "size": 3015,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/cjs/core/interactive/ViewerPreferences.js",
+        "size": 22141,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/cjs/core/interactive/ViewerPreferences.js.map",
+        "size": 8727,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/core/interactive/ViewerPreferences.d.ts",
+        "size": 13423,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/core/interactive/ViewerPreferences.d.ts.map",
+        "size": 3015,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/core/interactive/ViewerPreferences.js",
+        "size": 21423,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/core/interactive/ViewerPreferences.js.map",
+        "size": 8770,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/src/core/interactive/ViewerPreferences.ts",
+        "size": 18235,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/ts3.4/cjs/core/interactive/ViewerPreferences.d.ts",
+        "size": 13772,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382525000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/ts3.4/es/core/interactive/ViewerPreferences.d.ts",
+        "size": 13772,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/vite/traceViewer/assets/defaultSettingsView-D31xz8zv.js",
+        "size": 649133,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382527000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core/lib/vite/traceViewer/defaultSettingsView.BDKsFU3c.css",
+        "size": 110856,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/__pycache__/settings.cpython-312.pyc",
+        "size": 1966,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/oxml/__pycache__/settings.cpython-312.pyc",
+        "size": 3916,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/oxml/settings.py",
+        "size": 4264,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/parts/__pycache__/settings.cpython-312.pyc",
+        "size": 3068,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/parts/settings.py",
+        "size": 1717,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/settings.py",
+        "size": 1082,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/templates/default-docx-template/word/settings.xml",
+        "size": 2749,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/templates/default-docx-template/word/webSettings.xml",
+        "size": 438,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382534000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/docx/templates/default-settings.xml",
+        "size": 1640,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382535000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/openpyxl/chart/__pycache__/print_settings.cpython-312.pyc",
+        "size": 2178,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382535000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/openpyxl/chart/print_settings.py",
+        "size": 1454,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382535000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/openpyxl/worksheet/__pycache__/print_settings.cpython-312.pyc",
+        "size": 9047,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382535000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/openpyxl/worksheet/print_settings.py",
+        "size": 5215,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382543000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pydantic/__pycache__/env_settings.cpython-312.pyc",
+        "size": 418,
+        "state_class": "user_settings"
+      },
+      {
+        "classification_source": "path_metadata_only",
+        "kind": "file",
+        "mtime_ns": 1779382543000000000,
+        "raw_content_recorded": false,
+        "relative_path": "home/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pydantic/env_settings.py",
+        "size": 148,
+        "state_class": "user_settings"
+      }
+    ]
+  },
+  "samples_per_class_limit": 40,
+  "state_class_counts": {
+    "cache_or_incidental_state": 19111,
+    "integration_state": 6643,
+    "model_menu_state": 139,
+    "provider_wbp_linkage_state": 81,
+    "session_state": 31,
+    "thread_history": 169,
+    "unknown": 1323,
+    "user_settings": 45
+  },
+  "status": "ok",
+  "storage_surface_observed": true,
+  "storage_surface_observed_counts_as_thread_history_proof": false,
+  "total_file_bytes": 915524812
+}

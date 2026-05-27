@@ -1,0 +1,41 @@
+{
+  "captured_at_utc": "2026-05-27T04:11:05.023849Z",
+  "evidence_file_content_hashes_recorded": false,
+  "packet_kind": "persistent_storage_r2c_reference",
+  "prior_bounded_diff_state_classes_observed": [
+    "cache_or_incidental_state",
+    "unclassified_profile_state"
+  ],
+  "prior_final_status": "WBP_CUSTOM_CODEX_OWNER_VISIBLE_THREAD_CONTINUITY_CLASSIFIED_WITH_STORAGE_UNPROVEN",
+  "prior_owner_visible_thread_continuity_classified": true,
+  "prior_storage_level_thread_history_proven": false,
+  "profile_file_content_hashes_recorded": false,
+  "r2c_counts_as_r3_storage_pass": false,
+  "r2c_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27",
+  "r2c_imported_as_owner_visible_continuity_only": true,
+  "reason_class": "",
+  "referenced_packets": {
+    "classification": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779854427213853786,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/r2c_thread_continuity_classification_packet.json",
+      "size": 1004
+    },
+    "storage_context": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779854427213754248,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/r2c_storage_context_packet.json",
+      "size": 559
+    },
+    "summary": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779854427214023031,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/r2c_summary_packet.json",
+      "size": 564
+    }
+  },
+  "status": "ok"
+}

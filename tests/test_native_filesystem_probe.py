@@ -209,6 +209,15 @@ from tools.persistent_custom_profile_r2c_owner_visible_thread_continuity_probe i
     build_r2c_storage_context_packet,
     build_r2c_thread_continuity_classification_packet,
 )
+from tools.persistent_custom_profile_storage_truth_r3_probe import (
+    build_persistent_relaunch_restoration_source_packet,
+    build_persistent_storage_candidate_state_matrix,
+    build_persistent_storage_false_green_audit,
+    build_persistent_storage_proof_ladder_packet,
+    build_persistent_storage_truth_classification_packet,
+    classify_r3_storage_state_class,
+    collect_persistent_storage_surface_inventory,
+)
 from tools.persistent_custom_profile_backup_repair_r1_probe import (
     classify_backup_surface,
 )
@@ -5522,6 +5531,138 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(packet["storage_level_thread_history_proven"])
         self.assertFalse(packet["storage_profile_state_preservation_proven_by_r2c"])
         self.assertTrue(packet["with_storage_unproven_required"])
+
+    def test_persistent_storage_r3_state_classification_is_path_metadata_only(self) -> None:
+        self.assertEqual(
+            classify_r3_storage_state_class("electron-user-data/Local Storage/leveldb/000003.log"),
+            "session_state",
+        )
+        self.assertEqual(
+            classify_r3_storage_state_class("home/.codex/history.jsonl"),
+            "thread_history",
+        )
+        self.assertEqual(
+            classify_r3_storage_state_class(".tmp/bundled-marketplaces/openai-bundled/plugin.json"),
+            "integration_state",
+        )
+
+    def test_persistent_storage_r3_inventory_records_metadata_not_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "home/.codex").mkdir(parents=True)
+            (root / "home/.codex/history.jsonl").write_text("private fixture body", encoding="utf-8")
+            (root / "electron-user-data/Local Storage/leveldb").mkdir(parents=True)
+            (root / "electron-user-data/Local Storage/leveldb/000003.log").write_text(
+                "raw local storage", encoding="utf-8"
+            )
+
+            packet = collect_persistent_storage_surface_inventory(root, sample_per_class=10)
+            serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["metadata_only"])
+        self.assertFalse(packet["raw_content_recorded"])
+        self.assertIn("thread_history", packet["observed_state_classes"])
+        self.assertIn("session_state", packet["observed_state_classes"])
+        self.assertNotIn("private fixture body", serialized)
+        self.assertNotIn("raw local storage", serialized)
+
+    def test_persistent_storage_r3_ladder_keeps_candidate_below_durable_proof(self) -> None:
+        inventory = {
+            "status": "ok",
+            "storage_surface_observed": True,
+            "state_class_counts": {
+                "thread_history": 1,
+                "session_state": 1,
+                "cache_or_incidental_state": 1,
+            },
+        }
+        matrix = build_persistent_storage_candidate_state_matrix(
+            inventory_packet=inventory,
+            r2b_reference_packet={"r2b_counts_as_r3_storage_pass": False},
+            r2c_reference_packet={"r2c_counts_as_r3_storage_pass": False},
+        )
+        ladder = build_persistent_storage_proof_ladder_packet(
+            inventory_packet=inventory,
+            matrix_packet=matrix,
+        )
+
+        self.assertEqual(matrix["status"], "ok")
+        self.assertTrue(ladder["storage_surface_observed"])
+        self.assertTrue(ladder["thread_history_candidate"])
+        self.assertFalse(ladder["thread_history_durable_proven"])
+        self.assertFalse(ladder["relaunch_restoration_source_proven"])
+        self.assertEqual(ladder["current_highest_proven_rung"], "thread_history_candidate")
+
+    def test_persistent_storage_r3_visible_thread_does_not_prove_restoration_source(self) -> None:
+        restoration = build_persistent_relaunch_restoration_source_packet(
+            r2c_reference_packet={"prior_owner_visible_thread_continuity_classified": True},
+            proof_ladder_packet={"relaunch_restoration_source_proven": False},
+        )
+
+        self.assertEqual(restoration["status"], "ok")
+        self.assertFalse(restoration["owner_visible_thread_counted_as_restoration_source_proof"])
+        self.assertTrue(restoration["local_storage_not_proven_remote_or_sync_possible"])
+        self.assertFalse(restoration["remote_or_sync_likely_claimed"])
+
+    def test_persistent_storage_r3_false_green_blocks_overclaims(self) -> None:
+        classification = {
+            "owner_visible_thread_counted_as_storage_proof": True,
+            "profile_diff_counted_as_thread_history_proof": False,
+            "cache_drift_counted_as_thread_preservation": False,
+            "route_proof_claimed": False,
+            "direct_egress_absence_claimed": False,
+            "model_availability_claimed": False,
+            "native_ux_acceptance_claimed": False,
+            "final_e2e_claimed": False,
+        }
+        restoration = {
+            "owner_visible_thread_counted_as_restoration_source_proof": False,
+            "remote_or_sync_likely_claimed": False,
+        }
+        matrix = {"rows": []}
+        audit = build_persistent_storage_false_green_audit(
+            classification_packet=classification,
+            restoration_packet=restoration,
+            matrix_packet=matrix,
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_persistent_storage_r3_classifies_with_limits_not_final_e2e(self) -> None:
+        base_ok = {"status": "ok"}
+        inventory = {"status": "ok", "storage_surface_observed": True}
+        matrix = {"status": "ok"}
+        ladder = {
+            "status": "ok",
+            "state_class_classified": True,
+            "thread_history_candidate": True,
+            "relaunch_restoration_source_proven": False,
+        }
+        restoration = {
+            "status": "ok",
+            "local_storage_restoration_source_proven": False,
+        }
+        classification = build_persistent_storage_truth_classification_packet(
+            sync_packet=base_ok,
+            r2b_reference_packet=base_ok,
+            r2c_reference_packet=base_ok,
+            inventory_packet=inventory,
+            matrix_packet=matrix,
+            proof_ladder_packet=ladder,
+            restoration_packet=restoration,
+        )
+
+        self.assertEqual(classification["status"], "ok")
+        self.assertEqual(
+            classification["final_status"],
+            "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_STORAGE_TRUTH_CLASSIFIED_WITH_LIMITS",
+        )
+        self.assertFalse(classification["storage_level_thread_history_proven"])
+        self.assertFalse(classification["native_launch_attempted"])
+        self.assertFalse(classification["live_mutation_attempted"])
+        self.assertFalse(classification["final_e2e_claimed"])
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
