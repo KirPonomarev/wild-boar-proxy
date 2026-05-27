@@ -29,6 +29,14 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_file_auth_fallback_exclusion_packet,
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
+    build_provider_auth_account_boundary_packet,
+    build_provider_auth_browser_authority_packet,
+    build_provider_auth_fallback_matrix_packet,
+    build_provider_auth_precedence_contract_packet,
+    build_provider_auth_precedence_discovery_packet,
+    build_provider_auth_runtime_claim_limits_packet,
+    build_provider_auth_secret_boundary_packet,
+    build_provider_auth_source_inventory_packet,
     build_provider_auth_strategy_packet,
     build_secret_source_confusion_guard_packet,
     classify_native_config_auth_surface,
@@ -99,8 +107,16 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
     }
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
+        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
+        "M tests/test_native_filesystem_probe.py",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
+        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
     )
     quarantined = [
         line for line in status_lines if line.strip().startswith(quarantined_prefixes)
@@ -135,6 +151,13 @@ def _base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             "status": "ok",
             "quarantined_paths": quarantined,
             "quarantine_classification": "out_of_scope_historical_residue",
+            "paused_active_contour_residue": [
+                line
+                for line in quarantined
+                if "persistent_custom_profile_restoration_correlation_r5" in line
+                or "persistent_custom_profile_restoration_correlation_r5_probe.py" in line
+                or "tests/test_native_filesystem_probe.py" in line
+            ],
             "current_contour_relies_on_quarantined_paths": False,
             "current_contour_mutates_quarantined_paths": False,
             "current_contour_stages_quarantined_paths": False,
@@ -188,8 +211,16 @@ def _secret_redaction_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any
 def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     required = {
         "provider_auth_strategy_packet.json",
+        "provider_auth_source_inventory_packet.json",
+        "provider_auth_precedence_discovery_packet.json",
+        "provider_auth_precedence_contract_packet.json",
         "auth_strategy_precedence_packet.json",
         "auth_strategy_decision_matrix_packet.json",
+        "provider_auth_fallback_matrix_packet.json",
+        "provider_auth_account_boundary_packet.json",
+        "provider_auth_runtime_claim_limits_packet.json",
+        "provider_auth_secret_boundary_packet.json",
+        "provider_auth_browser_authority_packet.json",
         "auth_command_contract_packet.json",
         "auth_command_output_format_packet.json",
         "bounded_bearer_fallback_packet.json",
@@ -264,6 +295,18 @@ def main() -> int:
         browser_payload={},
     )
     decision_matrix = build_auth_strategy_decision_matrix(provider_packet)
+    source_inventory = build_provider_auth_source_inventory_packet(provider_packet)
+    precedence_discovery = build_provider_auth_precedence_discovery_packet(
+        provider_packet,
+        decision_matrix,
+    )
+    precedence_contract = build_provider_auth_precedence_contract_packet(
+        provider_packet,
+        decision_matrix,
+    )
+    fallback_matrix = build_provider_auth_fallback_matrix_packet(provider_packet)
+    account_boundary = build_provider_auth_account_boundary_packet()
+    runtime_claim_limits = build_provider_auth_runtime_claim_limits_packet(provider_packet)
     output_format = build_auth_command_output_format_packet(provider_packet)
     file_auth = build_file_auth_fallback_deferred_packet(provider_packet)
     file_auth_exclusion = build_file_auth_fallback_exclusion_packet(provider_packet)
@@ -273,12 +316,20 @@ def main() -> int:
     authority_boundary = build_authority_boundary_packet(provider_packet)
     source_guard = build_secret_source_confusion_guard_packet(provider_packet)
     auth_token_boundary = build_auth_token_boundary_packet(provider_packet)
+    secret_boundary = build_provider_auth_secret_boundary_packet(
+        provider_packet,
+        auth_token_boundary,
+    )
+    browser_authority = build_provider_auth_browser_authority_packet(provider_packet)
     false_green = build_auth_strategy_false_green_audit(
         provider_auth_strategy_packet=provider_packet,
         decision_matrix_packet=decision_matrix,
         file_auth_fallback_deferred_packet=file_auth,
         current_codex_auth_independence_packet=current_auth,
         secret_source_confusion_guard_packet=source_guard,
+        runtime_claim_limits_packet=runtime_claim_limits,
+        account_boundary_packet=account_boundary,
+        fallback_matrix_packet=fallback_matrix,
     )
     native_auth_command_surface = classify_native_config_auth_surface(
         _auth_command_config(auth_command),
@@ -289,18 +340,30 @@ def main() -> int:
     packets.update(
         {
             "provider_auth_strategy_packet.json": provider_packet,
+            "provider_auth_source_inventory_packet.json": source_inventory,
+            "provider_auth_precedence_discovery_packet.json": precedence_discovery,
+            "provider_auth_precedence_contract_packet.json": precedence_contract,
             "auth_strategy_precedence_packet.json": {
                 "captured_at_utc": _utc_now(),
                 "packet_kind": "auth_strategy_precedence",
-                "status": "ok" if not validation_failures else "blocked",
+                "status": "ok"
+                if not validation_failures and precedence_contract.get("status") == "ok"
+                else "blocked",
                 "preferred_strategy": provider_packet["preferred_strategy"],
                 "selected_strategy": provider_packet["selected_strategy"],
+                "selected_strategy_is_contract_only": True,
+                "selected_strategy_runtime_usage_proven": False,
                 "silent_fallback_allowed": False,
                 "fallbacks": provider_packet["fallbacks"],
                 "validation_failures": validation_failures,
             },
             "auth_strategy_decision_matrix_packet.json": decision_matrix,
             "auth_strategy_decision_matrix.json": decision_matrix,
+            "provider_auth_fallback_matrix_packet.json": fallback_matrix,
+            "provider_auth_account_boundary_packet.json": account_boundary,
+            "provider_auth_runtime_claim_limits_packet.json": runtime_claim_limits,
+            "provider_auth_secret_boundary_packet.json": secret_boundary,
+            "provider_auth_browser_authority_packet.json": browser_authority,
             "auth_command_contract_packet.json": {
                 "captured_at_utc": _utc_now(),
                 "packet_kind": "auth_command_contract",
@@ -350,6 +413,24 @@ def main() -> int:
         "bounded_bearer_selected": decision_matrix["bounded_bearer_selected"],
         "file_auth_selected": decision_matrix["file_auth_selected"],
         "silent_fallback_detected": decision_matrix["silent_fallback_detected"],
+        "auth_sources_classified": source_inventory.get("all_auth_sources_classified")
+        is True,
+        "selected_auth_runtime_usage_proven": runtime_claim_limits.get(
+            "selected_auth_live_used"
+        )
+        is True,
+        "selected_auth_claimed_as_live_used_without_trace": runtime_claim_limits.get(
+            "selected_auth_claimed_as_live_used_without_trace"
+        )
+        is True,
+        "account_validation_counts_as_model_availability": account_boundary.get(
+            "account_validation_counts_as_model_availability"
+        )
+        is True,
+        "ambient_fallback_forbidden_by_default": fallback_matrix.get(
+            "ambient_fallback_forbidden_by_default"
+        )
+        is True,
         "native_launch_attempted": False,
         "model_availability_proven": False,
         "direct_egress_absence_proven": False,

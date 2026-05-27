@@ -1,0 +1,15 @@
+{
+  "allowed_in_this_contour": false,
+  "can_satisfy_proxy_auth_contract": false,
+  "captured_at_utc": "2026-05-27T04:34:56.213658Z",
+  "copy_current_auth_json_allowed": false,
+  "current_codex_auth_json_used": false,
+  "deferred_reason": "FILE_AUTH is a separate fallback contour and cannot satisfy PROXY_AUTH by implication.",
+  "file_auth_available": false,
+  "file_auth_selected": false,
+  "file_auth_silently_replaced_proxy_auth": false,
+  "packet_kind": "file_auth_fallback_deferred",
+  "requires_separate_contour": true,
+  "status": "ok",
+  "symlink_auth_json_allowed": false
+}

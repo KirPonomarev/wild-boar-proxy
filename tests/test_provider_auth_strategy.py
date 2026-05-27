@@ -18,6 +18,14 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_file_auth_fallback_exclusion_packet,
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
+    build_provider_auth_account_boundary_packet,
+    build_provider_auth_browser_authority_packet,
+    build_provider_auth_fallback_matrix_packet,
+    build_provider_auth_precedence_contract_packet,
+    build_provider_auth_precedence_discovery_packet,
+    build_provider_auth_runtime_claim_limits_packet,
+    build_provider_auth_secret_boundary_packet,
+    build_provider_auth_source_inventory_packet,
     build_provider_auth_strategy_packet,
     redact_provider_auth_text,
     build_secret_source_confusion_guard_packet,
@@ -359,9 +367,102 @@ class ProviderAuthStrategyTests(unittest.TestCase):
 
         self.assertEqual(clean_packet["status"], "ok")
         self.assertFalse(clean_packet["current_codex_auth_json_runtime_input"])
+        self.assertFalse(clean_packet["env_auth_runtime_input"])
+        self.assertFalse(clean_packet["ambient_host_auth_runtime_input"])
         self.assertFalse(clean_packet["browser_token_path_model_provider_authority"])
         self.assertFalse(clean_packet["remote_token_path_model_provider_authority"])
         self.assertEqual(blocked_packet["status"], "blocked")
+
+    def test_provider_auth_sources_are_classified(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        inventory = build_provider_auth_source_inventory_packet(packet)
+
+        self.assertEqual(inventory["status"], "ok")
+        self.assertTrue(inventory["all_auth_sources_classified"])
+        self.assertEqual(inventory["unknown_source_count"], 0)
+        self.assertFalse(inventory["runtime_usage_proven"])
+        self.assertFalse(inventory["raw_secret_recorded"])
+        classes = {row["source_class"] for row in inventory["source_rows"]}
+        self.assertIn("server_owned", classes)
+        self.assertIn("ambient_host", classes)
+        self.assertIn("browser_supplied", classes)
+
+    def test_provider_auth_current_vs_declared_precedence_separated(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        matrix = build_auth_strategy_decision_matrix(packet)
+        discovery = build_provider_auth_precedence_discovery_packet(packet, matrix)
+        contract = build_provider_auth_precedence_contract_packet(packet, matrix)
+
+        self.assertEqual(discovery["status"], "ok")
+        self.assertFalse(discovery["current_behavior_live_observed"])
+        self.assertFalse(discovery["runtime_trace_present"])
+        self.assertTrue(discovery["current_behavior_separated_from_declared_precedence"])
+        self.assertFalse(discovery["selected_auth_claimed_as_live_used_auth"])
+        self.assertEqual(contract["status"], "ok")
+        self.assertTrue(contract["selected_strategy_is_contract_only"])
+        self.assertFalse(contract["selected_strategy_runtime_usage_proven"])
+
+    def test_env_file_fallback_forbidden_by_default(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        fallback = build_provider_auth_fallback_matrix_packet(packet)
+
+        self.assertEqual(fallback["status"], "ok")
+        self.assertTrue(fallback["ambient_fallback_forbidden_by_default"])
+        by_id = {row["fallback_id"]: row for row in fallback["fallback_rows"]}
+        self.assertFalse(by_id["env_openai_api_key"]["allowed"])
+        self.assertFalse(by_id["current_codex_auth_json"]["allowed"])
+        self.assertFalse(by_id["file_auth_separate_contour"]["allowed"])
+        self.assertFalse(by_id["env_openai_api_key"]["silent_fallback_allowed"])
+
+    def test_auth_command_selection_does_not_claim_live_usage(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        limits = build_provider_auth_runtime_claim_limits_packet(packet)
+
+        self.assertEqual(limits["status"], "ok")
+        self.assertEqual(limits["selected_strategy"], "auth.command")
+        self.assertTrue(limits["selected_auth_source_classified"])
+        self.assertFalse(limits["runtime_trace_present"])
+        self.assertFalse(limits["selected_auth_live_used"])
+        self.assertFalse(limits["provider_request_proven"])
+        self.assertFalse(limits["route_proof_claimed"])
+
+    def test_auth_command_live_usage_claim_requires_runtime_trace(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        limits = build_provider_auth_runtime_claim_limits_packet(
+            packet,
+            runtime_trace_present=False,
+            selected_auth_live_used=True,
+        )
+
+        self.assertEqual(limits["status"], "blocked")
+        self.assertTrue(limits["selected_auth_claimed_as_live_used_without_trace"])
+
+    def test_account_session_auth_not_provider_adapter_auth(self) -> None:
+        packet = build_provider_auth_account_boundary_packet(account_validation_observed=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["account_session_auth_equals_provider_adapter_auth"])
+        self.assertFalse(packet["account_validation_counts_as_model_availability"])
+        self.assertFalse(packet["account_validation_counts_as_provider_compatibility"])
+        self.assertFalse(packet["runtime_route_claimed"])
+
+    def test_provider_auth_secret_and_browser_boundary_packets(self) -> None:
+        packet = build_provider_auth_strategy_packet(
+            auth_command_path=AUTH_COMMAND,
+            native_config_text=bearer_config(),
+            explicit_bearer_contract=True,
+        )
+        token_boundary = build_auth_token_boundary_packet(packet)
+        secret = build_provider_auth_secret_boundary_packet(packet, token_boundary)
+        browser = build_provider_auth_browser_authority_packet(packet)
+
+        self.assertEqual(secret["status"], "ok")
+        self.assertFalse(secret["raw_secret_found"])
+        self.assertFalse(secret["raw_upstream_secret_in_evidence"])
+        self.assertFalse(secret["browser_secret_intake"])
+        self.assertEqual(browser["status"], "ok")
+        self.assertFalse(browser["browser_client_supplied_token_authority"])
+        self.assertFalse(browser["remote_client_supplied_account_authority"])
 
     def test_auth_strategy_false_green_blocks_silent_fallback_with_matrix(self) -> None:
         packet = build_provider_auth_strategy_packet(
@@ -379,11 +480,19 @@ class ProviderAuthStrategyTests(unittest.TestCase):
             file_auth_fallback_deferred_packet=file_auth,
             current_codex_auth_independence_packet=independence,
             secret_source_confusion_guard_packet=guard,
+            runtime_claim_limits_packet=build_provider_auth_runtime_claim_limits_packet(
+                packet,
+                runtime_trace_present=False,
+                selected_auth_live_used=True,
+            ),
+            account_boundary_packet=build_provider_auth_account_boundary_packet(),
+            fallback_matrix_packet=build_provider_auth_fallback_matrix_packet(packet),
         )
 
         self.assertEqual(packet["status"], "blocked")
         self.assertTrue(matrix["silent_fallback_detected"])
         self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["selected_auth_live_used_without_trace_claimed"])
 
     def test_auth_strategy_false_green_allows_clean_auth_command_contract(self) -> None:
         packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
@@ -397,6 +506,9 @@ class ProviderAuthStrategyTests(unittest.TestCase):
             file_auth_fallback_deferred_packet=file_auth,
             current_codex_auth_independence_packet=independence,
             secret_source_confusion_guard_packet=guard,
+            runtime_claim_limits_packet=build_provider_auth_runtime_claim_limits_packet(packet),
+            account_boundary_packet=build_provider_auth_account_boundary_packet(),
+            fallback_matrix_packet=build_provider_auth_fallback_matrix_packet(packet),
         )
 
         self.assertEqual(audit["status"], "ok")

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,14 @@ FILE_AUTH_FALLBACK = "file_auth_separate_contour"
 AUTH_COMMAND_OUTPUT_SHAPE = TOKEN_OUTPUT_SHAPE
 AUTH_COMMAND_SCOPE = TOKEN_SCOPE
 AUTH_COMMAND_SOURCE_KIND = TOKEN_SOURCE_KIND
+AUTH_SOURCE_CLASSES = {
+    "server_owned",
+    "operator_configured",
+    "ambient_host",
+    "browser_supplied",
+    "remote_client_supplied",
+    "unknown",
+}
 AUTH_FORBIDDEN_BROWSER_FIELDS = {
     "api_key",
     "apikey",
@@ -219,6 +228,8 @@ def build_provider_auth_strategy_packet(
             "current_codex_auth_json_dependency": False,
             "current_codex_auth_json_inspection_only_allowed": True,
             "file_auth_used_in_this_contour": False,
+            "env_auth_used_in_this_contour": False,
+            "ambient_host_auth_used_in_this_contour": False,
         },
         "claims": {
             "native_launch_attempted": False,
@@ -250,8 +261,352 @@ def build_provider_auth_strategy_packet(
             "account_pool_valid",
             "experimental_bearer_token_preferred_strategy",
             "FILE_AUTH_equals_PROXY_AUTH",
+            "selected_auth_equals_live_used_auth_without_trace",
         ],
         "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_source_inventory_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    auth_command = (
+        provider_auth_strategy_packet.get("auth_command")
+        if isinstance(provider_auth_strategy_packet.get("auth_command"), dict)
+        else {}
+    )
+    fallbacks = (
+        provider_auth_strategy_packet.get("fallbacks")
+        if isinstance(provider_auth_strategy_packet.get("fallbacks"), dict)
+        else {}
+    )
+    bounded_bearer = (
+        fallbacks.get(BOUNDED_BEARER_FALLBACK)
+        if isinstance(fallbacks.get(BOUNDED_BEARER_FALLBACK), dict)
+        else {}
+    )
+    file_auth = (
+        fallbacks.get(FILE_AUTH_FALLBACK)
+        if isinstance(fallbacks.get(FILE_AUTH_FALLBACK), dict)
+        else {}
+    )
+    runtime_dependency = (
+        provider_auth_strategy_packet.get("runtime_dependency")
+        if isinstance(provider_auth_strategy_packet.get("runtime_dependency"), dict)
+        else {}
+    )
+    rows = [
+        {
+            "source_id": PREFERRED_STRATEGY,
+            "source_class": "server_owned",
+            "available_by_contract": bool(auth_command.get("path")),
+            "selected_by_contract": provider_auth_strategy_packet.get("selected_strategy")
+            == PREFERRED_STRATEGY,
+            "allowed_in_this_contour": True,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": BOUNDED_BEARER_FALLBACK,
+            "source_class": "server_owned",
+            "available_by_contract": bounded_bearer.get("allowed") is True,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": bounded_bearer.get("allowed") is True,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": FILE_AUTH_FALLBACK,
+            "source_class": "ambient_host",
+            "available_by_contract": False,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": file_auth.get("allowed_in_this_contour") is True,
+            "requires_separate_contour": file_auth.get("requires_separate_contour") is True,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": "env_openai_api_key",
+            "source_class": "ambient_host",
+            "available_by_contract": False,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": runtime_dependency.get("env_auth_used_in_this_contour")
+            is True,
+            "forbidden_by_default": True,
+            "requires_separate_contour": True,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": "current_codex_auth_json",
+            "source_class": "ambient_host",
+            "available_by_contract": False,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": runtime_dependency.get("current_codex_auth_json_dependency")
+            is True,
+            "forbidden_by_default": True,
+            "requires_separate_contour": True,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": "browser_supplied_auth",
+            "source_class": "browser_supplied",
+            "available_by_contract": False,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": False,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "source_id": "remote_client_supplied_auth",
+            "source_class": "remote_client_supplied",
+            "available_by_contract": False,
+            "selected_by_contract": False,
+            "allowed_in_this_contour": False,
+            "runtime_usage_proven": False,
+            "raw_secret_recorded": False,
+        },
+    ]
+    unknown_rows = [row for row in rows if row["source_class"] not in AUTH_SOURCE_CLASSES]
+    forbidden_selected = [
+        row
+        for row in rows
+        if row["source_class"] in {"ambient_host", "browser_supplied", "remote_client_supplied"}
+        and row.get("selected_by_contract") is True
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_source_inventory",
+        "status": "ok" if not unknown_rows and not forbidden_selected else "blocked",
+        "source_rows": rows,
+        "source_count": len(rows),
+        "unknown_source_count": len(unknown_rows),
+        "forbidden_source_selected_count": len(forbidden_selected),
+        "all_auth_sources_classified": not unknown_rows,
+        "runtime_usage_proven": False,
+        "raw_secret_recorded": False,
+    }
+
+
+def build_provider_auth_precedence_discovery_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+    decision_matrix_packet: dict[str, Any],
+) -> dict[str, Any]:
+    strategy_rows = list(decision_matrix_packet.get("strategy_rows") or [])
+    ambiguous_rows = [
+        row
+        for row in strategy_rows
+        if row.get("selected") is not True and not row.get("rejection_reason")
+    ]
+    selected_rows = [row for row in strategy_rows if row.get("selected") is True]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_precedence_discovery",
+        "status": "ok" if len(selected_rows) == 1 and not ambiguous_rows else "blocked",
+        "discovery_method": "contract_packet_and_decision_matrix_inspection",
+        "current_behavior_live_observed": False,
+        "runtime_trace_present": False,
+        "selected_strategy_from_contract": provider_auth_strategy_packet.get(
+            "selected_strategy", ""
+        ),
+        "selected_strategy_count": len(selected_rows),
+        "ambiguous_unselected_strategy_count": len(ambiguous_rows),
+        "current_behavior_separated_from_declared_precedence": True,
+        "selected_auth_claimed_as_live_used_auth": False,
+    }
+
+
+def build_provider_auth_precedence_contract_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+    decision_matrix_packet: dict[str, Any],
+) -> dict[str, Any]:
+    selected_strategy = str(provider_auth_strategy_packet.get("selected_strategy") or "")
+    failed_checks: list[str] = []
+    if selected_strategy != PREFERRED_STRATEGY:
+        failed_checks.append("selected_strategy_not_auth_command")
+    if decision_matrix_packet.get("silent_fallback_detected") is not False:
+        failed_checks.append("silent_fallback_detected")
+    if decision_matrix_packet.get("all_unselected_strategies_have_rejection_reasons") is not True:
+        failed_checks.append("unselected_strategy_missing_rejection_reason")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_precedence_contract",
+        "status": "ok" if not failed_checks else "blocked",
+        "declared_precedence_order": [
+            PREFERRED_STRATEGY,
+            BOUNDED_BEARER_FALLBACK,
+            FILE_AUTH_FALLBACK,
+            "env_openai_api_key",
+            "current_codex_auth_json",
+            "browser_supplied_auth",
+            "remote_client_supplied_auth",
+        ],
+        "selected_strategy": selected_strategy,
+        "selected_strategy_is_contract_only": True,
+        "selected_strategy_runtime_usage_proven": False,
+        "silent_fallback_allowed": False,
+        "ambient_fallback_forbidden_by_default": True,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_fallback_matrix_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    fallbacks = (
+        provider_auth_strategy_packet.get("fallbacks")
+        if isinstance(provider_auth_strategy_packet.get("fallbacks"), dict)
+        else {}
+    )
+    file_auth = (
+        fallbacks.get(FILE_AUTH_FALLBACK)
+        if isinstance(fallbacks.get(FILE_AUTH_FALLBACK), dict)
+        else {}
+    )
+    bounded_bearer = (
+        fallbacks.get(BOUNDED_BEARER_FALLBACK)
+        if isinstance(fallbacks.get(BOUNDED_BEARER_FALLBACK), dict)
+        else {}
+    )
+    rows = [
+        {
+            "fallback_id": BOUNDED_BEARER_FALLBACK,
+            "allowed": bounded_bearer.get("allowed") is True,
+            "requires_explicit_contract": bounded_bearer.get("requires_explicit_contract")
+            is True,
+            "silent_fallback_allowed": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "fallback_id": FILE_AUTH_FALLBACK,
+            "allowed": file_auth.get("allowed_in_this_contour") is True,
+            "requires_explicit_contract": True,
+            "requires_separate_contour": file_auth.get("requires_separate_contour") is True,
+            "silent_fallback_allowed": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "fallback_id": "env_openai_api_key",
+            "allowed": False,
+            "requires_explicit_contract": True,
+            "requires_separate_contour": True,
+            "silent_fallback_allowed": False,
+            "raw_secret_recorded": False,
+        },
+        {
+            "fallback_id": "current_codex_auth_json",
+            "allowed": False,
+            "requires_explicit_contract": True,
+            "requires_separate_contour": True,
+            "silent_fallback_allowed": False,
+            "raw_secret_recorded": False,
+        },
+    ]
+    bad = [
+        row
+        for row in rows
+        if row.get("silent_fallback_allowed") is not False
+        or (
+            row["fallback_id"] in {FILE_AUTH_FALLBACK, "env_openai_api_key", "current_codex_auth_json"}
+            and row.get("allowed") is True
+        )
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_fallback_matrix",
+        "status": "ok" if not bad else "blocked",
+        "fallback_rows": rows,
+        "ambient_fallback_forbidden_by_default": True,
+        "silent_fallback_detected": bool(bad),
+    }
+
+
+def build_provider_auth_account_boundary_packet(
+    *,
+    account_validation_observed: bool = False,
+    account_session_auth_selected: bool = False,
+    provider_adapter_auth_selected: bool = False,
+) -> dict[str, Any]:
+    confused = account_session_auth_selected and provider_adapter_auth_selected
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_account_boundary",
+        "status": "ok" if not confused else "blocked",
+        "account_validation_observed": account_validation_observed,
+        "account_session_auth_selected": account_session_auth_selected,
+        "provider_adapter_auth_selected": provider_adapter_auth_selected,
+        "account_session_auth_equals_provider_adapter_auth": False,
+        "account_validation_counts_as_model_availability": False,
+        "account_validation_counts_as_provider_compatibility": False,
+        "reserve_account_promoted": False,
+        "runtime_route_claimed": False,
+    }
+
+
+def build_provider_auth_runtime_claim_limits_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+    *,
+    runtime_trace_present: bool = False,
+    selected_auth_live_used: bool = False,
+) -> dict[str, Any]:
+    invalid_live_claim = selected_auth_live_used and not runtime_trace_present
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_runtime_claim_limits",
+        "status": "blocked" if invalid_live_claim else "ok",
+        "selected_strategy": provider_auth_strategy_packet.get("selected_strategy", ""),
+        "selected_auth_source_classified": True,
+        "runtime_trace_present": runtime_trace_present,
+        "selected_auth_live_used": selected_auth_live_used,
+        "selected_auth_claimed_as_live_used_without_trace": invalid_live_claim,
+        "provider_request_proven": False,
+        "route_proof_claimed": False,
+        "model_availability_claimed": False,
+        "native_launch_claimed": False,
+    }
+
+
+def build_provider_auth_secret_boundary_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+    auth_token_boundary_packet: dict[str, Any],
+) -> dict[str, Any]:
+    serialized = json.dumps(
+        {
+            "provider_auth_strategy_packet": provider_auth_strategy_packet,
+            "auth_token_boundary_packet": auth_token_boundary_packet,
+        },
+        sort_keys=True,
+    )
+    raw_secret_found = provider_auth_text_has_secret(serialized)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_secret_boundary",
+        "status": "blocked" if raw_secret_found else "ok",
+        "raw_secret_found": raw_secret_found,
+        "raw_upstream_secret_in_evidence": False,
+        "auth_header_recorded": False,
+        "auth_command_output_recorded_raw": False,
+        "browser_secret_intake": False,
+        "remote_secret_intake": False,
+    }
+
+
+def build_provider_auth_browser_authority_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    authority = build_authority_boundary_packet(provider_auth_strategy_packet)
+    return {
+        **authority,
+        "packet_kind": "provider_auth_browser_authority",
+        "browser_client_supplied_token_authority": False,
+        "browser_client_supplied_path_authority": False,
+        "browser_client_supplied_provider_authority": False,
+        "browser_client_supplied_account_authority": False,
+        "remote_client_supplied_token_authority": False,
+        "remote_client_supplied_path_authority": False,
+        "remote_client_supplied_provider_authority": False,
+        "remote_client_supplied_account_authority": False,
     }
 
 
@@ -695,6 +1050,15 @@ def build_no_ambient_authority_packet(
             is False,
         },
         {
+            "name": "env_auth_not_runtime_input",
+            "passed": runtime_dependency.get("env_auth_used_in_this_contour") is False,
+        },
+        {
+            "name": "ambient_host_auth_not_runtime_input",
+            "passed": runtime_dependency.get("ambient_host_auth_used_in_this_contour")
+            is False,
+        },
+        {
             "name": "browser_authority_blocked",
             "passed": browser_authority.get("browser_authority_blocked") is True,
         },
@@ -709,10 +1073,13 @@ def build_no_ambient_authority_packet(
         "status": "ok" if all(check["passed"] for check in checks) else "blocked",
         "checks": checks,
         "openai_api_key_env_required": False,
+        "openai_api_key_env_allowed_in_this_contour": False,
         "http_proxy_env_required": False,
         "https_proxy_env_required": False,
         "all_proxy_env_required": False,
         "current_codex_auth_json_runtime_input": False,
+        "env_auth_runtime_input": False,
+        "ambient_host_auth_runtime_input": False,
         "browser_token_path_model_provider_authority": False,
         "remote_token_path_model_provider_authority": False,
     }
@@ -837,6 +1204,9 @@ def build_auth_strategy_false_green_audit(
     file_auth_fallback_deferred_packet: dict[str, Any],
     current_codex_auth_independence_packet: dict[str, Any],
     secret_source_confusion_guard_packet: dict[str, Any],
+    runtime_claim_limits_packet: dict[str, Any] | None = None,
+    account_boundary_packet: dict[str, Any] | None = None,
+    fallback_matrix_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     claims = (
         provider_auth_strategy_packet.get("claims")
@@ -856,6 +1226,9 @@ def build_auth_strategy_false_green_audit(
             "final_e2e_proven",
         )
     )
+    runtime_claim_limits_packet = runtime_claim_limits_packet or {}
+    account_boundary_packet = account_boundary_packet or {}
+    fallback_matrix_packet = fallback_matrix_packet or {}
     checks = [
         {
             "name": "auth_command_selected",
@@ -881,6 +1254,28 @@ def build_auth_strategy_false_green_audit(
             "name": "no_cross_layer_claims",
             "passed": not forbidden_claims_present,
         },
+        {
+            "name": "selected_auth_not_live_used_without_trace",
+            "passed": runtime_claim_limits_packet.get(
+                "selected_auth_claimed_as_live_used_without_trace"
+            )
+            is not True,
+        },
+        {
+            "name": "account_validation_not_model_availability",
+            "passed": account_boundary_packet.get(
+                "account_validation_counts_as_model_availability"
+            )
+            is not True,
+        },
+        {
+            "name": "ambient_fallback_forbidden_by_default",
+            "passed": fallback_matrix_packet.get(
+                "ambient_fallback_forbidden_by_default", True
+            )
+            is True
+            and fallback_matrix_packet.get("silent_fallback_detected", False) is False,
+        },
     ]
     return {
         "captured_at_utc": utc_now(),
@@ -901,6 +1296,14 @@ def build_auth_strategy_false_green_audit(
         is True,
         "remote_authority_used": decision_matrix_packet.get("remote_authority_used")
         is True,
+        "selected_auth_live_used_without_trace_claimed": runtime_claim_limits_packet.get(
+            "selected_auth_claimed_as_live_used_without_trace"
+        )
+        is True,
+        "account_validation_as_model_availability_claimed": account_boundary_packet.get(
+            "account_validation_counts_as_model_availability"
+        )
+        is True,
     }
 
 
@@ -917,6 +1320,13 @@ def validate_provider_auth_strategy_packet(packet: dict[str, Any]) -> list[str]:
     file_auth = fallbacks.get(FILE_AUTH_FALLBACK) if isinstance(fallbacks, dict) else {}
     if isinstance(file_auth, dict) and file_auth.get("can_satisfy_proxy_auth_contract") is not False:
         failures.append("file_auth_can_satisfy_proxy_auth")
+    runtime_dependency = (
+        packet.get("runtime_dependency") if isinstance(packet.get("runtime_dependency"), dict) else {}
+    )
+    if runtime_dependency.get("env_auth_used_in_this_contour") is not False:
+        failures.append("env_auth_used_in_this_contour")
+    if runtime_dependency.get("ambient_host_auth_used_in_this_contour") is not False:
+        failures.append("ambient_host_auth_used_in_this_contour")
     native_surface = packet.get("native_config_auth_surface")
     if isinstance(native_surface, dict):
         redacted = str(native_surface.get("redacted_config") or "")
