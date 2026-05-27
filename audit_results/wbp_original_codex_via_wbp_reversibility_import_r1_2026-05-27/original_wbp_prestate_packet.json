@@ -1,0 +1,22 @@
+{
+  "auth_json_execution_dependency": false,
+  "auth_json_hash_recorded": true,
+  "captured_at_utc": "2026-05-27T10:36:04.248165Z",
+  "config_before_hash_or_absent_state_recorded": true,
+  "config_toml_before_state": {
+    "exists": true,
+    "hash_recorded": true,
+    "kind": "file",
+    "mtime_ns": 1779807375578573468,
+    "path": "/Users/kirillponomarev/.codex/config.toml",
+    "sha256": "0a07967352c3242aefb2da992153b24c1334ac2cd421fdb4c2e07080daa04fc6",
+    "sha256_size_limit": 5000000,
+    "size": 5548,
+    "state": "present"
+  },
+  "counts_as_broad_original_filesystem_innocence": false,
+  "declared_observed_surfaces_only": true,
+  "packet_kind": "original_wbp_prestate_import",
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26/original_profile_before_packet.json",
+  "status": "ok"
+}

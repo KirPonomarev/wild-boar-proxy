@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T10:36:04.248175Z",
+  "current_probe_performed_original_write": false,
+  "declared_write_surfaces": [
+    "fresh evidence directory only",
+    "/Users/kirillponomarev/.codex/config.toml"
+  ],
+  "original_codex_profile_write_allowed": true,
+  "owner_authorization_required": true,
+  "owner_authorization_status": "ok",
+  "packet_kind": "original_wbp_declared_write_surfaces_import",
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26/declared_write_surfaces_packet.json",
+  "status": "ok"
+}
