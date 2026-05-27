@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-27T02:32:19.223462Z",
+  "declared_write_surfaces": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_handoff_r3_2026-05-27"
+  ],
+  "future_detached_write_surfaces": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27",
+    "/tmp/wbp-native-egress-* during external owner run only"
+  ],
+  "live_network_capture_attempted": false,
+  "native_launch_attempted": false,
+  "original_codex_config_write_allowed": false,
+  "packet_kind": "declared_write_surfaces",
+  "phase": "phase_a_handoff_only",
+  "protected_surface_write_allowed": false,
+  "status": "ok"
+}

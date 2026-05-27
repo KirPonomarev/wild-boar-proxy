@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T02:32:19.224670Z",
+  "owner_allowed_actions_after_phase_a": [
+    "run exactly the generated detached command outside the current Codex thread",
+    "type the exact prompt shown by the detached command if isolated Custom window appears",
+    "report visible response only as context",
+    "preserve generated evidence directory for Phase B import"
+  ],
+  "owner_command_edit_allowed": false,
+  "owner_forbidden_actions": [
+    "edit command",
+    "edit config/model/provider/route/account",
+    "touch Original Codex config",
+    "perform hidden cleanup",
+    "treat screenshot or visible response as network proof"
+  ],
+  "owner_prompt_requested_in_phase_a": false,
+  "owner_runtime_authority_edit_allowed": false,
+  "owner_visible_response_counts_as_context_only": true,
+  "packet_kind": "detached_egress_owner_action_boundary",
+  "status": "ok"
+}

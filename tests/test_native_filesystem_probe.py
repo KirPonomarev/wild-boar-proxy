@@ -4579,6 +4579,27 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertFalse(packet["counts_as_network_claim"])
 
+    def test_detached_egress_handoff_prerequisite_accepts_r3_prompt_required_status(self) -> None:
+        packet = build_detached_egress_handoff_prerequisite_packet(
+            handoff_dir=Path("/tmp/handoff"),
+            handoff_summary_packet={
+                "final_status": "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_R3_READY_OWNER_PROMPT_REQUIRED",
+                "external_evidence_dir": "/tmp/evidence",
+            },
+            command_packet={"status": "ok", "command_executed": False},
+            command_hash_packet={"status": "ok", "command_sha256": "abc"},
+            command_admission_packet={"status": "ok"},
+            import_contract_packet={
+                "status": "ok",
+                "future_import_must_verify_command_hash": True,
+                "future_import_must_verify_json": True,
+                "future_import_must_verify_no_secrets": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["counts_as_network_claim"])
+
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             external_dir = Path(tmp)

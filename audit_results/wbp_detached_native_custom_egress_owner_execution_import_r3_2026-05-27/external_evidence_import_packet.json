@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T02:34:52.274536Z",
+  "current_thread_native_launch_attempted": false,
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27",
+  "external_evidence_dir_exists": true,
+  "external_evidence_json_loaded": true,
+  "external_result_imported": true,
+  "invalid_json_packets": [],
+  "missing_packets": [],
+  "packet_kind": "detached_egress_external_evidence_import",
+  "reason_class": "",
+  "status": "ok"
+}

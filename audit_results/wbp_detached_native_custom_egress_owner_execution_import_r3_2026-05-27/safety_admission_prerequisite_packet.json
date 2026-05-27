@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T02:34:52.268772Z",
+  "counts_as_native_egress_proof": false,
+  "native_launch_attempted_in_prerequisite": false,
+  "packet_kind": "detached_egress_safety_admission_prerequisite",
+  "reason_class": "",
+  "safety_admission_classified": true,
+  "source_allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED",
+  "source_path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_safety_admission_refresh_r1_2026-05-27/native_safety_admission_result_packet.json",
+  "source_status": "ok",
+  "status": "ok"
+}

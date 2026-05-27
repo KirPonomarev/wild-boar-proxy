@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T02:34:52.275187Z",
+  "direct_non_wbp_model_egress_absent_within_bounded_window": false,
+  "direct_non_wbp_model_egress_observed": true,
+  "external_evidence_dir_exists": true,
+  "full_network_absence_proven": false,
+  "network_observation_present": true,
+  "packet_kind": "detached_egress_network_observation_validation",
+  "reason_class": "",
+  "source_packet_present": true,
+  "status": "ok"
+}

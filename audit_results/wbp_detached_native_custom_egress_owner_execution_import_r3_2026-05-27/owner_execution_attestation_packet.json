@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-27T02:34:52.268672Z",
+  "context_only": true,
+  "counts_as_native_ux_proof": false,
+  "counts_as_network_claim": false,
+  "counts_as_trace_proof": false,
+  "current_thread_executed_command": false,
+  "current_thread_native_launch_attempted": false,
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27",
+  "owner_claimed_evidence_dir_preserved": true,
+  "owner_claimed_external_execution": true,
+  "packet_kind": "detached_egress_owner_execution_attestation",
+  "reason_class": "",
+  "status": "ok"
+}

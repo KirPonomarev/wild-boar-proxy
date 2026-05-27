@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "python3",
+    "/Volumes/Work/wild-boar-proxy/tools/native_custom_direct_egress_classification_probe.py",
+    "--repo-root",
+    "/Volumes/Work/wild-boar-proxy",
+    "--evidence-dir",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27",
+    "--mode",
+    "live",
+    "--model",
+    "gpt-5.4-mini",
+    "--wait-seconds",
+    "150"
+  ],
+  "captured_at_utc": "2026-05-27T02:32:19.224454Z",
+  "command_executed": false,
+  "cwd": "/Volumes/Work/wild-boar-proxy",
+  "evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27",
+  "external_result_imported": false,
+  "model": "gpt-5.4-mini",
+  "native_launch_attempted_from_current_thread": false,
+  "owner_prompt_body_recorded": false,
+  "packet_kind": "detached_egress_execution_command",
+  "shell_command": "cd /Volumes/Work/wild-boar-proxy && python3 /Volumes/Work/wild-boar-proxy/tools/native_custom_direct_egress_classification_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27 --mode live --model gpt-5.4-mini --wait-seconds 150",
+  "status": "ok",
+  "target_tool": "/Volumes/Work/wild-boar-proxy/tools/native_custom_direct_egress_classification_probe.py",
+  "wait_seconds": 150
+}
