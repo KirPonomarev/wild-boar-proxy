@@ -1,0 +1,17 @@
+{
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T06:58:39.431143Z",
+  "failure_fixture_claimed_as_provider_live_behavior": false,
+  "fixture_streaming_claimed_as_live_streaming": false,
+  "local_fixture_pass_claimed_as_codex_consumer_acceptance": false,
+  "missing_required_packets": [],
+  "non_stream_fixture_claimed_as_streaming_compatibility": false,
+  "packet_kind": "responses_no_live_false_green_audit",
+  "status": "ok",
+  "tool_schema_parsed_claimed_as_tool_execution_loop": false,
+  "wire_readiness_claimed_as_direct_egress_absence": false,
+  "wire_readiness_claimed_as_final_e2e": false,
+  "wire_readiness_claimed_as_model_availability": false,
+  "wire_readiness_claimed_as_native_ux": false,
+  "wire_readiness_claimed_as_provider_reachability": false
+}

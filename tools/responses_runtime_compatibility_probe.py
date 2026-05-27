@@ -166,6 +166,41 @@ def event_names(body: str) -> list[str]:
     ]
 
 
+def stream_frames(body: str) -> list[dict[str, Any]]:
+    frames: list[dict[str, Any]] = []
+    for chunk in body.strip().split("\n\n"):
+        event_name = ""
+        data_text = ""
+        for line in chunk.splitlines():
+            if line.startswith("event: "):
+                event_name = line.removeprefix("event: ").strip()
+            if line.startswith("data: "):
+                data_text = line.removeprefix("data: ").strip()
+        parsed: dict[str, Any] | None = None
+        parse_error = ""
+        try:
+            parsed = json.loads(data_text)
+        except json.JSONDecodeError as exc:
+            parse_error = str(exc)
+        frames.append(
+            {
+                "event": event_name,
+                "data_type": parsed.get("type") if isinstance(parsed, dict) else None,
+                "data_type_matches_event": (
+                    isinstance(parsed, dict) and parsed.get("type") == event_name
+                ),
+                "parse_error": parse_error,
+                "response_status": (
+                    parsed.get("response", {}).get("status")
+                    if isinstance(parsed, dict)
+                    and isinstance(parsed.get("response"), dict)
+                    else None
+                ),
+            }
+        )
+    return frames
+
+
 def write_packet(evidence_dir: Path, name: str, payload: dict[str, Any]) -> None:
     (evidence_dir / name).write_text(
         json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
@@ -251,6 +286,7 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         route_overrides={"transform_profile": "openai_chat_system_to_developer"},
     )
     stream_events = event_names(stream["body"])
+    stream_frame_rows = stream_frames(stream["body"])
     expected_events = [
         json.loads(line)["event"]
         for line in (FIXTURE_DIR / "stream_text_events.ndjson").read_text(encoding="utf-8").splitlines()
@@ -310,9 +346,24 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         ),
         "responses_stream_sse_sequence_packet.json": packet(
             "responses_stream_sse_sequence",
-            status="ok" if stream_events == expected_events else "failed",
+            status="ok"
+            if stream_events == expected_events
+            and all(frame["data_type_matches_event"] for frame in stream_frame_rows)
+            and not any(frame["parse_error"] for frame in stream_frame_rows)
+            else "failed",
             observed_events=stream_events,
             expected_events=expected_events,
+            frame_count=len(stream_frame_rows),
+            data_type_sequence=[frame["data_type"] for frame in stream_frame_rows],
+            data_type_matches_event=all(
+                frame["data_type_matches_event"] for frame in stream_frame_rows
+            ),
+            data_parse_errors=[
+                frame["parse_error"] for frame in stream_frame_rows if frame["parse_error"]
+            ],
+            terminal_response_status=(
+                stream_frame_rows[-1]["response_status"] if stream_frame_rows else None
+            ),
             stream_started_counts_as_compatible=False,
             completed_event_required=True,
         ),

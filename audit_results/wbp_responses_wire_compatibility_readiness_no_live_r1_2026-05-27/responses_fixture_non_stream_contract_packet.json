@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T06:58:39.430882Z",
+  "codex_consumer_acceptance_proven": false,
+  "http_status": 200,
+  "local_fixture_pass_counts_as_codex_consumer_acceptance": false,
+  "non_stream_fixture_pass_counts_as_streaming_compatibility": false,
+  "object": "response",
+  "output_text_present": true,
+  "packet_kind": "responses_fixture_non_stream_contract",
+  "response_status": "completed",
+  "source_packet": "responses_non_stream_regression_packet.json",
+  "status": "ok",
+  "upstream_acceptance_proven": false
+}

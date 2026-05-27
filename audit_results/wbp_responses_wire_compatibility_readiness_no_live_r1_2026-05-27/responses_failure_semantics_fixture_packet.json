@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T06:58:39.430917Z",
+  "empty_input_error_ok": true,
+  "error_shape_ok": true,
+  "host_blocked_items": [
+    "failure_semantics_client_cancel_packet.json"
+  ],
+  "host_blocked_items_count_as_pass": false,
+  "local_error_semantics_not_upstream_provider_failure_semantics": true,
+  "packet_kind": "responses_failure_semantics_fixture",
+  "source_packets": [
+    "responses_error_shape_packet.json",
+    "failure_semantics_429_packet.json",
+    "failure_semantics_client_cancel_packet.json",
+    "failure_semantics_disconnect_packet.json",
+    "failure_semantics_partial_stream_packet.json",
+    "failure_semantics_retry_backpressure_packet.json",
+    "failure_semantics_timeout_packet.json"
+  ],
+  "status": "ok",
+  "upstream_provider_failure_semantics_proven": false
+}

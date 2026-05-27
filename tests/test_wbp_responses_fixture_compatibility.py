@@ -32,6 +32,21 @@ def load_event_names(name: str) -> list[str]:
     ]
 
 
+def parse_sse_frames(body: str) -> list[dict[str, object]]:
+    frames: list[dict[str, object]] = []
+    for chunk in body.strip().split("\n\n"):
+        event_name = ""
+        data_text = ""
+        for line in chunk.splitlines():
+            if line.startswith("event: "):
+                event_name = line.removeprefix("event: ").strip()
+            if line.startswith("data: "):
+                data_text = line.removeprefix("data: ").strip()
+        payload = json.loads(data_text)
+        frames.append({"event": event_name, "payload": payload})
+    return frames
+
+
 def fixture_route() -> dict[str, object]:
     return {
         "route_id": "wbp-fixture-route",
@@ -148,6 +163,22 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         ]
         self.assertEqual(observed_events, load_event_names("stream_text_events.ndjson"))
         self.assertIn("WBP_STREAM_OK", body)
+
+    def test_wbp_responses_stream_sse_data_payload_matches_event_type(self) -> None:
+        status, body, _captured, _fixture = self.run_adapter_request(
+            "stream_text_request.json",
+            response_payload={"choices": [{"message": {"content": "WBP_STREAM_OK"}}]},
+            accept="text/event-stream",
+        )
+
+        self.assertEqual(status, 200)
+        frames = parse_sse_frames(body)
+        self.assertEqual([frame["event"] for frame in frames], load_event_names("stream_text_events.ndjson"))
+        for frame in frames:
+            payload = frame["payload"]
+            self.assertIsInstance(payload, dict)
+            self.assertEqual(payload["type"], frame["event"])  # type: ignore[index]
+        self.assertEqual(frames[-1]["payload"]["response"]["status"], "completed")  # type: ignore[index]
 
     def test_wbp_responses_error_shape_required(self) -> None:
         for fixture_name in ("upstream_4xx_error.json", "upstream_5xx_error.json"):
