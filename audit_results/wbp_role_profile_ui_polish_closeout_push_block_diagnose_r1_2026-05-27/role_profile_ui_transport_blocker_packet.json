@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-27T13:04:30.348335Z",
+  "classification": "ROLE_PROFILE_UI_POLISH_REMOTE_CLOSEOUT_CONFIRMED",
+  "classification_with_limits": false,
+  "credential_config_present": true,
+  "gh_auth_status_ok": true,
+  "helper_ls_remote_ok": false,
+  "helperless_ls_remote_ok": false,
+  "helperless_push_auth_fail": false,
+  "packet_kind": "role_profile_ui_transport_blocker",
+  "push_trace_has_credential_child_exit_zero": false,
+  "push_trace_has_get_refs_list": false,
+  "push_trace_has_gh_credential_get": false,
+  "push_trace_has_remote_https": false,
+  "reasons": [],
+  "status": "ok"
+}
