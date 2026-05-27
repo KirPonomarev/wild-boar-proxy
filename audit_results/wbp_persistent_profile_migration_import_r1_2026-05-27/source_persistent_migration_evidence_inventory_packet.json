@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-27T11:51:29.462412Z",
+  "current_live_migration_execution_performed": false,
+  "historical_source_packet_chain": true,
+  "invalid_json_packets": {
+    "backup_repair": [],
+    "history_import": [],
+    "r1_contract": [],
+    "r4_dry_run": []
+  },
+  "loaded_packet_count": 26,
+  "missing_packets": {
+    "backup_repair": [],
+    "history_import": [],
+    "r1_contract": [],
+    "r4_dry_run": []
+  },
+  "packet_kind": "source_persistent_migration_evidence_inventory",
+  "source_dirs": {
+    "backup_repair": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_backup_rollback_repair_r1_2026-05-27",
+    "history_import": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_history_import_r1_2026-05-27",
+    "r1_contract": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27",
+    "r4_dry_run": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27"
+  },
+  "status": "ok"
+}

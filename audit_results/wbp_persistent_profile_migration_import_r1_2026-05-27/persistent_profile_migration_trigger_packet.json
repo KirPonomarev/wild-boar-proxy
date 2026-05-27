@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-27T11:51:29.462477Z",
+  "explicit_migration_trigger_required": true,
+  "hidden_migration_allowed": false,
+  "implicit_first_launch_counts_as_migration": false,
+  "ordinary_launch_counts_as_migration": false,
+  "packet_kind": "persistent_profile_migration_trigger",
+  "status": "ok",
+  "trigger_observed_in_this_contour": false
+}

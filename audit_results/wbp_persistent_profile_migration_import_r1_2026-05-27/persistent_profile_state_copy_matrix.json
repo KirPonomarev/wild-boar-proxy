@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-27T11:51:29.462491Z",
+  "copied_dir_count": 352,
+  "copied_equals_restored_equivalence": false,
+  "copied_file_count": 993,
+  "copied_state_classes": [
+    "thread_history",
+    "session_state",
+    "provider_wbp_linkage_state",
+    "integration_state_unclassified",
+    "unclassified_profile_state"
+  ],
+  "copy_failure_count": 0,
+  "copy_matrix_complete_for_bounded_backup_surface": true,
+  "excluded_state_classes": [
+    "cache_or_incidental_state",
+    "volatile_runtime_dependency",
+    "secret_or_auth_surface"
+  ],
+  "omitted_state_classes_count_as_harmless": false,
+  "packet_kind": "persistent_profile_state_copy_matrix",
+  "status": "ok",
+  "unknown_or_unclassified_state_classes": [
+    "integration_state_unclassified",
+    "unclassified_profile_state"
+  ]
+}

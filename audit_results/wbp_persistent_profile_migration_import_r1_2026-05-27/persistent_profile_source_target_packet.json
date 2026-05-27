@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-27T11:51:29.462482Z",
+  "cross_profile_migration_proven": false,
+  "current_auth_json_copied": false,
+  "original_codex_used_as_source": false,
+  "original_codex_used_as_target": false,
+  "packet_kind": "persistent_profile_source_target",
+  "source_backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup.20260527T031925Z",
+  "source_backup_root_under_wbp_control": true,
+  "source_identity_type": "selective_state_backup_artifact_for_persistent_custom_profile",
+  "source_profile_id": "wbp-custom-main",
+  "source_profile_id_matches_target_profile_id": true,
+  "status": "ok",
+  "target_identity_type": "persistent_custom_profile",
+  "target_profile_id": "wbp-custom-main",
+  "target_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "target_profile_root_matches_identity_contract": true
+}
