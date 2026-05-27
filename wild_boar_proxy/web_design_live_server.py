@@ -52,6 +52,10 @@ from wild_boar_proxy.codex_model_registry import (
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
 )
+from wild_boar_proxy.native_window_probe import (
+    OWNER_STANDING_AUTHORIZATION_PHRASE,
+    launch_custom_native_app_packet,
+)
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
@@ -532,6 +536,17 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Запустить внешний клиент",
         "human_meaning": "Запросить bounded запуск внешнего клиента, затем обновить live overview truth.",
     },
+    "launch_custom_client_native": {
+        "adapter_command_id": "codex_custom_native_launch",
+        "action_role": "custom_native_client_launch",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только Custom native app/window launch proof; это не prompt, route trace или egress truth",
+        "display_name": "Запустить Custom Codex",
+        "human_meaning": "Запустить Custom Codex через server-owned native launch lane и подтвердить процесс плюс окно.",
+    },
     "setup_discovery": {
         "adapter_command_id": "installer_init",
         "action_role": "setup_import_discovery_foundation",
@@ -620,6 +635,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "set_mode_managed",
         "launch_smoke",
         "launch_client_dispatch",
+        "launch_custom_client_native",
         "export_diagnostics",
     }
 )
@@ -2295,6 +2311,78 @@ def _launch_custom_codex_packet(
     }
 
 
+def _native_ui_action_result(packet: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": "ok" if packet.get("status") == "ok" else "failed",
+        "machine_error_code": str(packet.get("machine_error_code") or "UNKNOWN"),
+        "human_message": str(packet.get("human_message") or ""),
+        "next_action": str(packet.get("next_action") or ""),
+        "changed_files": [],
+        "data": packet,
+    }
+
+
+def _launch_custom_native_codex_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_live_launch_fields(payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Custom native launch accepts no browser-controlled route, backend, auth, path, or home fields.",
+            "forbidden_fields": forbidden,
+            "owner_authorization_phrase_present": owner_authorized,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not owner_authorized:
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            **_owner_authorization_required_packet(
+                mode_id="codex_custom",
+                next_action="provide_exact_owner_authorization_phrase",
+            ),
+        }
+    model_id = payload.get("model_id")
+    if not isinstance(model_id, str) or not model_id:
+        registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+        model_id = str(
+            registry.get("recommended_default_model")
+            or registry.get("recommended_model")
+            or ""
+        )
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    endpoint = str(registry.get("endpoint") or "")
+    packet = launch_custom_native_app_packet(
+        repo_root=ROOT,
+        endpoint=endpoint,
+        model=model_id,
+        owner_authorization_phrase=(
+            OWNER_STANDING_AUTHORIZATION_PHRASE if owner_authorized else None
+        ),
+    )
+    packet["selection_packet"] = _codex_custom_selection_packet(
+        model_id=model_id,
+        commands={},
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+    )
+    packet["server_issued_model_list"] = bool(registry.get("available_models"))
+    packet["wbp_endpoint_configured"] = endpoint.startswith("http://127.0.0.1:")
+    return packet
+
+
 def _runtime_check_all_component(snapshot: dict[str, Any]) -> dict[str, Any]:
     if snapshot.get("status") != "ok":
         return {
@@ -2527,6 +2615,9 @@ def run_ui_action(
     launch_copy_contract: LaunchCopyContract | None = None,
     launch_action_runner: CommandRunner | None = None,
     action_phase: str = FULL_ACTION_PHASE,
+    owner_authorized: bool = False,
+    native_operator_status: dict[str, Any] | None = None,
+    native_api_snapshot: dict[str, Any] | None = None,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
@@ -2646,6 +2737,7 @@ def run_ui_action(
         launch_client_path=launch_client_path,
         launch_copy_contract=launch_copy_contract,
         action_phase=action_phase,
+        owner_authorized=owner_authorized,
         legacy_import_token_store=legacy_import_token_store,
     ):
         return _unavailable_action(
@@ -2655,6 +2747,7 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
             _action_unavailable_code(
@@ -2662,6 +2755,7 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
             availability_state=_action_availability_state(
@@ -2669,6 +2763,7 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
             disabled_reasons=_action_disabled_reasons(
@@ -2676,6 +2771,7 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
         )
@@ -2726,6 +2822,17 @@ def run_ui_action(
         return _run_api_route_connect_action(runner, launch_copy_contract)
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
+    if ui_action == "launch_custom_client_native":
+        packet = _launch_custom_native_codex_packet(
+            {},
+            owner_authorized=owner_authorized,
+            operator_status=native_operator_status if owner_authorized else None,
+            api_snapshot=native_api_snapshot if owner_authorized else None,
+        )
+        return _ui_action_response_from_result(
+            ui_action,
+            _native_ui_action_result(packet),
+        )
     if ui_action == "launch_client_dispatch":
         if not launch_client_path:
             return _unavailable_action(
@@ -2777,6 +2884,7 @@ def ui_action_metadata(
     launch_client_path: str | None = None,
     launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> dict[str, Any]:
     actions: dict[str, dict[str, Any]] = {}
@@ -2786,6 +2894,7 @@ def ui_action_metadata(
             launch_client_path=launch_client_path,
             launch_copy_contract=launch_copy_contract,
             action_phase=action_phase,
+            owner_authorized=owner_authorized,
             legacy_import_token_store=legacy_import_token_store,
         )
         actions[ui_action] = {
@@ -2805,6 +2914,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
             "disabled_reason_code": _action_unavailable_code(
@@ -2812,6 +2922,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             )
             if not available
@@ -2821,6 +2932,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             )
             if not available
@@ -2830,6 +2942,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                owner_authorized=owner_authorized,
                 legacy_import_token_store=legacy_import_token_store,
             ),
         }
@@ -3196,6 +3309,7 @@ def build_handler(
                         launch_client_path=launch_client_path,
                         launch_copy_contract=launch_copy_contract,
                         action_phase=action_phase,
+                        owner_authorized=codex_custom_live_prompt_authorized,
                         legacy_import_token_store=legacy_import_token_store,
                     )
                 )
@@ -3508,6 +3622,26 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/native-launch":
+                operator_status = (
+                    operator_surface_session.status_payload()
+                    if codex_custom_live_prompt_authorized
+                    else None
+                )
+                api_snapshot = (
+                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                    if codex_custom_live_prompt_authorized
+                    else None
+                )
+                self._send_json(
+                    _launch_custom_native_codex_packet(
+                        self._read_json_body(),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                )
+                return
             if parsed.path == "/api/codex/app-copy/launch-dry-run":
                 self._send_json(build_safe_app_copy_launch_dry_run_packet(self._read_json_body()))
                 return
@@ -3640,6 +3774,17 @@ def build_handler(
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
+            action_owner_authorized = codex_custom_live_prompt_authorized
+            native_operator_status = (
+                operator_surface_session.status_payload()
+                if action_owner_authorized
+                else None
+            )
+            native_api_snapshot = (
+                build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                if action_owner_authorized
+                else None
+            )
             self._send_json(
                 run_ui_action(
                     action_runner,
@@ -3648,6 +3793,9 @@ def build_handler(
                     launch_copy_contract=launch_copy_contract,
                     launch_action_runner=launch_copy_runner,
                     action_phase=action_phase,
+                    owner_authorized=action_owner_authorized,
+                    native_operator_status=native_operator_status,
+                    native_api_snapshot=native_api_snapshot,
                     legacy_import_token_store=legacy_import_token_store,
                 )
             )
@@ -4309,6 +4457,7 @@ def _action_available(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> bool:
     if ui_action == "setup_discovery":
@@ -4328,6 +4477,8 @@ def _action_available(
             return _sandbox_action_preflight(launch_copy_contract)["status"] == "admitted"
     if ui_action == "launch_client_dispatch":
         return bool(launch_client_path) and _launch_copy_preflight(launch_copy_contract)["status"] == "admitted"
+    if ui_action == "launch_custom_client_native":
+        return owner_authorized
     return True
 
 
@@ -4337,6 +4488,7 @@ def _action_availability_state(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "setup_discovery":
@@ -4361,6 +4513,8 @@ def _action_availability_state(
         return "not_admitted"
     if ui_action == "launch_client_dispatch" and _launch_copy_preflight(launch_copy_contract)["status"] != "admitted":
         return "preflight_blocked"
+    if ui_action == "launch_custom_client_native" and not owner_authorized:
+        return "owner_authorization_required"
     if ui_action not in UI_ACTION_ALLOWLIST:
         return "unknown_disabled"
     return "displayable_readonly"
@@ -4372,6 +4526,7 @@ def _action_unavailable_code(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "legacy_import_discovery":
@@ -4391,6 +4546,8 @@ def _action_unavailable_code(
         return "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE"
     if ui_action == "launch_client_dispatch":
         return str(_launch_copy_preflight(launch_copy_contract)["machine_error_code"])
+    if ui_action == "launch_custom_client_native" and not owner_authorized:
+        return "OWNER_AUTHORIZATION_REQUIRED"
     if ui_action not in UI_ACTION_ALLOWLIST:
         return "UI_ACTION_NOT_ALLOWED"
     return ""
@@ -4402,6 +4559,7 @@ def _action_disabled_reasons(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> tuple[str, ...]:
     if ui_action == "legacy_import_discovery":
@@ -4427,6 +4585,8 @@ def _action_disabled_reasons(
         launch_preflight = _launch_copy_preflight(launch_copy_contract)
         if launch_preflight["status"] != "admitted":
             return ("launch_copy_preflight_blocked",)
+    if ui_action == "launch_custom_client_native" and not owner_authorized:
+        return ("owner_authorization_required",)
     if ui_action not in UI_ACTION_ALLOWLIST:
         return ("unknown_disabled",)
     return ()
@@ -4438,6 +4598,7 @@ def _action_unavailable_reason(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    owner_authorized: bool = False,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "setup_discovery":
@@ -4459,6 +4620,8 @@ def _action_unavailable_reason(
     if ui_action == "launch_client_dispatch":
         launch_preflight = _launch_copy_preflight(launch_copy_contract)
         return "" if launch_preflight["status"] == "admitted" else str(launch_preflight["reason"])
+    if ui_action == "launch_custom_client_native" and not owner_authorized:
+        return "Live launch requires exact owner authorization in the active thread."
     return ""
 
 
@@ -5886,6 +6049,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch-copy-profile-dir", default=None)
     parser.add_argument("--launch-copy-data-dir", default=None)
     parser.add_argument("--launch-copy-port", type=int, default=None)
+    parser.add_argument("--owner-authorization-phrase", default=None)
     parser.add_argument(
         "--launch-copy-helper-provenance",
         default=None,
@@ -5907,6 +6071,7 @@ def main(argv: list[str] | None = None) -> int:
             launch_client_path=args.launch_client_path,
             launch_copy_contract=launch_copy_contract,
             action_phase=args.action_phase,
+            owner_authorization_phrase=args.owner_authorization_phrase,
         ),
     )
     try:

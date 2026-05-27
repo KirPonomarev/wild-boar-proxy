@@ -104,7 +104,7 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
               <span>Обновить</span>
             </button>
-            <button id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch" aria-label="Запустить клиент" title="Запустить клиент" disabled>
+            <button id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_custom_client_native" aria-label="Запустить клиент" title="Запустить клиент" disabled>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
               <span>Запустить клиент</span>
             </button>
@@ -2289,9 +2289,9 @@
             </div>
           </section>
 
-          <section id="clientLaunchPanel" class="settings-client-launch" data-settings-subflow="client" data-client-launch-surface="bounded-dispatch-preview" hidden>
+          <section id="clientLaunchPanel" class="settings-client-launch" data-settings-subflow="client" data-client-launch-surface="native-proof-preview" hidden>
             <div class="client-launch-topline">
-              <div class="client-launch-subflow-title"><strong>Client / Launch</strong><span>selected client · readiness · bounded dispatch only</span></div>
+              <div class="client-launch-subflow-title"><strong>Client / Launch</strong><span>selected client · readiness · server-owned native proof</span></div>
               <span id="clientLaunchPanelChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
               <button id="clientLaunchBackAction" class="button small" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
@@ -2333,7 +2333,7 @@
                   <div><span>Mode compatible</span><strong id="clientReadyMode">unknown</strong></div>
                   <div><span>Accounts available</span><strong id="clientReadyAccounts">unknown</strong></div>
                   <div><span>Copy preflight</span><strong id="clientReadyPreflight">unknown</strong></div>
-                  <div><span>Launch dispatch</span><strong id="clientReadyDispatch">disabled</strong></div>
+                  <div><span>Native launch lane</span><strong id="clientReadyDispatch">disabled</strong></div>
                   <div><span>Process proof</span><strong id="clientReadyProcess">not confirmed</strong></div>
                 </div>
               </section>
@@ -2343,14 +2343,14 @@
                   <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true"></span>
                   <div>
                     <h3>Запуск клиента</h3>
-                    <p>Command OK означает dispatch requested, не app/session truth.</p>
+                    <p>Green success требует process, identity и native window proof.</p>
                   </div>
                   <span id="clientDispatchChip" class="chip neutral"><span class="dot"></span><span>bounded</span></span>
                 </div>
                 <div class="client-launch-actions">
-                  <button id="clientLaunchDispatchAction" class="button small live-action client-launch-action" type="button" data-ui-action="launch_client_dispatch">
+                  <button id="clientLaunchNativeAction" class="button small live-action client-launch-action" type="button" data-ui-action="launch_custom_client_native">
                     <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
-                    <span>Запустить копию</span>
+                    <span>Запустить Custom Codex</span>
                   </button>
                   <button class="button small live-action client-launch-action" type="button" data-ui-action="launch_smoke">
                     <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
@@ -2361,7 +2361,7 @@
                     <span>Открыть диагностику</span>
                   </a>
                 </div>
-                <div class="client-launch-note">Preflight first. Запрос запуска отправлен ≠ активная app session. Нужен packet proof и refresh.</div>
+                <div class="client-launch-note">Server-owned lane only. Green success требует packet proof и refresh.</div>
               </section>
 
               <section class="card client-launch-card client-launch-boundary-card" data-client-launch-card="boundary">
@@ -2419,7 +2419,7 @@
             </div>
 
             <div id="clientLaunchFooter" class="client-launch-footer">
-              Launch dispatch показывает запрос запуска, не здоровье runtime и не активную app session.
+              Native launch lane показывает process/window proof; dispatch-only и workbench-only не считаются запуском клиента.
             </div>
           </section>
 

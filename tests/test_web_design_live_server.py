@@ -5937,6 +5937,228 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(sessions["session_count"], 1)
         self.assertEqual(created_sessions[0].run_payloads, [])
 
+    def test_custom_native_launch_endpoint_requires_owner_authorization(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(action_phase=live_server.FULL_ACTION_PHASE),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            blocked = json.loads(post_json(f"{base}/api/codex/custom/native-launch", {}))
+            metadata = json.loads(fetch(f"{base}/api/actions"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertFalse(blocked["owner_authorization_phrase_present"])
+        self.assertEqual(blocked["launch_claim_scope"], "custom_native_app_window_launch_only")
+        native_action = metadata["actions"]["launch_custom_client_native"]
+        self.assertFalse(native_action["available"])
+        self.assertEqual(native_action["availability_state"], "owner_authorization_required")
+        self.assertEqual(native_action["disabled_reason_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertIn("exact owner authorization", native_action["unavailable_reason"])
+
+    def test_custom_native_launch_endpoint_rejects_browser_authority_fields(self) -> None:
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+
+        with (
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [],
+                },
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/native-launch",
+                        {"model_id": "gpt-5.3-codex", "route_id": "wbp-route"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], ["route_id"])
+
+    def test_custom_native_launch_endpoint_and_ui_action_return_native_proof_only(self) -> None:
+        native_packet = {
+            "schema_version": 1,
+            "captured_at_utc": "2026-05-27T00:00:00Z",
+            "mode_id": "codex_custom",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex native app launched and window proof passed.",
+            "next_action": "none",
+            "owner_authorization_phrase_present": True,
+            "running_status": True,
+            "process_started": True,
+            "expected_custom_identity_observed": True,
+            "native_window_observed": True,
+            "native_app_usable": True,
+            "real_codex_app_launched": True,
+            "isolated_home": True,
+            "isolated_codex_home": True,
+            "isolated_profile_dir": True,
+            "isolated_app_support_dir": True,
+            "isolated_cache_dir": True,
+            "isolated_runtime_dir": True,
+            "server_owned_route_configuration": True,
+            "browser_route_injection": False,
+            "browser_backend_injection": False,
+            "current_original_profile_shortcut_used": False,
+            "current_codex_touched": False,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            "workbench_ready": False,
+            "native_launch_complete": False,
+        }
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+
+        with (
+            mock.patch.object(
+                live_server,
+                "launch_custom_native_app_packet",
+                return_value=dict(native_packet),
+            ),
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={"status": "ok", "source": "api_connections_readonly", "primary_truth_ok": True, "routes": []},
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                endpoint_packet = json.loads(
+                    post_json(f"{base}/api/codex/custom/native-launch", {"model_id": "gpt-5.3-codex"})
+                )
+                ui_action = json.loads(
+                    post_json(f"{base}/api/action", {"ui_action": "launch_custom_client_native"})
+                )
+                metadata = json.loads(fetch(f"{base}/api/actions"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(endpoint_packet["status"], "ok")
+        self.assertTrue(endpoint_packet["process_started"])
+        self.assertTrue(endpoint_packet["expected_custom_identity_observed"])
+        self.assertTrue(endpoint_packet["native_window_observed"])
+        self.assertTrue(endpoint_packet["native_app_usable"])
+        self.assertFalse(endpoint_packet["workbench_ready"])
+        self.assertEqual(ui_action["status"], "ok")
+        self.assertEqual(ui_action["result"]["status"], "ok")
+        self.assertEqual(
+            ui_action["action_claim_scope"],
+            "только Custom native app/window launch proof; это не prompt, route trace или egress truth",
+        )
+        self.assertTrue(ui_action["result"]["data"]["real_codex_app_launched"])
+        self.assertFalse(ui_action["result"]["data"]["native_launch_complete"])
+        self.assertTrue(metadata["actions"]["launch_custom_client_native"]["available"])
+
+    def test_custom_native_launch_ui_action_rejects_browser_owned_route_field(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(
+                action_phase=live_server.FULL_ACTION_PHASE,
+                owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+            ),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            rejected = json.loads(
+                post_json(
+                    f"{base}/api/action",
+                    {"ui_action": "launch_custom_client_native", "route_id": "wbp-route"},
+                )
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(rejected["status"], "integration_failure")
+        self.assertEqual(rejected["disabled_reason_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(rejected["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(rejected["action_claim_scope"], "blocked")
+        self.assertIn("route_id", rejected["result"]["human_message"])
+
     def test_app_copy_live_admission_and_bounded_helper_launch_use_server_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

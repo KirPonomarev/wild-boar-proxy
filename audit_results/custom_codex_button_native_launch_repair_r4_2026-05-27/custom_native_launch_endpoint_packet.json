@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-27T19:35:00Z",
+  "status": "ok",
+  "contour": "CUSTOM_CODEX_BUTTON_NATIVE_LAUNCH_REPAIR_R4",
+  "endpoint_path": "/api/codex/custom/native-launch",
+  "ui_action": "launch_custom_client_native",
+  "owner_authorization_server_owned": true,
+  "browser_authority_fields_forbidden": true,
+  "forbidden_browser_fields": [
+    "route_id",
+    "backend_id",
+    "auth",
+    "path",
+    "model_provider",
+    "account_id"
+  ],
+  "full_phase_metadata_available_with_owner_authorization": true,
+  "full_phase_metadata_requires_owner_authorization_when_absent": true,
+  "source_files": [
+    "wild_boar_proxy/web_design_live_server.py",
+    "tests/test_web_design_live_server.py"
+  ]
+}

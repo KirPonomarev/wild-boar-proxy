@@ -347,7 +347,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('fetch("api/codex/original/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/original/launch"', js)
         self.assertIn('fetch("api/codex/custom/launch-dry-run"', js)
-        self.assertIn('fetch("api/codex/custom/launch"', js)
+        self.assertIn('fetch("api/codex/custom/native-launch"', js)
         self.assertIn('fetch("api/codex/app-copy/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/app-copy/live-admission"', js)
         self.assertIn('fetch("api/codex/app-copy/launch"', js)
@@ -374,6 +374,10 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("prompt_attempted: packet?.prompt_attempted === true", js)
         self.assertIn("running_status: packet?.running_status === true", js)
         self.assertIn("workbench_ready: packet?.workbench_ready === true", js)
+        self.assertIn("process_started: packet?.process_started === true", js)
+        self.assertIn("expected_custom_identity_observed: packet?.expected_custom_identity_observed === true", js)
+        self.assertIn("native_window_observed: packet?.native_window_observed === true", js)
+        self.assertIn("native_app_usable: packet?.native_app_usable === true", js)
         self.assertIn("browser_route_injection: packet?.browser_route_injection === true", js)
         self.assertIn("browser_backend_injection: packet?.browser_backend_injection === true", js)
 
@@ -2175,7 +2179,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn('data-settings-section-link="accounts-policy"', settings_markup)
         self.assertIn('id="clientLaunchPanel"', settings_markup)
         self.assertIn('data-settings-subflow="client"', settings_markup)
-        self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', settings_markup)
+        self.assertIn('data-client-launch-surface="native-proof-preview"', settings_markup)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('id="diagnosticsPrivacyPanel"', settings_markup)
@@ -2223,10 +2227,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn("Lifecycle actions", accounts_policy_markup)
         self.assertIn("Accounts / Detail only", accounts_policy_markup)
         self.assertIn("missing admitted policy command surface", accounts_policy_markup)
-        self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
-        self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
-        self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
-        self.assertIn("Launch dispatch показывает запрос запуска, не здоровье runtime", client_markup)
+        self.assertIn("selected client · readiness · server-owned native proof", client_markup)
+        self.assertIn("Green success требует process, identity и native window proof.", client_markup)
+        self.assertIn("Server-owned lane only. Green success требует packet proof и refresh.", client_markup)
+        self.assertIn("Native launch lane показывает process/window proof; dispatch-only и workbench-only не считаются запуском клиента.", client_markup)
         self.assertIn("Web path payload forbidden", client_markup)
         self.assertIn("inert display only", client_markup)
         self.assertIn("Текущий режим", runtime_markup)
@@ -2359,7 +2363,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
             self.assertIn(f'data-ui-action="{allowed_action}"', runtime_markup)
         self.assertEqual(runtime_markup.count("data-ui-action="), 6)
         for allowed_action in [
-            "launch_client_dispatch",
+            "launch_custom_client_native",
             "launch_smoke",
         ]:
             self.assertIn(f'data-ui-action="{allowed_action}"', client_markup)
@@ -2791,45 +2795,46 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('data-settings-subflow="client"', client_markup)
-        self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', client_markup)
+        self.assertIn('data-client-launch-surface="native-proof-preview"', client_markup)
         self.assertIn("clientLaunchModelFromSnapshot", js)
         self.assertIn("launchPreflightSummary", js)
         self.assertIn("renderClientLaunchSnapshot", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
         self.assertIn("Client status недоступен. Предыдущие fixture-данные не используются.", js)
         self.assertIn("Client status устарел. Требуется refresh из bounded packet.", js)
-        self.assertIn("Демо-режим. Изолированная копия admitted только через server-owned preflight.", js)
-        self.assertIn("Демо-режим. Изолированная копия не admitted без server-owned preflight.", js)
+        self.assertIn("Демо-режим. Native Custom launch admitted только через server-owned proof lane.", js)
+        self.assertIn("native proof admitted", js)
+        self.assertIn("server-owned custom native endpoint", js)
 
         self.assertIn("Выбранный клиент", client_markup)
         self.assertIn("Launch readiness", client_markup)
         self.assertIn("Запуск клиента", client_markup)
         self.assertIn("Candidate / selection boundary", client_markup)
         self.assertIn("Deferred native actions", client_markup)
-        self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
+        self.assertIn("selected client · readiness · server-owned native proof", client_markup)
         self.assertIn("Client preview не является runtime readiness или доказательством локального файла.", client_markup)
-        self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
+        self.assertIn("Green success требует process, identity и native window proof.", client_markup)
         self.assertIn("Copy preflight", client_markup)
         self.assertIn("Process proof", client_markup)
-        self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
-        self.assertIn("Launch dispatch показывает запрос запуска, не здоровье runtime", client_markup)
-        self.assertIn("Preflight first.", client_markup)
+        self.assertIn("Native launch lane", client_markup)
+        self.assertIn("Server-owned lane only. Green success требует packet proof и refresh.", client_markup)
+        self.assertIn("dispatch-only и workbench-only не считаются запуском клиента", client_markup)
         self.assertIn("Кандидаты выбираются только из command-owned list.", client_markup)
         self.assertIn("Ручной выбор файла: desktop/native only.", client_markup)
         self.assertIn("Web path payload forbidden.", client_markup)
         self.assertIn("Показать в Finder · human-open not admitted", client_markup)
-        self.assertIn("Запустить копию", client_markup)
+        self.assertIn("Запустить Custom Codex", client_markup)
         self.assertIn('id="clientActionPreflight"', client_markup)
         self.assertIn('id="clientActionPhase"', client_markup)
 
-        self.assertIn('data-ui-action="launch_client_dispatch"', client_markup)
+        self.assertIn('data-ui-action="launch_custom_client_native"', client_markup)
         self.assertIn('data-ui-action="launch_smoke"', client_markup)
         self.assertEqual(client_markup.count("data-ui-action="), 2)
         self.assertIn('data-screen-link="select-client"', client_markup)
         self.assertIn('data-screen-link="diagnostics"', client_markup)
-        self.assertIn("launch_client_dispatch:", js)
-        self.assertIn("bounded-dispatch", js)
-        self.assertIn("Это не доказывает старт приложения или здоровье runtime.", js)
+        self.assertIn("launch_custom_client_native:", js)
+        self.assertIn("server-owned custom native endpoint", js)
+        self.assertIn("Green success requires process, identity, and native window proof.", js)
         self.assertIn("metadata.available !== false", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
 
@@ -3338,7 +3343,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn('data-ui-action="set_mode_stable"', html)
         self.assertIn('data-ui-action="set_mode_managed"', html)
         self.assertIn('data-ui-action="launch_smoke"', html)
-        self.assertIn('data-ui-action="launch_client_dispatch"', html)
+        self.assertIn('data-ui-action="launch_custom_client_native"', html)
+        overview_button = re.search(r'<button id="launchClientAction"[^>]+data-ui-action="([^"]+)"', html)
+        self.assertIsNotNone(overview_button)
+        self.assertEqual(overview_button.group(1), "launch_custom_client_native")
         self.assertNotIn('data-ui-action="launch_client"', html)
         self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertIn('fetch("api/action"', js)
@@ -7341,6 +7349,7 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
             "set_mode_stable",
             "set_mode_managed",
             "launch_client_dispatch",
+            "launch_custom_client_native",
             "onboard_account",
             "validate_account",
             "recheck_account",
@@ -7383,7 +7392,9 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
         self.assertIn('id="launchClientAction"', html)
-        self.assertIn('data-ui-action="launch_client_dispatch"', html)
+        overview_button = re.search(r'<button id="launchClientAction"[^>]+data-ui-action="([^"]+)"', html)
+        self.assertIsNotNone(overview_button)
+        self.assertEqual(overview_button.group(1), "launch_custom_client_native")
         self.assertIn("disabled", html)
         self.assertIn("applyActionAvailability", js)
         self.assertIn("actionAvailabilityForButton", js)
@@ -7624,8 +7635,220 @@ assertAvailability(evidenceDisabledRouteButton, {
   disabledReasonCode: "",
   disabledReasons: ""
 });
-if (settingsLaunchAvailability.textContent.indexOf("preflight blocked") === -1) {
+if (settingsLaunchAvailability.textContent.indexOf("native launch blocked") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_overview_launch_button_targets_native_custom_action_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        overview_button = re.search(r'<button id="launchClientAction"[^>]+data-ui-action="([^"]+)"', html)
+        self.assertIsNotNone(overview_button)
+        self.assertEqual(overview_button.group(1), "launch_custom_client_native")
+        self.assertNotIn('id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch"', html)
+        self.assertIn("launch_custom_client_native:", js)
+        self.assertIn('uiAction === "launch_custom_client_native"', js)
+        self.assertIn("Запросить native запуск", js)
+
+    def test_custom_launch_render_keeps_workbench_only_packets_non_green(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+node("codexLaunchModesChip").lastElementChild = { textContent: "" };
+node("customCodexStatus");
+node("customCodexSession");
+node("codexLaunchDryRunResponse");
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "overview" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  status: "ok",
+  machine_error_code: "OK",
+  session_created: true,
+  running_status: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_workdir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
+  process_started: false,
+  expected_custom_identity_observed: false,
+  native_window_observed: false,
+  native_app_usable: false,
+  workbench_ready: true,
+  launch_claim_scope: "isolated_session_workbench_launch_ready",
+  next_action: "prompt"
+});
+`, sandbox);
+
+if (!node("codexLaunchModesChip").className.includes("amber")) {
+  throw new Error(`workbench-only launch must stay amber: ${node("codexLaunchModesChip").className}`);
+}
+if (node("codexLaunchModesChip").lastElementChild.textContent !== "workbench/session only") {
+  throw new Error(`unexpected chip label: ${node("codexLaunchModesChip").lastElementChild.textContent}`);
+}
+if (node("customCodexSession").textContent !== "workbench/session only") {
+  throw new Error(`unexpected session label: ${node("customCodexSession").textContent}`);
+}
+const rendered = JSON.parse(node("codexLaunchDryRunResponse").textContent);
+if (rendered.process_started !== false) {
+  throw new Error(`process_started should remain false: ${JSON.stringify(rendered)}`);
+}
+if (rendered.expected_custom_identity_observed !== false) {
+  throw new Error(`identity proof should remain false: ${JSON.stringify(rendered)}`);
+}
+if (rendered.native_window_observed !== false) {
+  throw new Error(`window proof should remain false: ${JSON.stringify(rendered)}`);
+}
+if (rendered.native_app_usable !== false) {
+  throw new Error(`native app usability should remain false: ${JSON.stringify(rendered)}`);
+}
+if (node("customCodexStatus").textContent !== "ok · isolated_session_workbench_launch_ready") {
+  throw new Error(`unexpected status copy: ${node("customCodexStatus").textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_custom_launch_render_accepts_window_proof_without_usability_greenwash(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  codexLaunchModesChip: makeChip(),
+  customCodexStatus: new Node(),
+  customCodexSession: new Node(),
+  codexLaunchDryRunResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  window: { location: { search: "" }, history: { replaceState() {} } },
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  status: "ok",
+  machine_error_code: "OK",
+  running_status: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_profile_dir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
+  process_started: true,
+  expected_custom_identity_observed: true,
+  native_window_observed: true,
+  native_app_usable: false,
+  real_codex_app_launched: true,
+  launch_claim_scope: "custom_native_app_window_launch_only",
+  next_action: "none"
+});
+`, sandbox);
+
+if (!nodes.codexLaunchModesChip.className.includes("green")) {
+  throw new Error(`pid-bound window proof should turn chip green: ${nodes.codexLaunchModesChip.className}`);
+}
+if (nodes.codexLaunchModesChip.lastElementChild.textContent !== "native proof confirmed") {
+  throw new Error(`unexpected chip label: ${nodes.codexLaunchModesChip.lastElementChild.textContent}`);
+}
+if (nodes.customCodexSession.textContent !== "native app/window proven") {
+  throw new Error(`unexpected session label: ${nodes.customCodexSession.textContent}`);
+}
+const rendered = JSON.parse(nodes.codexLaunchDryRunResponse.textContent);
+if (rendered.native_app_usable !== false) {
+  throw new Error(`native_app_usable should stay false when only window proof passed: ${JSON.stringify(rendered)}`);
+}
+if (rendered.real_codex_app_launched !== true) {
+  throw new Error(`real_codex_app_launched should be true: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(

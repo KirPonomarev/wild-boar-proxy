@@ -357,6 +357,11 @@ const CONFIRMATION_POLICY = {
     policy: "bounded-dispatch",
     warning: "Это запрашивает только server-owned запуск приложения. Это не доказывает старт приложения или здоровье runtime."
   },
+  launch_custom_client_native: {
+    severity: "high",
+    policy: "native-proof-required",
+    warning: "Это запрашивает native Custom launch. Зелёный успех допустим только при process_started, expected_custom_identity_observed и native_window_observed плюс подтверждённом launch_claim_scope; workbench/session readiness этого не доказывают."
+  },
   onboard_account_dry_run: {
     severity: "low",
     policy: "account-preview",
@@ -757,7 +762,7 @@ function codexLaunchSetChip(visual, label) {
   if (!chip) {
     return;
   }
-  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || visual || "neutral"}`;
   if (chip.lastElementChild) {
     chip.lastElementChild.textContent = label || visual || "unknown";
   }
@@ -888,23 +893,60 @@ function renderCodexCustomLaunchDryRun(packet) {
 
 function renderCodexCustomLaunch(packet) {
   const response = document.getElementById("codexLaunchDryRunResponse");
-  const ok = packet?.status === "ok"
+  const claimScope = String(packet?.launch_claim_scope || "");
+  const normalizedClaimScope = claimScope.toLowerCase();
+  const workbenchOnly = packet?.session_created === true
+    || packet?.workbench_ready === true
+    || normalizedClaimScope.includes("dispatch")
+    || normalizedClaimScope.includes("workbench");
+  const nativeProofOk = packet?.status === "ok"
     && packet?.running_status === true
     && packet?.isolated_home === true
     && packet?.isolated_codex_home === true
-    && packet?.isolated_workdir === true
+    && packet?.isolated_profile_dir === true
     && packet?.server_issued_model_list === true
     && packet?.wbp_endpoint_configured === true
     && packet?.browser_route_injection === false
     && packet?.browser_backend_injection === false
     && packet?.current_codex_touched === false
-    && packet?.workbench_ready === true;
+    && packet?.process_started === true
+    && packet?.expected_custom_identity_observed === true
+    && packet?.native_window_observed === true
+    && packet?.real_codex_app_launched === true
+    && claimScope !== ""
+    && !normalizedClaimScope.includes("dispatch")
+    && !normalizedClaimScope.includes("workbench");
   codexLaunchSetChip(
-    ok ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    ok ? "custom workbench ready" : (packet?.status || "failed")
+    nativeProofOk
+      ? "green"
+      : (
+        packet?.status === "ok"
+          ? "amber"
+          : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red")
+      ),
+    nativeProofOk
+      ? "native proof confirmed"
+      : (
+        packet?.status === "ok"
+          ? (workbenchOnly ? "workbench/session only" : "native proof pending")
+          : (packet?.status || "failed")
+      )
   );
-  codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${packet?.launch_claim_scope || "custom_launch"}`);
-  codexLaunchSetText("customCodexSession", ok ? "workbench ready" : (packet?.next_action || "launch blocked"));
+  codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${claimScope || "native_proof_required"}`);
+  codexLaunchSetText(
+    "customCodexSession",
+    nativeProofOk
+      ? (packet?.native_app_usable === true ? "native app usable" : "native app/window proven")
+      : (
+        workbenchOnly
+          ? "workbench/session only"
+          : (
+            packet?.process_started === true
+              ? "process only; native proof missing"
+              : (packet?.next_action || "native proof missing")
+          )
+      )
+  );
   if (response) {
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
@@ -913,17 +955,22 @@ function renderCodexCustomLaunch(packet) {
       running_status: packet?.running_status === true,
       isolated_home: packet?.isolated_home === true,
       isolated_codex_home: packet?.isolated_codex_home === true,
-      isolated_workdir: packet?.isolated_workdir === true,
+      isolated_profile_dir: packet?.isolated_profile_dir === true,
       server_issued_model_list: packet?.server_issued_model_list === true,
       wbp_endpoint_configured: packet?.wbp_endpoint_configured === true,
       browser_route_injection: packet?.browser_route_injection === true,
       browser_backend_injection: packet?.browser_backend_injection === true,
       current_codex_touched: packet?.current_codex_touched === true,
+      process_started: packet?.process_started === true,
+      expected_custom_identity_observed: packet?.expected_custom_identity_observed === true,
+      native_window_observed: packet?.native_window_observed === true,
+      real_codex_app_launched: packet?.real_codex_app_launched === true,
+      native_app_usable: packet?.native_app_usable === true,
       workbench_ready: packet?.workbench_ready === true,
       selected_source_class: packet?.selection_packet?.selected_source_class || "",
       selected_route_digest: packet?.selection_packet?.selected_route_digest || "",
       source_provenance_status: packet?.selection_packet?.source_provenance_status || "",
-      launch_claim_scope: packet?.launch_claim_scope || "",
+      launch_claim_scope: claimScope,
       next_action: packet?.next_action || "",
     }, null, 2);
   }
@@ -1216,7 +1263,7 @@ async function runCodexCustomLaunch() {
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   codexLaunchSetChip("neutral", "launching");
   try {
-    const response = await fetch("api/codex/custom/launch", {
+    const response = await fetch("api/codex/custom/native-launch", {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
@@ -1227,9 +1274,6 @@ async function runCodexCustomLaunch() {
     }
     const packet = await response.json();
     renderCodexCustomLaunch(packet);
-    if (packet?.session_created === true) {
-      await refreshCodexCustomSessionsPanel();
-    }
   } catch (error) {
     renderCodexCustomLaunch({
       status: "failed",
@@ -1239,14 +1283,18 @@ async function runCodexCustomLaunch() {
       running_status: false,
       isolated_home: false,
       isolated_codex_home: false,
-      isolated_workdir: false,
+      isolated_profile_dir: false,
       server_issued_model_list: false,
       wbp_endpoint_configured: false,
       browser_route_injection: false,
       browser_backend_injection: false,
       current_codex_touched: false,
+      process_started: false,
+      expected_custom_identity_observed: false,
+      native_window_observed: false,
+      native_app_usable: false,
       workbench_ready: false,
-      launch_claim_scope: "isolated_session_workbench_launch"
+      launch_claim_scope: "native_proof_unavailable"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
@@ -7743,15 +7791,14 @@ function renderSettingsSnapshot(snapshot) {
 }
 
 function updateSettingsActionMetadata() {
-  const launch = metadataFor("launch_client_dispatch");
+  const launch = metadataFor("launch_custom_client_native");
   const target = document.getElementById("settingsLaunchAvailability");
   if (!target) {
     return;
   }
-  const preflight = launchPreflightSummary(launch);
   target.textContent = launch.available === false
-    ? `${preflight.statusLabel} · ${preflight.reason}`
-    : `${preflight.statusLabel} · isolated copy admitted`;
+    ? `native launch blocked · ${launch.unavailable_reason || "native lane not admitted"}`
+    : "native proof admitted · server-owned Custom native launch lane";
 }
 
 function setClientLaunchChip(id, visual, label) {
@@ -7788,8 +7835,7 @@ function clientLaunchModelFromSnapshot(snapshot) {
   const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
   const state = snapshot?.state_id || snapshot?.ui_state || runtime.visual_state || "unknown";
   const liveFailure = source === "live" && snapshot?.status === "integration_failure";
-  const launch = metadataFor("launch_client_dispatch");
-  const launchPreflight = launchPreflightSummary(launch);
+  const launch = metadataFor("launch_custom_client_native");
   const launchAdmitted = launch.available !== false;
   const runtimeDown = state === "down" || liveFailure;
   const stale = state === "stale";
@@ -7812,22 +7858,21 @@ function clientLaunchModelFromSnapshot(snapshot) {
     ? "mismatch"
     : (runtimeDown ? "unknown" : (stale ? "stale" : "OK"));
   const accountsAvailable = state === "healthy" ? "OK" : (runtimeDown ? "unknown" : (stale || degraded ? "warning" : "unknown"));
-  const dispatch = launchAdmitted ? "dispatch admitted" : `disabled · ${launch.unavailable_reason || "server-owned target missing"}`;
-  const processProof = launchPreflight.processConfirmationPossible ? "possible after packet proof" : "not admitted";
+  const dispatch = launchAdmitted ? "native proof admitted" : `disabled · ${launch.unavailable_reason || "native launch not admitted"}`;
+  const processProof = launchAdmitted ? "process + window required" : "not admitted";
   return {
     source,
     visual,
     candidateVisual,
     launchAdmitted,
-    launchPreflight,
     panelLabel: liveFailure ? "unavailable" : (stale ? "stale" : (degraded ? "requires check" : "ready preview")),
     bannerCopy: liveFailure
       ? "Client status недоступен. Предыдущие fixture-данные не используются."
       : (stale
         ? "Client status устарел. Требуется refresh из bounded packet."
-        : (launchPreflight.admitted
-          ? "Демо-режим. Изолированная копия admitted только через server-owned preflight."
-          : "Демо-режим. Изолированная копия не admitted без server-owned preflight.")),
+        : (launchAdmitted
+          ? "Демо-режим. Native Custom launch admitted только через server-owned proof lane."
+          : "Демо-режим. Native Custom launch не admitted без server-owned proof lane.")),
     selectedName,
     selectedStatus,
     selectedSource: source === "live" ? "command-owned packet" : "fixture preview",
@@ -7839,7 +7884,7 @@ function clientLaunchModelFromSnapshot(snapshot) {
     runtimeReachable,
     modeCompatible,
     accountsAvailable,
-    preflight: launchPreflight.statusLabel,
+    preflight: launchAdmitted ? "native proof admitted" : "native launch blocked",
     dispatch,
     processProof
   };
@@ -7850,7 +7895,7 @@ function renderClientLaunchSnapshot(snapshot) {
   setClientLaunchChip("clientLaunchPanelChip", model.visual, model.panelLabel);
   setClientLaunchChip("clientSelectedChip", model.candidateVisual, model.selectedStatus);
   setClientLaunchChip("clientReadinessChip", model.readinessVisual, model.readinessLabel);
-  setClientLaunchChip("clientDispatchChip", model.launchAdmitted ? "blue" : "amber", model.launchAdmitted ? "dispatch admitted" : "dispatch disabled");
+  setClientLaunchChip("clientDispatchChip", model.launchAdmitted ? "blue" : "amber", model.launchAdmitted ? "native proof admitted" : "native launch blocked");
 
   text("clientSelectedName", model.selectedName);
   text("clientSelectedStatus", model.selectedStatus);
@@ -8428,6 +8473,9 @@ function confirmationReadyLabel(uiAction) {
   if (uiAction === "retire_account") {
     return "Вывести из пула";
   }
+  if (uiAction === "launch_custom_client_native") {
+    return "Запросить native запуск";
+  }
   if (uiAction === "launch_client_dispatch") {
     return "Запустить копию";
   }
@@ -8460,8 +8508,21 @@ function renderLaunchClientPreflight(uiAction, metadata = {}) {
   if (!block) {
     return;
   }
-  if (uiAction !== "launch_client_dispatch") {
+  if (uiAction !== "launch_client_dispatch" && uiAction !== "launch_custom_client_native") {
     block.hidden = true;
+    return;
+  }
+  if (uiAction === "launch_custom_client_native") {
+    block.hidden = false;
+    text("launchClientPreflightTarget", "server-owned custom native endpoint");
+    text("launchClientPreflightProfile", "isolated");
+    text("launchClientPreflightDataDir", "isolated");
+    text("launchClientPreflightPort", "server-owned");
+    text("launchClientPreflightProcess", "process + window required");
+    text(
+      "launchClientPreflightNote",
+      metadata?.action_claim_scope || "Green success requires process, identity, and native window proof."
+    );
     return;
   }
   const preflight = launchPreflightSummary(metadata);

@@ -3,8 +3,14 @@
 
 from __future__ import annotations
 
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
+import wild_boar_proxy.native_window_probe as native_probe
 from wild_boar_proxy.native_launch_contract import build_native_custom_preflight_packet
 from wild_boar_proxy.native_launch_dispatch import (
     build_native_cleanup_rollback_execution_packet,
@@ -20,10 +26,13 @@ from wild_boar_proxy.native_launch_dispatch import (
 )
 from wild_boar_proxy.native_window_probe import (
     OWNER_STANDING_AUTHORIZATION_PHRASE,
+    launch_custom_native_app_packet,
     native_window_probe_command,
     native_window_probe_server_plan,
     owner_authorization_phrase_present,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def native_command() -> dict[str, object]:
@@ -93,6 +102,129 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(owner_authorization_phrase_present(OWNER_STANDING_AUTHORIZATION_PHRASE))
         self.assertTrue(owner_authorization_phrase_present(f" {OWNER_STANDING_AUTHORIZATION_PHRASE} "))
         self.assertFalse(owner_authorization_phrase_present("go"))
+
+    def test_live_custom_native_launch_returns_structured_blocked_packet_on_exception(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+            side_effect=RuntimeError("boom"),
+        ):
+            packet = launch_custom_native_app_packet(
+                repo_root=ROOT,
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.3-codex",
+                owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_LAUNCH_EXCEPTION")
+        self.assertEqual(packet["next_action"], "stop_and_diagnose_native_launch_exception")
+        self.assertEqual(packet["cleanup_result"]["exception_class"], "RuntimeError")
+
+    def test_window_observation_uses_custom_pid_and_requires_real_window_count(self) -> None:
+        process_inventory = {
+            "root_app_pids": [111, 222],
+            "custom_process_lines": [
+                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+            ],
+        }
+        completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex\ttrue\tfalse\tfalse\t0\n",
+            stderr="",
+        )
+        with mock.patch("wild_boar_proxy.native_window_probe.subprocess.run", return_value=completed) as run:
+            packet = native_probe._window_observation_via_ax(process_inventory)
+
+        self.assertFalse(packet["window_observed"])
+        self.assertEqual(packet["observed_pid"], 222)
+        self.assertEqual(packet["window_count"], 0)
+        self.assertEqual(packet["blocked_reason_class"], "pid_visible_but_accessible_window_absent")
+        self.assertIn("unix id is 222", run.call_args.args[0][2])
+
+    def test_window_usability_does_not_promote_cg_only_window_to_input_capable(self) -> None:
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable_by_name",
+                return_value=(False, "ax_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_input_capable",
+                return_value=(True, "[{'window_number': 1}]"),
+            ),
+        ):
+            packet = native_probe._window_usability_from_observation(
+                {"window_observed": True, "observed_pid": 222}
+            )
+
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["native_window_usable"])
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "input_capable_ui_not_proven_for_pid_window_present",
+        )
+
+    def test_live_custom_native_launch_accepts_pid_bound_window_proof_without_usability_greenwash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                custom_user_data_dir=temp_root / "electron-user-data",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value={
+                        "custom_process_observed": True,
+                        "startup_inventory": {
+                            "root_app_pids": [222],
+                            "custom_process_lines": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                            "sample": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                        },
+                        "launcher_pid": 222,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    return_value={"window_observed": True, "observed_pid": 222, "blocked_reason_class": ""},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": False,
+                        "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["real_codex_app_launched"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertFalse(packet["native_app_usable"])
 
     def test_authorization_blocks_without_owner_authorization(self) -> None:
         packet = build_native_dispatch_authorization_packet(
