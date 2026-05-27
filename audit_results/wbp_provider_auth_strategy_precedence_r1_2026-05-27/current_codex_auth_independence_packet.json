@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T06:49:37.469716Z",
+  "current_codex_auth_json_copied": false,
+  "current_codex_auth_json_execution_dependency": false,
+  "current_codex_auth_json_inspection_only_allowed": true,
+  "current_codex_auth_json_read_as_runtime_input": false,
+  "current_codex_auth_json_symlinked": false,
+  "file_auth_used_in_this_contour": false,
+  "keychain_safety_claimed": false,
+  "native_filesystem_safety_claimed": false,
+  "original_profile_safety_claimed": false,
+  "packet_kind": "current_codex_auth_independence",
+  "status": "ok"
+}

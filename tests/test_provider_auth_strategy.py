@@ -19,14 +19,26 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
     build_provider_auth_account_boundary_packet,
+    build_provider_auth_ambient_authority_guard_packet,
     build_provider_auth_browser_authority_packet,
+    build_provider_auth_client_authority_rejection_packet,
+    build_provider_auth_credential_reference_packet,
+    build_provider_auth_env_authority_limit_packet,
+    build_provider_auth_failure_semantics_packet,
     build_provider_auth_fallback_matrix_packet,
+    build_provider_auth_file_vs_proxy_boundary_packet,
+    build_provider_auth_precedence_false_green_audit,
     build_provider_auth_precedence_contract_packet,
     build_provider_auth_precedence_discovery_packet,
+    build_provider_auth_precedence_packet,
+    build_provider_auth_reserve_account_non_promotion_packet,
     build_provider_auth_runtime_claim_limits_packet,
     build_provider_auth_secret_boundary_packet,
+    build_provider_auth_secret_redaction_packet,
     build_provider_auth_source_inventory_packet,
+    build_provider_auth_strategy_contract_packet,
     build_provider_auth_strategy_packet,
+    build_provider_auth_summary_packet,
     redact_provider_auth_text,
     build_secret_source_confusion_guard_packet,
     classify_native_config_auth_surface,
@@ -517,6 +529,220 @@ class ProviderAuthStrategyTests(unittest.TestCase):
         self.assertFalse(audit["direct_egress_claimed"])
         self.assertFalse(audit["file_auth_used"])
         self.assertFalse(audit["remote_authority_used"])
+
+    def test_provider_auth_contract_freezes_server_owned_precedence(self) -> None:
+        contract = build_provider_auth_strategy_contract_packet()
+
+        self.assertEqual(contract["status"], "ok")
+        self.assertEqual(
+            contract["precedence_order"],
+            [
+                "explicit_wbp_route_policy_account_binding",
+                "active_wbp_provider_account_registry_entry",
+                "wbp_server_owned_configured_provider_credential_reference",
+                "explicit_bounded_fallback_contour_auth",
+                "reject",
+            ],
+        )
+        self.assertTrue(contract["server_owns_provider_account_selection"])
+        self.assertFalse(contract["client_supplied_auth_authority_allowed"])
+        self.assertFalse(contract["provider_reachability_claimed"])
+        self.assertFalse(contract["model_availability_claimed"])
+
+    def test_credential_reference_is_not_raw_secret_or_reachability_proof(self) -> None:
+        packet = build_provider_auth_credential_reference_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["credential_reference_kind"], "server_owned_reference")
+        self.assertTrue(packet["credential_reference_id"].startswith("sha256:"))
+        self.assertFalse(packet["credential_reference_recorded_raw"])
+        self.assertFalse(packet["raw_secret_value_recorded"])
+        self.assertFalse(packet["credential_reference_proves_provider_reachability"])
+        self.assertFalse(packet["account_validation_counts_as_model_availability"])
+
+        blocked = build_provider_auth_credential_reference_packet(
+            raw_secret_value_recorded=True,
+            provider_reachability_claimed=True,
+            account_validated=True,
+            model_availability_claimed=True,
+        )
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn("raw_secret_value_recorded", blocked["failed_checks"])
+        self.assertIn(
+            "credential_reference_treated_as_provider_reachability",
+            blocked["failed_checks"],
+        )
+        self.assertIn(
+            "account_validation_treated_as_model_availability",
+            blocked["failed_checks"],
+        )
+
+    def test_provider_auth_precedence_selects_first_server_owned_source(self) -> None:
+        packet = build_provider_auth_precedence_packet(
+            route_policy_account_binding_present=True,
+            active_provider_account_present=True,
+            server_credential_reference_present=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["selected_source"],
+            "explicit_wbp_route_policy_account_binding",
+        )
+        self.assertTrue(packet["route_policy_wins_over_registry"])
+        self.assertFalse(packet["silent_fallback_allowed"])
+        self.assertFalse(packet["runtime_route_claimed"])
+
+        registry = build_provider_auth_precedence_packet(
+            route_policy_account_binding_present=False,
+            active_provider_account_present=True,
+            server_credential_reference_present=True,
+        )
+        self.assertEqual(registry["status"], "ok")
+        self.assertEqual(
+            registry["selected_source"],
+            "active_wbp_provider_account_registry_entry",
+        )
+        self.assertTrue(registry["registry_wins_over_server_credential_reference"])
+
+    def test_provider_auth_precedence_blocks_missing_or_ambiguous_auth(self) -> None:
+        missing = build_provider_auth_precedence_packet(
+            route_policy_account_binding_present=False,
+            active_provider_account_present=False,
+            server_credential_reference_present=False,
+            bounded_fallback_contour_declared=False,
+        )
+        ambiguous = build_provider_auth_precedence_packet(
+            ambiguous_same_precedence_sources=True,
+        )
+
+        self.assertEqual(missing["status"], "blocked")
+        self.assertTrue(missing["missing_auth_blocks_request"])
+        self.assertEqual(missing["selected_source"], "reject")
+        self.assertEqual(ambiguous["status"], "blocked")
+        self.assertTrue(ambiguous["ambiguous_auth_blocks_request"])
+
+    def test_ambient_file_env_and_client_authority_guards_are_separate(self) -> None:
+        ambient = build_provider_auth_ambient_authority_guard_packet()
+        file_boundary = build_provider_auth_file_vs_proxy_boundary_packet()
+        env_limit = build_provider_auth_env_authority_limit_packet()
+        client = build_provider_auth_client_authority_rejection_packet()
+
+        self.assertEqual(ambient["status"], "ok")
+        self.assertEqual(file_boundary["status"], "ok")
+        self.assertEqual(env_limit["status"], "ok")
+        self.assertEqual(client["status"], "ok")
+        self.assertFalse(ambient["ambient_authority_allowed"])
+        self.assertFalse(file_boundary["file_auth_equals_proxy_auth"])
+        self.assertFalse(env_limit["env_var_presence_proves_safe_runtime_auth"])
+        self.assertFalse(client["client_supplied_account_authority_allowed"])
+        self.assertIn("account_id", client["client_forbidden_fields_detected"])
+        self.assertIn("credential_ref", client["client_forbidden_fields_detected"])
+
+    def test_env_auth_cannot_silently_override_route_policy(self) -> None:
+        blocked = build_provider_auth_env_authority_limit_packet(
+            env_auth_used=True,
+            env_source_declared=False,
+            overrides_route_policy=True,
+            raw_env_value_recorded=True,
+            silent_env_fallback_allowed=True,
+        )
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn("env_auth_used_without_declaration", blocked["failed_checks"])
+        self.assertIn("env_auth_overrides_route_policy", blocked["failed_checks"])
+        self.assertIn("raw_env_value_recorded", blocked["failed_checks"])
+        self.assertIn("silent_env_fallback_allowed", blocked["failed_checks"])
+
+    def test_reserve_account_cannot_promote_without_explicit_contour(self) -> None:
+        clean = build_provider_auth_reserve_account_non_promotion_packet()
+        blocked = build_provider_auth_reserve_account_non_promotion_packet(
+            reserve_account_selected_as_active=True,
+            explicit_promotion_contour=False,
+            active_route_mutated=True,
+        )
+
+        self.assertEqual(clean["status"], "ok")
+        self.assertFalse(clean["reserve_account_equals_active_route"])
+        self.assertFalse(clean["reserve_account_validates_model_availability"])
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn(
+            "reserve_account_promoted_without_explicit_contour",
+            blocked["failed_checks"],
+        )
+        self.assertIn("active_route_mutated_by_reserve_account", blocked["failed_checks"])
+
+    def test_missing_and_ambiguous_auth_failure_semantics_reject_without_live_claim(self) -> None:
+        packet = build_provider_auth_failure_semantics_packet()
+        blocked = build_provider_auth_failure_semantics_packet(
+            missing_auth_result="fallback",
+            silent_fallback_on_missing_auth=True,
+            live_failure_semantics_claimed=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["missing_auth_blocks_request"])
+        self.assertTrue(packet["ambiguous_auth_blocks_request"])
+        self.assertFalse(packet["live_failure_semantics_claimed"])
+        self.assertFalse(packet["responses_live_failure_semantics_completed"])
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertIn("missing_auth_does_not_reject", blocked["failed_checks"])
+        self.assertIn("silent_fallback_on_missing_auth", blocked["failed_checks"])
+        self.assertIn(
+            "auth_contract_claimed_live_failure_semantics",
+            blocked["failed_checks"],
+        )
+
+    def test_provider_auth_precedence_false_green_and_summary_require_clean_packets(self) -> None:
+        packets = {
+            "provider_auth_strategy_contract_packet.json": (
+                build_provider_auth_strategy_contract_packet()
+            ),
+            "provider_auth_source_inventory_packet.json": (
+                build_provider_auth_source_inventory_packet(
+                    build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+                )
+            ),
+            "provider_auth_credential_reference_packet.json": (
+                build_provider_auth_credential_reference_packet()
+            ),
+            "provider_auth_precedence_packet.json": build_provider_auth_precedence_packet(),
+            "provider_auth_ambient_authority_guard_packet.json": (
+                build_provider_auth_ambient_authority_guard_packet()
+            ),
+            "provider_auth_file_vs_proxy_boundary_packet.json": (
+                build_provider_auth_file_vs_proxy_boundary_packet()
+            ),
+            "provider_auth_client_authority_rejection_packet.json": (
+                build_provider_auth_client_authority_rejection_packet()
+            ),
+            "provider_auth_env_authority_limit_packet.json": (
+                build_provider_auth_env_authority_limit_packet()
+            ),
+            "provider_auth_reserve_account_non_promotion_packet.json": (
+                build_provider_auth_reserve_account_non_promotion_packet()
+            ),
+            "provider_auth_failure_semantics_packet.json": (
+                build_provider_auth_failure_semantics_packet()
+            ),
+        }
+        packets["provider_auth_secret_redaction_packet.json"] = (
+            build_provider_auth_secret_redaction_packet(packets)
+        )
+        packets["provider_auth_false_green_audit.json"] = (
+            build_provider_auth_precedence_false_green_audit(packets)
+        )
+        summary = build_provider_auth_summary_packet(packets)
+
+        self.assertEqual(packets["provider_auth_secret_redaction_packet.json"]["status"], "ok")
+        self.assertEqual(packets["provider_auth_false_green_audit.json"]["status"], "ok")
+        self.assertEqual(summary["status"], "ok")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        )
+        self.assertFalse(summary["model_availability_claimed"])
+        self.assertFalse(summary["responses_live_failure_semantics_claimed"])
 
 
 if __name__ == "__main__":

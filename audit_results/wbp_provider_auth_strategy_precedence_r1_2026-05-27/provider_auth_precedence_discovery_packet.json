@@ -1,0 +1,13 @@
+{
+  "ambiguous_unselected_strategy_count": 0,
+  "captured_at_utc": "2026-05-27T06:49:37.469679Z",
+  "current_behavior_live_observed": false,
+  "current_behavior_separated_from_declared_precedence": true,
+  "discovery_method": "contract_packet_and_decision_matrix_inspection",
+  "packet_kind": "provider_auth_precedence_discovery",
+  "runtime_trace_present": false,
+  "selected_auth_claimed_as_live_used_auth": false,
+  "selected_strategy_count": 1,
+  "selected_strategy_from_contract": "auth.command",
+  "status": "ok"
+}

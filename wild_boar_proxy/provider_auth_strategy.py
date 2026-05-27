@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import re
+from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,12 @@ AUTH_FORBIDDEN_BROWSER_FIELDS = {
     "auth",
     "auth_path",
     "auth_command",
+    "account",
+    "account_id",
+    "provider_account",
+    "credential",
+    "credential_ref",
+    "secret_ref",
     "command",
     "path",
     "provider",
@@ -1348,3 +1355,504 @@ def validate_provider_auth_strategy_packet(packet: dict[str, Any]) -> list[str]:
     ) is not True:
         failures.append("remote_authority_not_blocked")
     return sorted(set(failures))
+
+
+def _redacted_reference_id(value: str) -> str:
+    return f"sha256:{sha256(value.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _walk_true_flags(value: Any, prefix: str = "") -> set[str]:
+    findings: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            path = f"{prefix}.{key_text}" if prefix else key_text
+            if child is True:
+                findings.add(path)
+            findings.update(_walk_true_flags(child, path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            findings.update(_walk_true_flags(child, f"{prefix}[{index}]"))
+    return findings
+
+
+def build_provider_auth_strategy_contract_packet() -> dict[str, Any]:
+    """Classify the server-owned auth precedence contract without live use."""
+
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_strategy_contract",
+        "status": "ok",
+        "contract_scope": "provider_auth_precedence_only",
+        "pass_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        "precedence_order": [
+            "explicit_wbp_route_policy_account_binding",
+            "active_wbp_provider_account_registry_entry",
+            "wbp_server_owned_configured_provider_credential_reference",
+            "explicit_bounded_fallback_contour_auth",
+            "reject",
+        ],
+        "server_owns_provider_account_selection": True,
+        "server_owns_credential_reference_resolution": True,
+        "client_supplied_auth_authority_allowed": False,
+        "ambient_auth_authority_allowed": False,
+        "file_auth_treated_as_proxy_auth": False,
+        "raw_secret_value_allowed_in_evidence": False,
+        "provider_reachability_claimed": False,
+        "model_availability_claimed": False,
+        "live_failure_semantics_claimed": False,
+        "native_launch_attempted": False,
+    }
+
+
+def build_provider_auth_credential_reference_packet(
+    *,
+    provider: str = "openrouter",
+    account_id: str = "provider-account-active",
+    credential_reference: str = "credref:provider-account-active",
+    raw_secret_value_present: bool = False,
+    raw_secret_value_recorded: bool = False,
+    provider_reachability_claimed: bool = False,
+    account_validated: bool = False,
+    model_availability_claimed: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if raw_secret_value_recorded:
+        failed_checks.append("raw_secret_value_recorded")
+    if raw_secret_value_present and raw_secret_value_recorded:
+        failed_checks.append("raw_secret_value_present_in_packet")
+    if provider_reachability_claimed:
+        failed_checks.append("credential_reference_treated_as_provider_reachability")
+    if account_validated and model_availability_claimed:
+        failed_checks.append("account_validation_treated_as_model_availability")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_credential_reference",
+        "status": "blocked" if failed_checks else "ok",
+        "provider": provider,
+        "account_id": account_id,
+        "credential_reference_kind": "server_owned_reference",
+        "credential_reference_id": _redacted_reference_id(credential_reference),
+        "credential_reference_recorded_raw": False,
+        "raw_secret_value_present": raw_secret_value_present,
+        "raw_secret_value_recorded": raw_secret_value_recorded,
+        "credential_reference_is_runtime_secret": False,
+        "credential_reference_proves_provider_reachability": provider_reachability_claimed,
+        "account_validated": account_validated,
+        "account_validation_counts_as_model_availability": model_availability_claimed,
+        "provider_reachability_claimed": provider_reachability_claimed,
+        "model_availability_claimed": model_availability_claimed,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_precedence_packet(
+    *,
+    route_policy_account_binding_present: bool = True,
+    active_provider_account_present: bool = True,
+    server_credential_reference_present: bool = True,
+    bounded_fallback_contour_declared: bool = False,
+    missing_auth: bool = False,
+    ambiguous_same_precedence_sources: bool = False,
+    silent_fallback_allowed: bool = False,
+) -> dict[str, Any]:
+    rows = [
+        {
+            "rank": 1,
+            "source": "explicit_wbp_route_policy_account_binding",
+            "present": route_policy_account_binding_present,
+            "server_owned": True,
+            "selected": False,
+        },
+        {
+            "rank": 2,
+            "source": "active_wbp_provider_account_registry_entry",
+            "present": active_provider_account_present,
+            "server_owned": True,
+            "selected": False,
+        },
+        {
+            "rank": 3,
+            "source": "wbp_server_owned_configured_provider_credential_reference",
+            "present": server_credential_reference_present,
+            "server_owned": True,
+            "selected": False,
+        },
+        {
+            "rank": 4,
+            "source": "explicit_bounded_fallback_contour_auth",
+            "present": bounded_fallback_contour_declared,
+            "server_owned": True,
+            "selected": False,
+        },
+    ]
+    failed_checks: list[str] = []
+    if silent_fallback_allowed:
+        failed_checks.append("silent_fallback_allowed")
+    if ambiguous_same_precedence_sources:
+        failed_checks.append("ambiguous_same_precedence_sources")
+    selected_source = "reject"
+    if not missing_auth and not ambiguous_same_precedence_sources:
+        for row in rows:
+            if row["present"]:
+                row["selected"] = True
+                selected_source = str(row["source"])
+                break
+    if selected_source == "reject":
+        failed_checks.append("auth_source_rejected_or_missing")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_precedence",
+        "status": "blocked" if failed_checks else "ok",
+        "precedence_scope": "contract_only_no_live_provider_call",
+        "precedence_rows": rows,
+        "selected_source": selected_source,
+        "reject_selected": selected_source == "reject",
+        "silent_fallback_allowed": silent_fallback_allowed,
+        "missing_auth_blocks_request": selected_source == "reject",
+        "ambiguous_auth_blocks_request": ambiguous_same_precedence_sources,
+        "route_policy_wins_over_registry": (
+            route_policy_account_binding_present
+            and active_provider_account_present
+            and selected_source == "explicit_wbp_route_policy_account_binding"
+        ),
+        "registry_wins_over_server_credential_reference": (
+            not route_policy_account_binding_present
+            and active_provider_account_present
+            and server_credential_reference_present
+            and selected_source == "active_wbp_provider_account_registry_entry"
+        ),
+        "provider_reachability_claimed": False,
+        "model_availability_claimed": False,
+        "runtime_route_claimed": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_ambient_authority_guard_packet(
+    *,
+    current_codex_auth_json_runtime_input: bool = False,
+    env_auth_runtime_input: bool = False,
+    ambient_host_auth_runtime_input: bool = False,
+    browser_client_auth_authority: bool = False,
+    remote_client_auth_authority: bool = False,
+) -> dict[str, Any]:
+    failed_checks = [
+        name
+        for name, active in (
+            ("current_codex_auth_json_runtime_input", current_codex_auth_json_runtime_input),
+            ("env_auth_runtime_input", env_auth_runtime_input),
+            ("ambient_host_auth_runtime_input", ambient_host_auth_runtime_input),
+            ("browser_client_auth_authority", browser_client_auth_authority),
+            ("remote_client_auth_authority", remote_client_auth_authority),
+        )
+        if active
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_ambient_authority_guard",
+        "status": "blocked" if failed_checks else "ok",
+        "current_codex_auth_json_runtime_input": current_codex_auth_json_runtime_input,
+        "env_auth_runtime_input": env_auth_runtime_input,
+        "ambient_host_auth_runtime_input": ambient_host_auth_runtime_input,
+        "browser_client_auth_authority": browser_client_auth_authority,
+        "remote_client_auth_authority": remote_client_auth_authority,
+        "ambient_authority_allowed": False,
+        "no_ambient_authority_gate_satisfied": not failed_checks,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_file_vs_proxy_boundary_packet(
+    *,
+    file_auth_available: bool = False,
+    file_auth_selected_as_proxy_auth: bool = False,
+    current_codex_auth_json_copied: bool = False,
+    current_codex_auth_json_symlinked: bool = False,
+) -> dict[str, Any]:
+    failed_checks = [
+        name
+        for name, active in (
+            ("file_auth_selected_as_proxy_auth", file_auth_selected_as_proxy_auth),
+            ("current_codex_auth_json_copied", current_codex_auth_json_copied),
+            ("current_codex_auth_json_symlinked", current_codex_auth_json_symlinked),
+        )
+        if active
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_file_vs_proxy_boundary",
+        "status": "blocked" if failed_checks else "ok",
+        "file_auth_available": file_auth_available,
+        "file_auth_selected_as_proxy_auth": file_auth_selected_as_proxy_auth,
+        "file_auth_equals_proxy_auth": False,
+        "file_auth_may_satisfy_proxy_auth": False,
+        "current_codex_auth_json_copied": current_codex_auth_json_copied,
+        "current_codex_auth_json_symlinked": current_codex_auth_json_symlinked,
+        "current_codex_auth_json_runtime_dependency": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_client_authority_rejection_packet(
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = payload or {
+        "token": "redacted_fixture",
+        "provider": "client-provider",
+        "model": "client-model",
+        "account_id": "client-account",
+        "credential_ref": "client-credential",
+        "path": "/tmp/client-auth",
+    }
+    forbidden_fields = sorted(forbidden_auth_browser_fields(payload))
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_client_authority_rejection",
+        "status": "ok" if forbidden_fields else "blocked",
+        "client_payload_recorded_raw": False,
+        "client_forbidden_fields_detected": forbidden_fields,
+        "client_supplied_token_authority_allowed": False,
+        "client_supplied_provider_authority_allowed": False,
+        "client_supplied_model_authority_allowed": False,
+        "client_supplied_account_authority_allowed": False,
+        "client_supplied_path_authority_allowed": False,
+        "server_owns_provider_model_account_authority": True,
+    }
+
+
+def build_provider_auth_env_authority_limit_packet(
+    *,
+    env_source_declared: bool = False,
+    env_auth_used: bool = False,
+    server_side_only: bool = True,
+    overrides_route_policy: bool = False,
+    raw_env_value_recorded: bool = False,
+    silent_env_fallback_allowed: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if env_auth_used and not env_source_declared:
+        failed_checks.append("env_auth_used_without_declaration")
+    if not server_side_only:
+        failed_checks.append("env_auth_not_server_side_only")
+    if overrides_route_policy:
+        failed_checks.append("env_auth_overrides_route_policy")
+    if raw_env_value_recorded:
+        failed_checks.append("raw_env_value_recorded")
+    if silent_env_fallback_allowed:
+        failed_checks.append("silent_env_fallback_allowed")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_env_authority_limit",
+        "status": "blocked" if failed_checks else "ok",
+        "env_source_declared": env_source_declared,
+        "env_auth_used": env_auth_used,
+        "server_side_only": server_side_only,
+        "env_auth_overrides_route_policy": overrides_route_policy,
+        "raw_env_value_recorded": raw_env_value_recorded,
+        "silent_env_fallback_allowed": silent_env_fallback_allowed,
+        "env_var_presence_proves_safe_runtime_auth": False,
+        "env_auth_proves_provider_reachability": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_reserve_account_non_promotion_packet(
+    *,
+    reserve_account_present: bool = True,
+    reserve_account_selected_as_active: bool = False,
+    explicit_promotion_contour: bool = False,
+    active_route_mutated: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if reserve_account_selected_as_active and not explicit_promotion_contour:
+        failed_checks.append("reserve_account_promoted_without_explicit_contour")
+    if active_route_mutated:
+        failed_checks.append("active_route_mutated_by_reserve_account")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_reserve_account_non_promotion",
+        "status": "blocked" if failed_checks else "ok",
+        "reserve_account_present": reserve_account_present,
+        "reserve_account_selected_as_active": reserve_account_selected_as_active,
+        "explicit_promotion_contour": explicit_promotion_contour,
+        "active_route_mutated": active_route_mutated,
+        "reserve_account_equals_active_route": False,
+        "reserve_account_validates_model_availability": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_failure_semantics_packet(
+    *,
+    missing_auth_result: str = "reject",
+    ambiguous_auth_result: str = "reject",
+    silent_fallback_on_missing_auth: bool = False,
+    silent_fallback_on_ambiguous_auth: bool = False,
+    live_failure_semantics_claimed: bool = False,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if missing_auth_result != "reject":
+        failed_checks.append("missing_auth_does_not_reject")
+    if ambiguous_auth_result != "reject":
+        failed_checks.append("ambiguous_auth_does_not_reject")
+    if silent_fallback_on_missing_auth:
+        failed_checks.append("silent_fallback_on_missing_auth")
+    if silent_fallback_on_ambiguous_auth:
+        failed_checks.append("silent_fallback_on_ambiguous_auth")
+    if live_failure_semantics_claimed:
+        failed_checks.append("auth_contract_claimed_live_failure_semantics")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_failure_semantics",
+        "status": "blocked" if failed_checks else "ok",
+        "missing_auth_result": missing_auth_result,
+        "ambiguous_auth_result": ambiguous_auth_result,
+        "missing_auth_blocks_request": missing_auth_result == "reject",
+        "ambiguous_auth_blocks_request": ambiguous_auth_result == "reject",
+        "silent_fallback_on_missing_auth": silent_fallback_on_missing_auth,
+        "silent_fallback_on_ambiguous_auth": silent_fallback_on_ambiguous_auth,
+        "live_failure_semantics_claimed": live_failure_semantics_claimed,
+        "responses_live_failure_semantics_completed": False,
+        "failed_checks": failed_checks,
+    }
+
+
+def build_provider_auth_secret_redaction_packet(
+    packets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    serialized = json.dumps(packets, sort_keys=True)
+    raw_secret_found = provider_auth_text_has_secret(serialized)
+    true_flags = _walk_true_flags(packets)
+    forbidden_true_flags = sorted(
+        flag
+        for flag in true_flags
+        if flag.endswith(
+            (
+                "raw_secret_value_recorded",
+                "raw_env_value_recorded",
+                "credential_reference_recorded_raw",
+                "client_payload_recorded_raw",
+                "current_codex_auth_json_copied",
+                "current_codex_auth_json_symlinked",
+            )
+        )
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_secret_redaction",
+        "status": "blocked" if raw_secret_found or forbidden_true_flags else "ok",
+        "raw_secret_found": raw_secret_found,
+        "forbidden_true_flags": forbidden_true_flags,
+        "checked_packet_count": len(packets),
+        "raw_upstream_secret_recorded": False,
+        "credential_reference_recorded_raw": False,
+        "raw_env_value_recorded": False,
+        "client_payload_recorded_raw": False,
+    }
+
+
+def build_provider_auth_precedence_false_green_audit(
+    packets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    true_flags = _walk_true_flags(packets)
+    forbidden_suffixes = (
+        "provider_reachability_claimed",
+        "model_availability_claimed",
+        "live_failure_semantics_claimed",
+        "runtime_route_claimed",
+        "file_auth_selected_as_proxy_auth",
+        "file_auth_treated_as_proxy_auth",
+        "client_supplied_auth_authority_allowed",
+        "client_supplied_token_authority_allowed",
+        "client_supplied_provider_authority_allowed",
+        "client_supplied_model_authority_allowed",
+        "client_supplied_account_authority_allowed",
+        "client_supplied_path_authority_allowed",
+        "ambient_auth_authority_allowed",
+        "silent_fallback_allowed",
+        "silent_env_fallback_allowed",
+        "silent_fallback_on_missing_auth",
+        "silent_fallback_on_ambiguous_auth",
+        "reserve_account_selected_as_active",
+        "active_route_mutated",
+        "account_validation_counts_as_model_availability",
+        "credential_reference_proves_provider_reachability",
+        "raw_secret_value_recorded",
+        "raw_env_value_recorded",
+    )
+    forbidden_true_flags = sorted(
+        flag for flag in true_flags if flag.endswith(forbidden_suffixes)
+    )
+    blocked_packets = sorted(
+        name for name, packet in packets.items() if packet.get("status") == "blocked"
+    )
+    checks = [
+        {
+            "name": "all_contract_packets_ok",
+            "passed": not blocked_packets,
+        },
+        {
+            "name": "no_forbidden_cross_layer_true_flags",
+            "passed": not forbidden_true_flags,
+        },
+        {
+            "name": "auth_strategy_not_model_or_live_proof",
+            "passed": not any(
+                flag.endswith(
+                    (
+                        "provider_reachability_claimed",
+                        "model_availability_claimed",
+                        "live_failure_semantics_claimed",
+                    )
+                )
+                for flag in true_flags
+            ),
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "allowed_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        "checks": checks,
+        "blocked_packets": blocked_packets,
+        "forbidden_true_flags": forbidden_true_flags,
+    }
+
+
+def build_provider_auth_summary_packet(
+    packets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    required = {
+        "provider_auth_strategy_contract_packet.json",
+        "provider_auth_source_inventory_packet.json",
+        "provider_auth_credential_reference_packet.json",
+        "provider_auth_precedence_packet.json",
+        "provider_auth_ambient_authority_guard_packet.json",
+        "provider_auth_file_vs_proxy_boundary_packet.json",
+        "provider_auth_client_authority_rejection_packet.json",
+        "provider_auth_env_authority_limit_packet.json",
+        "provider_auth_reserve_account_non_promotion_packet.json",
+        "provider_auth_failure_semantics_packet.json",
+        "provider_auth_secret_redaction_packet.json",
+        "provider_auth_false_green_audit.json",
+    }
+    missing = sorted(required - set(packets))
+    blocked = sorted(
+        name for name, packet in packets.items() if packet.get("status") == "blocked"
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "provider_auth_summary",
+        "status": "blocked" if missing or blocked else "ok",
+        "final_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+        "required_packets": sorted(required),
+        "missing_required_packets": missing,
+        "blocked_packets": blocked,
+        "provider_reachability_claimed": False,
+        "account_usability_claimed": False,
+        "model_availability_claimed": False,
+        "responses_live_failure_semantics_claimed": False,
+        "native_launch_attempted": False,
+    }

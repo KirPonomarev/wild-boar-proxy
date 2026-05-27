@@ -1,0 +1,40 @@
+{
+  "ambient_fallback_forbidden_by_default": true,
+  "captured_at_utc": "2026-05-27T06:49:37.469691Z",
+  "fallback_rows": [
+    {
+      "allowed": true,
+      "fallback_id": "bounded_local_bearer",
+      "raw_secret_recorded": false,
+      "requires_explicit_contract": true,
+      "silent_fallback_allowed": false
+    },
+    {
+      "allowed": false,
+      "fallback_id": "file_auth_separate_contour",
+      "raw_secret_recorded": false,
+      "requires_explicit_contract": true,
+      "requires_separate_contour": true,
+      "silent_fallback_allowed": false
+    },
+    {
+      "allowed": false,
+      "fallback_id": "env_openai_api_key",
+      "raw_secret_recorded": false,
+      "requires_explicit_contract": true,
+      "requires_separate_contour": true,
+      "silent_fallback_allowed": false
+    },
+    {
+      "allowed": false,
+      "fallback_id": "current_codex_auth_json",
+      "raw_secret_recorded": false,
+      "requires_explicit_contract": true,
+      "requires_separate_contour": true,
+      "silent_fallback_allowed": false
+    }
+  ],
+  "packet_kind": "provider_auth_fallback_matrix",
+  "silent_fallback_detected": false,
+  "status": "ok"
+}

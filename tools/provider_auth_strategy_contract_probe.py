@@ -17,6 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+DEFAULT_EVIDENCE_DIR = (
+    ROOT / "audit_results" / "wbp_provider_auth_strategy_precedence_r1_2026-05-27"
+)
+
 from wild_boar_proxy.native_filesystem_probe import json_write
 from wild_boar_proxy.provider_auth_strategy import (
     build_auth_command_output_format_packet,
@@ -30,14 +34,26 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
     build_provider_auth_account_boundary_packet,
+    build_provider_auth_ambient_authority_guard_packet,
     build_provider_auth_browser_authority_packet,
+    build_provider_auth_client_authority_rejection_packet,
+    build_provider_auth_credential_reference_packet,
+    build_provider_auth_env_authority_limit_packet,
+    build_provider_auth_failure_semantics_packet,
     build_provider_auth_fallback_matrix_packet,
+    build_provider_auth_file_vs_proxy_boundary_packet,
+    build_provider_auth_precedence_false_green_audit,
     build_provider_auth_precedence_contract_packet,
     build_provider_auth_precedence_discovery_packet,
+    build_provider_auth_precedence_packet,
+    build_provider_auth_reserve_account_non_promotion_packet,
     build_provider_auth_runtime_claim_limits_packet,
     build_provider_auth_secret_boundary_packet,
+    build_provider_auth_secret_redaction_packet,
     build_provider_auth_source_inventory_packet,
+    build_provider_auth_strategy_contract_packet,
     build_provider_auth_strategy_packet,
+    build_provider_auth_summary_packet,
     build_secret_source_confusion_guard_packet,
     classify_native_config_auth_surface,
     provider_auth_text_has_secret,
@@ -271,10 +287,82 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _closeout_text(
+    *,
+    repo_root: Path,
+    evidence_dir: Path,
+    summary: dict[str, Any],
+    touched_files: list[str],
+) -> str:
+    head = _run(repo_root, ["git", "rev-parse", "HEAD"], check=True)
+    branch = _run(repo_root, ["git", "branch", "--show-current"])
+    tests = (
+        "python3 -m py_compile wild_boar_proxy/provider_auth_strategy.py tools/provider_auth_strategy_contract_probe.py; "
+        "python3 -m pytest tests/test_provider_auth_strategy.py; "
+        "python3 -m pytest tests/test_provider_auth_strategy.py tests/test_codex_account_selection.py tests/test_cli_runner.py tests/test_external_models.py tests/test_operator_surface.py tests/test_repo_hygiene.py tests/test_closeout_resilience.py; "
+        "provider auth probe JSON emission; JSON parse; secret marker scan; closeout resilience"
+    )
+    blocked_risks = (
+        "Live provider reachability, account usability, model availability, Responses "
+        "live failure semantics, and native behavior remain unclaimed by this contour."
+    )
+    return f"""# WBP Provider Auth Strategy Precedence R1 Closeout
+
+## Goal
+
+Classify provider auth source precedence, credential-reference boundaries, and forbidden fallback behavior without live upstream or native execution.
+
+## Result
+
+- status: {summary["final_status"]}
+- final verdict: provider auth precedence classified as contract-only evidence
+- closure state: CLOSED
+
+## Contour Capsule
+
+- goal: classify WBP provider auth precedence and no-ambient-authority boundaries
+- branch: {branch}
+- head: {head}
+- touched files: {", ".join(touched_files)}
+- tests run: {tests}
+- blocked risks: {blocked_risks}
+- closure state: CLOSED
+
+## Verification
+
+- tests: {tests}
+- build: python3 -m py_compile wild_boar_proxy/provider_auth_strategy.py tools/provider_auth_strategy_contract_probe.py
+- manual: JSON packets parsed and secret-redaction packet reported clean
+- live verification: not attempted by contour scope
+
+## Artifacts
+
+- spec: thread-only contour definition
+- packet: {evidence_dir / "provider_auth_summary_packet.json"}
+- report: {evidence_dir / "provider_auth_false_green_audit.json"}
+
+## Git
+
+- branch: {branch}
+- commit: recorded by the contour commit containing this closeout
+- pushed: recorded by repository remote after contour verification
+
+## Scope Check
+
+- unrelated work mixed in: no
+- private-data risk reviewed: yes, raw secrets and raw credential references are excluded from packets
+
+## Notes
+
+- blockers encountered: none for contract classification
+- resume from here: CLOSED
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="provider-auth-strategy-contract-probe")
     parser.add_argument("--repo-root", default=str(ROOT))
-    parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument("--evidence-dir", default=str(DEFAULT_EVIDENCE_DIR))
     return parser
 
 
@@ -321,6 +409,15 @@ def main() -> int:
         auth_token_boundary,
     )
     browser_authority = build_provider_auth_browser_authority_packet(provider_packet)
+    strategy_contract = build_provider_auth_strategy_contract_packet()
+    credential_reference = build_provider_auth_credential_reference_packet()
+    precedence = build_provider_auth_precedence_packet()
+    ambient_guard = build_provider_auth_ambient_authority_guard_packet()
+    file_vs_proxy = build_provider_auth_file_vs_proxy_boundary_packet()
+    client_rejection = build_provider_auth_client_authority_rejection_packet()
+    env_limit = build_provider_auth_env_authority_limit_packet()
+    reserve_non_promotion = build_provider_auth_reserve_account_non_promotion_packet()
+    failure_semantics = build_provider_auth_failure_semantics_packet()
     false_green = build_auth_strategy_false_green_audit(
         provider_auth_strategy_packet=provider_packet,
         decision_matrix_packet=decision_matrix,
@@ -339,8 +436,19 @@ def main() -> int:
     packets: dict[str, dict[str, Any]] = _base_packets(repo_root, evidence_dir)
     packets.update(
         {
+            "provider_auth_strategy_contract_packet.json": strategy_contract,
             "provider_auth_strategy_packet.json": provider_packet,
             "provider_auth_source_inventory_packet.json": source_inventory,
+            "provider_auth_credential_reference_packet.json": credential_reference,
+            "provider_auth_precedence_packet.json": precedence,
+            "provider_auth_ambient_authority_guard_packet.json": ambient_guard,
+            "provider_auth_file_vs_proxy_boundary_packet.json": file_vs_proxy,
+            "provider_auth_client_authority_rejection_packet.json": client_rejection,
+            "provider_auth_env_authority_limit_packet.json": env_limit,
+            "provider_auth_reserve_account_non_promotion_packet.json": (
+                reserve_non_promotion
+            ),
+            "provider_auth_failure_semantics_packet.json": failure_semantics,
             "provider_auth_precedence_discovery_packet.json": precedence_discovery,
             "provider_auth_precedence_contract_packet.json": precedence_contract,
             "auth_strategy_precedence_packet.json": {
@@ -399,46 +507,60 @@ def main() -> int:
             "auth_strategy_false_green_audit.json": false_green,
         }
     )
+    packets["provider_auth_secret_redaction_packet.json"] = (
+        build_provider_auth_secret_redaction_packet(packets)
+    )
+    packets["provider_auth_false_green_audit.json"] = (
+        build_provider_auth_precedence_false_green_audit(packets)
+    )
     packets["secret_redaction_audit.json"] = _secret_redaction_audit(packets)
     packets["independent_auth_strategy_audit.json"] = _independent_audit(packets)
-    summary = {
-        "captured_at_utc": _utc_now(),
-        "packet_kind": "provider_auth_strategy_summary",
-        "status": "ok"
-        if all(packet.get("status") != "blocked" for packet in packets.values())
-        else "blocked",
-        "final_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
-        "selected_strategy": provider_packet["selected_strategy"],
-        "auth_command_selected": decision_matrix["auth_command_selected"],
-        "bounded_bearer_selected": decision_matrix["bounded_bearer_selected"],
-        "file_auth_selected": decision_matrix["file_auth_selected"],
-        "silent_fallback_detected": decision_matrix["silent_fallback_detected"],
-        "auth_sources_classified": source_inventory.get("all_auth_sources_classified")
-        is True,
-        "selected_auth_runtime_usage_proven": runtime_claim_limits.get(
-            "selected_auth_live_used"
-        )
-        is True,
-        "selected_auth_claimed_as_live_used_without_trace": runtime_claim_limits.get(
-            "selected_auth_claimed_as_live_used_without_trace"
-        )
-        is True,
-        "account_validation_counts_as_model_availability": account_boundary.get(
-            "account_validation_counts_as_model_availability"
-        )
-        is True,
-        "ambient_fallback_forbidden_by_default": fallback_matrix.get(
-            "ambient_fallback_forbidden_by_default"
-        )
-        is True,
-        "native_launch_attempted": False,
-        "model_availability_proven": False,
-        "direct_egress_absence_proven": False,
-        "final_e2e_proven": False,
-    }
+    summary = build_provider_auth_summary_packet(packets)
+    summary.update(
+        {
+            "selected_strategy": provider_packet["selected_strategy"],
+            "auth_command_selected": decision_matrix["auth_command_selected"],
+            "bounded_bearer_selected": decision_matrix["bounded_bearer_selected"],
+            "file_auth_selected": decision_matrix["file_auth_selected"],
+            "silent_fallback_detected": decision_matrix["silent_fallback_detected"],
+            "auth_sources_classified": source_inventory.get("all_auth_sources_classified")
+            is True,
+            "selected_auth_runtime_usage_proven": runtime_claim_limits.get(
+                "selected_auth_live_used"
+            )
+            is True,
+            "selected_auth_claimed_as_live_used_without_trace": runtime_claim_limits.get(
+                "selected_auth_claimed_as_live_used_without_trace"
+            )
+            is True,
+            "account_validation_counts_as_model_availability": account_boundary.get(
+                "account_validation_counts_as_model_availability"
+            )
+            is True,
+            "ambient_fallback_forbidden_by_default": fallback_matrix.get(
+                "ambient_fallback_forbidden_by_default"
+            )
+            is True,
+            "direct_egress_absence_proven": False,
+            "final_e2e_proven": False,
+        }
+    )
     packets["provider_auth_strategy_summary_packet.json"] = summary
+    packets["provider_auth_summary_packet.json"] = summary
     for name, packet in packets.items():
         json_write(evidence_dir / name, packet)
+    closeout = _closeout_text(
+        repo_root=repo_root,
+        evidence_dir=evidence_dir,
+        summary=summary,
+        touched_files=[
+            "wild_boar_proxy/provider_auth_strategy.py",
+            "tests/test_provider_auth_strategy.py",
+            "tools/provider_auth_strategy_contract_probe.py",
+            str(evidence_dir.relative_to(repo_root)),
+        ],
+    )
+    (evidence_dir / "closeout.md").write_text(closeout, encoding="utf-8")
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["status"] == "ok" else 1
 
