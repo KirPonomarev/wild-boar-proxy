@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T06:21:14.641091Z",
+  "codex_app_bundle_version": "3178",
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.81530",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "packet_kind": "persistent_backup_restore_version_pinning",
+  "status": "ok",
+  "wbp_git_commit": "dd401bc56a9e6f6b9ed56bf16ea73eed37e6c46e"
+}
