@@ -1,0 +1,19 @@
+{
+  "auth_precondition_claimed_as_auth_proof": false,
+  "auth_proof_claimed_as_model_availability": false,
+  "candidate_selected_claimed_as_availability": false,
+  "captured_at_utc": "2026-05-27T05:02:07.315794Z",
+  "catalog_visible_claimed_as_available": false,
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "findings": [],
+  "fixture_or_mock_claimed_provider_availability": false,
+  "gpt_5_5_claimed_available_from_listing": false,
+  "native_claimed": false,
+  "packet_kind": "model_availability_false_green_audit",
+  "parent_target_closed": false,
+  "request_shape_claimed_as_route_attempt": false,
+  "status": "ok",
+  "streaming_claimed": false,
+  "tool_loop_claimed": false
+}

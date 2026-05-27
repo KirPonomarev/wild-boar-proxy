@@ -1,0 +1,22 @@
+{
+  "all_models_availability_proven": false,
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T05:02:07.315992Z",
+  "direct_egress_absence_proven": false,
+  "direct_provider_request_attempted": false,
+  "false_green_findings": [],
+  "final_e2e_proven": false,
+  "final_status": "WBP_MODEL_AVAILABILITY_SMOKE_MATRIX_READINESS_CLASSIFIED",
+  "gpt_5_5_availability_proven": false,
+  "missing_required_packets": [],
+  "model_availability_proven": false,
+  "native_launch_attempted": false,
+  "owner_prompt_required": false,
+  "packet_kind": "model_availability_readiness_summary",
+  "parent_target": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "parent_target_closed": false,
+  "readiness_classified": true,
+  "status": "ok",
+  "streaming_compatibility_proven": false,
+  "tool_loop_compatibility_proven": false
+}
