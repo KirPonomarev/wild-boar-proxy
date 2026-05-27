@@ -1,0 +1,24 @@
+{
+  "auth_strategy_counts_as_runtime_family_proof": false,
+  "captured_at_utc": "2026-05-27T12:04:26.821159Z",
+  "packet_kind": "provider_auth_strategy_matrix",
+  "rows": [
+    {
+      "auth_sources_classified": true,
+      "provider_family": "deepseek",
+      "provider_specific_credential_present": true,
+      "provider_specific_runtime_usage_proven": false,
+      "selected_strategy": "auth.command",
+      "silent_fallback_forbidden": true
+    },
+    {
+      "auth_sources_classified": true,
+      "provider_family": "openrouter",
+      "provider_specific_credential_present": false,
+      "provider_specific_runtime_usage_proven": false,
+      "selected_strategy": "auth.command",
+      "silent_fallback_forbidden": true
+    }
+  ],
+  "status": "ok"
+}

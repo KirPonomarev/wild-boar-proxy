@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-27T12:04:26.821068Z",
+  "current_live_multi_provider_run_performed": false,
+  "historical_source_packet_chain": true,
+  "invalid_json_packets": {
+    "auth_strategy": [],
+    "deepseek": [],
+    "live_non_native": [],
+    "model_availability": [],
+    "openrouter": [],
+    "runtime_compat": []
+  },
+  "loaded_packet_count": 24,
+  "missing_packets": {
+    "auth_strategy": [],
+    "deepseek": [],
+    "live_non_native": [],
+    "model_availability": [],
+    "openrouter": [],
+    "runtime_compat": []
+  },
+  "packet_kind": "source_provider_adapter_evidence_inventory",
+  "source_dirs": {
+    "auth_strategy": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27",
+    "deepseek": "/Volumes/Work/wild-boar-proxy/audit_results/deepseek_direct_api_minimal_token_proof_pass_2026-05-23",
+    "live_non_native": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27",
+    "model_availability": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27",
+    "openrouter": "/Volumes/Work/wild-boar-proxy/audit_results/legacy_api_routes_and_provider_proof_pass_2026-05-23",
+    "runtime_compat": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_responses_runtime_compatibility_r1_2026-05-26"
+  },
+  "status": "ok"
+}

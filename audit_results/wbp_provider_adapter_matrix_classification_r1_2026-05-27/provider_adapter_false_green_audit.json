@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-27T12:04:26.821170Z",
+  "checks": [
+    {
+      "name": "multi_provider_scope_explicit",
+      "passed": true
+    },
+    {
+      "name": "generic_runtime_not_promoted_to_family_compatibility",
+      "passed": true
+    },
+    {
+      "name": "representative_model_not_family_wide",
+      "passed": true
+    },
+    {
+      "name": "native_model_ux_final_not_claimed",
+      "passed": true
+    },
+    {
+      "name": "source_false_green_audits_ok",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "provider_adapter_false_green_audit",
+  "status": "ok"
+}

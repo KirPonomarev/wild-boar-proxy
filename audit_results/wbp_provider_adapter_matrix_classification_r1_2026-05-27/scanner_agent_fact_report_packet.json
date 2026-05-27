@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-05-27T12:04:26.821178Z",
+  "facts": {
+    "deepseek_direct_probe_http_200": true,
+    "final_status": "WBP_PROVIDER_ADAPTER_MATRIX_CLASSIFIED_WITH_LIMITS",
+    "generic_runtime_provider_family_compatibility_proven": false,
+    "live_non_native_provider_family_compatibility_proven": false,
+    "openrouter_credential_present": false,
+    "openrouter_provider_check_status": "not_run",
+    "provider_count": 2,
+    "provider_families": [
+      "deepseek",
+      "openrouter"
+    ]
+  },
+  "non_claims": {
+    "family_wide_model_compatibility_proven": false,
+    "final_e2e_reproof_claimed": false,
+    "native_reproof_claimed": false,
+    "provider_family_compatibility_proven": false
+  },
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok"
+}
