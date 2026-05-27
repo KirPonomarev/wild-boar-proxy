@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T16:17:17.277119Z",
+  "counts_as_live_lock_execution_proof": false,
+  "current_lock_execution_proven": false,
+  "historical_policy_imported": true,
+  "launcher_enforces_policy": true,
+  "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-profile.lock",
+  "packet_kind": "custom_concurrent_launch_policy",
+  "policy": "single_writer_only",
+  "same_profile_multi_writer_allowed": false,
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_concurrent_launch_policy_packet.json",
+  "state_consistency_risk_classified": true,
+  "status": "ok"
+}

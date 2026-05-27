@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T16:17:17.277114Z",
+  "current_original_profile_write_performed": false,
+  "current_owner_action_collected": false,
+  "direct_egress_claimed": false,
+  "hidden_cleanup_performed": false,
+  "historical_boundary_imported": true,
+  "imported_truth_only": true,
+  "keychain_behavior_classified": false,
+  "original_codex_profile_dependency": false,
+  "original_codex_profile_mutated": false,
+  "original_equivalence_claimed": false,
+  "owner_typed_specified_prompt": true,
+  "packet_kind": "custom_authority_boundary",
+  "provider_or_model_authority_edited": false,
+  "runtime_authority_edited": false,
+  "source_original_classification_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_original_codex_via_wbp_reversibility_import_r1_2026-05-27/original_wbp_reversibility_classification_packet.json",
+  "source_original_non_dependency_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/original_codex_profile_non_dependency_packet.json",
+  "source_owner_action_boundary_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_action_boundary_packet.json",
+  "source_persistent_readiness_summary_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_readiness_summary_packet.json",
+  "status": "ok"
+}

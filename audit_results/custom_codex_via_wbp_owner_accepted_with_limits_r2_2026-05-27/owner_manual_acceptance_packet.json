@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T16:17:17.277140Z",
+  "current_owner_action_collected": false,
+  "general_day_to_day_usability_claimed": false,
+  "historical_owner_acceptance_imported": true,
+  "machine_ui_proof_claimed": false,
+  "owner_confirmation_imported": true,
+  "owner_reported_agent_answered": true,
+  "owner_ui_waiver_closes_ux_only": true,
+  "packet_kind": "custom_owner_manual_acceptance",
+  "prompt_entry_visibly_possible": true,
+  "response_visibly_appeared": true,
+  "route_trace_confirmed_in_source": true,
+  "source_classification_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_usability_classification_packet.json",
+  "source_live_matrix_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/two_lane_result_matrix.json",
+  "source_response_visibility_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_response_visibility_packet.json",
+  "source_summary_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_usability_summary_packet.json",
+  "source_visible_interaction_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_visible_interaction_packet.json",
+  "status": "ok",
+  "submit_action_visibly_possible": true,
+  "usability_classification": "usable",
+  "window_visibly_present": true
+}
