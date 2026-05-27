@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693602Z",
+  "filesystem_classification_used_as_route_or_egress_proof": false,
+  "findings": [],
+  "forbidden_claims_present": false,
+  "keychain_absence_used_as_auth_boundary_proof": false,
+  "packet_kind": "native_custom_safety_false_green_audit",
+  "persistent_identity_used_as_thread_history_proof": false,
+  "safety_readiness_used_as_native_launch_proof": false,
+  "status": "ok"
+}

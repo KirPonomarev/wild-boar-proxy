@@ -1,0 +1,52 @@
+{
+  "blocked_by_host_environment_counted_as_pass": false,
+  "captured_at_utc": "2026-05-27T05:21:32.141372Z",
+  "checks": [
+    {
+      "evidence": "packet filenames",
+      "name": "required_packets_present",
+      "passed": true
+    },
+    {
+      "evidence": "execution_mode_decision_packet.json",
+      "name": "conditional_packets_present_when_temp_or_launch",
+      "passed": true
+    },
+    {
+      "evidence": "execution_mode_decision_packet.json",
+      "name": "execution_mode_valid",
+      "passed": true
+    },
+    {
+      "evidence": "packet_kind scan",
+      "name": "inspection_only_forbids_launch_packets",
+      "passed": true
+    },
+    {
+      "evidence": "native_custom_admission_packet.json",
+      "name": "admission_ready_not_launch_executed",
+      "passed": true
+    },
+    {
+      "evidence": "native_custom_admission_packet.json",
+      "name": "no_route_ux_egress_claims",
+      "passed": true
+    },
+    {
+      "evidence": "protected_surface_read_classification_packet.json",
+      "name": "protected_read_inspection_only",
+      "passed": true
+    },
+    {
+      "evidence": "reference packets",
+      "name": "references_are_reference_only",
+      "passed": true
+    }
+  ],
+  "forbidden_launch_packets_present": [],
+  "missing_conditional_packets": [],
+  "missing_required_packets": [],
+  "packet_kind": "native_safety_admission_contour_validation",
+  "reason_class": "",
+  "status": "ok"
+}

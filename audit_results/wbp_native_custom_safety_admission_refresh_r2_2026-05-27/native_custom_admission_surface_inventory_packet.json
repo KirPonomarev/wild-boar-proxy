@@ -1,0 +1,36 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.855846Z",
+  "live_surfaces_identified": true,
+  "native_launch_surfaces_execution_allowed": false,
+  "packet_kind": "native_custom_admission_surface_inventory",
+  "repo_root": "/Volumes/Work/wild-boar-proxy",
+  "route_egress_ux_surfaces_execution_allowed": false,
+  "safety_admission_only": true,
+  "status": "ok",
+  "surfaces": [
+    {
+      "forbidden_use_in_this_contour": "launch_native_candidate/materialize/cleanup live helpers",
+      "path": "wild_boar_proxy/native_filesystem_probe.py",
+      "safe_use_in_this_contour": "packet builders and read-only snapshots only",
+      "surface": "packet builders, protected-surface scanners, and native launch helpers"
+    },
+    {
+      "forbidden_use_in_this_contour": "runtime launch proof inference",
+      "path": "wild_boar_proxy/native_launch_contract.py",
+      "safe_use_in_this_contour": "contract validation only",
+      "surface": "native launch command/preflight/admission contracts"
+    },
+    {
+      "forbidden_use_in_this_contour": "dispatch/native-window/process observation",
+      "path": "wild_boar_proxy/native_launch_dispatch.py",
+      "safe_use_in_this_contour": "reference-only test boundary",
+      "surface": "dispatch, process/window observation, cleanup execution packets"
+    },
+    {
+      "forbidden_use_in_this_contour": "any execution or imported route/egress claim",
+      "path": "tools/native_custom_direct_egress_classification_probe.py",
+      "safe_use_in_this_contour": "none",
+      "surface": "bounded live native Custom egress probe"
+    }
+  ]
+}

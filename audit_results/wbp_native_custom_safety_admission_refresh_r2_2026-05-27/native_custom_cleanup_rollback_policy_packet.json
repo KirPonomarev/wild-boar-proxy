@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693592Z",
+  "cleanup_executed": false,
+  "cleanup_expectation_status": "ok",
+  "ephemeral_cleanup_policy": "owned_temp_surfaces_only_when_materialized",
+  "explicit_owner_delete_authorization_required": true,
+  "hidden_cleanup_performed": false,
+  "packet_kind": "native_custom_cleanup_rollback_policy",
+  "persistent_cleanup_policy": "preserve_history_by_default",
+  "persistent_cleanup_status": "ok",
+  "persistent_history_delete_allowed_by_default": false,
+  "rollback_executed": false,
+  "status": "ok"
+}

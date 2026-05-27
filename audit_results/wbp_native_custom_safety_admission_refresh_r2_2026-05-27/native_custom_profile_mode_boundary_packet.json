@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693579Z",
+  "modes_distinguishable": true,
+  "original_profile_shortcut_allowed": false,
+  "packet_kind": "native_custom_profile_mode_boundary",
+  "persistent_identity_counts_as_history_proof": false,
+  "profile_modes": {
+    "ephemeral_custom": {
+      "cleanup_can_delete_history_by_default": false,
+      "cleanup_required": true,
+      "profile_lifetime": "single_contour",
+      "thread_history_claim": "not_preserved_or_unproven"
+    },
+    "original_codex": {
+      "cleanup_can_delete_history_by_default": false,
+      "cleanup_required": "forbidden",
+      "profile_lifetime": "user_owned",
+      "thread_history_claim": "original_app_only"
+    },
+    "persistent_custom": {
+      "cleanup_can_delete_history_by_default": false,
+      "cleanup_required": false,
+      "profile_lifetime": "long_lived",
+      "stable_profile_id_required": true,
+      "thread_history_claim": "requires_relaunch_storage_proof"
+    }
+  },
+  "silent_persistent_to_ephemeral_fallback_allowed": false,
+  "status": "ok"
+}

@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693327Z",
+  "cleanup_executed": false,
+  "cleanup_not_required_reason": "inspection_only_no_temp_surface_materialized",
+  "cleanup_removes_only_custom_owned_surfaces": true,
+  "cleanup_required": false,
+  "original_codex_reversibility_claimed": false,
+  "outside_tmp_root_targets": [],
+  "owned_paths": [
+    "/private/tmp/wbp-native-custom-safety-admission-r2/profile",
+    "/private/tmp/wbp-native-custom-safety-admission-r2/profile",
+    "/private/tmp/wbp-native-custom-safety-admission-r2/profile/electron-user-data",
+    "/private/tmp/wbp-native-custom-safety-admission-r2/profile/home",
+    "/private/tmp/wbp-native-custom-safety-admission-r2/profile/tmp"
+  ],
+  "packet_kind": "cleanup_rollback_expectation",
+  "protected_surface_targets": [],
+  "reason_class": "",
+  "rollback_executed": false,
+  "rollback_required": false,
+  "status": "ok",
+  "tmp_root": "/private/tmp/wbp-native-custom-safety-admission-r2"
+}

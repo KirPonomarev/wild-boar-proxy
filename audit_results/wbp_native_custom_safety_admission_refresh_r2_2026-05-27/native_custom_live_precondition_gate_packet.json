@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693595Z",
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "future_live_preconditions_classified": true,
+  "future_live_requirements": [
+    "native safety admission refreshed",
+    "declared write surfaces recorded",
+    "cleanup/rollback expectation recorded",
+    "protected surface diff or equivalent runtime safety packet",
+    "owner/detached command boundary when live owner input is required",
+    "secret scan clean before import/closeout"
+  ],
+  "live_execution_allowed_in_this_contour": false,
+  "native_launch_attempted": false,
+  "native_ux_claimed": false,
+  "network_capture_allowed_in_this_contour": false,
+  "owner_input_required": false,
+  "owner_prompt_required": false,
+  "packet_kind": "native_custom_live_precondition_gate",
+  "prompt_entry_required_now": false,
+  "route_proof_claimed": false,
+  "status": "ok"
+}
