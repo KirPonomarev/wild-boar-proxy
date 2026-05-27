@@ -8,10 +8,12 @@
     "tools",
     "long_context"
   ],
-  "captured_at_utc": "2026-05-27T07:23:07.141865Z",
+  "captured_at_utc": "2026-05-27T09:06:05.233674Z",
+  "catalog_registry_truth_is_capability_proof": false,
   "catalog_tier_is_benchmark_or_live_proof": false,
   "fixture_wire_readiness_is_live_compatibility": false,
   "packet_kind": "capability_claims_boundary",
+  "runtime_binding_truth_is_capability_proof": false,
   "runtime_truth_boundary_is_capability_proof": false,
   "source_packet_kind": "capability_claims",
   "status": "ok",

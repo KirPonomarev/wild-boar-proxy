@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-05-27T07:23:07.132966Z",
+  "captured_at_utc": "2026-05-27T09:06:05.224584Z",
   "live_provider_request_allowed": false,
   "live_provider_request_attempted": false,
   "native_launch_allowed": false,
@@ -12,7 +12,6 @@
   "status": "ok",
   "write_surfaces": [
     "tools/model_availability_smoke_matrix_readiness_probe.py",
-    "tests/test_model_availability.py",
     "tests/test_model_availability_smoke_matrix_readiness_probe.py",
     "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27"
   ]

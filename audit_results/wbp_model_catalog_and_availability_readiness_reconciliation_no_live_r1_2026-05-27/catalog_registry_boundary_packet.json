@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T09:06:05.233664Z",
+  "catalog_entry_is_model_usability": false,
+  "catalog_registry_truth_is_runtime_binding_truth": false,
+  "display_metadata_is_catalog_registry_truth": false,
+  "model_count": 6,
+  "packet_kind": "catalog_registry_boundary",
+  "raw_catalog_registry_mutated": false,
+  "source_packet_kind": "catalog_registry_truth",
+  "status": "ok"
+}

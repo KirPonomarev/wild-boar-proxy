@@ -62,24 +62,32 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         self.assertFalse(prior["prior_evidence_used_as_current_live_truth"])
         self.assertFalse(prior["prior_closeouts_used_as_navigation_source"])
 
-    def test_layer_boundaries_keep_display_runtime_and_capability_separate(self) -> None:
+    def test_layer_boundaries_keep_display_registry_runtime_and_capability_separate(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
             packets = build_readiness_packets(REPO_ROOT, Path(tmp))
 
         display = packets["display_metadata_boundary_packet.json"]
-        runtime = packets["runtime_truth_boundary_packet.json"]
+        registry = packets["catalog_registry_boundary_packet.json"]
+        runtime = packets["runtime_binding_boundary_packet.json"]
         capability = packets["capability_claims_boundary_packet.json"]
 
         self.assertEqual(display["status"], "ok")
         self.assertFalse(display["display_metadata_is_runtime_truth"])
         self.assertFalse(display["catalog_visibility_is_model_usability"])
         self.assertFalse(display["tier_label_is_capability_proof"])
+        self.assertEqual(registry["status"], "ok")
+        self.assertFalse(registry["display_metadata_is_catalog_registry_truth"])
+        self.assertFalse(registry["catalog_entry_is_model_usability"])
+        self.assertFalse(registry["catalog_registry_truth_is_runtime_binding_truth"])
         self.assertEqual(runtime["status"], "ok")
-        self.assertFalse(runtime["catalog_metadata_becomes_runtime_truth"])
+        self.assertFalse(runtime["display_metadata_becomes_runtime_binding_truth"])
+        self.assertFalse(runtime["catalog_registry_truth_becomes_runtime_binding_truth"])
         self.assertFalse(runtime["route_selected_proven"])
         self.assertFalse(runtime["upstream_accepts_proven"])
         self.assertFalse(runtime["codex_consumer_accepted_response_proven"])
         self.assertEqual(capability["status"], "ok")
+        self.assertFalse(capability["catalog_registry_truth_is_capability_proof"])
+        self.assertFalse(capability["runtime_binding_truth_is_capability_proof"])
         self.assertFalse(capability["runtime_truth_boundary_is_capability_proof"])
         self.assertFalse(capability["fixture_wire_readiness_is_live_compatibility"])
 
@@ -179,6 +187,9 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         self.assertFalse(false_green["auth_proof_claimed_as_model_availability"])
         self.assertFalse(false_green["provider_reachable_from_credential_ref"])
         self.assertFalse(false_green["provider_auth_works_from_secret_ref_presence"])
+        self.assertFalse(false_green["display_metadata_claimed_as_catalog_registry_truth"])
+        self.assertFalse(false_green["catalog_registry_truth_claimed_as_runtime_binding_truth"])
+        self.assertFalse(false_green["runtime_binding_truth_claimed_as_capability_proof"])
 
     def test_route_backed_candidates_are_not_reachability_or_route_proof(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
@@ -235,6 +246,12 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         missing_packets = dict(packets)
         del missing_packets["model_availability_request_shape_packet.json"]
         missing_summary = build_summary_packet(missing_packets)
+        missing_registry_packets = dict(packets)
+        del missing_registry_packets["catalog_registry_boundary_packet.json"]
+        missing_registry_summary = build_summary_packet(missing_registry_packets)
+        missing_runtime_packets = dict(packets)
+        del missing_runtime_packets["runtime_binding_boundary_packet.json"]
+        missing_runtime_summary = build_summary_packet(missing_runtime_packets)
         missing_prior_packets = dict(packets)
         del missing_prior_packets["prior_evidence_reference_packet.json"]
         missing_prior_summary = build_summary_packet(missing_prior_packets)
@@ -251,6 +268,16 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         self.assertIn(
             "model_availability_request_shape_packet.json",
             missing_summary["missing_required_packets"],
+        )
+        self.assertEqual(missing_registry_summary["status"], "blocked")
+        self.assertIn(
+            "catalog_registry_boundary_packet.json",
+            missing_registry_summary["missing_required_packets"],
+        )
+        self.assertEqual(missing_runtime_summary["status"], "blocked")
+        self.assertIn(
+            "runtime_binding_boundary_packet.json",
+            missing_runtime_summary["missing_required_packets"],
         )
         self.assertEqual(missing_prior_summary["status"], "blocked")
         self.assertIn(

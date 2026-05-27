@@ -11,7 +11,7 @@
     "summary_path": "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
     "summary_sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126"
   },
-  "captured_at_utc": "2026-05-27T07:23:07.141608Z",
+  "captured_at_utc": "2026-05-27T09:06:05.233400Z",
   "model_availability_proven_by_auth": false,
   "packet_kind": "model_availability_auth_precondition",
   "raw_secret_recorded": false,

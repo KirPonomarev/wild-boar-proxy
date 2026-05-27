@@ -1,6 +1,6 @@
 {
   "alias_selected_as_route_proof": false,
-  "captured_at_utc": "2026-05-27T07:23:07.141881Z",
+  "captured_at_utc": "2026-05-27T09:06:05.233692Z",
   "packet_kind": "route_backed_candidate_admission",
   "route_admission_as_reachability": false,
   "route_backed_candidate_is_admission_metadata_only": true,

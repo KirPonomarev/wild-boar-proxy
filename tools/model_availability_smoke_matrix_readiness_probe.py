@@ -106,8 +106,11 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
         "tests/test_model_availability_smoke_matrix_readiness_probe.py",
     }
     admitted_current_evidence_prefixes = (
+        f"M {relative_evidence_dir}/",
         f"?? {relative_evidence_dir}/",
+        "M audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27/",
         "?? audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27/",
+        f"M {RECONCILIATION_EVIDENCE_PATH}/",
         "?? audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27/",
     )
     quarantined_prefixes = (
@@ -261,7 +264,7 @@ def build_candidate_matrix_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
         if isinstance(row, dict)
     }
     source_by_id: dict[str, dict[str, Any]] = {}
-    for row in fidelity["model_display_metadata_packet.json"].get("models", []):
+    for row in fidelity["catalog_registry_truth_packet.json"].get("models", []):
         if isinstance(row, dict):
             source_by_id[str(row.get("model_id") or "")] = row
     rows: list[dict[str, Any]] = []
@@ -411,7 +414,8 @@ def build_layer_boundary_packets(
     candidate_matrix: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     display = fidelity["model_display_metadata_packet.json"]
-    runtime = fidelity["runtime_truth_boundary_packet.json"]
+    registry = fidelity["catalog_registry_truth_packet.json"]
+    runtime = fidelity["runtime_binding_truth_packet.json"]
     capability = fidelity["capability_claims_packet.json"]
     return {
         "display_metadata_boundary_packet.json": packet(
@@ -435,10 +439,38 @@ def build_layer_boundary_packets(
             tier_label_is_capability_proof=False,
             raw_catalog_source_mutated=False,
         ),
+        "catalog_registry_boundary_packet.json": packet(
+            "catalog_registry_boundary",
+            status=registry.get("status", "blocked"),
+            source_packet_kind=registry.get("packet_kind", "catalog_registry_truth"),
+            model_count=len(registry.get("models", []))
+            if isinstance(registry.get("models"), list)
+            else 0,
+            display_metadata_is_catalog_registry_truth=False,
+            catalog_entry_is_model_usability=False,
+            catalog_registry_truth_is_runtime_binding_truth=False,
+            raw_catalog_registry_mutated=False,
+        ),
+        "runtime_binding_boundary_packet.json": packet(
+            "runtime_binding_boundary",
+            status=runtime.get("status", "blocked"),
+            source_packet_kind=runtime.get("packet_kind", "runtime_binding_truth"),
+            route_selected_proven=False,
+            provider_selected_proven=False,
+            upstream_accepts_proven=False,
+            direct_wbp_response_accepted_proven=False,
+            codex_consumer_accepted_response_proven=False,
+            display_metadata_becomes_runtime_binding_truth=False,
+            catalog_registry_truth_becomes_runtime_binding_truth=False,
+            candidate_matrix_runtime_rows=len(candidate_matrix.get("rows", []))
+            if isinstance(candidate_matrix.get("rows"), list)
+            else 0,
+        ),
         "runtime_truth_boundary_packet.json": packet(
             "runtime_truth_boundary",
             status=runtime.get("status", "blocked"),
-            source_packet_kind=runtime.get("packet_kind", "runtime_truth_boundary"),
+            packet_alias_of="runtime_binding_boundary_packet.json",
+            source_packet_kind=runtime.get("packet_kind", "runtime_binding_truth"),
             route_selected_proven=False,
             provider_selected_proven=False,
             upstream_accepts_proven=False,
@@ -462,6 +494,8 @@ def build_layer_boundary_packets(
                 "tools",
                 "long_context",
             ],
+            catalog_registry_truth_is_capability_proof=False,
+            runtime_binding_truth_is_capability_proof=False,
             runtime_truth_boundary_is_capability_proof=False,
             fixture_wire_readiness_is_live_compatibility=False,
             catalog_tier_is_benchmark_or_live_proof=False,
@@ -707,14 +741,23 @@ def build_false_green_audit(
     if route_backed_admission.get("route_admission_as_reachability") is not False:
         findings.append("route_admission_as_reachability")
     display_boundary = layer_boundaries.get("display_metadata_boundary_packet.json", {})
-    runtime_boundary = layer_boundaries.get("runtime_truth_boundary_packet.json", {})
+    registry_boundary = layer_boundaries.get("catalog_registry_boundary_packet.json", {})
+    runtime_boundary = layer_boundaries.get("runtime_binding_boundary_packet.json", {})
     capability_boundary = layer_boundaries.get("capability_claims_boundary_packet.json", {})
     if display_boundary.get("display_metadata_is_runtime_truth") is not False:
         findings.append("display_metadata_is_runtime_truth")
-    if runtime_boundary.get("catalog_metadata_becomes_runtime_truth") is not False:
-        findings.append("catalog_metadata_becomes_runtime_truth")
-    if capability_boundary.get("runtime_truth_boundary_is_capability_proof") is not False:
-        findings.append("runtime_truth_boundary_is_capability_proof")
+    if registry_boundary.get("display_metadata_is_catalog_registry_truth") is not False:
+        findings.append("display_metadata_is_catalog_registry_truth")
+    if registry_boundary.get("catalog_registry_truth_is_runtime_binding_truth") is not False:
+        findings.append("catalog_registry_truth_is_runtime_binding_truth")
+    if runtime_boundary.get("display_metadata_becomes_runtime_binding_truth") is not False:
+        findings.append("display_metadata_becomes_runtime_binding_truth")
+    if runtime_boundary.get("catalog_registry_truth_becomes_runtime_binding_truth") is not False:
+        findings.append("catalog_registry_truth_becomes_runtime_binding_truth")
+    if capability_boundary.get("catalog_registry_truth_is_capability_proof") is not False:
+        findings.append("catalog_registry_truth_is_capability_proof")
+    if capability_boundary.get("runtime_binding_truth_is_capability_proof") is not False:
+        findings.append("runtime_binding_truth_is_capability_proof")
     if mutation_guard.get("status") != "ok":
         findings.append("route_account_mutation_detected")
     if mutation_guard.get("route_account_mutation_attempted") is not False:
@@ -740,6 +783,9 @@ def build_false_green_audit(
         fixture_or_mock_claimed_provider_availability=False,
         streaming_compatible_from_fixture_only=False,
         tool_loop_compatible_from_fixture_only=False,
+        display_metadata_claimed_as_catalog_registry_truth=False,
+        catalog_registry_truth_claimed_as_runtime_binding_truth=False,
+        runtime_binding_truth_claimed_as_capability_proof=False,
         parent_target_closed=False,
         native_claimed=False,
         codex_app_accepted_model_claimed=False,
@@ -777,7 +823,8 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "readiness_reconciliation_contour_packet.json",
         "prior_evidence_reference_packet.json",
         "display_metadata_boundary_packet.json",
-        "runtime_truth_boundary_packet.json",
+        "catalog_registry_boundary_packet.json",
+        "runtime_binding_boundary_packet.json",
         "capability_claims_boundary_packet.json",
         "route_account_mutation_guard_packet.json",
         "credential_ref_admission_metadata_packet.json",
@@ -847,6 +894,9 @@ def build_independent_audit_packet(packets: dict[str, dict[str, Any]]) -> dict[s
         native_launch_found=False,
         parent_status_closed=False,
         display_metadata_runtime_truth_mixed=False,
+        display_metadata_catalog_registry_mixed=False,
+        catalog_registry_runtime_binding_mixed=False,
+        runtime_binding_capability_proof_mixed=False,
         runtime_truth_capability_proof_mixed=False,
         credential_ref_promoted_to_provider_reachability=False,
     )
@@ -879,7 +929,6 @@ def build_base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[st
             "declared_write_surfaces",
             write_surfaces=[
                 "tools/model_availability_smoke_matrix_readiness_probe.py",
-                "tests/test_model_availability.py",
                 "tests/test_model_availability_smoke_matrix_readiness_probe.py",
                 str(evidence_dir.relative_to(repo_root)),
             ],
@@ -961,7 +1010,6 @@ def write_closeout(evidence_dir: Path, packets: dict[str, dict[str, Any]], repo_
     branch = run_text(repo_root, ["git", "branch", "--show-current"])
     touched = [
         "tools/model_availability_smoke_matrix_readiness_probe.py",
-        "tests/test_model_availability.py",
         "tests/test_model_availability_smoke_matrix_readiness_probe.py",
         str(evidence_dir.relative_to(repo_root)),
     ]

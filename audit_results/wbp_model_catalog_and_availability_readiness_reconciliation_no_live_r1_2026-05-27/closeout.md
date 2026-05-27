@@ -14,8 +14,8 @@ Classify the final no-live model catalog and availability readiness reconciliati
 
 - goal: reconcile catalog fidelity, model availability readiness, Provider Auth R1, and Responses No-Live R1 without live/model/native claims
 - branch: codex/external-agent-lab-isolated
-- head: 182825238b2a77b075b6d8abe793bbe6011fa880
-- touched files: tools/model_availability_smoke_matrix_readiness_probe.py, tests/test_model_availability.py, tests/test_model_availability_smoke_matrix_readiness_probe.py, audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27
+- head: 140a8d10948134002a07107b9ccc0c4b353f56b5
+- touched files: tools/model_availability_smoke_matrix_readiness_probe.py, tests/test_model_availability_smoke_matrix_readiness_probe.py, audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27
 - tests run: recorded in verification section
 - blocked risks: live availability, provider reachability, native acceptance, direct egress absence, streaming, tool loop, Original via WBP, final E2E
 - closure state: CLOSED
