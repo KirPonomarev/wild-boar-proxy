@@ -3024,6 +3024,17 @@ def build_handler(
         live_source = build_recovery_admitted_session_actions_packet()
         live_session_id = str(live_source.get("selected_session_id") or "")
         live_session_ref = custom_recovery_session_ref(live_session_id) if live_session_id else ""
+        if (
+            preflight.get("status") != "ok"
+            or preflight.get("machine_error_code")
+            != "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY"
+            or preflight.get("stop_cleanup_preflight_ready") is not True
+        ):
+            return build_custom_recovery_stop_cleanup_live_packet(
+                preflight_packet=preflight,
+                preflight_selected_session_ref=preflight_session_ref,
+                live_selected_session_ref=live_session_ref,
+            )
         if not internal_session_id or internal_session_id != live_session_id:
             return build_custom_recovery_stop_cleanup_live_packet(
                 preflight_packet=preflight,

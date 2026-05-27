@@ -7,6 +7,7 @@ import importlib.util
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,17 @@ def _load_tool_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _clean_git_status(tool):
+    original_run_text = tool.run_text
+
+    def runner(repo_root: Path, command: list[str]) -> str:
+        if command == ["git", "status", "--short"]:
+            return ""
+        return original_run_text(repo_root, command)
+
+    return runner
 
 
 class ResponsesLiveNonNativeProbeTests(unittest.TestCase):
@@ -177,13 +189,14 @@ class ResponsesLiveNonNativeProbeTests(unittest.TestCase):
                 "failure_cause": "none",
             }
 
-        with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
-            packets = tool.build_packets(
-                ROOT,
-                Path(tmp),
-                owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
-                request_runner=runner,
-            )
+        with mock.patch.object(tool, "run_text", side_effect=_clean_git_status(tool)):
+            with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
+                packets = tool.build_packets(
+                    ROOT,
+                    Path(tmp),
+                    owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    request_runner=runner,
+                )
 
         summary = packets["responses_live_non_native_summary_packet.json"]
         false_green = packets["responses_live_non_native_false_green_audit.json"]
@@ -296,13 +309,14 @@ class ResponsesLiveNonNativeProbeTests(unittest.TestCase):
                 "failure_cause": "none",
             }
 
-        with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
-            packets = tool.build_packets(
-                ROOT,
-                Path(tmp),
-                owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
-                request_runner=runner,
-            )
+        with mock.patch.object(tool, "run_text", side_effect=_clean_git_status(tool)):
+            with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
+                packets = tool.build_packets(
+                    ROOT,
+                    Path(tmp),
+                    owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    request_runner=runner,
+                )
 
         summary = packets["responses_live_non_native_summary_packet.json"]
         tool_loop = packets["responses_tool_loop_packet.json"]
@@ -366,13 +380,14 @@ class ResponsesLiveNonNativeProbeTests(unittest.TestCase):
                 "failure_cause": "none",
             }
 
-        with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
-            packets = tool.build_packets(
-                ROOT,
-                Path(tmp),
-                owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
-                request_runner=runner,
-            )
+        with mock.patch.object(tool, "run_text", side_effect=_clean_git_status(tool)):
+            with tempfile.TemporaryDirectory(dir=ROOT / "audit_results") as tmp:
+                packets = tool.build_packets(
+                    ROOT,
+                    Path(tmp),
+                    owner_authorization_phrase=tool.OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    request_runner=runner,
+                )
 
         summary = packets["responses_live_non_native_summary_packet.json"]
         self.assertNotEqual(summary["final_status"], tool.TARGET_STATUS)

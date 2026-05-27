@@ -112,6 +112,7 @@ def external_snapshot() -> ExternalModelsSnapshot:
         observed_routes_count=0,
         observed_routes={},
         local_token_present=False,
+        available_secret_refs=None,
         models_source="local_routes_registry",
         models=(
             ExternalModelRecord(

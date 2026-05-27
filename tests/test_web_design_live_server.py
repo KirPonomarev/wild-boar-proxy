@@ -6967,6 +6967,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             live["machine_error_code"],
             "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
         )
+        self.assertTrue(live["session_cancel_performed"])
+        self.assertTrue(live["owned_cleanup_performed"])
+        self.assertTrue(live["filesystem_write_performed"])
         self.assertEqual(
             live["verified_scope"],
             "owned_custom_session_cancel_and_cleanup_only",
@@ -7060,32 +7063,36 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(contract["readonly_sources"]["accounts_readonly_ok"])
         self.assertTrue(contract["readonly_sources"]["api_readonly_ok"])
 
-        self.assertEqual(admitted["status"], "ok")
-        self.assertEqual(admitted["machine_error_code"], "ADMITTED_SESSION_ACTIONS_READY")
-        self.assertTrue(admitted["session_admitted_actions_ready"])
+        self.assertEqual(admitted["status"], "blocked")
+        self.assertEqual(admitted["machine_error_code"], "ADMITTED_SESSION_ACTIONS_BLOCKED")
+        self.assertEqual(
+            admitted["block_reason_code"],
+            "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED",
+        )
+        self.assertFalse(admitted["session_admitted_actions_ready"])
         self.assertTrue(admitted["selected_session_present"])
         self.assertTrue(admitted["selected_session_packet_valid"])
-        self.assertTrue(admitted["selected_session_cancel_ready"])
-        self.assertTrue(admitted["owned_session_cleanup_ready"])
+        self.assertFalse(admitted["selected_session_cancel_ready"])
+        self.assertFalse(admitted["owned_session_cleanup_ready"])
         self.assertFalse(admitted["readonly_sources"]["custom_status_ok"])
 
-        self.assertEqual(preflight["status"], "ok")
+        self.assertEqual(preflight["status"], "blocked")
         self.assertEqual(
             preflight["machine_error_code"],
-            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY",
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SOURCE_BLOCKED",
         )
-        self.assertTrue(preflight["stop_cleanup_preflight_ready"])
+        self.assertFalse(preflight["stop_cleanup_preflight_ready"])
 
-        self.assertEqual(live["status"], "ok")
+        self.assertEqual(live["status"], "blocked")
         self.assertEqual(
             live["machine_error_code"],
-            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NOT_READY",
         )
-        self.assertTrue(live["session_cancel_performed"])
-        self.assertTrue(live["owned_cleanup_performed"])
-        self.assertTrue(live["owned_cleanup_verified"])
-        self.assertEqual(session_after_live["session"]["cleanup_state"], "cleaned")
-        self.assertEqual(session_after_live["session"]["cancel_state"], "cancelled_dry_run_session")
+        self.assertFalse(live["session_cancel_performed"])
+        self.assertFalse(live["owned_cleanup_performed"])
+        self.assertFalse(live["filesystem_write_performed"])
+        self.assertEqual(session_after_live["session"]["cleanup_state"], "not_cleaned")
+        self.assertEqual(session_after_live["session"]["cancel_state"], "not_cancelled")
 
     def test_codex_custom_recovery_process_kill_preflight_endpoint_is_readonly(self) -> None:
         payloads = live_payloads()
