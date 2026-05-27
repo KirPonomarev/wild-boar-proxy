@@ -1,0 +1,25 @@
+{
+  "allowed_future_owner_signals": [
+    "owner_live_ready_now=true",
+    "target_window_clear=true",
+    "prompt_action_boundary_ack=true",
+    "evidence_dir_preserved=true"
+  ],
+  "automatic_owner_ready_treated_as_live_authorization": false,
+  "captured_at_utc": "2026-05-27T05:32:12.361499Z",
+  "future_live_must_stop_before_launch": true,
+  "generic_owner_ready_enough": false,
+  "live_execution_allowed_in_this_contour": false,
+  "not_enough_by_itself": [
+    "generic owner_ready_now=true",
+    "repeated automated contour command",
+    "previous owner approval",
+    "screenshot alone",
+    "prompt absent by visual inspection only"
+  ],
+  "owner_input_required": false,
+  "owner_prompt_required": false,
+  "packet_kind": "future_live_owner_stop_gate",
+  "previous_owner_approval_reusable": false,
+  "status": "ok"
+}

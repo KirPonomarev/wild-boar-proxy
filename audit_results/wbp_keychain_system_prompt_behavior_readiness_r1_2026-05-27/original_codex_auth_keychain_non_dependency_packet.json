@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-27T05:32:12.361408Z",
+  "current_auth_json_copied": false,
+  "current_auth_json_symlinked": false,
+  "current_codex_auth_independence": {
+    "captured_at_utc": "2026-05-27T05:32:12.361405Z",
+    "current_codex_auth_json_copied": false,
+    "current_codex_auth_json_execution_dependency": false,
+    "current_codex_auth_json_inspection_only_allowed": true,
+    "current_codex_auth_json_read_as_runtime_input": false,
+    "current_codex_auth_json_symlinked": false,
+    "file_auth_used_in_this_contour": false,
+    "keychain_safety_claimed": false,
+    "native_filesystem_safety_claimed": false,
+    "original_profile_safety_claimed": false,
+    "packet_kind": "current_codex_auth_independence",
+    "status": "ok"
+  },
+  "file_auth_used_in_this_contour": false,
+  "original_codex_auth_json_execution_dependency": false,
+  "original_codex_auth_keychain_dependency": false,
+  "original_codex_keychain_mutated": false,
+  "original_codex_keychain_runtime_dependency": false,
+  "packet_kind": "original_codex_auth_keychain_non_dependency",
+  "readiness_counts_as_runtime_non_dependency_proof": false,
+  "status": "ok"
+}
