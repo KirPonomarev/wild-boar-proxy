@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-05-26T21:11:40Z",
+  "captured_at_utc": "2026-05-27T09:19:34Z",
   "packet_kind": "scanner_agent_fact_report",
   "status": "ok",
   "agents": [
@@ -10,59 +10,55 @@
       "edited_files": [],
       "factual_findings": [
         {
-          "finding": "direct WBP model availability smoke already existed but was direct-only and helper-driven",
-          "evidence": "tools/model_availability_direct_only_smoke_probe.py; wild_boar_proxy/model_availability.py; tests/test_model_availability.py"
+          "finding": "candidate freeze point for this contour remains build_candidate_model_list(...) in model_availability helpers",
+          "evidence": "wild_boar_proxy/model_availability.py"
         },
         {
-          "finding": "route family was not a dedicated model_availability symbol before this contour",
-          "evidence": "pre-change code used lane/source_class/selection_source surfaces rather than explicit route_family classification"
+          "finding": "direct live request execution remains probe-owned and direct-only, with no native launch path in scope",
+          "evidence": "tools/model_availability_direct_only_smoke_probe.py"
         },
         {
-          "finding": "probe-runner-level coverage was weaker than helper-level coverage",
-          "evidence": "tests/test_model_availability.py covered helpers; direct probe generated evidence but did not have a dedicated end-to-end unit test"
+          "finding": "helper-level no-overclaim validation already existed and continues to gate contour packets",
+          "evidence": "wild_boar_proxy/model_availability.py; tests/test_model_availability.py"
         }
       ],
       "false_green_risks_reported": [
         "catalog visibility can be mistaken for model usability",
-        "direct WBP non-stream response can be mistaken for Codex/native acceptance",
-        "external route response can be mistaken for provider-family compatibility"
+        "route-backed external candidate admission can be mistaken for provider-family compatibility",
+        "direct WBP non-stream acceptance can be mistaken for native Codex acceptance"
       ]
     },
     {
-      "agent_id": "019e661a-2430-7e93-bc25-348fe9627582",
+      "agent_id": "019e68b9-c065-76f3-9abc-6654bb8ea44c",
       "role": "independent_read_only_inspector",
-      "model": "existing_completed_agent",
+      "model": "gpt-5.4-mini",
       "edited_files": [],
       "factual_findings": [
         {
-          "finding": "candidate partitioning and normalization existed, but route-family partitioning was implicit",
-          "evidence": "wild_boar_proxy/model_availability.py and wild_boar_proxy/codex_model_registry.py"
+          "finding": "summary and matrix packets stay per-model and transport-bounded",
+          "evidence": "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_claims_matrix.json; audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_matrix.json; audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_direct_only_summary_packet.json"
         },
         {
-          "finding": "direct-only matrix intentionally leaves streaming, tool-loop, egress, account-pool health, and native acceptance false",
-          "evidence": "model availability helper and direct-only evidence matrix fields"
+          "finding": "direct-mistral-devstral-2512 remains classified narrowly as blocked_with_reason with provider_error and http_status 502",
+          "evidence": "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_direct_preflight_packets/direct-mistral-devstral-2512.json; audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/route_family_classification_packet.json"
         },
         {
-          "finding": "reference packets must stay reference-only and not become current model-availability proof",
-          "evidence": "provider auth, catalog, and route-selection evidence surfaces"
+          "finding": "false-green audit and independent audit do not report contour validation failures or overclaim findings",
+          "evidence": "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_false_green_audit.json; audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/independent_model_availability_audit.json; audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_matrix.json"
         }
       ],
       "false_green_risks_reported": [
-        "all-model sweep claims are invalid for capped candidates",
-        "static route/account selection cannot become live-selection truth",
-        "packet redaction proves bounded stored-packet redaction only"
+        "Git section placeholders in closeout would have weakened factual closeout quality if left unfixed"
       ]
     }
   ],
   "orchestrator_assessment": {
     "agent_claims_accepted": true,
-    "agent_claims_rechecked_against_current_code": true,
+    "agent_claims_rechecked_against_current_packets": true,
     "reported_gap_closed_in_this_contour": [
-      "explicit route_family packet builder",
-      "candidate_partition packet builder",
-      "default_model_source packet builder",
-      "external_route_admission packet builder",
-      "contour-level validation for R1 required packets"
+      "bounded candidate merge from readiness reconciliation and live /v1/models observation",
+      "current-contour sync-gate hygiene admission for direct-only smoke evidence",
+      "per-model classification for route-backed external candidate failure ownership"
     ],
     "text_only_audit_counted_as_pass": false
   }

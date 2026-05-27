@@ -43,9 +43,12 @@ from wild_boar_proxy.runtime import proxyless_urlopen
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
 DIRECT_SMOKE_PROMPT_PREFIX = "WBP_MODEL_AVAILABILITY_R1_DIRECT_ONLY_NONCE_2026_05_27"
-AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26"
-MODEL_CATALOG_DIR = "audit_results/wbp_model_catalog_contract_2026-05-26"
+AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27"
+MODEL_CATALOG_DIR = "audit_results/wbp_catalog_fidelity_model_registry_r1_2026-05-27"
 MODEL_ROUTE_TRUTH_DIR = "audit_results/wbp_account_route_model_selection_truth_2026-05-26"
+READINESS_RECONCILIATION_DIR = (
+    "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27"
+)
 
 
 def _utc_now() -> str:
@@ -122,12 +125,21 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
     admitted_current_contour = {
         "wild_boar_proxy/model_availability.py",
         "tests/test_model_availability.py",
+        "tests/test_model_availability_direct_only_smoke_probe.py",
         "tools/model_availability_direct_only_smoke_probe.py",
     }
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
+        "M tests/test_native_filesystem_probe.py",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
+        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
     )
     quarantined: list[str] = []
     unexpected: list[str] = []
@@ -135,13 +147,95 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
         stripped = line.strip()
         if stripped.startswith(quarantined_prefixes):
             quarantined.append(line)
-        elif stripped.startswith(f"?? {relative_evidence_dir}/"):
+        elif stripped.startswith(
+            (
+                f"?? {relative_evidence_dir}/",
+                f"M {relative_evidence_dir}/",
+                f"D {relative_evidence_dir}/",
+            )
+        ):
             continue
         elif any(path in line for path in admitted_current_contour):
             continue
         else:
             unexpected.append(line)
     return quarantined, unexpected
+
+
+def _readiness_candidate_rows(repo_root: Path) -> list[dict[str, Any]]:
+    payload = _read_json_file(
+        repo_root
+        / READINESS_RECONCILIATION_DIR
+        / "model_availability_candidate_matrix_packet.json"
+    )
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict) and row.get("candidate_selected") is True]
+
+
+def _candidate_inputs_from_live_and_readiness(
+    *,
+    model_ids: list[str],
+    readiness_rows: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    catalog_models: dict[str, dict[str, Any]] = {
+        model_id: {
+            "model_id": model_id,
+            "server_issued": True,
+            "source": "direct_models_endpoint",
+        }
+        for model_id in model_ids
+    }
+    routes: list[dict[str, Any]] = []
+    readiness_admitted: list[str] = []
+    imported_external_route_ids: list[str] = []
+    for row in readiness_rows:
+        model_id = str(row.get("model_id") or "").strip()
+        if not model_id:
+            continue
+        readiness_admitted.append(model_id)
+        catalog_models.setdefault(
+            model_id,
+            {
+                "model_id": model_id,
+                "server_issued": True,
+                "source": "readiness_reconciliation_reference",
+            },
+        )
+        if str(row.get("route_family") or "") == "wbp_api_external_route":
+            imported_external_route_ids.append(model_id)
+            routes.append(
+                {
+                    "route_id": model_id,
+                    "enabled": True,
+                    "provider": {"id": "readiness_reference_external_route"},
+                    "upstream_model": str(row.get("provider_model_id") or model_id),
+                    "auth": {"secret_ref": "present_redacted"},
+                    "adapter_id": "readiness_reference_external_route_adapter",
+                }
+            )
+    reference_packet = {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "model_availability_readiness_reference",
+        "status": "ok" if readiness_rows else "blocked",
+        "source_dir": READINESS_RECONCILIATION_DIR,
+        "source_packet": (
+            f"{READINESS_RECONCILIATION_DIR}/model_availability_candidate_matrix_packet.json"
+        ),
+        "reference_only": True,
+        "readiness_candidate_count": len(readiness_rows),
+        "fresh_models_endpoint_visible_ids": model_ids,
+        "readiness_admitted_candidate_ids": readiness_admitted,
+        "imported_external_route_ids": imported_external_route_ids,
+        "candidate_freeze_reproved_here": False,
+        "model_availability_proven_by_reference": False,
+    }
+    return (
+        {"models": list(catalog_models.values())},
+        {"data": {"routes": routes}},
+        reference_packet,
+    )
 
 
 def _summary_status_packet(payload: dict[str, Any], *, source: str) -> dict[str, Any]:
@@ -491,12 +585,16 @@ def main() -> int:
         {"captured_at_utc": _utc_now(), "packet_kind": "direct_models_endpoint_observation", "status": "blocked", "model_ids": []},
         [],
     )
-    catalog_packet = {"models": [{"model_id": model_id, "server_issued": True, "source": "direct_models_endpoint"} for model_id in model_ids]}
+    readiness_rows = _readiness_candidate_rows(repo_root)
+    catalog_packet, routes_packet, readiness_reference_packet = _candidate_inputs_from_live_and_readiness(
+        model_ids=model_ids,
+        readiness_rows=readiness_rows,
+    )
     configured_model = str(healthcheck.get("configured_model") or status_before.get("configured_model") or "")
     candidate_packet = build_candidate_model_list(
         configured_model=configured_model,
         catalog_packet=catalog_packet,
-        routes_packet=None,
+        routes_packet=routes_packet,
     )
     runtime_packet = {
         "runtime_ready": healthcheck.get("status") == "ok"
@@ -506,7 +604,7 @@ def main() -> int:
     normalization = build_model_id_normalization_packet(
         candidate_packet=candidate_packet,
         catalog_packet=catalog_packet,
-        routes_packet=None,
+        routes_packet=routes_packet,
     )
     route_family = build_route_family_classification_packet(
         candidate_packet=candidate_packet,
@@ -546,20 +644,42 @@ def main() -> int:
         route_family_packet=route_family,
         normalization_packet=normalization,
     )
+    source_rows = {
+        str(row.get("model_id") or ""): row
+        for row in readiness_rows
+        if isinstance(row, dict)
+    }
     route_family_by_model = {
         str(row.get("model_id")): str(row.get("route_family") or "")
         for row in route_family.get("classifications", [])
         if isinstance(row, dict)
     }
     admitted_models = set(admission.get("admitted_smoke_candidates", []))
-    model_packets = [
-        {
-            **_direct_model_packet(endpoint, token, model_id, model_id in model_ids),
-            "route_family": route_family_by_model.get(model_id, ""),
-        }
-        for model_id in candidate_packet.get("candidate_model_ids", [])
-        if token and model_id in admitted_models
-    ]
+    model_packets = []
+    for model_id in candidate_packet.get("candidate_model_ids", []):
+        if not token or model_id not in admitted_models:
+            continue
+        source_row = source_rows.get(str(model_id), {})
+        packet = _direct_model_packet(
+            endpoint,
+            token,
+            model_id,
+            (model_id in model_ids) or bool(source_row),
+        )
+        packet["route_family"] = route_family_by_model.get(model_id, "")
+        packet["candidate_source"] = (
+            "fresh_direct_models_endpoint"
+            if model_id in model_ids
+            else "readiness_reconciliation_reference"
+        )
+        packet["source"] = packet["candidate_source"]
+        packet["selectable"] = True
+        packet["route_selected"] = packet["route_family"] != "unknown_unrouted"
+        if packet["route_selected"] and "route_selected" not in packet["availability_levels"]:
+            packet["availability_levels"].append("route_selected")
+        if packet["selectable"] and "selectable" not in packet["availability_levels"]:
+            packet["availability_levels"].insert(1 if packet["listed"] else 0, "selectable")
+        model_packets.append(packet)
     matrix = build_model_availability_matrix(
         model_packets,
         candidate_packet=candidate_packet,
@@ -630,13 +750,12 @@ def main() -> int:
         "direct_smoke_auth_command_observation_packet.json": auth_packet,
         "provider_auth_strategy_reference_packet.json": _reference_packet(
             packet_kind="provider_auth_strategy_reference",
-            source_path=repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_packet.json",
+            source_path=repo_root / AUTH_STRATEGY_DIR / "auth_strategy_precedence_packet.json",
             expected_status="ok",
-            expected_selected_strategy="auth.command",
         ),
         "model_catalog_reference_packet.json": _reference_packet(
             packet_kind="model_catalog_reference",
-            source_path=repo_root / MODEL_CATALOG_DIR / "model_catalog_generated_packet.json",
+            source_path=repo_root / MODEL_CATALOG_DIR / "model_catalog_fidelity_summary_packet.json",
             expected_status="ok",
         ),
         "model_route_policy_reference_packet.json": _reference_packet(
@@ -644,6 +763,7 @@ def main() -> int:
             source_path=repo_root / MODEL_ROUTE_TRUTH_DIR / "model_to_route_selection_packet.json",
             expected_status="ok",
         ),
+        "model_availability_readiness_reference_packet.json": readiness_reference_packet,
         "direct_models_endpoint_observation_packet.json": models_packet,
         "model_candidate_discovery_packet.json": {
             "captured_at_utc": _utc_now(),

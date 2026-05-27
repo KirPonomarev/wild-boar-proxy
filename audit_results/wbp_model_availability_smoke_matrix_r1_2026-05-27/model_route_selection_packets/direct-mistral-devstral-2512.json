@@ -1,0 +1,9 @@
+{
+  "model_id": "direct-mistral-devstral-2512",
+  "provider_model_id": "direct-mistral-devstral-2512",
+  "route_family": "wbp_api_external_route",
+  "route_family_required": true,
+  "route_id": "direct-mistral-devstral-2512",
+  "selection_source": "external_route",
+  "unknown_unrouted_smoke_allowed": false
+}

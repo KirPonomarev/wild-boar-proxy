@@ -2,10 +2,11 @@
   "admitted_smoke_candidates": [
     "gpt-5.5",
     "gpt-5.4-mini",
-    "gpt-5.4"
+    "gpt-5.4",
+    "direct-mistral-devstral-2512"
   ],
   "blocked_candidates": [],
-  "captured_at_utc": "2026-05-26T21:11:20.855288Z",
+  "captured_at_utc": "2026-05-27T09:15:32.049827Z",
   "catalog_visible_candidates": [
     "gpt-5.5",
     "gpt-5.4-mini",
@@ -17,7 +18,8 @@
   "route_backed_candidates": [
     "gpt-5.5",
     "gpt-5.4-mini",
-    "gpt-5.4"
+    "gpt-5.4",
+    "direct-mistral-devstral-2512"
   ],
   "schema_version": 1,
   "status": "ok",
