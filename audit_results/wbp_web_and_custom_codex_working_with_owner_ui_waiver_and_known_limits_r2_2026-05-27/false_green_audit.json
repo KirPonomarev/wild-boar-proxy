@@ -1,0 +1,38 @@
+{
+  "captured_at_utc": "2026-05-27T18:09:48.076466Z",
+  "checks": [
+    {
+      "name": "final_status_is_bounded_alias_only",
+      "passed": true
+    },
+    {
+      "name": "no_all_model_or_provider_family_claim",
+      "passed": true
+    },
+    {
+      "name": "owner_ui_waiver_stays_ux_only",
+      "passed": true
+    },
+    {
+      "name": "persistence_and_keychain_limits_visible",
+      "passed": true
+    },
+    {
+      "name": "direct_egress_known_blocker_stays_visible",
+      "passed": true
+    },
+    {
+      "name": "wbp_truth_not_collapsed_into_direct_lane_health",
+      "passed": true
+    },
+    {
+      "name": "upstream_false_green_audits_remain_green",
+      "passed": true
+    }
+  ],
+  "contour_final_status": "WBP_WEB_AND_CUSTOM_CODEX_WORKING_WITH_OWNER_UI_WAIVER_AND_KNOWN_LIMITS",
+  "forbidden_claims_present": false,
+  "packet_kind": "final_acceptance_false_green_audit",
+  "positive_global_success_claim_without_limits": false,
+  "status": "ok"
+}

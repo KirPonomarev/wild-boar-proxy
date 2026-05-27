@@ -1,0 +1,16 @@
+{
+  "api_openai_com_absence_proven": false,
+  "captured_at_utc": "2026-05-27T18:09:48.076450Z",
+  "classification": "direct_non_wbp_known_blocker_wbp_route_truth_preserved",
+  "contour_final_status": "WBP_WEB_AND_CUSTOM_CODEX_WORKING_WITH_OWNER_UI_WAIVER_AND_KNOWN_LIMITS",
+  "direct_lane_fix_proven": false,
+  "direct_lane_recovery_implied": false,
+  "direct_non_wbp_model_egress_known_blocker": true,
+  "global_egress_failure_claimed": false,
+  "imported_evidence_only": true,
+  "packet_kind": "final_acceptance_direct_egress_boundary",
+  "source_pass4_route_trace_packet": "/Volumes/Work/wild-boar-proxy/audit_results/custom_codex_via_wbp_owner_accepted_with_limits_r2_2026-05-27/custom_route_trace_packet.json",
+  "source_pass5_failure_semantics_packet": "/Volumes/Work/wild-boar-proxy/audit_results/custom_codex_direct_non_wbp_egress_fix_or_known_blocker_r2_2026-05-27/direct_non_wbp_failure_semantics_packet.json",
+  "status": "ok",
+  "wbp_routed_truth_preserved": true
+}
