@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-28T00:00:00Z",
+  "status": "ok",
+  "packet_kind": "false_green_audit",
+  "material_issues_found": [],
+  "helper_only_truth_promoted_to_product_truth": false,
+  "stale_in_memory_server_confused_with_current_code": false,
+  "prompt_absence_promoted_to_auth_success": false,
+  "global_all_users_claimed": false,
+  "owner_observation_overstated": false,
+  "residual_limits": [
+    "owner observation was not captured in this contour; prompt absence is machine-observed only",
+    "current-code validation was performed on a fresh live server at 127.0.0.1:8791 because older long-running servers at 8788/8790 were stale in memory"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-28T00:00:00Z",
+  "status": "ok",
+  "final_verdict": "CUSTOM_CODEX_KEYCHAIN_NOT_FOUND_PROMPT_AVOIDED_ON_THIS_HOST_VIA_PRODUCT_PATH",
+  "contour": "CUSTOM_CODEX_KEYCHAIN_PREFLIGHT_LIVE_VALIDATION_R2",
+  "validated_host": "127.0.0.1:8791",
+  "validated_surface": "/api/action -> launch_custom_client_native",
+  "fresh_server_required": true,
+  "fresh_server_current_code_loaded": true,
+  "stale_in_memory_servers_localized": true,
+  "stale_servers_ports": [
+    8788,
+    8790
+  ],
+  "action_status": "ok",
+  "launch_result_status": "ok",
+  "real_codex_app_launched": true,
+  "keychain_preflight_attempted": true,
+  "keychain_preflight_status": "ok",
+  "isolated_default_keychain_verified": true,
+  "isolated_search_list_verified": true,
+  "prompt_surface_observed_packet": false,
+  "machine_observed_securityagent_prompt": false,
+  "real_default_keychain_unchanged_before_after": true,
+  "host_level_claim_scope": "this_host_current_code_product_path_only",
+  "auth_success_claimed": false
+}
