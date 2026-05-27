@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-27T12:38:54.323520Z",
+  "checks": [
+    {
+      "name": "closed_named_annex_references_ok",
+      "passed": true
+    },
+    {
+      "name": "benchmark_admission_reference_ok",
+      "passed": true
+    },
+    {
+      "name": "design_gate_reference_ok",
+      "passed": true
+    }
+  ],
+  "packet_kind": "optional_annex_source_validation",
+  "source_chain_counts_as_new_scope": false,
+  "status": "ok",
+  "validation_scope": "optional_annex_admission_stop_only"
+}

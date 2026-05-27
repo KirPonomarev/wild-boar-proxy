@@ -1,0 +1,30 @@
+{
+  "blocked_annexes": [
+    "provider_benchmarking"
+  ],
+  "blocked_counts_as_active_next_work": false,
+  "captured_at_utc": "2026-05-27T12:38:54.323537Z",
+  "packet_kind": "optional_annex_gate_blockers",
+  "rows": [
+    {
+      "annex_id": "provider_benchmarking",
+      "blocker_class": "compatibility_floor_not_met",
+      "currently_blocking": true,
+      "details": [
+        "ONLY_ONE_ROW_MEETS_COMPATIBILITY_FLOOR",
+        "OPENROUTER_PROVIDER_ROW_NOT_BENCHMARK_READY",
+        "MIXED_METRIC_FAMILIES_NOT_HONESTLY_COMPARABLE",
+        "REPRESENTATIVE_MODEL_ROWS_DO_NOT_PROVE_FAMILY_WIDE_COMPARABILITY"
+      ]
+    },
+    {
+      "annex_id": "role_profile_ui_polish",
+      "blocker_class": "design_gate",
+      "currently_blocking": false,
+      "details": [
+        "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY evidenced"
+      ]
+    }
+  ],
+  "status": "ok"
+}
