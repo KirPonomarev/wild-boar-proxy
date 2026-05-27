@@ -1,0 +1,12 @@
+{
+  "browser_forbidden_field_rejection_proven": true,
+  "captured_at_utc": "2026-05-27T12:18:29.358093Z",
+  "declared_gate_equals_enforced_gate": false,
+  "live_server_enforces_loopback_only": false,
+  "operator_harness_enforces_loopback_only": true,
+  "packet_kind": "remote_control_enforcement_boundary",
+  "public_exposure_fully_enforced_for_all_surfaces": false,
+  "semantic_alias_coverage_proven": false,
+  "status": "ok",
+  "web_ui_enforces_loopback_only": false
+}

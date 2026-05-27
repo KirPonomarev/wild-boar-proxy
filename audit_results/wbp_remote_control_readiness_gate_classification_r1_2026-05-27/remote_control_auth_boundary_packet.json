@@ -1,0 +1,17 @@
+{
+  "action_phase_gate_present": true,
+  "ambient_authority_forbidden": true,
+  "auth_boundary_counts_as_runtime_success_proof": false,
+  "auth_sources_classified": true,
+  "captured_at_utc": "2026-05-27T12:18:29.358073Z",
+  "network_auth_middleware_proven": false,
+  "owner_authorization_phrase_gate_present": true,
+  "packet_kind": "remote_control_auth_boundary",
+  "selected_strategy": "auth.command",
+  "status": "ok",
+  "with_limits_reasons": [
+    "NO_NETWORK_AUTH_MIDDLEWARE_PROVEN",
+    "LOCAL_SURFACE_RELIES_ON_LOOPBACK_AND_SERVER_OWNED_FIELD_FILTERS"
+  ],
+  "with_limits_required": true
+}

@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-27T12:18:29.358103Z",
+  "facts": {
+    "browser_path_intake_forbidden": true,
+    "browser_secret_intake_forbidden": true,
+    "final_status": "WBP_REMOTE_CONTROL_READINESS_GATE_CLASSIFIED_WITH_LIMITS",
+    "harness_fixed_loopback": true,
+    "live_server_default_host": "127.0.0.1",
+    "live_server_post_path_count": 16,
+    "operator_harness_post_path_count": 0,
+    "public_exposure_fully_enforced_for_all_surfaces": false,
+    "web_ui_default_host": "127.0.0.1"
+  },
+  "non_claims": {
+    "final_product_readiness_claimed": false,
+    "remote_control_implemented": false,
+    "safe_public_exposure_proven": false
+  },
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok"
+}

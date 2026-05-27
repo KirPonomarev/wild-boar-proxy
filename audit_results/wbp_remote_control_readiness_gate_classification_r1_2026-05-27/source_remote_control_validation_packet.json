@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-27T12:18:29.356218Z",
+  "checks": [
+    {
+      "name": "provider_auth_boundaries_ok",
+      "passed": true
+    },
+    {
+      "name": "web_menu_remote_surface_ok",
+      "passed": true
+    },
+    {
+      "name": "login_bridge_boundary_ok",
+      "passed": true
+    },
+    {
+      "name": "operator_boundary_ok",
+      "passed": true
+    }
+  ],
+  "packet_kind": "source_remote_control_validation",
+  "source_chain_counts_as_final_product_readiness": false,
+  "source_chain_counts_as_remote_control_implementation": false,
+  "status": "ok",
+  "validation_scope": "remote_control_readiness_gate_only"
+}
