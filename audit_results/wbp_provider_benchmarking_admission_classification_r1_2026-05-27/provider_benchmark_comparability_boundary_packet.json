@@ -1,0 +1,13 @@
+{
+  "benchmarking_currently_admitted": false,
+  "captured_at_utc": "2026-05-27T12:33:15.208806Z",
+  "comparable_row_count": 1,
+  "comparable_rows": [
+    "deepseek"
+  ],
+  "family_wide_comparability_proven": false,
+  "minimum_rows_for_honest_cross_provider_benchmark": 2,
+  "packet_kind": "provider_benchmark_comparability_boundary",
+  "representative_model_row_counts_as_family_wide": false,
+  "status": "ok"
+}
