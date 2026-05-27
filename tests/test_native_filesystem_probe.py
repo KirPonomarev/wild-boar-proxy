@@ -104,7 +104,9 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_persistent_custom_profile_identity_packet,
     build_persistent_launcher_selection_packet,
     build_persistent_profile_false_green_audit,
+    build_persistent_profile_state_preservation_packet,
     build_persistent_profile_state_diff_packet,
+    build_persistent_thread_history_preservation_r2_packet,
     build_thread_history_preservation_packet,
     build_owner_visible_thread_context_packet,
     build_integration_ownership_baseline_packet,
@@ -188,6 +190,9 @@ from wild_boar_proxy.native_filesystem_probe import (
     summarize_idle_baseline_windows,
     validate_external_evidence_packets,
     validate_native_safety_admission_contour_packets,
+)
+from tools.persistent_custom_profile_history_r2_probe import (
+    classify_r2_persistent_profile_history_packet,
 )
 
 
@@ -4730,6 +4735,125 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertFalse(packet["route_trace_counted_as_saved_thread_proof"])
 
+    def test_persistent_r2_profile_state_preserved_does_not_prove_thread_history(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        identity = build_persistent_custom_profile_identity_packet(
+            phase="before",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        relaunch_identity = build_persistent_custom_profile_identity_packet(
+            phase="relaunch",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+            expected_profile_id="wbp-custom-main",
+            expected_profile_root=profile_root,
+        )
+        profile_state = build_persistent_profile_state_preservation_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=relaunch_identity,
+            after_action_state_diff_packet={
+                "status": "ok",
+                "created_count": 1,
+                "state_classes_observed": ["user_settings"],
+            },
+            after_relaunch_state_diff_packet={
+                "status": "blocked",
+                "created_count": 0,
+                "state_classes_observed": [],
+            },
+        )
+        thread_history = build_persistent_thread_history_preservation_r2_packet(
+            profile_state_preservation_packet=profile_state,
+            state_diff_packet={
+                "status": "ok",
+                "state_classes_observed": ["user_settings"],
+            },
+            owner_visible_thread_context_packet=build_owner_visible_thread_context_packet(
+                owner_visible_prior_thread=True,
+                owner_confirmation_collected=True,
+            ),
+        )
+
+        self.assertEqual(profile_state["status"], "ok")
+        self.assertTrue(profile_state["profile_state_preserved"])
+        self.assertFalse(profile_state["counts_as_thread_history_proof"])
+        self.assertEqual(thread_history["status"], "blocked")
+        self.assertFalse(thread_history["thread_history_preserved"])
+
+    def test_persistent_r2_thread_history_requires_profile_state_first(self) -> None:
+        thread_history = build_persistent_thread_history_preservation_r2_packet(
+            profile_state_preservation_packet={
+                "status": "blocked",
+                "profile_state_preserved": False,
+            },
+            state_diff_packet={
+                "status": "ok",
+                "state_classes_observed": ["thread_history"],
+            },
+            owner_visible_thread_context_packet=build_owner_visible_thread_context_packet(
+                owner_visible_prior_thread=True,
+                owner_confirmation_collected=True,
+            ),
+        )
+
+        self.assertEqual(thread_history["status"], "blocked")
+        self.assertFalse(thread_history["thread_history_preserved"])
+        self.assertFalse(thread_history["owner_visible_thread_counted_as_storage_proof"])
+
+    def test_persistent_r2_profile_state_blocks_relaunch_deletion(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        identity = build_persistent_custom_profile_identity_packet(
+            phase="before",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        packet = build_persistent_profile_state_preservation_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            after_action_state_diff_packet={
+                "status": "ok",
+                "created_count": 1,
+                "deleted_count": 0,
+            },
+            after_relaunch_state_diff_packet={
+                "status": "ok",
+                "created_count": 0,
+                "deleted_count": 1,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["profile_state_preserved"])
+        self.assertFalse(packet["after_relaunch_state_kept"])
+
+    def test_persistent_r2_thread_history_classified_after_profile_state(self) -> None:
+        profile_state = {
+            "status": "ok",
+            "profile_state_preserved": True,
+        }
+        thread_history = build_persistent_thread_history_preservation_r2_packet(
+            profile_state_preservation_packet=profile_state,
+            state_diff_packet={
+                "status": "ok",
+                "state_classes_observed": ["thread_history"],
+            },
+            owner_visible_thread_context_packet=build_owner_visible_thread_context_packet(
+                owner_visible_prior_thread=True,
+                owner_confirmation_collected=True,
+            ),
+        )
+
+        self.assertEqual(thread_history["status"], "ok")
+        self.assertTrue(thread_history["thread_history_preserved"])
+        self.assertTrue(thread_history["profile_state_preserved"])
+
     def test_persistent_custom_visible_thread_is_context_only(self) -> None:
         packet = build_owner_visible_thread_context_packet(
             owner_visible_prior_thread=True,
@@ -4835,6 +4959,78 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "blocked")
         self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_persistent_custom_r2_classifier_passes_inspection_with_two_level_preservation(self) -> None:
+        packet = classify_r2_persistent_profile_history_packet(
+            execution_mode="inspection",
+            profile_state_preservation_packet={
+                "status": "ok",
+                "profile_state_preserved": True,
+            },
+            thread_history_preservation_packet={
+                "status": "ok",
+                "thread_history_preserved": True,
+            },
+            false_green_audit_packet={"status": "ok"},
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "WBP_PERSISTENT_CUSTOM_PROFILE_HISTORY_R2_CLASSIFIED",
+        )
+        self.assertTrue(packet["profile_state_preserved"])
+        self.assertTrue(packet["thread_history_preserved"])
+        self.assertFalse(packet["native_launch_attempted"])
+        self.assertFalse(packet["direct_egress_absence_claimed"])
+        self.assertFalse(packet["model_availability_claimed"])
+        self.assertFalse(packet["keychain_prompt_resolved_claimed"])
+
+    def test_persistent_custom_r2_classifier_blocks_thread_without_profile_state(self) -> None:
+        packet = classify_r2_persistent_profile_history_packet(
+            execution_mode="inspection",
+            profile_state_preservation_packet={
+                "status": "ok",
+                "profile_state_preserved": True,
+            },
+            thread_history_preservation_packet={
+                "status": "blocked",
+                "thread_history_preserved": False,
+            },
+            false_green_audit_packet={"status": "ok"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "WBP_PERSISTENT_CUSTOM_PROFILE_HISTORY_R2_BLOCKED_THREAD_HISTORY_UNPROVEN",
+        )
+        self.assertTrue(packet["profile_state_preserved"])
+        self.assertFalse(packet["thread_history_preserved"])
+        self.assertFalse(packet["native_launch_performed"])
+
+    def test_persistent_custom_r2_classifier_admission_mode_allows_no_launch_admission(self) -> None:
+        packet = classify_r2_persistent_profile_history_packet(
+            execution_mode="admission",
+            profile_state_preservation_packet={
+                "status": "blocked",
+                "profile_state_preserved": False,
+            },
+            thread_history_preservation_packet={
+                "status": "blocked",
+                "thread_history_preserved": False,
+            },
+            false_green_audit_packet={"status": "ok"},
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "WBP_PERSISTENT_CUSTOM_PROFILE_HISTORY_R2_ADMITTED_NO_NATIVE_LAUNCH",
+        )
+        self.assertTrue(packet["admitted"])
+        self.assertFalse(packet["native_launch_attempted"])
+        self.assertFalse(packet["runtime_mutation_performed"])
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

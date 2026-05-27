@@ -6166,6 +6166,88 @@ def build_thread_history_preservation_packet(
     }
 
 
+def build_persistent_profile_state_preservation_packet(
+    *,
+    before_identity_packet: dict[str, Any],
+    relaunch_identity_packet: dict[str, Any],
+    after_action_state_diff_packet: dict[str, Any],
+    after_relaunch_state_diff_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    same_identity = (
+        before_identity_packet.get("status") == "ok"
+        and relaunch_identity_packet.get("status") == "ok"
+        and before_identity_packet.get("persistent_profile_id")
+        == relaunch_identity_packet.get("persistent_profile_id")
+        and before_identity_packet.get("persistent_profile_root")
+        == relaunch_identity_packet.get("persistent_profile_root")
+    )
+    action_changed_storage = after_action_state_diff_packet.get("status") == "ok"
+    relaunch_changed_storage = (
+        after_relaunch_state_diff_packet.get("status") == "ok"
+        if after_relaunch_state_diff_packet is not None
+        else False
+    )
+    relaunch_kept_state = (
+        after_relaunch_state_diff_packet is None
+        or (
+            after_relaunch_state_diff_packet.get("created_count", 0) == 0
+            and after_relaunch_state_diff_packet.get("deleted_count", 0) == 0
+        )
+    )
+    preserved = same_identity and action_changed_storage and relaunch_kept_state
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_profile_state_preservation",
+        "status": "ok" if preserved else "blocked",
+        "reason_class": ""
+        if preserved
+        else "PERSISTENT_PROFILE_STATE_PRESERVATION_UNPROVEN",
+        "profile_state_preserved": preserved,
+        "same_persistent_profile_identity": same_identity,
+        "after_action_storage_changed": action_changed_storage,
+        "after_relaunch_storage_changed": relaunch_changed_storage,
+        "after_relaunch_state_kept": relaunch_kept_state,
+        "counts_as_thread_history_proof": False,
+        "counts_as_model_availability_proof": False,
+        "counts_as_egress_proof": False,
+    }
+
+
+def build_persistent_thread_history_preservation_r2_packet(
+    *,
+    profile_state_preservation_packet: dict[str, Any],
+    state_diff_packet: dict[str, Any],
+    owner_visible_thread_context_packet: dict[str, Any],
+) -> dict[str, Any]:
+    state_classes = set(state_diff_packet.get("state_classes_observed", []))
+    history_state_observed = bool(state_classes & {"thread_history", "session_state"})
+    owner_context_recorded = (
+        owner_visible_thread_context_packet.get("owner_visible_prior_thread") is not None
+    )
+    profile_state_preserved = (
+        profile_state_preservation_packet.get("profile_state_preserved") is True
+    )
+    preserved = profile_state_preserved and history_state_observed and owner_context_recorded
+    forbidden = preserved and not profile_state_preserved
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_thread_history_preservation_r2",
+        "status": "ok" if preserved and not forbidden else "blocked",
+        "reason_class": ""
+        if preserved and not forbidden
+        else "THREAD_HISTORY_PRESERVATION_UNPROVEN",
+        "profile_state_preserved": profile_state_preserved,
+        "thread_history_preserved": preserved and not forbidden,
+        "history_or_session_state_observed": history_state_observed,
+        "owner_visible_prior_thread_context_recorded": owner_context_recorded,
+        "owner_visible_thread_counted_as_storage_proof": False,
+        "visible_thread_context_only": owner_visible_thread_context_packet.get("context_only") is True,
+        "forbidden_thread_without_profile_state": forbidden,
+        "raw_prompt_recorded": False,
+        "raw_thread_content_recorded": False,
+    }
+
+
 def build_integration_ownership_baseline_packet(
     *,
     integration_classes: list[str] | None = None,
