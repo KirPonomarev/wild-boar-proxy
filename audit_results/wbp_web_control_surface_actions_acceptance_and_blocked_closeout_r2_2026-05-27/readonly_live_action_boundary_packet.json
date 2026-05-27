@@ -1,0 +1,51 @@
+{
+  "captured_at_utc": "2026-05-27T15:21:25.601483Z",
+  "packet_kind": "readonly_live_action_boundary",
+  "status": "ok",
+  "action_phase": "live_readonly",
+  "parked_action_count": 30,
+  "parked_actions": [
+    "account_login_cancel",
+    "account_login_complete",
+    "account_login_status",
+    "api_route_allow",
+    "api_route_check",
+    "api_route_connect",
+    "api_route_credential_check",
+    "api_route_disable",
+    "api_route_evidence_capture",
+    "api_route_profile",
+    "api_route_remove",
+    "api_route_validate",
+    "demote_account",
+    "export_diagnostics",
+    "hold_account",
+    "launch_client_dispatch",
+    "launch_smoke",
+    "onboard_account",
+    "onboard_account_dry_run",
+    "promote_account",
+    "quick_start_check_all",
+    "recheck_account",
+    "refresh_health_detail",
+    "release_account",
+    "retire_account",
+    "set_mode_managed",
+    "set_mode_stable",
+    "stable_repair_plan",
+    "sync_runtime",
+    "validate_account"
+  ],
+  "parked_actions_blocked_with_packet_reason": true,
+  "parked_action_mismatches": [],
+  "expected_live_available_actions": [
+    "legacy_import_discovery",
+    "setup_discovery"
+  ],
+  "observed_live_available_actions": [
+    "legacy_import_discovery",
+    "setup_discovery"
+  ],
+  "unexpected_live_available_actions": [],
+  "disabled_reason_code": "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+}

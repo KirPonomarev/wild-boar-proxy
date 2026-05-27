@@ -1,0 +1,76 @@
+{
+  "packet_kind": "disputed_action_sandbox_boundary",
+  "status": "ok",
+  "branch": "codex/external-agent-lab-isolated",
+  "rows": [
+    {
+      "action": "account_login_status",
+      "without_contract": {
+        "available": false,
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        "disabled_reasons": [
+          "sandbox_target_unproven"
+        ]
+      },
+      "with_admitted_contract": {
+        "available": true,
+        "availability_state": "displayable_readonly",
+        "disabled_reason_code": "",
+        "disabled_reasons": []
+      }
+    },
+    {
+      "action": "account_login_complete",
+      "without_contract": {
+        "available": false,
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        "disabled_reasons": [
+          "sandbox_target_unproven"
+        ]
+      },
+      "with_admitted_contract": {
+        "available": true,
+        "availability_state": "displayable_readonly",
+        "disabled_reason_code": "",
+        "disabled_reasons": []
+      }
+    },
+    {
+      "action": "account_login_cancel",
+      "without_contract": {
+        "available": false,
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        "disabled_reasons": [
+          "sandbox_target_unproven"
+        ]
+      },
+      "with_admitted_contract": {
+        "available": true,
+        "availability_state": "displayable_readonly",
+        "disabled_reason_code": "",
+        "disabled_reasons": []
+      }
+    },
+    {
+      "action": "api_route_credential_check",
+      "without_contract": {
+        "available": false,
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        "disabled_reasons": [
+          "sandbox_target_unproven"
+        ]
+      },
+      "with_admitted_contract": {
+        "available": true,
+        "availability_state": "displayable_readonly",
+        "disabled_reason_code": "",
+        "disabled_reasons": []
+      }
+    }
+  ],
+  "derived_from_anchored_facts": true
+}

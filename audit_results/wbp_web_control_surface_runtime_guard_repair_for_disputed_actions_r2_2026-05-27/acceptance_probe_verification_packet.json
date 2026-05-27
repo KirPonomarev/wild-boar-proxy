@@ -1,0 +1,19 @@
+{
+  "packet_kind": "acceptance_probe_verification",
+  "status": "ok",
+  "branch": "codex/external-agent-lab-isolated",
+  "probe_result": {
+    "fresh_process_probe_exit_code": 0,
+    "anchored_from_current_verified_facts": true,
+    "derived_from_anchored_verification_facts": true,
+    "source_packets": [
+      "/tmp/wbp_pass1_finish_probe_anchor/action_verification_results_packet.json",
+      "/tmp/wbp_pass1_finish_probe_anchor/readonly_live_action_boundary_packet.json",
+      "/tmp/wbp_pass1_finish_probe_anchor/web_control_surface_matrix_packet.json",
+      "/tmp/wbp_runtime_guard_direct_closeout_orchestrator/action_verification_results_packet.json",
+      "/tmp/wbp_runtime_guard_direct_closeout_orchestrator/readonly_live_action_boundary_packet.json",
+      "/tmp/wbp_runtime_guard_direct_closeout_orchestrator/web_control_surface_matrix_packet.json"
+    ],
+    "note": "This packet is derived from anchored verification facts and current temp packet statuses. It does not claim a fresh rerun inside this closeout write."
+  }
+}

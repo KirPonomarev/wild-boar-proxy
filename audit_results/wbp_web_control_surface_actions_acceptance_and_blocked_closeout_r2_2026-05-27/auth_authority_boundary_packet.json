@@ -1,0 +1,45 @@
+{
+  "captured_at_utc": "2026-05-27T14:23:46.635990Z",
+  "packet_kind": "auth_authority_boundary",
+  "status": "ok",
+  "internal_disabled_commands": [
+    "accounts_login_cancel",
+    "accounts_login_complete_codex",
+    "accounts_login_complete_sandbox",
+    "accounts_login_start_codex_device",
+    "accounts_login_start_sandbox",
+    "accounts_login_status",
+    "accounts_onboard_auth_ref",
+    "external_models_credentials_admit_openrouter_owner_env",
+    "external_models_credentials_admit_provider_owner_env",
+    "external_models_credentials_status_openrouter",
+    "external_models_credentials_status_provider",
+    "external_models_routes_add_server_owned",
+    "launch_client"
+  ],
+  "ui_enabled_violations": [],
+  "browser_secret_or_path_intake_guard_checks": [
+    {
+      "name": "legacy_import_discovery_browser_path_forbidden",
+      "status": "integration_failure",
+      "machine_error_code": "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+      "expected_machine_error_code": "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+      "passed": true
+    },
+    {
+      "name": "legacy_import_browser_fields_forbidden",
+      "status": "integration_failure",
+      "machine_error_code": "UI_LEGACY_IMPORT_BROWSER_FIELDS_FORBIDDEN",
+      "expected_machine_error_code": "UI_LEGACY_IMPORT_BROWSER_FIELDS_FORBIDDEN",
+      "passed": true
+    },
+    {
+      "name": "api_route_connect_browser_secret_forbidden",
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "expected_machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "passed": true
+    }
+  ],
+  "failed_guard_checks": []
+}

@@ -968,6 +968,25 @@ class WebDesignLiveServerTests(unittest.TestCase):
             sandbox_blocked["actions"]["onboard_account"]["disabled_reason_code"],
             "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
         )
+        for ui_action in (
+            "account_login_status",
+            "account_login_complete",
+            "account_login_cancel",
+            "api_route_credential_check",
+        ):
+            self.assertFalse(sandbox_blocked["actions"][ui_action]["available"])
+            self.assertEqual(
+                sandbox_blocked["actions"][ui_action]["availability_state"],
+                "preflight_blocked",
+            )
+            self.assertEqual(
+                sandbox_blocked["actions"][ui_action]["disabled_reason_code"],
+                "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+            )
+            self.assertEqual(
+                tuple(sandbox_blocked["actions"][ui_action]["disabled_reasons"]),
+                ("sandbox_target_unproven",),
+            )
         self.assertFalse(sandbox_blocked["actions"]["validate_account"]["available"])
         self.assertEqual(
             sandbox_blocked["actions"]["validate_account"]["disabled_reason_code"],
@@ -984,6 +1003,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["quick_start_check_all"]["available"])
+        for ui_action in (
+            "account_login_status",
+            "account_login_complete",
+            "account_login_cancel",
+            "api_route_credential_check",
+        ):
+            self.assertTrue(sandbox_metadata["actions"][ui_action]["available"])
+            self.assertEqual(
+                sandbox_metadata["actions"][ui_action]["availability_state"],
+                "displayable_readonly",
+            )
+            self.assertEqual(
+                sandbox_metadata["actions"][ui_action]["disabled_reason_code"],
+                "",
+            )
+            self.assertEqual(sandbox_metadata["actions"][ui_action]["disabled_reasons"], [])
         self.assertFalse(sandbox_metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
             sandbox_metadata["actions"]["validate_account"]["availability_state"],

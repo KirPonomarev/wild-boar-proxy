@@ -1,0 +1,8 @@
+{
+  "packet_kind": "runtime_guard_repair_false_green_audit",
+  "status": "ok",
+  "branch": "codex/external-agent-lab-isolated",
+  "findings": [],
+  "blocked_packets": [],
+  "target_status": "WBP_WEB_CONTROL_SURFACE_DISPUTED_ACTION_RUNTIME_GUARDS_REPAIRED"
+}

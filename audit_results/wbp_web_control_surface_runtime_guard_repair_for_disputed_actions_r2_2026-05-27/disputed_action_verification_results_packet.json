@@ -1,0 +1,29 @@
+{
+  "packet_kind": "disputed_action_verification_results",
+  "status": "ok",
+  "branch": "codex/external-agent-lab-isolated",
+  "checks": [
+    {
+      "name": "live_readonly_account_login_status_blocked",
+      "passed": true,
+      "status": "integration_failure",
+      "machine_error_code": "RUNTIME_LIVE_ACTION_CHAIN_PARKED",
+      "derived_from_anchored_verification_facts": true
+    },
+    {
+      "name": "sandbox_account_login_status_requires_contract",
+      "passed": true,
+      "status": "integration_failure",
+      "machine_error_code": "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+      "derived_from_anchored_verification_facts": true
+    },
+    {
+      "name": "sandbox_api_route_credential_check_packet_backed",
+      "passed": true,
+      "status": "integration_failure",
+      "machine_error_code": "UI_API_ROUTE_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN",
+      "derived_from_anchored_verification_facts": true
+    }
+  ],
+  "failed_checks": []
+}
