@@ -19,7 +19,7 @@ truthfully with the real upstream and record completed evidence for Pass 2 only.
 
 - goal: raise the bounded smoke-request completion budget in `wild_boar_proxy/external_models/transforms.py` just enough for the selected OpenRouter lane to return truthful text instead of invalid upstream responses, then prove it with focused tests and live packets
 - branch: codex/external-agent-lab-isolated
-- head: c157f7e22120cb5117878b219c5028acda6aaeef
+- head: d65b5a42536ef6da4127e544e5dfd1ea753db4f8
 - touched files: wild_boar_proxy/external_models/transforms.py; tests/test_cli_external_models.py; tests/test_external_models.py; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/provider_lane_selection_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/credential_status_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/route_validation_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/route_smoke_check_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/response_shape_classification_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/failure_semantics_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/auth_authority_boundary_packet.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/false_green_audit.json; audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/closeout.md
 - tests run: python3 -m unittest tests.test_external_models tests.test_cli_external_models; WBP_EXTERNAL_MODELS_DIR="$HOME/.wild-boar-proxy/external-models" WBP_MANAGED_DIR="$HOME/.wild-boar-proxy" python3 -m wild_boar_proxy external-models credentials status --provider openrouter --json; WBP_EXTERNAL_MODELS_DIR="$HOME/.wild-boar-proxy/external-models" WBP_MANAGED_DIR="$HOME/.wild-boar-proxy" python3 -m wild_boar_proxy external-models credentials status --provider deepseek --json; python3 -m wild_boar_proxy external-models routes list --json; WBP_EXTERNAL_MODELS_DIR="$HOME/.wild-boar-proxy/external-models" WBP_MANAGED_DIR="$HOME/.wild-boar-proxy" python3 -m wild_boar_proxy external-models routes validate --json --route wbp-web-primary-openrouter; WBP_EXTERNAL_MODELS_DIR="$HOME/.wild-boar-proxy/external-models" WBP_MANAGED_DIR="$HOME/.wild-boar-proxy" python3 -m wild_boar_proxy external-models check --json --route wbp-web-primary-openrouter; WBP_EXTERNAL_MODELS_DIR="$HOME/.wild-boar-proxy/external-models" WBP_MANAGED_DIR="$HOME/.wild-boar-proxy" python3 -m wild_boar_proxy external-models profile codex-desktop --json --route wbp-web-primary-openrouter; python3 tools/check_closeout_resilience.py audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27/closeout.md; JSON parse sweep over audit_results/wbp_one_external_provider_route_works_with_limits_r2_2026-05-27; git diff --check
 - blocked risks: the runtime fix used a shared smoke completion budget helper across request shapes, so the code change was broader than a route-id-specific branch; only the selected OpenRouter lane is live-proven here, auth stayed on `OPENROUTER_API_KEY`, and non-selected providers remain unproven and blocked
@@ -41,8 +41,8 @@ truthfully with the real upstream and record completed evidence for Pass 2 only.
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: not performed in this worker pass
-- pushed: not performed in this worker pass
+- commit: d65b5a42536ef6da4127e544e5dfd1ea753db4f8
+- pushed: already pushed to origin
 
 ## Scope Check
 
