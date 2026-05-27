@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-27T12:49:34.836319Z",
+  "copy_claims_beyond_metadata": false,
+  "failed_checks": [],
+  "packet_kind": "role_profile_false_green_audit",
+  "payload_widening_detected": false,
+  "role_labels_claimed_as_authority": false,
+  "status": "ok",
+  "ui_polish_claimed_as_runtime_improvement": false
+}

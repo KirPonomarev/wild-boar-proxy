@@ -1,0 +1,8 @@
+{
+  "captured_at_utc": "2026-05-27T12:49:34.796551Z",
+  "expected_labels_present": true,
+  "missing_labels": [],
+  "packet_kind": "role_profile_label_truth",
+  "role_label_is_presentation_only": true,
+  "status": "ok"
+}

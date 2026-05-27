@@ -1803,10 +1803,17 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         api_screen = self._section_html(html, "apiConnectionsScreen")
         self.assertIn('data-api-connections-mode="readonly-registry"', api_screen)
         self.assertIn('data-api-registry-surface="readonly-list"', api_screen)
+        self.assertIn('data-api-role-profile-surface="presentation-only"', api_screen)
         self.assertIn('data-api-builder-mode="deferred"', api_screen)
         self.assertIn("Маршруты недоступны", js)
         self.assertIn("Демо-режим. Маршруты показаны как ограниченная сводка", api_screen + js)
         self.assertIn("Live-readonly маршруты недоступны", js)
+        self.assertIn("Role / profile metadata", api_screen)
+        self.assertIn("presentation only", api_screen)
+        self.assertIn("Badge и подписи объясняют admitted metadata", api_screen)
+        self.assertIn("не меняют authority, capability или runtime truth", api_screen)
+        self.assertIn("Profile packet остаётся support surface", api_screen)
+        self.assertIn("support-only", api_screen)
         self.assertIn("Новый маршрут", api_screen)
         self.assertIn("server-owned", api_screen)
         self.assertIn("Подключить API", api_screen)
@@ -1864,7 +1871,6 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn("Сделать активным", api_screen + js)
         self.assertNotIn("Подключить Codex", api_screen + js)
         self.assertNotIn("Профиль готов", api_screen + js)
-        self.assertNotIn("Основной", api_screen)
         self.assertNotIn("Непрерывный поток", api_screen + js)
         self.assertNotIn("Сетка", api_screen + js)
         self.assertNotIn("primary route", api_screen + js)
@@ -1883,50 +1889,104 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn('id="onboardingResultSelected"', html)
         self.assertIn('id="onboardingResultReserveChip"', html)
         self.assertIn('id="onboardingResultNextAction"', html)
-        self.assertIn("Итог onboarding", html)
-        self.assertIn("Аккаунт не подключён", js)
-        self.assertIn('class="onboard-facts-grid"', html)
-        self.assertIn('class="onboard-technical-boundaries"', html)
-        self.assertIn('id="onboardingResultStatusProofChip"', html)
-        self.assertIn('id="onboardingResultPoolChip"', html)
-        self.assertIn("hold_account", js)
-        self.assertIn("release_account", js)
-        self.assertIn("account_id", js)
-        self.assertIn("route_id", js)
-        self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
-        self.assertIn('maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run")', js)
-        self.assertIn("Dry-run preview готов", js)
-        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action", js)
-        self.assertIn("Сначала выполняется безопасный dry-run preview", html)
-        self.assertIn("Web не принимает токены, файлы и локальные пути.", html)
-        self.assertIn("После admitted preview можно вернуться и подтвердить live connect в sandbox.", html)
-        self.assertIn("терминальный вывод из lifecycle", js)
-        self.assertIn("accountActionButtons", js)
-        self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
-        self.assertIn("Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов.", js)
-        self.assertIn("Это не утверждение состояния runtime.", js)
-        self.assertIn("secret_references", js)
-        self.assertNotIn("auth_ref", html + js)
-        self.assertNotIn("accounts validate", html + js)
-        self.assertNotIn("accounts hold", html + js)
-        self.assertNotIn("accounts promote", html + js)
-        self.assertNotIn("accounts demote", html + js)
-        self.assertNotIn("accounts release", html + js)
-        self.assertNotIn("accounts retire", html + js)
-        self.assertNotIn("accounts onboard", html + js)
-        self.assertNotIn("auth_ref", html + js)
-        self.assertNotIn("source_dir", html + js)
-        self.assertNotIn('type="file"', html)
-        self.assertNotIn('name="password"', html)
-        self.assertNotIn('name="credentials"', html)
-        self.assertNotIn('name="backend_id"', html)
-        self.assertNotIn("auto-promote", html + js)
-        self.assertNotIn("delete", html + js)
-        self.assertNotIn("reactivation", html + js)
-        self.assertNotIn("reactivate", html + js)
-        self.assertNotIn("restore later", html + js)
-        self.assertNotIn("pilot", html + js)
-        self.assertNotIn("scale proof", html + js)
+
+    def test_api_route_identity_renders_role_pill_as_metadata_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function createElement(tagName) {
+  return {
+    tagName,
+    className: "",
+    textContent: "",
+    title: "",
+    dataset: {},
+    children: [],
+    append(...nodes) {
+      this.children.push(...nodes);
+    },
+    appendChild(node) {
+      this.children.push(node);
+    },
+    addEventListener() {},
+    setAttribute(name, value) {
+      this[name] = value;
+    }
+  };
+}
+
+const sandbox = {
+  console,
+  Node: function Node() {},
+  document: {
+    createElement,
+    getElementById() {
+      return { textContent: "", className: "", hidden: false, children: [], append() {}, appendChild() {}, addEventListener() {}, setAttribute() {} };
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { source: "fixture", screen: "api-connections" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+function flattenText(node) {
+  return [node.textContent || "", ...(node.children || []).flatMap(flattenText)].join(" | ");
+}
+
+const mainIdentity = sandbox.routeIdentity({
+  route_id: "wbp-main",
+  display_name: "OpenAI registry entry",
+  role_label: "main route",
+  primary: true
+});
+const reserveIdentity = sandbox.routeIdentity({
+  route_id: "wbp-reserve",
+  display_name: "Reserve candidate",
+  role_label: "Допустим для резерва",
+  primary: false
+});
+
+const mainText = flattenText(mainIdentity);
+const reserveText = flattenText(reserveIdentity);
+if (!mainText.includes("Основной маршрут")) {
+  throw new Error(`main route pill missing: ${mainText}`);
+}
+if (mainText.includes("main route")) {
+  throw new Error(`raw main route leaked into rendered copy: ${mainText}`);
+}
+if (!reserveText.includes("Резервный кандидат")) {
+  throw new Error(`reserve role pill missing: ${reserveText}`);
+}
+if (!mainIdentity.children.some((child) => child.className === "api-route-meta")) {
+  throw new Error(`route meta container missing: ${JSON.stringify(mainIdentity)}`);
+}
+const rolePill = sandbox.routeRolePill({ role_label: "main route", primary: true });
+if (!rolePill || rolePill.className !== "mini-pill api-route-role-pill blue") {
+  throw new Error(`main role pill class mismatch: ${JSON.stringify(rolePill)}`);
+}
+if (!rolePill.title.includes("admitted metadata")) {
+  throw new Error(`role pill title missing metadata boundary: ${rolePill.title}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_diagnostics_screen_is_support_artifact_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

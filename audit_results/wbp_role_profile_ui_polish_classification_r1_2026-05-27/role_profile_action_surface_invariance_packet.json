@@ -1,0 +1,15 @@
+{
+  "api_route_allow_present": true,
+  "api_route_check_present": true,
+  "api_route_disable_present": true,
+  "api_route_evidence_capture_present": true,
+  "api_route_profile_present": true,
+  "api_route_remove_present": true,
+  "api_route_validate_present": true,
+  "captured_at_utc": "2026-05-27T12:49:34.798212Z",
+  "forbidden_route_create_absent": true,
+  "forbidden_route_draft_absent": true,
+  "forbidden_route_update_absent": true,
+  "packet_kind": "role_profile_action_surface_invariance",
+  "status": "ok"
+}

@@ -2022,6 +2022,47 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.api-role-profile-card {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.api-role-profile-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.api-role-profile-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.api-role-profile-item {
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.api-role-profile-item p {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 0;
+}
+
+.api-role-profile-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .kpi-card {
   align-items: flex-start;
   display: flex;
@@ -2555,6 +2596,26 @@ button:disabled {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
+}
+
+.api-route-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.api-route-display-name {
+  color: var(--secondary);
+}
+
+.api-route-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.api-route-role-pill {
+  padding: 4px 8px;
 }
 
 .right {
@@ -7500,6 +7561,10 @@ button:disabled {
   .quick-start-grid,
   .api-connections-summary,
   .quick-start-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .api-role-profile-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -9531,29 +9531,80 @@ function renderApiConnectionRows(routes) {
 
 function routeIdentity(route) {
   const wrap = document.createElement("div");
+  wrap.className = "api-route-identity";
   const main = document.createElement("div");
   main.className = "account-main mono-value api-route-id";
   main.textContent = route.route_id || "unknown-route";
   const sub = document.createElement("div");
-  sub.className = "account-sub";
-  const subtitle = routeSubtitle(route);
-  sub.textContent = subtitle;
-  sub.title = subtitle;
+  sub.className = "account-sub api-route-display-name";
+  const displayName = routeDisplayName(route);
+  sub.textContent = displayName;
+  sub.title = displayName;
   wrap.append(main, sub);
+  const rolePill = routeRolePill(route);
+  if (rolePill) {
+    const meta = document.createElement("div");
+    meta.className = "api-route-meta";
+    meta.append(rolePill);
+    wrap.append(meta);
+  }
   return wrap;
 }
 
-function routeSubtitle(route) {
-  const parts = [];
+function routeDisplayName(route) {
   const displayName = String(route.display_name || "").trim();
-  const roleLabel = String(route.role_label || "").trim();
   if (displayName) {
-    parts.push(displayName.replace(/\s*registry entry\s*$/i, "").trim() || displayName);
+    return displayName.replace(/\s*registry entry\s*$/i, "").trim() || displayName;
   }
-  if (roleLabel && roleLabel.toLowerCase() !== "registry entry") {
-    parts.push(roleLabel);
+  const roleLabel = normalizedRouteRoleLabel(route);
+  if (roleLabel) {
+    return roleLabel;
   }
-  return parts.filter(Boolean).join(" · ") || "registry entry";
+  return "registry entry";
+}
+
+function normalizedRouteRoleLabel(route) {
+  const raw = String(route.role_label || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw || lower === "registry entry") {
+    return "";
+  }
+  if (route.is_primary === true || route.primary === true || lower === "main route" || lower === "primary") {
+    return "Основной маршрут";
+  }
+  if (lower === "допустим для резерва") {
+    return "Резервный кандидат";
+  }
+  if (lower === "маршрут проверки") {
+    return "Маршрут проверки";
+  }
+  return raw;
+}
+
+function routeRoleTone(route) {
+  const label = normalizedRouteRoleLabel(route);
+  if (!label) {
+    return "neutral";
+  }
+  if (label === "Основной маршрут") {
+    return "blue";
+  }
+  if (label === "Резервный кандидат") {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function routeRolePill(route) {
+  const label = normalizedRouteRoleLabel(route);
+  if (!label) {
+    return null;
+  }
+  const chip = document.createElement("span");
+  chip.className = `mini-pill api-route-role-pill ${routeRoleTone(route)}`;
+  chip.textContent = label;
+  chip.title = "Role label отражает admitted metadata и не меняет authority или runtime truth.";
+  return chip;
 }
 
 function routeStatusLabel(route) {

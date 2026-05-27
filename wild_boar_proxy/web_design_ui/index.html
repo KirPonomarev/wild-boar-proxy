@@ -1609,6 +1609,33 @@
             </section>
           </div>
 
+          <section class="card api-role-profile-card" data-api-role-profile-surface="presentation-only">
+            <div class="api-role-profile-head">
+              <div>
+                <div class="card-title">Role / profile metadata</div>
+                <div class="secondary">Badge и подписи объясняют admitted metadata. Они не меняют authority, capability или runtime truth.</div>
+              </div>
+              <span class="mini-pill neutral">presentation only</span>
+            </div>
+            <div class="api-role-profile-grid">
+              <div class="api-role-profile-item">
+                <div class="api-role-profile-pill-row">
+                  <span class="mini-pill blue">Основной маршрут</span>
+                  <span class="mini-pill amber">Резервный кандидат</span>
+                  <span class="mini-pill neutral">Маршрут проверки</span>
+                </div>
+                <p>Role labels показывают только назначение route в bounded metadata и не дают новой command authority.</p>
+              </div>
+              <div class="api-role-profile-item">
+                <div class="api-role-profile-pill-row">
+                  <span class="mini-pill neutral">profile packet</span>
+                  <span class="mini-pill neutral">support-only</span>
+                </div>
+                <p>Profile packet остаётся support surface: не настраивает Codex config, не подтверждает readiness и не утверждает runtime успех.</p>
+              </div>
+            </div>
+          </section>
+
           <section class="card table-card api-connections-table-card" data-api-registry-surface="readonly-list">
             <div class="table-top">
               <div>
@@ -1620,7 +1647,7 @@
             <div class="table-scroll" data-table-scroll="api-connections">
               <table class="table api-connections-table">
                 <colgroup>
-                  <col style="width:190px">
+                  <col style="width:224px">
                   <col style="width:86px">
                   <col style="width:156px">
                   <col style="width:108px">
