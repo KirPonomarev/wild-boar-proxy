@@ -1,0 +1,24 @@
+{
+  "browser_client_path_authority": false,
+  "captured_at_utc": "2026-05-27T11:16:00.868688Z",
+  "cleanup_deletes_persistent_profile_by_default": false,
+  "codex_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "counts_as_final_e2e": false,
+  "counts_as_route_proof": false,
+  "history_persistence_expected": true,
+  "original_codex_profile_runtime_dependency": false,
+  "packet_kind": "persistent_custom_profile_contract_import",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_mode": "persistent_custom",
+  "remote_client_path_authority": false,
+  "silent_persistent_to_ephemeral_fallback_allowed": false,
+  "source_packets": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_custom_profile_contract_packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_contract_packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_launcher_enforcement_contract_packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_no_silent_fallback_packet.json"
+  ],
+  "status": "ok",
+  "user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+}

@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-27T11:16:00.869151Z",
+  "counts_as_daily_reliability_proof": false,
+  "fallback_rejected": true,
+  "launcher_enforces_policy": true,
+  "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-profile.lock",
+  "packet_kind": "concurrent_launch_policy_import",
+  "policy": "single_writer_only",
+  "same_profile_multi_writer_allowed": false,
+  "silent_persistent_to_ephemeral_fallback_allowed": false,
+  "source_packets": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_concurrent_launch_policy_packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_no_silent_fallback_packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_launcher_enforcement_contract_packet.json"
+  ],
+  "state_consistency_risk_classified": true,
+  "status": "ok"
+}

@@ -1,0 +1,38 @@
+{
+  "captured_at_utc": "2026-05-27T11:16:00.868682Z",
+  "checks": [
+    {
+      "name": "r1_contract_ready",
+      "passed": true
+    },
+    {
+      "name": "r2_enforcement_ready",
+      "passed": true
+    },
+    {
+      "name": "r2b_negative_preservation_truth",
+      "passed": true
+    },
+    {
+      "name": "r2c_owner_visible_continuity_truth",
+      "passed": true
+    },
+    {
+      "name": "r2c_prior_r2b_consistent",
+      "passed": true
+    },
+    {
+      "name": "r3_storage_limits_truth",
+      "passed": true
+    },
+    {
+      "name": "r4_schema_limits_truth",
+      "passed": true
+    }
+  ],
+  "packet_kind": "persistent_source_reference_validation",
+  "source_chain_counts_as_final_e2e": false,
+  "source_chain_counts_as_route_proof": false,
+  "status": "ok",
+  "validation_scope": "bounded_persistent_custom_profile_continuity_only"
+}
