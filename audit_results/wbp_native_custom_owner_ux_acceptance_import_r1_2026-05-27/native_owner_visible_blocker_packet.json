@@ -1,0 +1,10 @@
+{
+  "blocking_prompt_observed": false,
+  "captured_at_utc": "2026-05-27T10:17:13.601844Z",
+  "current_owner_action_collected": false,
+  "derived_from_source_packets_only": true,
+  "packet_kind": "native_owner_visible_blocker",
+  "status": "ok",
+  "visible_blocker_classification": "no_obvious_blocker_reported_in_source_event",
+  "visible_friction_reported": false
+}

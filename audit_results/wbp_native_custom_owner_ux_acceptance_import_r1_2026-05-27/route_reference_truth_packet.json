@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T10:17:13.601882Z",
+  "packet_kind": "route_reference_truth",
+  "route_reference_final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_OBSERVED",
+  "route_reference_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/detached_native_custom_egress_import_summary_packet.json",
+  "route_reference_present": true,
+  "route_reference_reopens_route_proof": false,
+  "route_reference_status": "ok",
+  "route_reference_supports_interpretation_only": true,
+  "source_route_trace_confirmed": true,
+  "status": "ok"
+}

@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T10:17:13.601814Z",
+  "current_owner_action_collected": false,
+  "historical_source_packet_chain": true,
+  "invalid_json_packets": [],
+  "missing_packets": [],
+  "packet_kind": "source_owner_ux_evidence_inventory",
+  "required_packets": [
+    "independent_owner_ux_route_audit.json",
+    "native_owner_ux_false_green_audit.json",
+    "native_route_trace_binding_packet.json",
+    "owner_action_boundary_packet.json",
+    "owner_manual_ux_check_packet.json",
+    "owner_ux_route_summary_packet.json",
+    "owner_visible_response_confirmation_packet.json",
+    "two_lane_result_matrix.json",
+    "wbp_trace_observation_packet.json"
+  ],
+  "source_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26",
+  "source_packet_count": 9,
+  "status": "ok"
+}

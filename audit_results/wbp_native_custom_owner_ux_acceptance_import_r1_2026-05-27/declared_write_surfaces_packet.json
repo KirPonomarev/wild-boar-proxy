@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T10:17:13.601247Z",
+  "declared_write_surfaces": [
+    "fresh evidence directory only"
+  ],
+  "native_app_launch_attempted_by_this_probe": false,
+  "original_codex_bundle_write_allowed": false,
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "declared_write_surfaces",
+  "protected_surfaces_write_allowed": false,
+  "status": "ok"
+}
