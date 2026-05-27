@@ -1,0 +1,96 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.097216Z",
+  "live_rejection_proven": false,
+  "packet_kind": "dry_run_rejection_matrix",
+  "rejection_matrix": [
+    {
+      "case": "missing_profile_id",
+      "dry_run_rejection_only": true,
+      "expected_failure": "persistent_profile_id_invalid",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "persistent_profile_id_invalid"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "invalid_profile_id",
+      "dry_run_rejection_only": true,
+      "expected_failure": "persistent_profile_id_invalid",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "persistent_profile_id_invalid"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "browser_client_path_authority",
+      "dry_run_rejection_only": true,
+      "expected_failure": "browser_client_path_authority_forbidden",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "browser_client_path_authority_forbidden"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "remote_client_path_authority",
+      "dry_run_rejection_only": true,
+      "expected_failure": "remote_client_path_authority_forbidden",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "remote_client_path_authority_forbidden"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "silent_fallback",
+      "dry_run_rejection_only": true,
+      "expected_failure": "silent_persistent_to_ephemeral_fallback_forbidden",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "silent_persistent_to_ephemeral_fallback_forbidden"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "original_profile_dependency",
+      "dry_run_rejection_only": true,
+      "expected_failure": "original_codex_profile_dependency_forbidden",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "original_codex_profile_dependency_forbidden"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "profile_write_allowed",
+      "dry_run_rejection_only": true,
+      "expected_failure": "persistent_profile_state_write_forbidden_in_dry_run",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "persistent_profile_state_write_forbidden_in_dry_run"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "live_execution_allowed",
+      "dry_run_rejection_only": true,
+      "expected_failure": "live_execution_forbidden_in_dry_run",
+      "expected_failure_present": true,
+      "failed_checks": [
+        "live_execution_forbidden_in_dry_run"
+      ],
+      "live_rejection_proven": false,
+      "status": "blocked"
+    }
+  ],
+  "status": "ok"
+}

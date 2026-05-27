@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.080843Z",
+  "dependency_rejected": true,
+  "mutation_rejected": true,
+  "original_codex_auth_copied": false,
+  "original_codex_history_copied": false,
+  "original_codex_profile_dependency": false,
+  "original_codex_profile_mutated": false,
+  "original_codex_profile_used_as_custom_shortcut": false,
+  "original_guard_counts_as_original_reversibility_proof": false,
+  "packet_kind": "persistent_original_profile_guard",
+  "status": "ok"
+}

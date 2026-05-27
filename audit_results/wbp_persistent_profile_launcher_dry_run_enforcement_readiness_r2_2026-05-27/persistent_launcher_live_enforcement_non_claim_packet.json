@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.086136Z",
+  "codex_app_runtime_behavior_proven": false,
+  "config_validation_is_live_runtime_enforcement": false,
+  "dry_run_rejection_is_live_rejection_proof": false,
+  "live_enforcement_proven": false,
+  "live_execution_allowed_in_this_contour": false,
+  "live_execution_rejected": true,
+  "macos_open_runtime_enforcement_proven": false,
+  "packet_kind": "persistent_launcher_live_enforcement_non_claim",
+  "status": "ok"
+}
