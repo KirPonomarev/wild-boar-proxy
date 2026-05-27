@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T07:58:54.196852Z",
+  "codex_cli_required": false,
+  "direct_wbp_client_only": true,
+  "live_request_allowed": true,
+  "live_request_attempted": true,
+  "machine_error_code": "OK",
+  "native_launch_required": false,
+  "owner_authorization_phrase_present": true,
+  "packet_kind": "runtime_readiness",
+  "status": "ok",
+  "stopped_before_live_provider_model_request": false
+}

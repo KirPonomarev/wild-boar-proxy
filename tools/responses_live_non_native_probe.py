@@ -15,6 +15,8 @@ import hashlib
 import json
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -28,6 +30,7 @@ from wild_boar_proxy.native_window_probe import (  # noqa: E402
     OWNER_STANDING_AUTHORIZATION_PHRASE,
     owner_authorization_phrase_present,
 )
+from wild_boar_proxy.runtime import proxyless_urlopen  # noqa: E402
 
 
 TARGET_STATUS = "WBP_RESPONSES_LIVE_COMPATIBILITY_NON_NATIVE_R1_CLASSIFIED"
@@ -43,12 +46,15 @@ BLOCKED_RUNTIME_OR_UPSTREAM_FAILURE = (
 DEFAULT_EVIDENCE_DIR = (
     REPO_ROOT / "audit_results" / "wbp_responses_live_compatibility_non_native_r1_2026-05-27"
 )
+DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "wbp_responses_compatibility"
+LIVE_PROMPT_PREFIX = "WBP_RESPONSES_LIVE_NON_NATIVE_R1_NONCE_2026_05_27"
 SECRET_MARKERS = (
     "sk-",
     "Authorization: Bearer",
     "OPENAI_API_KEY",
     "Reply with exactly",
+    LIVE_PROMPT_PREFIX,
 )
 FAILURE_CAUSES = {
     "none",
@@ -100,6 +106,198 @@ def load_request_fixture() -> dict[str, Any]:
     return json.loads((FIXTURE_DIR / "non_stream_text_request.json").read_text(encoding="utf-8"))
 
 
+def auth_token_packet(repo_root: Path) -> tuple[dict[str, Any], str]:
+    command_path = repo_root / "wbp_codex_auth_command.py"
+    process = subprocess.run(
+        [str(command_path)],
+        cwd=repo_root,
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    token = process.stdout.strip() if process.returncode == 0 else ""
+    return (
+        packet(
+            "direct_wbp_auth_command_observation",
+            status="ok" if token else "blocked",
+            machine_error_code="OK" if token else "WBP_AUTH_TOKEN_UNAVAILABLE",
+            auth_command_path=str(command_path),
+            auth_command_returncode=process.returncode,
+            token_present=bool(token),
+            token_recorded=False,
+            token_hash_recorded=False,
+            stderr_hash=sha256_text(process.stderr) if process.stderr else "",
+            raw_upstream_secret_recorded=False,
+        ),
+        token,
+    )
+
+
+def http_json(
+    *,
+    endpoint: str,
+    path: str,
+    token: str,
+    payload: dict[str, Any],
+    timeout: int,
+) -> dict[str, Any]:
+    body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+    request = urllib.request.Request(
+        f"{endpoint.rstrip('/')}/{path.lstrip('/')}",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "responses=v1",
+            "X-Session-ID": f"wbp-responses-live-r1-{sha256_text(utc_now())[:16]}",
+        },
+    )
+    try:
+        with proxyless_urlopen(request, timeout=timeout) as response:
+            response_body = response.read()
+            decoded = response_body.decode("utf-8", "replace")
+            try:
+                parsed = json.loads(decoded)
+            except json.JSONDecodeError:
+                parsed = {}
+            return {
+                "http_status": int(response.status),
+                "body_hash": sha256_text(decoded),
+                "body_len": len(response_body),
+                "payload": parsed if isinstance(parsed, dict) else {},
+                "exception_type": "",
+            }
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read()
+        decoded = response_body.decode("utf-8", "replace")
+        try:
+            parsed = json.loads(decoded)
+        except json.JSONDecodeError:
+            parsed = {}
+        return {
+            "http_status": int(exc.code),
+            "body_hash": sha256_text(decoded),
+            "body_len": len(response_body),
+            "payload": parsed if isinstance(parsed, dict) else {},
+            "exception_type": "HTTPError",
+        }
+    except TimeoutError:
+        return {
+            "http_status": None,
+            "body_hash": "",
+            "body_len": 0,
+            "payload": {},
+            "exception_type": "TimeoutError",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "http_status": None,
+            "body_hash": "",
+            "body_len": 0,
+            "payload": {},
+            "exception_type": type(exc).__name__,
+        }
+
+
+def response_shape_accepted(payload: dict[str, Any]) -> tuple[bool, str]:
+    if not isinstance(payload, dict):
+        return False, ""
+    status = str(payload.get("status") or "")
+    output = payload.get("output")
+    text = payload.get("output_text")
+    accepted = (
+        str(payload.get("id") or "").startswith("resp_")
+        and status in {"completed", "incomplete"}
+        and (isinstance(output, list) or isinstance(text, str))
+    )
+    return accepted, status
+
+
+def classify_http_failure(http_status: int | None, payload: dict[str, Any], exception_type: str) -> str:
+    if exception_type == "TimeoutError":
+        return "timeout"
+    if http_status in {401, 403}:
+        return "auth_failure"
+    if http_status == 429:
+        return "quota_or_rate_limit"
+    if http_status in {400, 404}:
+        error = payload.get("error") if isinstance(payload, dict) else {}
+        code = str(error.get("code") or error.get("type") or "") if isinstance(error, dict) else ""
+        return "model_rejected" if "model" in code.lower() else "provider_error"
+    if http_status is not None and http_status >= 500:
+        return "provider_error"
+    if http_status is None:
+        return "wbp_runtime_unavailable"
+    return "unknown"
+
+
+def build_live_request_runner(
+    *,
+    repo_root: Path,
+    endpoint: str,
+    model_id: str,
+    timeout: int,
+) -> tuple[RequestRunner, dict[str, Any]]:
+    auth_packet, token = auth_token_packet(repo_root)
+
+    def runner(request_spec: dict[str, Any]) -> dict[str, Any]:
+        if not token:
+            return {
+                "request_attempted": False,
+                "request_reaches_wbp": False,
+                "route_selected": False,
+                "response_observed": False,
+                "upstream_status_code": 0,
+                "upstream_accepts": False,
+                "response_shape_accepted": False,
+                "failure_cause": "auth_failure",
+                "auth_command_status": auth_packet["status"],
+            }
+        prompt = f"{LIVE_PROMPT_PREFIX}_{sha256_text(utc_now())[:16]}: answer exactly OK"
+        observed = http_json(
+            endpoint=endpoint,
+            path="responses",
+            token=token,
+            payload={
+                "model": model_id or str(request_spec.get("model_id") or ""),
+                "input": prompt,
+                "max_output_tokens": 16,
+                "stream": False,
+            },
+            timeout=timeout,
+        )
+        http_status = observed["http_status"]
+        payload = observed["payload"]
+        shape_accepted, response_status = response_shape_accepted(payload)
+        success = http_status is not None and 200 <= http_status < 300
+        failure_cause = "none" if success and shape_accepted else classify_http_failure(
+            http_status,
+            payload,
+            str(observed["exception_type"]),
+        )
+        return {
+            "request_attempted": True,
+            "request_reaches_wbp": http_status is not None,
+            "path": "/v1/responses",
+            "response_observed": http_status is not None,
+            "route_selected": success,
+            "upstream_status_code": http_status or 0,
+            "upstream_accepts": success,
+            "response_shape_accepted": shape_accepted,
+            "response_status": response_status,
+            "failure_cause": failure_cause,
+            "http_body_sha256": observed["body_hash"],
+            "http_body_len": observed["body_len"],
+            "exception_type": observed["exception_type"],
+            "auth_command_status": auth_packet["status"],
+        }
+
+    return runner, auth_packet
+
+
 def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str], list[str]]:
     status_lines = run_text(repo_root, ["git", "status", "--short"]).splitlines()
     try:
@@ -110,6 +308,12 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
         "tools/responses_live_non_native_probe.py",
         "tests/test_responses_live_non_native_probe.py",
     }
+    admitted_current_evidence_prefixes = (
+        f"A  {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
+        f"AM {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
+        f" M {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
+        f"?? {DEFAULT_EVIDENCE_DIR.relative_to(repo_root)}/",
+    )
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
         "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
@@ -134,6 +338,7 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
             relative_evidence_dir
             and line.strip().startswith(f"?? {relative_evidence_dir}/")
         )
+        and not line.strip().startswith(admitted_current_evidence_prefixes)
         and not any(path in line for path in admitted_current_contour)
     ]
     return quarantined, unexpected_dirty
@@ -165,10 +370,13 @@ def build_packets(
     *,
     owner_authorization_phrase: str | None = None,
     request_runner: RequestRunner | None = None,
+    auth_observation_packet: dict[str, Any] | None = None,
+    endpoint: str = DEFAULT_ENDPOINT,
+    model_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     quarantined, unexpected_dirty = historical_quarantine(repo_root, evidence_dir)
     fixture = load_request_fixture()
-    model = str(fixture.get("model") or "")
+    model = str(model_id or fixture.get("model") or "")
     input_items = fixture.get("input")
     input_count = len(input_items) if isinstance(input_items, list) else 0
     try:
@@ -209,6 +417,8 @@ def build_packets(
                 "tests/test_responses_live_non_native_probe.py",
                 evidence_surface,
             ],
+            endpoint=endpoint,
+            live_model_id=model,
             runtime_mutation_allowed=False,
             route_account_mutation_allowed=False,
             native_launch_allowed=False,
@@ -251,6 +461,7 @@ def build_packets(
         "direct_request_shape_packet.json": packet(
             "direct_request_shape",
             endpoint_path="/v1/responses",
+            endpoint=endpoint,
             request_shape_classified=True,
             model_id=model,
             input_item_count=input_count,
@@ -272,6 +483,8 @@ def build_packets(
             failure_taxonomy_counts_as_model_availability=False,
         ),
     }
+    if auth_observation_packet is not None:
+        packets["direct_wbp_auth_command_observation_packet.json"] = auth_observation_packet
 
     if not owner_authorized:
         blocked_packet = packet(
@@ -373,6 +586,9 @@ def build_packets(
             request_reaches_wbp=request_reaches_wbp,
             endpoint_path=str(runner_result.get("path") or "/v1/responses"),
             response_observed=runner_result.get("response_observed") is True,
+            http_body_sha256=str(runner_result.get("http_body_sha256") or ""),
+            http_body_len=int(runner_result.get("http_body_len") or 0),
+            exception_type=str(runner_result.get("exception_type") or ""),
             blocked_reason_class="" if request_attempted and request_reaches_wbp else failure_cause,
         )
         packets["route_selection_observation_packet.json"] = packet(
@@ -402,6 +618,7 @@ def build_packets(
             upstream_status_code=upstream_status_code,
             failure_cause=failure_cause,
             failure_classified=failure_cause in FAILURE_CAUSES,
+            exception_type=str(runner_result.get("exception_type") or ""),
             failure_counts_as_model_availability=False,
             failure_counts_as_provider_family_compatibility=False,
         )
@@ -417,6 +634,8 @@ def build_packets(
             response_shape_accepted=response_shape_accepted,
             direct_client_accepted_response=response_shape_accepted,
             response_status=str(runner_result.get("response_status") or ""),
+            http_body_sha256=str(runner_result.get("http_body_sha256") or ""),
+            http_body_len=int(runner_result.get("http_body_len") or 0),
             direct_non_stream_success_counts_as_native_acceptance=False,
             direct_non_stream_success_counts_as_model_availability=False,
         )
@@ -598,12 +817,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--evidence-dir", type=Path, default=DEFAULT_EVIDENCE_DIR)
     parser.add_argument("--owner-authorization-phrase", default="")
+    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    parser.add_argument("--model", default="")
+    parser.add_argument("--timeout", type=int, default=90)
     args = parser.parse_args(argv)
 
+    request_runner: RequestRunner | None = None
+    auth_observation_packet: dict[str, Any] | None = None
+    if owner_authorization_phrase_present(args.owner_authorization_phrase):
+        request_runner, auth_observation_packet = build_live_request_runner(
+            repo_root=args.repo_root,
+            endpoint=args.endpoint,
+            model_id=args.model,
+            timeout=args.timeout,
+        )
     packets = build_packets(
         args.repo_root,
         args.evidence_dir,
         owner_authorization_phrase=args.owner_authorization_phrase,
+        request_runner=request_runner,
+        auth_observation_packet=auth_observation_packet,
+        endpoint=args.endpoint,
+        model_id=args.model or None,
     )
     write_packets(args.evidence_dir, packets)
     print(

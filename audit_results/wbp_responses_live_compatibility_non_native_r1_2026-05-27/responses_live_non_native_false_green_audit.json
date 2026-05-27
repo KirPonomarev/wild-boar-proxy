@@ -1,0 +1,19 @@
+{
+  "all_models_work": false,
+  "captured_at_utc": "2026-05-27T07:58:54.196976Z",
+  "codex_app_accepted_model": false,
+  "codex_cli_accepted_model": false,
+  "direct_egress_absent": false,
+  "direct_wbp_200_counted_as_general_model_availability": false,
+  "direct_wbp_200_counted_as_native_acceptance": false,
+  "final_e2e_proven": false,
+  "findings": [],
+  "gpt_5_5_works": false,
+  "model_catalog_proves_model_access": false,
+  "native_custom_works": false,
+  "packet_kind": "responses_live_non_native_false_green_audit",
+  "provider_family_compatible": false,
+  "status": "ok",
+  "streaming_compatible": false,
+  "tool_loop_compatible": false
+}
