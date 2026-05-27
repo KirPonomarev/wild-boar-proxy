@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-28T00:00:00Z",
+  "status": "ok",
+  "final_verdict": "CUSTOM_CODEX_KEYCHAIN_PREFLIGHT_PHASE1_INTEGRATED_WITH_BOUNDARY",
+  "contour": "CUSTOM_CODEX_KEYCHAIN_PREFLIGHT_PRODUCT_INTEGRATION_PHASE1_R2",
+  "phase": "implementation",
+  "module_added": true,
+  "integration_point": "wild_boar_proxy/native_window_probe.py",
+  "runtime_py_modified": false,
+  "dynamic_discovery_only": true,
+  "discovery_commands": [
+    "security default-keychain -d user",
+    "security list-keychains -d user"
+  ],
+  "writes_confined_to_isolated_home": true,
+  "isolated_default_keychain_verified_live_helper_run": true,
+  "isolated_search_list_verified_live_helper_run": true,
+  "real_user_default_keychain_unchanged_after_live_helper_run": true,
+  "real_user_keychain_modified": false,
+  "keychain_item_read": false,
+  "keychain_reset_performed": false,
+  "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+  "host_level_prompt_suppression_claimed": false,
+  "auth_success_claimed": false
+}

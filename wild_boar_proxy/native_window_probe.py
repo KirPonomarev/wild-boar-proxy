@@ -27,6 +27,7 @@ from .native_filesystem_probe import (
     terminate_custom_processes,
     utc_now,
 )
+from .keychain_preflight import prepare_isolated_home_keychain
 from .native_launch_contract import build_native_custom_preflight_packet
 from .native_launch_dispatch import (
     CUSTOM_LAUNCH_MODE,
@@ -106,10 +107,7 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
             if pid is not None
         }
     )
-    if custom_root_pids:
-        return custom_root_pids
-    root_pids = process_inventory.get("root_app_pids", [])
-    return [int(pid) for pid in root_pids if isinstance(pid, int)]
+    return custom_root_pids
 
 
 def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
@@ -406,6 +404,15 @@ def launch_custom_native_app_packet(
         "cleanup_deferred_while_running": False,
         "cleanup_command_planned": True,
         "launch_claim_scope": "custom_native_app_window_launch_only",
+        "keychain_preflight_attempted": False,
+        "keychain_preflight_status": "",
+        "keychain_preflight_reason_code": "",
+        "isolated_default_keychain_verified": False,
+        "isolated_search_list_verified": False,
+        "real_user_keychain_modified": False,
+        "keychain_item_read": False,
+        "keychain_reset_performed": False,
+        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
     }
     if auth["status"] != "ok":
         return {
@@ -432,6 +439,50 @@ def launch_custom_native_app_packet(
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
         )
+        keychain_preflight = prepare_isolated_home_keychain(
+            isolated_home=layout.custom_home_dir,
+        )
+        keychain_fields = {
+            "keychain_preflight_attempted": True,
+            "keychain_preflight_status": str(keychain_preflight.get("status") or ""),
+            "keychain_preflight_reason_code": str(
+                keychain_preflight.get("machine_error_code") or ""
+            ),
+            "isolated_default_keychain_verified": keychain_preflight.get(
+                "isolated_default_keychain_verified"
+            )
+            is True,
+            "isolated_search_list_verified": keychain_preflight.get(
+                "isolated_search_list_verified"
+            )
+            is True,
+            "real_user_keychain_modified": False,
+            "keychain_item_read": False,
+            "keychain_reset_performed": False,
+            "prompt_avoidance_claim_scope": str(
+                keychain_preflight.get("prompt_avoidance_claim_scope")
+                or "keychain_not_found_prompt_only"
+            ),
+        }
+        if keychain_preflight.get("status") == "blocked":
+            cleanup_error = remove_tree_with_retry(tmp_root)
+            return {
+                **base,
+                **keychain_fields,
+                "status": "blocked",
+                "machine_error_code": str(
+                    keychain_preflight.get("machine_error_code")
+                    or "KEYCHAIN_PREFLIGHT_BLOCKED"
+                ),
+                "human_message": "Custom native launch stopped before launch because keychain preflight was blocked.",
+                "next_action": "stop_and_diagnose_keychain_preflight",
+                "cleanup_result": {
+                    "attempted": True,
+                    "status": "ok" if not cleanup_error else "blocked",
+                    "termination": {},
+                    "cleanup_error_class": cleanup_error,
+                },
+            }
         launch_result = launch_native_candidate(
             repo_root=repo_root,
             layout=layout,
@@ -452,6 +503,7 @@ def launch_custom_native_app_packet(
 
         return {
             **base,
+            **keychain_fields,
             "status": "ok" if success else "blocked",
             "machine_error_code": "OK" if success else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN",
             "human_message": (
