@@ -1,0 +1,54 @@
+{
+  "allowed_local_endpoint_observed": false,
+  "allowed_local_endpoints": [
+    "127.0.0.1:49952"
+  ],
+  "classification": "insufficient_observation",
+  "direct_non_wbp_model_egress_absent_proven": false,
+  "machine_error_code": "OK",
+  "non_local_peer_endpoints_present": true,
+  "observed_process_count_max": 13,
+  "peer_endpoints": [
+    {
+      "command_basename": "Codex",
+      "endpoint": "127.0.0.1:10809",
+      "host_class": "local",
+      "is_root_process": false,
+      "pid_digest": "468344ce1f2e74f3"
+    },
+    {
+      "command_basename": "git-remote-https",
+      "endpoint": "140.82.121.3:443",
+      "host_class": "non_local",
+      "is_root_process": false,
+      "pid_digest": "a8d248c5eda6fa32"
+    },
+    {
+      "command_basename": "Codex",
+      "endpoint": "104.18.41.158:443",
+      "host_class": "non_local",
+      "is_root_process": true,
+      "pid_digest": "0edcd7f37d75330b"
+    },
+    {
+      "command_basename": "Codex",
+      "endpoint": "172.64.150.28:443",
+      "host_class": "non_local",
+      "is_root_process": true,
+      "pid_digest": "0edcd7f37d75330b"
+    },
+    {
+      "command_basename": "Codex",
+      "endpoint": "34.160.81.0:443",
+      "host_class": "non_local",
+      "is_root_process": true,
+      "pid_digest": "0edcd7f37d75330b"
+    }
+  ],
+  "pid_not_exposed_to_browser": true,
+  "process_tree_observed": true,
+  "raw_pid_exposed": false,
+  "sample_count": 264,
+  "secret_value_recorded": false,
+  "status": "ok"
+}

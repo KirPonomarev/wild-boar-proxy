@@ -2373,8 +2373,10 @@ def validate_external_evidence_packets(
     *,
     external_evidence_dir: Path,
     required_packets: list[str],
+    import_derived_alternatives: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     external_evidence_dir = external_evidence_dir.resolve()
+    import_derived_alternatives = import_derived_alternatives or {}
     required: list[str] = []
     alternatives: list[str] = []
     for packet in required_packets:
@@ -2410,7 +2412,10 @@ def validate_external_evidence_packets(
     for alternative in alternatives:
         choices = [choice.strip() for choice in alternative.split(" or ")]
         present = [choice for choice in choices if (external_evidence_dir / choice).exists()]
-        alternative_statuses[alternative] = "present" if present else "missing"
+        derived = [choice for choice in choices if choice in import_derived_alternatives]
+        alternative_statuses[alternative] = (
+            "present" if present else "import_derived" if derived else "missing"
+        )
         if present:
             for choice in present:
                 try:
@@ -2420,8 +2425,20 @@ def validate_external_evidence_packets(
                 except json.JSONDecodeError:
                     invalid_json_packets.append(choice)
                     alternative_statuses[alternative] = "invalid_json"
+        elif derived:
+            for choice in derived:
+                parsed_packets[choice] = import_derived_alternatives[choice]
         else:
             missing_packets.append(alternative)
+
+    if external_evidence_dir.exists():
+        for path in sorted(external_evidence_dir.glob("*.json")):
+            if path.name in parsed_packets:
+                continue
+            try:
+                parsed_packets[path.name] = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                invalid_json_packets.append(path.name)
 
     status = "ok"
     reason_class = ""
@@ -6228,11 +6245,14 @@ def build_detached_egress_handoff_prerequisite_packet(
     import_contract_packet = (
         import_contract_packet if isinstance(import_contract_packet, dict) else {}
     )
+    ready_statuses = {
+        "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+        "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED",
+    }
     checks = [
         {
             "name": "handoff_summary_ready",
-            "passed": handoff_summary_packet.get("final_status")
-            == "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+            "passed": handoff_summary_packet.get("final_status") in ready_statuses,
         },
         {
             "name": "command_packet_ok",
@@ -6273,6 +6293,7 @@ def build_detached_egress_handoff_prerequisite_packet(
         "native_launch_attempted_from_current_thread": False,
         "external_result_imported_in_handoff": False,
         "counts_as_network_claim": False,
+        "accepted_ready_statuses": sorted(ready_statuses),
     }
 
 
@@ -6351,11 +6372,19 @@ def build_detached_egress_process_binding_validation_packet(
     packet = parsed.get("custom_process_binding_packet.json", {}) or parsed.get(
         "native_process_binding_packet.json", {}
     )
+    launch_packet = parsed.get("native_custom_launch_packet.json", {})
+    claim_packet = parsed.get("native_direct_egress_claim_packet.json", {})
+    network_packet = parsed.get("native_process_network_observation_packet.json", {})
     bound = (
         packet.get("custom_process_bound") is True
         or packet.get("process_bound") is True
         or packet.get("status") == "ok"
         and packet.get("observer_root_pid_bound") is True
+        or claim_packet.get("custom_process_bound") is True
+        or (
+            launch_packet.get("custom_process_observed") is True
+            and network_packet.get("process_tree_observed") is True
+        )
     )
     evidence_missing = validation_packet.get("external_evidence_dir_exists") is not True
     return {
@@ -6368,7 +6397,7 @@ def build_detached_egress_process_binding_validation_packet(
         if bound
         else "NATIVE_PROCESS_BINDING_MISSING",
         "native_process_bound": bound,
-        "source_packet_present": bool(packet),
+        "source_packet_present": bool(packet or launch_packet or claim_packet),
         "external_evidence_dir_exists": not evidence_missing,
         "counts_as_native_ux_proof": False,
     }

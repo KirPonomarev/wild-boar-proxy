@@ -29,7 +29,9 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_detached_egress_process_binding_validation_packet,
     build_detached_egress_safety_admission_prerequisite_packet,
     build_detached_egress_wbp_trace_validation_packet,
+    build_domain_attribution_limit_packet,
     build_network_claim_limits_packet,
+    build_owner_visible_response_context_packet,
     json_write,
     validate_external_evidence_packets,
 )
@@ -125,6 +127,50 @@ def _secret_matches(external_evidence_dir: Path) -> list[str]:
     return matches
 
 
+def _owner_readiness_gate_packet(
+    *,
+    owner_ready_now: bool,
+    owner_executed_externally: bool,
+    owner_evidence_dir_preserved: bool,
+) -> dict[str, Any]:
+    ok = owner_ready_now and owner_executed_externally and owner_evidence_dir_preserved
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "detached_egress_owner_readiness_gate",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "OWNER_READINESS_OR_ATTESTATION_MISSING",
+        "owner_ready_now": owner_ready_now,
+        "owner_claimed_external_execution": owner_executed_externally,
+        "owner_claimed_evidence_dir_preserved": owner_evidence_dir_preserved,
+        "owner_statement_counts_as_packet_proof": False,
+        "counts_as_network_claim": False,
+    }
+
+
+def _owner_execution_attestation_packet(
+    *,
+    owner_executed_externally: bool,
+    owner_evidence_dir_preserved: bool,
+    external_evidence_dir: Path,
+) -> dict[str, Any]:
+    ok = owner_executed_externally and owner_evidence_dir_preserved
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "detached_egress_owner_execution_attestation",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "OWNER_EXECUTION_ATTESTATION_MISSING",
+        "owner_claimed_external_execution": owner_executed_externally,
+        "owner_claimed_evidence_dir_preserved": owner_evidence_dir_preserved,
+        "external_evidence_dir": str(external_evidence_dir.resolve(strict=False)),
+        "current_thread_executed_command": False,
+        "current_thread_native_launch_attempted": False,
+        "context_only": True,
+        "counts_as_trace_proof": False,
+        "counts_as_network_claim": False,
+        "counts_as_native_ux_proof": False,
+    }
+
+
 def _base_packets(
     repo_root: Path,
     evidence_dir: Path,
@@ -207,6 +253,9 @@ def build_packets(
     handoff_dir: Path,
     safety_admission_path: Path,
     external_evidence_dir: Path | None,
+    owner_ready_now: bool = False,
+    owner_executed_externally: bool = False,
+    owner_evidence_dir_preserved: bool = False,
     skip_git: bool = False,
 ) -> dict[str, dict[str, Any]]:
     command_packet = _read_json(handoff_dir / "detached_egress_execution_command_packet.json")
@@ -224,6 +273,18 @@ def build_packets(
     safety_admission = _read_json(safety_admission_path)
 
     packets = _base_packets(repo_root, evidence_dir, skip_git=skip_git)
+    packets["owner_readiness_gate_packet.json"] = _owner_readiness_gate_packet(
+        owner_ready_now=owner_ready_now,
+        owner_executed_externally=owner_executed_externally,
+        owner_evidence_dir_preserved=owner_evidence_dir_preserved,
+    )
+    packets["owner_execution_attestation_packet.json"] = (
+        _owner_execution_attestation_packet(
+            owner_executed_externally=owner_executed_externally,
+            owner_evidence_dir_preserved=owner_evidence_dir_preserved,
+            external_evidence_dir=external_evidence_dir,
+        )
+    )
     packets["safety_admission_prerequisite_packet.json"] = (
         build_detached_egress_safety_admission_prerequisite_packet(
             source_path=str(safety_admission_path),
@@ -246,10 +307,44 @@ def build_packets(
             expected_hash_packet=command_hash,
         )
     )
+    external_process_observation = _read_json(
+        external_evidence_dir / "native_process_network_observation_packet.json"
+    )
+    import_derived_alternatives: dict[str, dict[str, Any]] = {
+        "import-derived context-only packet": build_owner_visible_response_context_packet(
+            owner_visible_response_reported=False,
+            owner_confirmation_collected=False,
+        ),
+        "import audit packet": {
+            "captured_at_utc": _utc_now(),
+            "packet_kind": "detached_egress_import_audit_reference",
+            "status": "ok",
+            "audit_emitted_by_import_tool": True,
+            "text_only_audit_counted_as_pass": False,
+        },
+    }
+    if external_process_observation.get("status") != "missing":
+        import_derived_alternatives["import-derived domain attribution limit"] = (
+            build_domain_attribution_limit_packet(
+                process_network_observation_packet=external_process_observation,
+                domain_attribution_available=False,
+            )
+        )
     validation = validate_external_evidence_packets(
         external_evidence_dir=external_evidence_dir,
         required_packets=required_packets,
+        import_derived_alternatives=import_derived_alternatives,
     )
+    packets["import_derived_owner_visible_response_context_packet.json"] = (
+        import_derived_alternatives["import-derived context-only packet"]
+    )
+    packets["import_derived_import_audit_reference_packet.json"] = (
+        import_derived_alternatives["import audit packet"]
+    )
+    if "import-derived domain attribution limit" in import_derived_alternatives:
+        packets["import_derived_domain_attribution_limit_packet.json"] = (
+            import_derived_alternatives["import-derived domain attribution limit"]
+        )
     packets["external_json_packet_validation_packet.json"] = validation
     packets["external_evidence_import_packet.json"] = (
         build_detached_egress_external_evidence_import_packet(
@@ -373,6 +468,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--external-evidence-dir", default="")
+    parser.add_argument("--owner-ready-now", action="store_true")
+    parser.add_argument("--owner-executed-externally", action="store_true")
+    parser.add_argument("--owner-evidence-dir-preserved", action="store_true")
     parser.add_argument("--skip-git", action="store_true")
     return parser
 
@@ -395,6 +493,9 @@ def main() -> int:
         handoff_dir=handoff_dir,
         safety_admission_path=safety_admission_path,
         external_evidence_dir=external_evidence_dir,
+        owner_ready_now=args.owner_ready_now,
+        owner_executed_externally=args.owner_executed_externally,
+        owner_evidence_dir_preserved=args.owner_evidence_dir_preserved,
         skip_git=args.skip_git,
     )
     for name, packet in packets.items():
@@ -412,6 +513,10 @@ def main() -> int:
         "external_evidence_dir_exists": packets["external_evidence_import_packet.json"][
             "external_evidence_dir_exists"
         ],
+        "owner_readiness_status": packets["owner_readiness_gate_packet.json"]["status"],
+        "owner_attestation_context_only": packets[
+            "owner_execution_attestation_packet.json"
+        ]["context_only"],
         "command_hash_matches": packets[
             "detached_command_hash_verification_packet.json"
         ]["command_hash_matches"],

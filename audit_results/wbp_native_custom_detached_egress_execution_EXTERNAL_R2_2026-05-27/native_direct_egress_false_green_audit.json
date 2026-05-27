@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-27T02:20:14.628428Z",
+  "checks": [
+    {
+      "name": "route_trace_alone_not_counted_as_egress_absence",
+      "passed": true
+    },
+    {
+      "name": "observer_insufficient_not_counted_as_pass",
+      "passed": true
+    },
+    {
+      "name": "direct_model_egress_blocks",
+      "passed": true
+    },
+    {
+      "name": "bounded_absence_not_global_absence",
+      "passed": true
+    },
+    {
+      "name": "no_cross_layer_claims",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "native_direct_egress_false_green_audit",
+  "route_trace_counted_as_egress_absence": false,
+  "status": "ok"
+}

@@ -4558,6 +4558,80 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["safety_admission_classified"])
         self.assertFalse(packet["counts_as_native_egress_proof"])
 
+    def test_detached_egress_handoff_prerequisite_accepts_r2_ready_status(self) -> None:
+        packet = build_detached_egress_handoff_prerequisite_packet(
+            handoff_dir=Path("/tmp/handoff"),
+            handoff_summary_packet={
+                "final_status": "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED",
+                "external_evidence_dir": "/tmp/evidence",
+            },
+            command_packet={"status": "ok", "command_executed": False},
+            command_hash_packet={"status": "ok", "command_sha256": "abc"},
+            command_admission_packet={"status": "ok"},
+            import_contract_packet={
+                "status": "ok",
+                "future_import_must_verify_command_hash": True,
+                "future_import_must_verify_json": True,
+                "future_import_must_verify_no_secrets": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["counts_as_network_claim"])
+
+    def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            external_dir = Path(tmp)
+            validation = validate_external_evidence_packets(
+                external_evidence_dir=external_dir,
+                required_packets=[
+                    "domain_attribution_limit_packet.json or import-derived domain attribution limit",
+                    "owner_visible_response_context_packet.json or import-derived context-only packet",
+                ],
+                import_derived_alternatives={
+                    "import-derived domain attribution limit": {
+                        "packet_kind": "domain_attribution_limit",
+                        "status": "ok",
+                    },
+                    "import-derived context-only packet": {
+                        "packet_kind": "owner_visible_response_context",
+                        "status": "ok",
+                        "context_only": True,
+                    },
+                },
+            )
+
+        self.assertEqual(validation["status"], "ok")
+        self.assertEqual(
+            validation["alternative_statuses"][
+                "domain_attribution_limit_packet.json or import-derived domain attribution limit"
+            ],
+            "import_derived",
+        )
+        self.assertEqual(validation["parsed_packet_count"], 2)
+
+    def test_detached_egress_process_binding_accepts_launch_and_observation_packets(self) -> None:
+        packet = build_detached_egress_process_binding_validation_packet(
+            validation_packet={
+                "external_evidence_dir_exists": True,
+                "parsed_packets": {
+                    "native_custom_launch_packet.json": {
+                        "custom_process_observed": True,
+                    },
+                    "native_process_network_observation_packet.json": {
+                        "process_tree_observed": True,
+                    },
+                    "native_direct_egress_claim_packet.json": {
+                        "custom_process_bound": True,
+                    },
+                },
+            }
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["native_process_bound"])
+        self.assertFalse(packet["counts_as_native_ux_proof"])
+
     def test_detached_egress_import_hash_mismatch_blocks(self) -> None:
         repo_root = Path("/tmp/wbp-repo")
         command = build_detached_egress_execution_command_packet(
