@@ -194,6 +194,14 @@ from wild_boar_proxy.native_filesystem_probe import (
 from tools.persistent_custom_profile_history_r2_probe import (
     classify_r2_persistent_profile_history_packet,
 )
+from tools.persistent_custom_profile_history_r2b_probe import (
+    build_bounded_state_diff_packet,
+    build_first_launch_packets as build_r2b_first_launch_packets,
+    build_redacted_owner_nonce_prompt_packet,
+    build_relaunch_classification_packets as build_r2b_relaunch_classification_packets,
+    build_rollback_reference_packet as build_r2b_rollback_reference_packet,
+    collect_bounded_profile_manifest,
+)
 from tools.persistent_custom_profile_backup_repair_r1_probe import (
     classify_backup_surface,
 )
@@ -5055,6 +5063,315 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["admitted"])
         self.assertFalse(packet["native_launch_attempted"])
         self.assertFalse(packet["runtime_mutation_performed"])
+
+    def test_persistent_r2b_rollback_reference_requires_repair_marker_and_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir(parents=True)
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            (repair / "backup_repair_summary_packet.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                        "timestamped_backup_root": str(backup_root),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repair / "rollback_readiness_packet.json").write_text(
+                json.dumps({"status": "ok", "rollback_ready": True}),
+                encoding="utf-8",
+            )
+            (repair / "state_backup_manifest_packet.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "copied_file_count": 3,
+                        "raw_content_recorded": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (repair / "cache_exclusion_manifest_packet.json").write_text(
+                json.dumps({"status": "ok", "excluded_count": 7}),
+                encoding="utf-8",
+            )
+            (repair / "timestamped_backup_complete_marker_packet.json").write_text(
+                json.dumps({"status": "ok", "marker_path": str(marker)}),
+                encoding="utf-8",
+            )
+
+            packet = build_r2b_rollback_reference_packet(repair_evidence_dir=repair)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["rollback_ready"])
+        self.assertEqual(packet["copied_state_file_count"], 3)
+        self.assertEqual(packet["excluded_cache_entry_count"], 7)
+        self.assertTrue(packet["marker_sha256"])
+        self.assertFalse(packet["repair_counts_as_thread_history_proof"])
+        self.assertFalse(packet["repair_counts_as_route_or_egress_proof"])
+
+    def test_persistent_r2b_rollback_reference_rejects_marker_outside_backup_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            outside = root / "outside"
+            backup_root.mkdir(parents=True)
+            outside.mkdir()
+            marker = outside / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 3,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 7,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            packet = build_r2b_rollback_reference_packet(repair_evidence_dir=repair)
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["rollback_ready"])
+        self.assertFalse(packet["marker_matches_timestamped_backup_root"])
+
+    def test_persistent_r2b_owner_nonce_packet_is_hash_only(self) -> None:
+        nonce = "wbp-secret-nonce-123"
+        packet = build_redacted_owner_nonce_prompt_packet(nonce=nonce)
+        serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertNotIn(nonce, serialized)
+        self.assertFalse(packet["nonce_recorded"])
+        self.assertFalse(packet["raw_nonce_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertTrue(packet["nonce_sha256"])
+        self.assertTrue(packet["prompt_hash_recorded"])
+
+    def test_persistent_r2b_bounded_manifest_does_not_record_full_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sessions").mkdir()
+            (root / "sessions" / "thread.jsonl").write_text("redacted\n", encoding="utf-8")
+            (root / "Cache").mkdir()
+            (root / "Cache" / "blob").write_text("cache\n", encoding="utf-8")
+
+            packet = collect_bounded_profile_manifest(root, phase="before", sample_limit=1)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["bounded_manifest"])
+        self.assertFalse(packet["full_entry_list_recorded"])
+        self.assertFalse(packet["raw_content_recorded"])
+        self.assertEqual(len(packet["entries_sample"]), 1)
+        self.assertTrue(packet["entries_sample_truncated"])
+        self.assertIn("thread_history", packet["state_class_counts"])
+        self.assertIn("cache_or_incidental_state", packet["state_class_counts"])
+        self.assertTrue(packet["profile_fingerprint_sha256"])
+
+    def test_persistent_r2b_first_launch_stops_before_owner_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            (profile / "sessions").mkdir(parents=True)
+            (profile / "sessions" / "thread.jsonl").write_text("redacted\n", encoding="utf-8")
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.RuntimePaths.from_env",
+                return_value=mock.Mock(),
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.emit_local_token",
+                return_value="local-token",
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.materialize_probe_profile",
+                return_value={"status": "ok"},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate",
+                return_value={"custom_process_observed": True, "pid": 123},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={"status": "ok", "processes": []},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.scan_protected_surfaces",
+                side_effect=[
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                    {
+                        "surfaces": {
+                            "codex_dir": {
+                                "root": "/protected",
+                                "exists": True,
+                                "entries": [{"relative_path": "ambient", "kind": "file"}],
+                            }
+                        }
+                    },
+                ],
+            ):
+                packets = build_r2b_first_launch_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=root / "evidence",
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.4-mini",
+                    owner_nonce="owner-nonce-value",
+                    startup_wait_seconds=0,
+                    skip_git=True,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        stop = packets["r2b_owner_action_stop_packet.json"]
+        nonce = packets["r2b_owner_nonce_prompt_packet.json"]
+        admission = packets["r2b_admission_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_OWNER_ACTION_REQUIRED",
+        )
+        self.assertTrue(summary["owner_action_required"])
+        self.assertFalse(summary["thread_history_preserved"])
+        self.assertFalse(summary["direct_egress_absence_claimed"])
+        self.assertEqual(admission["original_drift_status"], "blocked")
+        self.assertTrue(admission["original_drift_blocks_filesystem_pass_claim"])
+        self.assertFalse(admission["protected_filesystem_pass_claimed"])
+        self.assertTrue(stop["stop_required_before_relaunch_classification"])
+        self.assertNotIn("owner-nonce-value", json.dumps(nonce, sort_keys=True))
+
+    def test_persistent_r2b_relaunch_classify_enforces_owner_marker_before_side_effects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            profile.mkdir(parents=True)
+            (evidence / "persistent_custom_profile_before_bounded_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "entry_count": 1,
+                        "entries_sample": [],
+                        "profile_fingerprint_sha256": "before",
+                        "max_mtime_ns": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (evidence / "r2b_original_codex_before_snapshot.json").write_text(
+                json.dumps({"surfaces": {}}),
+                encoding="utf-8",
+            )
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.terminate_custom_processes"
+            ) as terminate_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock:
+                packets = build_r2b_relaunch_classification_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=evidence,
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    owner_visible_prior_thread=True,
+                    owner_confirmation_collected=True,
+                    owner_ready_now=False,
+                    prompt_entered=False,
+                    nonce_used=False,
+                    evidence_dir_preserved=False,
+                    startup_wait_seconds=0,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_OWNER_ACTION_REQUIRED",
+        )
+        self.assertFalse(summary["native_launch_attempted"])
+        self.assertFalse(summary["relaunch_attempted"])
+        terminate_mock.assert_not_called()
+        launch_mock.assert_not_called()
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
