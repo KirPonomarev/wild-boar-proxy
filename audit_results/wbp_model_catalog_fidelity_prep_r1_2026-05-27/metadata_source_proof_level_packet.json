@@ -1,0 +1,119 @@
+{
+  "captured_at_utc": "2026-05-27T04:50:29.373060Z",
+  "intelligence_label_treated_as_live_proof": false,
+  "measured_source_requires_measurement_packet": true,
+  "packet_kind": "metadata_source_proof_level",
+  "rows": [
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "direct-mistral-devstral-2512",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "direct-mistral-devstral-2512",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.5",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.5",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "native-looking-external",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "native-looking-external",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "wbp:deepseek-max",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "wbp:deepseek-max",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_live_proof": false
+    }
+  ],
+  "source_and_proof_level_required": true,
+  "speed_label_treated_as_measured_proof": false,
+  "status": "ok"
+}

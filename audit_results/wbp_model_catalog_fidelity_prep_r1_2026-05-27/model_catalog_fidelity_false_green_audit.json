@@ -1,0 +1,30 @@
+{
+  "alias_selected_claimed_as_route_proven": false,
+  "captured_at_utc": "2026-05-27T04:50:29.330311Z",
+  "catalog_source_fixture_claimed_as_current_build_truth": false,
+  "display_metadata_claimed_as_runtime_truth": false,
+  "full_catalog_fidelity_claimed": false,
+  "gpt_5_5_visibility_claimed_as_availability": false,
+  "lane_integrity": {
+    "codex_native_lane_present": true,
+    "codex_native_wrong_lane_model_ids": [],
+    "lanes_mixed": false,
+    "overlapping_model_ids": [],
+    "wbp_api_lane_present": true,
+    "wbp_api_wrong_lane_model_ids": []
+  },
+  "lane_presence_hardcoded_without_model_cross_check": false,
+  "model_availability_claimed": false,
+  "model_listed_claimed_as_usable": false,
+  "native_or_egress_or_final_claim_present": false,
+  "native_physical_provider_identity_assumed": false,
+  "packet_kind": "model_catalog_fidelity_false_green_audit",
+  "parent_master_target_closed": false,
+  "prep_target_status": "WBP_MODEL_CATALOG_FIDELITY_PREP_CLASSIFIED",
+  "route_selected_claimed": false,
+  "runtime_truth_boundary_claimed_as_capability_proof": false,
+  "source_measured_without_measurement_packet": false,
+  "status": "ok",
+  "upstream_accepts_claimed": false,
+  "wbp_api_label_claimed_as_codex_native_parity": false
+}
