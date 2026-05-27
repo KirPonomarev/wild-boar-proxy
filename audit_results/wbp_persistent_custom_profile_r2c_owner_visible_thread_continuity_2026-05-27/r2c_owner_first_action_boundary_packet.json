@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-27T03:58:02.750526Z",
+  "evidence_dir_preserved": true,
+  "first_window_only": true,
+  "nonce_used": true,
+  "owner_action_counts_as_route_proof": false,
+  "owner_action_counts_as_storage_proof": false,
+  "owner_action_counts_as_ux_acceptance": false,
+  "owner_prompt_entered": true,
+  "packet_kind": "r2c_owner_first_action_boundary",
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "reason_class": "",
+  "status": "ok",
+  "target_window_clear": true
+}

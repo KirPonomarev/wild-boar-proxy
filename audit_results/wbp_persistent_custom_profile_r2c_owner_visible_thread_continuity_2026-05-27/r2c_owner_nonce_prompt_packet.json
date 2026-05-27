@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T03:57:16.300187Z",
+  "nonce_recorded": false,
+  "nonce_sha256": "65c54151cc9183c0a0fc92ed7e62fe7a42c7e5f5bcb79e1aab85ae3231e44323",
+  "packet_kind": "r2c_owner_nonce_prompt",
+  "prompt_hash_recorded": true,
+  "prompt_sha256": "0d319449aa3dc49cdb30f4f764df290564acf7ed0506b233566f36151561f4a8",
+  "prompt_template_shape": "WBP Persistent Custom R2C thread continuity check. Please reply with OK and this nonce only: <nonce>",
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "status": "ok"
+}

@@ -202,6 +202,13 @@ from tools.persistent_custom_profile_history_r2b_probe import (
     build_rollback_reference_packet as build_r2b_rollback_reference_packet,
     collect_bounded_profile_manifest,
 )
+from tools.persistent_custom_profile_r2c_owner_visible_thread_continuity_probe import (
+    build_r2c_false_green_audit,
+    build_r2c_owner_nonce_prompt_packet,
+    build_r2c_owner_relaunch_visibility_packet,
+    build_r2c_storage_context_packet,
+    build_r2c_thread_continuity_classification_packet,
+)
 from tools.persistent_custom_profile_backup_repair_r1_probe import (
     classify_backup_surface,
 )
@@ -5372,6 +5379,149 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(summary["relaunch_attempted"])
         terminate_mock.assert_not_called()
         launch_mock.assert_not_called()
+
+    def test_persistent_r2c_nonce_prompt_is_hash_only(self) -> None:
+        nonce = "wbp-r2c-secret-nonce"
+        packet = build_r2c_owner_nonce_prompt_packet(nonce=nonce)
+        serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertNotIn(nonce, serialized)
+        self.assertFalse(packet["nonce_recorded"])
+        self.assertFalse(packet["raw_nonce_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertTrue(packet["prompt_hash_recorded"])
+
+    def test_persistent_r2c_owner_visible_continuity_does_not_claim_storage(self) -> None:
+        identity = {
+            "status": "ok",
+            "persistent_profile_id": "wbp-custom-main",
+            "persistent_profile_root": "/tmp/wbp-custom-main",
+        }
+        visibility = build_r2c_owner_relaunch_visibility_packet(
+            owner_relaunch_checked=True,
+            same_nonce_thread_visible=True,
+            target_window_clear=True,
+            evidence_dir_preserved=True,
+        )
+        storage_context = {
+            "status": "ok",
+            "storage_level_thread_history_proven": False,
+            "with_storage_unproven_required": True,
+        }
+        classification = build_r2c_thread_continuity_classification_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            first_action_packet={"status": "ok"},
+            visibility_packet=visibility,
+            storage_context_packet=storage_context,
+            relaunch_packet={"custom_process_observed": True},
+        )
+        audit = build_r2c_false_green_audit(
+            classification_packet=classification,
+            storage_context_packet={**storage_context, "storage_context_only": True},
+            visibility_packet=visibility,
+        )
+
+        self.assertEqual(classification["status"], "ok")
+        self.assertEqual(
+            classification["final_status"],
+            "WBP_CUSTOM_CODEX_OWNER_VISIBLE_THREAD_CONTINUITY_CLASSIFIED_WITH_STORAGE_UNPROVEN",
+        )
+        self.assertTrue(classification["owner_visible_thread_continuity_classified"])
+        self.assertFalse(classification["storage_level_thread_history_proven"])
+        self.assertFalse(classification["profile_state_preservation_proven"])
+        self.assertFalse(visibility["owner_visibility_counts_as_storage_proof"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_persistent_r2c_visibility_false_blocks_continuity(self) -> None:
+        identity = {
+            "status": "ok",
+            "persistent_profile_id": "wbp-custom-main",
+            "persistent_profile_root": "/tmp/wbp-custom-main",
+        }
+        visibility = build_r2c_owner_relaunch_visibility_packet(
+            owner_relaunch_checked=True,
+            same_nonce_thread_visible=False,
+            target_window_clear=True,
+            evidence_dir_preserved=True,
+        )
+        classification = build_r2c_thread_continuity_classification_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            first_action_packet={"status": "ok"},
+            visibility_packet=visibility,
+            storage_context_packet={
+                "storage_level_thread_history_proven": False,
+                "with_storage_unproven_required": True,
+            },
+            relaunch_packet={"custom_process_observed": True},
+        )
+
+        self.assertEqual(classification["status"], "blocked")
+        self.assertEqual(
+            classification["final_status"],
+            "WBP_CUSTOM_CODEX_OWNER_VISIBLE_THREAD_CONTINUITY_BLOCKED",
+        )
+        self.assertTrue(classification["owner_reported_same_nonce_thread_not_visible"])
+        self.assertFalse(classification["owner_visible_thread_continuity_classified"])
+
+    def test_persistent_r2c_unclear_target_window_is_ambiguous(self) -> None:
+        identity = {
+            "status": "ok",
+            "persistent_profile_id": "wbp-custom-main",
+            "persistent_profile_root": "/tmp/wbp-custom-main",
+        }
+        visibility = build_r2c_owner_relaunch_visibility_packet(
+            owner_relaunch_checked=True,
+            same_nonce_thread_visible=True,
+            target_window_clear=False,
+            evidence_dir_preserved=True,
+        )
+        classification = build_r2c_thread_continuity_classification_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            first_action_packet={"status": "ok", "target_window_clear": True},
+            visibility_packet=visibility,
+            storage_context_packet={
+                "storage_level_thread_history_proven": False,
+                "with_storage_unproven_required": True,
+            },
+            relaunch_packet={"custom_process_observed": True},
+        )
+
+        self.assertEqual(classification["status"], "blocked")
+        self.assertEqual(
+            classification["final_status"],
+            "WBP_CUSTOM_CODEX_OWNER_VISIBLE_THREAD_CONTINUITY_AMBIGUOUS",
+        )
+        self.assertFalse(classification["target_window_clear"])
+        self.assertFalse(classification["owner_visible_thread_continuity_classified"])
+
+    def test_persistent_r2c_storage_context_is_supporting_only(self) -> None:
+        before = {
+            "entry_count": 1,
+            "profile_fingerprint_sha256": "before",
+            "changed_since_candidates_sample": [],
+        }
+        relaunch = {
+            "entry_count": 2,
+            "profile_fingerprint_sha256": "after",
+            "changed_since_candidates_sample": [
+                {"relative_path": "sessions/thread.jsonl", "state_class": "thread_history"}
+            ],
+        }
+        packet = build_r2c_storage_context_packet(
+            r2b_reference_packet={"prior_profile_state_preserved": False},
+            before_manifest=before,
+            relaunch_manifest=relaunch,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["storage_context_only"])
+        self.assertFalse(packet["storage_level_thread_history_proven"])
+        self.assertFalse(packet["storage_profile_state_preservation_proven_by_r2c"])
+        self.assertTrue(packet["with_storage_unproven_required"])
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
