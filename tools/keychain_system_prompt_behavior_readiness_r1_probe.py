@@ -120,9 +120,12 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
         "M tests/test_native_filesystem_probe.py",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_keychain_prompt_behavior_import_r1_2026-05-27/",
         "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
         "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
         "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+        "?? tests/test_keychain_prompt_behavior_import_r1_probe.py",
+        "?? tools/keychain_prompt_behavior_import_r1_probe.py",
         "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
     )
     quarantined = [

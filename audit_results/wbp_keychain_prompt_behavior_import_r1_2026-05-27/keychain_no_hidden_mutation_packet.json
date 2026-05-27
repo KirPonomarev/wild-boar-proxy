@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T11:36:20.561793Z",
+  "counts_as_prompt_behavior_by_itself": false,
+  "hidden_runtime_mutation_allowed": false,
+  "hidden_suppression_performed": false,
+  "keychain_default_changed": false,
+  "keychain_mutation_performed": false,
+  "keychain_reset_performed": false,
+  "original_codex_keychain_mutated": false,
+  "packet_kind": "keychain_no_hidden_mutation_import",
+  "status": "ok",
+  "suppression_attempted": false
+}

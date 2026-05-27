@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-27T11:36:20.561801Z",
+  "checks": [
+    {
+      "name": "prompt_absence_not_auth_proof",
+      "passed": true
+    },
+    {
+      "name": "flow_continued_not_auth_proof",
+      "passed": true
+    },
+    {
+      "name": "flow_blocked_not_route_failure",
+      "passed": true
+    },
+    {
+      "name": "no_hidden_mutation_or_suppression",
+      "passed": true
+    },
+    {
+      "name": "no_route_or_final_e2e_claim",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "keychain_prompt_behavior_false_green_audit",
+  "status": "ok"
+}
