@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T10:53:06.819605Z",
+  "cleanup_custom_processes_gone": true,
+  "cleanup_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/cleanup_reversibility_packet.json",
+  "launch_path_counts_as_filesystem_innocence": false,
+  "launch_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/native_custom_launch_packet.json",
+  "launcher_pid": 21125,
+  "native_launch_observed": true,
+  "packet_kind": "final_e2e_bounded_launch",
+  "source_launch_status_field_present": false,
+  "status": "ok"
+}

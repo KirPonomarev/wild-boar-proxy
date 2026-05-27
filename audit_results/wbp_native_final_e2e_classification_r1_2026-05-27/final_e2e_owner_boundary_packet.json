@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T10:53:06.819597Z",
+  "current_owner_action_collected": false,
+  "owner_action_counts_as_automatic_final_green": false,
+  "owner_action_counts_as_machine_proof": false,
+  "owner_action_imported": true,
+  "owner_typed_specified_prompt": true,
+  "packet_kind": "final_e2e_owner_boundary",
+  "provider_or_model_authority_edited": false,
+  "runtime_authority_edited": false,
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/owner_action_boundary_packet.json",
+  "status": "ok"
+}

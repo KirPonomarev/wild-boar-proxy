@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-05-27T10:54:52.325024Z",
+  "packet_kind": "independent_final_e2e_audit",
+  "status": "ok",
+  "referenced_packets": [
+    "final_e2e_lane_identity_packet.json",
+    "final_e2e_component_reference_matrix_packet.json",
+    "final_e2e_cross_contour_binding_packet.json",
+    "final_e2e_owner_boundary_packet.json",
+    "final_e2e_bounded_launch_packet.json",
+    "final_e2e_route_reference_packet.json",
+    "final_e2e_visible_completion_packet.json",
+    "final_e2e_residual_gap_packet.json",
+    "final_e2e_false_green_audit.json",
+    "final_e2e_summary_packet.json"
+  ],
+  "source_bridge_event_imported": true,
+  "component_stack_only": false,
+  "original_reversibility_used_as_lane_completion": false,
+  "machine_ui_claimed": false,
+  "direct_egress_absence_claimed": false,
+  "all_model_claimed": false,
+  "provider_family_parity_claimed": false
+}
