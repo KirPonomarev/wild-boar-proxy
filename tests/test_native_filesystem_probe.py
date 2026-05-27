@@ -97,6 +97,19 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_domain_attribution_limit_packet,
     build_owner_visible_response_context_packet,
     build_temp_custom_cleanup_packet,
+    build_persistent_backup_rollback_packet,
+    build_persistent_cleanup_policy_packet,
+    build_persistent_concurrent_launch_policy_packet,
+    build_persistent_custom_profile_contract_packet,
+    build_persistent_custom_profile_identity_packet,
+    build_persistent_launcher_selection_packet,
+    build_persistent_profile_false_green_audit,
+    build_persistent_profile_state_diff_packet,
+    build_thread_history_preservation_packet,
+    build_owner_visible_thread_context_packet,
+    build_integration_ownership_baseline_packet,
+    build_original_codex_profile_drift_packet,
+    build_original_codex_protected_surface_scope_packet,
     build_bounded_process_egress_false_green_audit,
     build_native_route_trace_binding_packet,
     build_owner_manual_ux_check_packet,
@@ -4599,6 +4612,229 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertFalse(packet["counts_as_network_claim"])
+
+    def test_persistent_custom_profile_identity_required(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        packet = build_persistent_custom_profile_contract_packet(
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        missing = build_persistent_custom_profile_contract_packet(
+            profile_id="",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["original_codex_profile_runtime_dependency"])
+        self.assertEqual(missing["status"], "blocked")
+
+    def test_persistent_custom_launcher_selects_stable_profile(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        packet = build_persistent_launcher_selection_packet(
+            launcher_path=profile_root / "codex-custom-launch.sh",
+            profile_mode="persistent_custom",
+            selected_profile_id="wbp-custom-main",
+            selected_profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        fallback = build_persistent_launcher_selection_packet(
+            launcher_path=profile_root / "codex-custom-launch.sh",
+            profile_mode="ephemeral_custom",
+            selected_profile_id="wbp-custom-main",
+            selected_profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["browser_client_override_allowed"])
+        self.assertEqual(fallback["status"], "blocked")
+
+    def test_persistent_custom_cleanup_does_not_delete_history(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        preserved = build_persistent_cleanup_policy_packet(
+            profile_root=profile_root,
+            cleanup_attempted=True,
+            profile_exists_after_cleanup=True,
+        )
+        deleted = build_persistent_cleanup_policy_packet(
+            profile_root=profile_root,
+            cleanup_attempted=True,
+            profile_exists_after_cleanup=False,
+        )
+
+        self.assertEqual(preserved["status"], "ok")
+        self.assertEqual(deleted["status"], "blocked")
+
+    def test_persistent_custom_history_requires_relaunch_proof(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        before_identity = build_persistent_custom_profile_identity_packet(
+            phase="before",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        relaunch_identity = build_persistent_custom_profile_identity_packet(
+            phase="relaunch",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+            expected_profile_id="wbp-custom-main",
+            expected_profile_root=profile_root,
+        )
+        state_diff = {
+            "status": "ok",
+            "state_classes_observed": ["thread_history"],
+        }
+        context = build_owner_visible_thread_context_packet(
+            owner_visible_prior_thread=True,
+            owner_confirmation_collected=True,
+        )
+
+        packet = build_thread_history_preservation_packet(
+            before_identity_packet=before_identity,
+            relaunch_identity_packet=relaunch_identity,
+            state_diff_packet=state_diff,
+            owner_visible_thread_context_packet=context,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["owner_visible_thread_counted_as_storage_proof"])
+
+    def test_persistent_custom_history_not_proven_by_route_trace(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        identity = build_persistent_custom_profile_identity_packet(
+            phase="before",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        packet = build_thread_history_preservation_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            state_diff_packet={"status": "blocked"},
+            owner_visible_thread_context_packet=build_owner_visible_thread_context_packet(
+                owner_visible_prior_thread=True,
+                owner_confirmation_collected=True,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["route_trace_counted_as_saved_thread_proof"])
+
+    def test_persistent_custom_visible_thread_is_context_only(self) -> None:
+        packet = build_owner_visible_thread_context_packet(
+            owner_visible_prior_thread=True,
+            owner_confirmation_collected=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["context_only"])
+        self.assertFalse(packet["counts_as_storage_persistence_proof"])
+
+    def test_persistent_custom_original_profile_not_used_as_shortcut(self) -> None:
+        scope = build_original_codex_protected_surface_scope_packet()
+        drift = build_original_codex_profile_drift_packet(
+            before_surfaces={"surfaces": {}},
+            after_surfaces={"surfaces": {}},
+        )
+
+        self.assertEqual(scope["status"], "ok")
+        self.assertFalse(scope["original_codex_runtime_input"])
+        self.assertEqual(drift["status"], "ok")
+
+    def test_persistent_custom_concurrent_policy_required(self) -> None:
+        ok = build_persistent_concurrent_launch_policy_packet(
+            policy="single_writer_only",
+            launcher_enforces_policy=True,
+        )
+        blocked = build_persistent_concurrent_launch_policy_packet(
+            policy="",
+            launcher_enforces_policy=False,
+        )
+
+        self.assertEqual(ok["status"], "ok")
+        self.assertEqual(blocked["status"], "blocked")
+
+    def test_persistent_custom_backup_rollback_required(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        first_write = build_persistent_backup_rollback_packet(
+            profile_root=profile_root,
+            backup_root=Path("/tmp/wbp-persistent/backup"),
+            profile_existed_before=False,
+            backup_created=False,
+        )
+        existing_without_backup = build_persistent_backup_rollback_packet(
+            profile_root=profile_root,
+            backup_root=Path("/tmp/wbp-persistent/backup"),
+            profile_existed_before=True,
+            backup_created=False,
+        )
+
+        self.assertEqual(first_write["status"], "ok")
+        self.assertEqual(existing_without_backup["status"], "blocked")
+
+    def test_persistent_custom_sensitive_state_redacted(self) -> None:
+        before = {"root": "/tmp/profile", "exists": True, "entries": []}
+        after = {
+            "root": "/tmp/profile",
+            "exists": True,
+            "entries": [
+                {
+                    "relative_path": "threads/history.json",
+                    "kind": "file",
+                    "size": 12,
+                    "mtime_ns": 2,
+                    "sha256": "hash",
+                }
+            ],
+        }
+        packet = build_persistent_profile_state_diff_packet(
+            before_scan=before,
+            after_scan=after,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_session_body_recorded"])
+        self.assertIn("thread_history", packet["state_classes_observed"])
+
+    def test_persistent_custom_integration_ownership_baseline_classified(self) -> None:
+        packet = build_integration_ownership_baseline_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["integration_parity_claimed"])
+        self.assertFalse(packet["integration_persistence_proven"])
+
+    def test_persistent_profile_false_green_audit_blocks_visible_thread_overclaim(self) -> None:
+        context = build_owner_visible_thread_context_packet(
+            owner_visible_prior_thread=True,
+            owner_confirmation_collected=True,
+        )
+        context["counts_as_storage_persistence_proof"] = True
+        audit = build_persistent_profile_false_green_audit(
+            thread_history_packet={
+                "route_trace_counted_as_saved_thread_proof": False,
+            },
+            owner_visible_thread_context_packet=context,
+            cleanup_policy_packet={
+                "cleanup_deletes_persistent_profile_by_default": False,
+            },
+            original_drift_packet={
+                "original_codex_runtime_input": False,
+            },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

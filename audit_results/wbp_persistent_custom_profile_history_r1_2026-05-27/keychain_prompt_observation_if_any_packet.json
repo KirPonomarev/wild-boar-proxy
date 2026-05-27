@@ -1,0 +1,13 @@
+{
+  "auth_success_claimed": false,
+  "captured_at_utc": "2026-05-27T02:52:07.285358Z",
+  "keychain_cancel_equals_auth_success": false,
+  "keychain_default_changed": false,
+  "keychain_reset_performed": false,
+  "machine_prompt_observed": false,
+  "owner_cancel_classification": "not_applicable",
+  "owner_pressed_cancel": false,
+  "packet_kind": "keychain_observation",
+  "reason_class": "",
+  "status": "ok"
+}

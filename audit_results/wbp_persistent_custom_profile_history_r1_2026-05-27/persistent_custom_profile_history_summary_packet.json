@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T02:52:07.285531Z",
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BLOCKED_LIVE_NOT_ATTEMPTED",
+  "native_launch_attempted": false,
+  "owner_visible_thread_counted_as_storage_proof": false,
+  "packet_kind": "persistent_custom_profile_history_summary",
+  "profile_id": "wbp-custom-main",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "route_trace_counted_as_history_proof": false,
+  "status": "blocked",
+  "thread_history_preservation_claimed": false
+}

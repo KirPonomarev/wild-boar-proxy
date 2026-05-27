@@ -1,0 +1,28 @@
+{
+  "after_exists": false,
+  "after_to_relaunch_diff": {
+    "changed": [],
+    "changed_count": 0,
+    "created": [],
+    "created_count": 0,
+    "deleted": [],
+    "deleted_count": 0,
+    "unchanged": [],
+    "unchanged_count": 0
+  },
+  "before_exists": false,
+  "captured_at_utc": "2026-05-27T02:52:07.271444Z",
+  "changed_count": 0,
+  "classified_changes": [],
+  "created_count": 0,
+  "deleted_count": 0,
+  "packet_kind": "persistent_profile_state_diff",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "raw_auth_recorded": false,
+  "raw_prompt_recorded": false,
+  "raw_session_body_recorded": false,
+  "reason_class": "PERSISTENT_PROFILE_STATE_UNCHANGED",
+  "relaunch_exists": false,
+  "state_classes_observed": [],
+  "status": "blocked"
+}

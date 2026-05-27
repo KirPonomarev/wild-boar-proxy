@@ -5843,6 +5843,420 @@ def build_temp_custom_cleanup_packet(
     }
 
 
+PERSISTENT_CUSTOM_STATE_CLASSES = {
+    "thread_history",
+    "session_state",
+    "user_settings",
+    "model_menu_state",
+    "provider_wbp_linkage_state",
+    "integration_state_unclassified",
+    "cache_or_incidental_state",
+    "unclassified_profile_state",
+}
+
+
+def default_persistent_custom_profile_paths(
+    *,
+    profile_id: str = "wbp-custom-main",
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    root = (
+        base_dir
+        if base_dir is not None
+        else Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "CodexProfiles"
+    ) / profile_id
+    return {
+        "persistent_profile_id": profile_id,
+        "persistent_profile_root": str(root.expanduser()),
+        "codex_home": str(root.expanduser()),
+        "user_data_dir": str((root / "electron-user-data").expanduser()),
+        "home_dir": str((root / "home").expanduser()),
+        "tmp_dir": str((root / "tmp").expanduser()),
+        "launcher_path": str((root / "codex-custom-launch.sh").expanduser()),
+    }
+
+
+def build_persistent_custom_profile_contract_packet(
+    *,
+    profile_id: str,
+    profile_root: Path,
+    codex_home: Path,
+    user_data_dir: Path,
+    mode: str = "persistent_custom",
+) -> dict[str, Any]:
+    profile_root = profile_root.expanduser().resolve(strict=False)
+    codex_home = codex_home.expanduser().resolve(strict=False)
+    user_data_dir = user_data_dir.expanduser().resolve(strict=False)
+    protected_overlap = any(
+        _path_is_relative_to(path, protected)
+        for path in (profile_root, codex_home, user_data_dir)
+        for protected in PROTECTED_SURFACE_PATHS.values()
+    )
+    stable_identity = bool(profile_id) and mode == "persistent_custom"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_custom_profile_contract",
+        "status": "ok" if stable_identity and not protected_overlap else "blocked",
+        "reason_class": ""
+        if stable_identity and not protected_overlap
+        else "PERSISTENT_PROFILE_CONTRACT_UNSAFE",
+        "profile_mode": mode,
+        "persistent_profile_id": profile_id,
+        "persistent_profile_root": str(profile_root),
+        "codex_home": str(codex_home),
+        "user_data_dir": str(user_data_dir),
+        "history_persistence_expected": True,
+        "cleanup_deletes_persistent_profile_by_default": False,
+        "original_codex_profile_runtime_dependency": False,
+        "browser_client_path_authority": False,
+        "remote_client_path_authority": False,
+        "protected_surface_overlap": protected_overlap,
+    }
+
+
+def build_persistent_custom_profile_identity_packet(
+    *,
+    phase: str,
+    profile_id: str,
+    profile_root: Path,
+    codex_home: Path,
+    user_data_dir: Path,
+    expected_profile_id: str | None = None,
+    expected_profile_root: Path | None = None,
+) -> dict[str, Any]:
+    profile_root = profile_root.expanduser().resolve(strict=False)
+    codex_home = codex_home.expanduser().resolve(strict=False)
+    user_data_dir = user_data_dir.expanduser().resolve(strict=False)
+    same_id = expected_profile_id in {None, profile_id}
+    same_root = expected_profile_root is None or profile_root == expected_profile_root.expanduser().resolve(strict=False)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_custom_profile_identity",
+        "status": "ok" if profile_id and same_id and same_root else "blocked",
+        "reason_class": "" if profile_id and same_id and same_root else "PERSISTENT_PROFILE_IDENTITY_DRIFT",
+        "phase": phase,
+        "persistent_profile_id": profile_id,
+        "persistent_profile_root": str(profile_root),
+        "codex_home": str(codex_home),
+        "user_data_dir": str(user_data_dir),
+        "expected_profile_id": expected_profile_id or profile_id,
+        "expected_profile_root": str(
+            expected_profile_root.expanduser().resolve(strict=False)
+            if expected_profile_root is not None
+            else profile_root
+        ),
+        "same_profile_id_as_expected": same_id,
+        "same_profile_root_as_expected": same_root,
+        "silent_profile_switching_detected": not (same_id and same_root),
+        "counts_as_native_ux_acceptance": False,
+    }
+
+
+def build_persistent_launcher_selection_packet(
+    *,
+    launcher_path: Path,
+    profile_mode: str,
+    selected_profile_id: str,
+    selected_profile_root: Path,
+    codex_home: Path,
+    user_data_dir: Path,
+) -> dict[str, Any]:
+    ok = (
+        profile_mode == "persistent_custom"
+        and bool(selected_profile_id)
+        and selected_profile_root.expanduser().resolve(strict=False)
+        == codex_home.expanduser().resolve(strict=False)
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_launcher_selection",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "PERSISTENT_LAUNCHER_SELECTION_UNSAFE",
+        "launcher_path": str(launcher_path.expanduser().resolve(strict=False)),
+        "profile_mode": profile_mode,
+        "selected_profile_id": selected_profile_id,
+        "selected_profile_root": str(selected_profile_root.expanduser().resolve(strict=False)),
+        "effective_codex_home": str(codex_home.expanduser().resolve(strict=False)),
+        "effective_user_data_dir": str(user_data_dir.expanduser().resolve(strict=False)),
+        "browser_client_override_allowed": False,
+        "remote_client_override_allowed": False,
+        "silent_fallback_to_ephemeral_allowed": False,
+    }
+
+
+def build_persistent_concurrent_launch_policy_packet(
+    *,
+    policy: str = "single_writer_only",
+    lock_path: Path | None = None,
+    launcher_enforces_policy: bool = True,
+) -> dict[str, Any]:
+    allowed = {
+        "single_writer_only",
+        "shared_readonly_forbidden",
+        "concurrent_same_profile_classified",
+    }
+    ok = policy in allowed and launcher_enforces_policy
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_concurrent_launch_policy",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "PERSISTENT_CONCURRENT_POLICY_MISSING",
+        "policy": policy,
+        "lock_path": str(lock_path.expanduser().resolve(strict=False)) if lock_path else "",
+        "launcher_enforces_policy": launcher_enforces_policy,
+        "same_profile_multi_writer_allowed": policy == "concurrent_same_profile_classified",
+        "state_consistency_risk_classified": policy in allowed,
+    }
+
+
+def build_persistent_backup_rollback_packet(
+    *,
+    profile_root: Path,
+    backup_root: Path,
+    profile_existed_before: bool,
+    backup_created: bool = False,
+) -> dict[str, Any]:
+    profile_root = profile_root.expanduser().resolve(strict=False)
+    backup_root = backup_root.expanduser().resolve(strict=False)
+    ok = bool(str(backup_root)) and (backup_created or not profile_existed_before)
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_backup_rollback",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "PERSISTENT_BACKUP_ROLLBACK_MISSING",
+        "profile_root": str(profile_root),
+        "backup_root": str(backup_root),
+        "profile_existed_before": profile_existed_before,
+        "backup_created": backup_created,
+        "backup_required_before_first_write": profile_existed_before,
+        "rollback_expectation_declared": True,
+        "rollback_executed": False,
+    }
+
+
+def build_persistent_cleanup_policy_packet(
+    *,
+    profile_root: Path,
+    cleanup_attempted: bool = False,
+    profile_exists_after_cleanup: bool | None = None,
+) -> dict[str, Any]:
+    deleted = cleanup_attempted and profile_exists_after_cleanup is False
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_cleanup_policy",
+        "status": "blocked" if deleted else "ok",
+        "reason_class": "PERSISTENT_PROFILE_DELETED_BY_CLEANUP" if deleted else "",
+        "profile_root": str(profile_root.expanduser().resolve(strict=False)),
+        "cleanup_deletes_persistent_profile_by_default": False,
+        "cleanup_attempted": cleanup_attempted,
+        "profile_exists_after_cleanup": profile_exists_after_cleanup,
+        "explicit_owner_delete_authorization_required": True,
+        "ordinary_cleanup_must_preserve_history": True,
+    }
+
+
+def classify_persistent_profile_state_class(relative_path: str) -> str:
+    lower = relative_path.lower()
+    if any(token in lower for token in ("thread", "conversation", "history", "transcript")):
+        return "thread_history"
+    if any(token in lower for token in ("session", "window-state", "state.vscdb", "local storage")):
+        return "session_state"
+    if any(token in lower for token in ("config.toml", "settings", "preferences")):
+        return "user_settings"
+    if any(token in lower for token in ("model", "provider", "wbp", "registry", "catalog")):
+        return "provider_wbp_linkage_state"
+    if any(token in lower for token in ("integration", "mcp", "plugin", "connector")):
+        return "integration_state_unclassified"
+    if any(token in lower for token in ("cache", "cached", "tmp", "blob_storage", "gpucache")):
+        return "cache_or_incidental_state"
+    return "unclassified_profile_state"
+
+
+def build_persistent_profile_state_diff_packet(
+    *,
+    before_scan: dict[str, Any],
+    after_scan: dict[str, Any],
+    relaunch_scan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    diff = diff_scans(before_scan, after_scan)
+    relaunch_diff = diff_scans(after_scan, relaunch_scan) if relaunch_scan else {}
+    changed_paths = [
+        *diff.get("created", []),
+        *diff.get("deleted", []),
+        *[entry.get("relative_path", "") for entry in diff.get("changed", [])],
+    ]
+    classified = [
+        {
+            "relative_path": path,
+            "state_class": classify_persistent_profile_state_class(path),
+            "raw_content_recorded": False,
+        }
+        for path in sorted(set(changed_paths))
+        if path
+    ]
+    state_classes = sorted({entry["state_class"] for entry in classified})
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_profile_state_diff",
+        "status": "ok" if classified else "blocked",
+        "reason_class": "" if classified else "PERSISTENT_PROFILE_STATE_UNCHANGED",
+        "profile_root": after_scan.get("root", ""),
+        "before_exists": before_scan.get("exists") is True,
+        "after_exists": after_scan.get("exists") is True,
+        "relaunch_exists": relaunch_scan.get("exists") is True if relaunch_scan else None,
+        "created_count": diff.get("created_count", 0),
+        "deleted_count": diff.get("deleted_count", 0),
+        "changed_count": diff.get("changed_count", 0),
+        "state_classes_observed": state_classes,
+        "classified_changes": classified,
+        "raw_prompt_recorded": False,
+        "raw_auth_recorded": False,
+        "raw_session_body_recorded": False,
+        "after_to_relaunch_diff": relaunch_diff,
+    }
+
+
+def build_owner_visible_thread_context_packet(
+    *,
+    owner_visible_prior_thread: bool | None = None,
+    owner_confirmation_collected: bool = False,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_visible_thread_context",
+        "status": "ok",
+        "owner_visible_prior_thread": owner_visible_prior_thread,
+        "owner_confirmation_collected": owner_confirmation_collected,
+        "context_only": True,
+        "counts_as_storage_persistence_proof": False,
+        "counts_as_native_ux_acceptance": False,
+        "counts_as_final_e2e": False,
+    }
+
+
+def build_thread_history_preservation_packet(
+    *,
+    before_identity_packet: dict[str, Any],
+    relaunch_identity_packet: dict[str, Any],
+    state_diff_packet: dict[str, Any],
+    owner_visible_thread_context_packet: dict[str, Any],
+) -> dict[str, Any]:
+    same_identity = (
+        before_identity_packet.get("status") == "ok"
+        and relaunch_identity_packet.get("status") == "ok"
+        and before_identity_packet.get("persistent_profile_id")
+        == relaunch_identity_packet.get("persistent_profile_id")
+        and before_identity_packet.get("persistent_profile_root")
+        == relaunch_identity_packet.get("persistent_profile_root")
+    )
+    storage_changed = state_diff_packet.get("status") == "ok"
+    ok = same_identity and storage_changed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "thread_history_preservation",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "THREAD_HISTORY_PRESERVATION_UNPROVEN",
+        "same_persistent_profile_identity": same_identity,
+        "profile_storage_changed": storage_changed,
+        "owner_visible_thread_context_only": owner_visible_thread_context_packet.get("context_only") is True,
+        "owner_visible_thread_counted_as_storage_proof": False,
+        "route_trace_counted_as_saved_thread_proof": False,
+        "raw_prompt_recorded": False,
+        "raw_thread_content_recorded": False,
+    }
+
+
+def build_integration_ownership_baseline_packet(
+    *,
+    integration_classes: list[str] | None = None,
+) -> dict[str, Any]:
+    integration_classes = integration_classes or ["unclassified"]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "integration_ownership_baseline",
+        "status": "ok",
+        "integration_classes": integration_classes,
+        "integration_parity_claimed": False,
+        "original_codex_integration_state_runtime_dependency": False,
+        "integration_persistence_proven": False,
+        "classification_scope": "baseline_only",
+    }
+
+
+def build_original_codex_protected_surface_scope_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_codex_protected_surface_scope",
+        "status": "ok",
+        "scoped_surfaces": {
+            name: str(path) for name, path in PROTECTED_SURFACE_PATHS.items()
+        },
+        "read_only_inspection": True,
+        "original_codex_runtime_input": False,
+        "original_codex_write_allowed": False,
+    }
+
+
+def build_original_codex_profile_drift_packet(
+    *,
+    before_surfaces: dict[str, Any],
+    after_surfaces: dict[str, Any],
+) -> dict[str, Any]:
+    diff = diff_protected_surfaces(before_surfaces, after_surfaces)
+    unchanged = diff.get("all_protected_surfaces_unchanged") is True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "original_codex_profile_drift",
+        "status": "ok" if unchanged else "blocked",
+        "reason_class": "" if unchanged else "ORIGINAL_CODEX_PROTECTED_SURFACE_DRIFT",
+        "all_protected_surfaces_unchanged": unchanged,
+        "original_codex_runtime_input": False,
+        "original_codex_write_performed_by_contour": False,
+        "drift": diff,
+    }
+
+
+def build_persistent_profile_false_green_audit(
+    *,
+    thread_history_packet: dict[str, Any],
+    owner_visible_thread_context_packet: dict[str, Any],
+    cleanup_policy_packet: dict[str, Any],
+    original_drift_packet: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        owner_visible_thread_context_packet.get("counts_as_storage_persistence_proof") is True
+        or thread_history_packet.get("route_trace_counted_as_saved_thread_proof") is True
+        or cleanup_policy_packet.get("cleanup_deletes_persistent_profile_by_default") is True
+        or original_drift_packet.get("original_codex_runtime_input") is True
+    )
+    checks = [
+        {
+            "name": "owner_visible_thread_not_counted_as_storage_proof",
+            "passed": owner_visible_thread_context_packet.get("counts_as_storage_persistence_proof") is False,
+        },
+        {
+            "name": "route_trace_not_counted_as_saved_thread_proof",
+            "passed": thread_history_packet.get("route_trace_counted_as_saved_thread_proof") is False,
+        },
+        {
+            "name": "persistent_cleanup_non_destructive",
+            "passed": cleanup_policy_packet.get("cleanup_deletes_persistent_profile_by_default") is False,
+        },
+        {
+            "name": "original_codex_not_runtime_input",
+            "passed": original_drift_packet.get("original_codex_runtime_input") is False,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "persistent_profile_false_green_audit",
+        "status": "ok" if not forbidden_claims_present and all(check["passed"] for check in checks) else "blocked",
+        "forbidden_claims_present": forbidden_claims_present,
+        "checks": checks,
+        "text_only_audit_counted_as_pass": False,
+    }
+
+
 def build_bounded_process_egress_false_green_audit(
     *,
     native_direct_egress_claim_packet: dict[str, Any],
