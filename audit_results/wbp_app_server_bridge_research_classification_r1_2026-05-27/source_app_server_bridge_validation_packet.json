@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-05-27T12:27:31.870183Z",
+  "checks": [
+    {
+      "name": "provider_auth_boundary_ok",
+      "passed": true
+    },
+    {
+      "name": "remote_gate_reference_ok",
+      "passed": true
+    },
+    {
+      "name": "setup_import_bridge_foundation_ok",
+      "passed": true
+    },
+    {
+      "name": "isolated_app_bridge_limit_truth_ok",
+      "passed": true
+    },
+    {
+      "name": "code_bridge_surfaces_ok",
+      "passed": true
+    }
+  ],
+  "packet_kind": "source_app_server_bridge_validation",
+  "source_chain_counts_as_architecture_approval": false,
+  "source_chain_counts_as_implementation": false,
+  "status": "ok",
+  "validation_scope": "app_server_bridge_research_only"
+}

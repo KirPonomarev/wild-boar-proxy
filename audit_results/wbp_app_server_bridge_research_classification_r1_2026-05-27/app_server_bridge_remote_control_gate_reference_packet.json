@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-27T12:27:31.870330Z",
+  "packet_kind": "app_server_bridge_remote_control_gate_reference",
+  "public_exposure_fully_enforced_for_all_surfaces": false,
+  "reference_counts_as_bridge_viability": false,
+  "reference_only": true,
+  "remote_control_final_status": "WBP_REMOTE_CONTROL_READINESS_GATE_CLASSIFIED_WITH_LIMITS",
+  "remote_control_implemented": false,
+  "status": "ok"
+}

@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-27T12:27:31.870334Z",
+  "checks": [
+    {
+      "name": "no_native_proof_overclaim",
+      "passed": true
+    },
+    {
+      "name": "no_remote_control_admission_overclaim",
+      "passed": true
+    },
+    {
+      "name": "no_implementation_admission_overclaim",
+      "passed": true
+    },
+    {
+      "name": "no_architecture_approval_overclaim",
+      "passed": true
+    },
+    {
+      "name": "source_false_green_audits_ok",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "app_server_bridge_false_green_audit",
+  "status": "ok"
+}

@@ -1,0 +1,11 @@
+{
+  "architecture_approval_claimed": false,
+  "bridge_concepts_explicit": true,
+  "browser_remote_authority_forbidden": true,
+  "captured_at_utc": "2026-05-27T12:27:31.870425Z",
+  "historical_child_app_server_machine_surface_unproven": true,
+  "implementation_approval_claimed": false,
+  "packet_kind": "independent_app_server_bridge_research_audit",
+  "remote_control_reference_only": true,
+  "status": "ok"
+}

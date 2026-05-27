@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-27T12:27:31.870240Z",
+  "command_adapter_allowlist_entries": 39,
+  "command_adapter_ui_disabled_entries": 13,
+  "dangerous_visible_disabled_actions": [
+    "process_kill_live",
+    "account_mutation",
+    "route_remove",
+    "global_reset_uninstall",
+    "touch_original_codex"
+  ],
+  "packet_kind": "app_server_bridge_command_surface",
+  "remote_command_surface_counts_as_bridge_admission": false,
+  "setup_import_runtime_bridge_execution_enabled": false,
+  "status": "ok",
+  "web_live_server_ui_actions_with_adapter_command_id": 33
+}

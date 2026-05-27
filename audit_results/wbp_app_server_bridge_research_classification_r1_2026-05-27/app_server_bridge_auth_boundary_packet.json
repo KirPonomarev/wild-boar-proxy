@@ -1,0 +1,10 @@
+{
+  "ambient_authority_forbidden": true,
+  "auth_boundary_counts_as_bridge_viability": false,
+  "captured_at_utc": "2026-05-27T12:27:31.870236Z",
+  "network_auth_middleware_proven": false,
+  "owner_authorization_phrase_gate_present": true,
+  "packet_kind": "app_server_bridge_auth_boundary",
+  "selected_strategy": "auth.command",
+  "status": "ok"
+}
