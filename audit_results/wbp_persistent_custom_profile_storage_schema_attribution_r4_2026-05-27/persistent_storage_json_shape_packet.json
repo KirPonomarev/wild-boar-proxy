@@ -1,0 +1,1077 @@
+{
+  "captured_at_utc": "2026-05-27T04:18:17.631792Z",
+  "durable_restoration_proven": false,
+  "json_surface_count": 16,
+  "keys_types_counts_only": true,
+  "packet_kind": "persistent_storage_json_shape",
+  "raw_lines_recorded": false,
+  "raw_values_recorded": false,
+  "reason_class": "",
+  "semantic_content_classified": false,
+  "shape_observed_count": 16,
+  "status": "ok",
+  "surfaces": [
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851186599790542,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": ".tmp/plugins/plugins/notion/skills/notion-knowledge-capture/evaluations/conversation-to-wiki.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "context": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "expected_behavior": {
+            "length": 12,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 8,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 6,
+        "keys": [
+          "context",
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2034,
+      "surface_type": "json"
+    },
+    {
+      "bounded_shape_type_counts": {
+        "object": 4
+      },
+      "durable_restoration_proven": false,
+      "line_count": 4,
+      "mtime_ns": 1779854269253324388,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "session_index.jsonl",
+      "semantic_content_classified": false,
+      "shape_observed": true,
+      "size": 537,
+      "surface_type": "jsonl"
+    },
+    {
+      "bounded_shape_type_counts": {
+        "object": 11
+      },
+      "durable_restoration_proven": false,
+      "line_count": 11,
+      "mtime_ns": 1779851215937924626,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-06-47-019e6766-2330-74f1-94d8-633b9aca2982.jsonl",
+      "semantic_content_classified": false,
+      "shape_observed": true,
+      "size": 43316,
+      "surface_type": "jsonl"
+    },
+    {
+      "bounded_shape_type_counts": {
+        "object": 12
+      },
+      "durable_restoration_proven": false,
+      "line_count": 12,
+      "mtime_ns": 1779853252695368068,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-40-44-019e6785-390e-7a41-8b8a-30d123a9bbb6.jsonl",
+      "semantic_content_classified": false,
+      "shape_observed": true,
+      "size": 37153,
+      "surface_type": "jsonl"
+    },
+    {
+      "bounded_shape_type_counts": {
+        "object": 28
+      },
+      "durable_restoration_proven": false,
+      "line_count": 28,
+      "mtime_ns": 1779853376787164056,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-42-35-019e6786-e99b-7681-95ac-0826b3df1fd4.jsonl",
+      "semantic_content_classified": false,
+      "shape_observed": true,
+      "size": 50961,
+      "surface_type": "jsonl"
+    },
+    {
+      "bounded_shape_type_counts": {
+        "object": 12
+      },
+      "durable_restoration_proven": false,
+      "line_count": 12,
+      "mtime_ns": 1779854265961405995,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-57-41-019e6794-bbec-73d1-9944-f392cf9fa942.jsonl",
+      "semantic_content_classified": false,
+      "shape_observed": true,
+      "size": 37082,
+      "surface_type": "jsonl"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188384332660,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-knowledge-capture/evaluations/conversation-to-wiki.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "context": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "expected_behavior": {
+            "length": 12,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 8,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 6,
+        "keys": [
+          "context",
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2035,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779854293773092561,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": ".codex-global-state.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "electron-local-remote-control-installation-id": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "electron-main-window-bounds": {
+            "children": {
+              "height": {
+                "type": "int",
+                "value_recorded": false
+              },
+              "isMaximized": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "width": {
+                "type": "int",
+                "value_recorded": false
+              },
+              "x": {
+                "type": "int",
+                "value_recorded": false
+              },
+              "y": {
+                "type": "int",
+                "value_recorded": false
+              }
+            },
+            "key_count": 5,
+            "keys": [
+              "height",
+              "isMaximized",
+              "width",
+              "x",
+              "y"
+            ],
+            "sensitive_key_names_redacted": false,
+            "type": "object",
+            "values_recorded": false
+          },
+          "electron-persisted-atom-state": {
+            "children": {
+              "agent-mode-by-host-id": {
+                "children": {
+                  "local": {
+                    "type": "str",
+                    "value_recorded": false
+                  }
+                },
+                "key_count": 1,
+                "keys": [
+                  "local"
+                ],
+                "sensitive_key_names_redacted": false,
+                "type": "object",
+                "values_recorded": false
+              },
+              "app-shell-bottom-panel-launcher-visible": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "composer-permission-mode-visibility": {
+                "children": {
+                  "full-access": {
+                    "type": "bool",
+                    "value_recorded": false
+                  },
+                  "guardian-approvals": {
+                    "type": "bool",
+                    "value_recorded": false
+                  }
+                },
+                "key_count": 2,
+                "keys": [
+                  "full-access",
+                  "guardian-approvals"
+                ],
+                "sensitive_key_names_redacted": false,
+                "type": "object",
+                "values_recorded": false
+              },
+              "electron:onboarding-hide-first-new-thread-promos": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "electron:onboarding-override": {
+                "type": "str",
+                "value_recorded": false
+              },
+              "electron:onboarding-plugin-checklist-active": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "electron:onboarding-primary-runtime-install-ready": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "electron:onboarding-projectless-completed": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "electron:onboarding-welcome-pending": {
+                "type": "bool",
+                "value_recorded": false
+              },
+              "electron:onboarding-welcome-v2-role-state": {
+                "children": {
+                  "personalizedSuggestionsEnabled": {
+                    "type": "bool",
+                    "value_recorded": false
+                  },
+                  "roles": {
+                    "length": 1,
+                    "sample_item_types": [
+                      "str"
+                    ],
+                    "type": "array",
+                    "values_recorded": false
+                  },
+                  "workMode": {
+                    "type": "str",
+                    "value_recorded": false
+                  }
+                },
+                "key_count": 3,
+                "keys": [
+                  "personalizedSuggestionsEnabled",
+                  "roles",
+                  "workMode"
+                ],
+                "sensitive_key_names_redacted": false,
+                "type": "object",
+                "values_recorded": false
+              },
+              "heartbeat-thread-permissions-by-id": {
+                "children": {
+                  "019e6766-2330-74f1-94d8-633b9aca2982": {
+                    "children": {
+                      "approvalPolicy": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "approvalsReviewer": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "sandboxPolicy": {
+                        "depth_limited": true,
+                        "type": "dict",
+                        "value_recorded": false
+                      }
+                    },
+                    "key_count": 3,
+                    "keys": [
+                      "approvalPolicy",
+                      "approvalsReviewer",
+                      "sandboxPolicy"
+                    ],
+                    "sensitive_key_names_redacted": false,
+                    "type": "object",
+                    "values_recorded": false
+                  },
+                  "019e6785-390e-7a41-8b8a-30d123a9bbb6": {
+                    "children": {
+                      "approvalPolicy": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "approvalsReviewer": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "sandboxPolicy": {
+                        "depth_limited": true,
+                        "type": "dict",
+                        "value_recorded": false
+                      }
+                    },
+                    "key_count": 3,
+                    "keys": [
+                      "approvalPolicy",
+                      "approvalsReviewer",
+                      "sandboxPolicy"
+                    ],
+                    "sensitive_key_names_redacted": false,
+                    "type": "object",
+                    "values_recorded": false
+                  },
+                  "019e6786-e99b-7681-95ac-0826b3df1fd4": {
+                    "children": {
+                      "approvalPolicy": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "approvalsReviewer": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "sandboxPolicy": {
+                        "depth_limited": true,
+                        "type": "dict",
+                        "value_recorded": false
+                      }
+                    },
+                    "key_count": 3,
+                    "keys": [
+                      "approvalPolicy",
+                      "approvalsReviewer",
+                      "sandboxPolicy"
+                    ],
+                    "sensitive_key_names_redacted": false,
+                    "type": "object",
+                    "values_recorded": false
+                  },
+                  "019e6794-bbec-73d1-9944-f392cf9fa942": {
+                    "children": {
+                      "approvalPolicy": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "approvalsReviewer": {
+                        "depth_limited": true,
+                        "type": "str",
+                        "value_recorded": false
+                      },
+                      "sandboxPolicy": {
+                        "depth_limited": true,
+                        "type": "dict",
+                        "value_recorded": false
+                      }
+                    },
+                    "key_count": 3,
+                    "keys": [
+                      "approvalPolicy",
+                      "approvalsReviewer",
+                      "sandboxPolicy"
+                    ],
+                    "sensitive_key_names_redacted": false,
+                    "type": "object",
+                    "values_recorded": false
+                  }
+                },
+                "key_count": 4,
+                "keys": [
+                  "019e6766-2330-74f1-94d8-633b9aca2982",
+                  "019e6785-390e-7a41-8b8a-30d123a9bbb6",
+                  "019e6786-e99b-7681-95ac-0826b3df1fd4",
+                  "019e6794-bbec-73d1-9944-f392cf9fa942"
+                ],
+                "sensitive_key_names_redacted": false,
+                "type": "object",
+                "values_recorded": false
+              },
+              "last_completed_onboarding": {
+                "type": "int",
+                "value_recorded": false
+              },
+              "prompt-history": {
+                "children": {
+                  "global": {
+                    "length": 0,
+                    "sample_item_types": [],
+                    "type": "array",
+                    "values_recorded": false
+                  },
+                  "new-conversation": {
+                    "length": 4,
+                    "sample_item_types": [
+                      "str"
+                    ],
+                    "type": "array",
+                    "values_recorded": false
+                  }
+                },
+                "key_count": 2,
+                "keys": [
+                  "global",
+                  "new-conversation"
+                ],
+                "sensitive_key_names_redacted": false,
+                "type": "object",
+                "values_recorded": false
+              },
+              "seen-model-upgrade-list": {
+                "length": 1,
+                "sample_item_types": [
+                  "str"
+                ],
+                "type": "array",
+                "values_recorded": false
+              }
+            },
+            "key_count": 14,
+            "keys": [
+              "agent-mode-by-host-id",
+              "app-shell-bottom-panel-launcher-visible",
+              "composer-permission-mode-visibility",
+              "electron:onboarding-hide-first-new-thread-promos",
+              "electron:onboarding-override",
+              "electron:onboarding-plugin-checklist-active",
+              "electron:onboarding-primary-runtime-install-ready",
+              "electron:onboarding-projectless-completed",
+              "electron:onboarding-welcome-pending",
+              "electron:onboarding-welcome-v2-role-state",
+              "heartbeat-thread-permissions-by-id",
+              "last_completed_onboarding",
+              "prompt-history",
+              "seen-model-upgrade-list"
+            ],
+            "sensitive_key_names_redacted": false,
+            "type": "object",
+            "values_recorded": false
+          },
+          "primary-runtime-update-jitter-ms": {
+            "type": "int",
+            "value_recorded": false
+          },
+          "projectless-thread-ids": {
+            "length": 4,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "remote-project-connection-backfill-completed": {
+            "type": "bool",
+            "value_recorded": false
+          },
+          "thread-workspace-root-hints": {
+            "children": {
+              "019e6766-2330-74f1-94d8-633b9aca2982": {
+                "type": "str",
+                "value_recorded": false
+              },
+              "019e6785-390e-7a41-8b8a-30d123a9bbb6": {
+                "type": "str",
+                "value_recorded": false
+              },
+              "019e6786-e99b-7681-95ac-0826b3df1fd4": {
+                "type": "str",
+                "value_recorded": false
+              },
+              "019e6794-bbec-73d1-9944-f392cf9fa942": {
+                "type": "str",
+                "value_recorded": false
+              }
+            },
+            "key_count": 4,
+            "keys": [
+              "019e6766-2330-74f1-94d8-633b9aca2982",
+              "019e6785-390e-7a41-8b8a-30d123a9bbb6",
+              "019e6786-e99b-7681-95ac-0826b3df1fd4",
+              "019e6794-bbec-73d1-9944-f392cf9fa942"
+            ],
+            "sensitive_key_names_redacted": false,
+            "type": "object",
+            "values_recorded": false
+          }
+        },
+        "key_count": 7,
+        "keys": [
+          "electron-local-remote-control-installation-id",
+          "electron-main-window-bounds",
+          "electron-persisted-atom-state",
+          "primary-runtime-update-jitter-ms",
+          "projectless-thread-ids",
+          "remote-project-connection-backfill-completed",
+          "thread-workspace-root-hints"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2994,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779854261164075576,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "computer-use/config.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "accentColor": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "direction": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "locale": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "strings": {
+            "children": {
+              "escToCancel": {
+                "type": "str",
+                "value_recorded": false
+              },
+              "usingComputer": {
+                "type": "str",
+                "value_recorded": false
+              }
+            },
+            "key_count": 2,
+            "keys": [
+              "escToCancel",
+              "usingComputer"
+            ],
+            "sensitive_key_names_redacted": false,
+            "type": "object",
+            "values_recorded": false
+          }
+        },
+        "key_count": 4,
+        "keys": [
+          "accentColor",
+          "direction",
+          "locale",
+          "strings"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 147,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188384442783,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-knowledge-capture/evaluations/decision-record.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "context": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "expected_behavior": {
+            "length": 11,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 9,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 6,
+        "keys": [
+          "context",
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2220,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188390346455,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-meeting-intelligence/evaluations/decision-meeting-prep.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 13,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 12,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 3441,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188390461953,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-meeting-intelligence/evaluations/status-meeting-prep.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 14,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 2,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 11,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 3312,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188392676074,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-research-documentation/evaluations/basic-research.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 11,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 7,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 1731,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188392751823,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-research-documentation/evaluations/research-to-database.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 12,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 7,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 1681,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188394886988,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-spec-to-implementation/evaluations/basic-spec-implementation.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 12,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 1,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 10,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2401,
+      "surface_type": "json"
+    },
+    {
+      "durable_restoration_proven": false,
+      "mtime_ns": 1779851188394961445,
+      "raw_lines_recorded": false,
+      "raw_values_recorded": false,
+      "relative_path": "vendor_imports/skills/skills/.curated/notion-spec-to-implementation/evaluations/spec-to-tasks.json",
+      "semantic_content_classified": false,
+      "shape": {
+        "children": {
+          "expected_behavior": {
+            "length": 14,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "name": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "query": {
+            "type": "str",
+            "value_recorded": false
+          },
+          "skills": {
+            "length": 2,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          },
+          "success_criteria": {
+            "length": 11,
+            "sample_item_types": [
+              "str"
+            ],
+            "type": "array",
+            "values_recorded": false
+          }
+        },
+        "key_count": 5,
+        "keys": [
+          "expected_behavior",
+          "name",
+          "query",
+          "skills",
+          "success_criteria"
+        ],
+        "sensitive_key_names_redacted": false,
+        "type": "object",
+        "values_recorded": false
+      },
+      "shape_observed": true,
+      "size": 2561,
+      "surface_type": "json"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "captured_at_utc": "2026-05-27T04:18:16.239338Z",
+  "packet_kind": "persistent_storage_r3_reference",
+  "r3_counts_as_r4_proof": false,
+  "r3_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_storage_truth_r3_2026-05-27",
+  "r3_final_status": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_STORAGE_TRUTH_CLASSIFIED_WITH_LIMITS",
+  "r3_inventory_entry_count": 27542,
+  "r3_inventory_state_class_counts": {
+    "cache_or_incidental_state": 19111,
+    "integration_state": 6643,
+    "model_menu_state": 139,
+    "provider_wbp_linkage_state": 81,
+    "session_state": 31,
+    "thread_history": 169,
+    "unknown": 1323,
+    "user_settings": 45
+  },
+  "r3_relaunch_restoration_source_proven": false,
+  "r3_storage_level_thread_history_proven": false,
+  "r3_thread_history_candidate": true,
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "referenced_packets": {
+    "classification": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779855066626651426,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_storage_truth_r3_2026-05-27/persistent_storage_truth_classification_packet.json",
+      "size": 1057
+    },
+    "inventory": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779855066626166438,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_storage_truth_r3_2026-05-27/persistent_storage_surface_inventory_packet.json",
+      "size": 118094
+    },
+    "summary": {
+      "content_hash_recorded": false,
+      "exists": true,
+      "mtime_ns": 1779855066626807714,
+      "path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_storage_truth_r3_2026-05-27/persistent_storage_r3_summary_packet.json",
+      "size": 750
+    }
+  },
+  "status": "ok"
+}

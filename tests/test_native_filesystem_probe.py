@@ -218,6 +218,15 @@ from tools.persistent_custom_profile_storage_truth_r3_probe import (
     classify_r3_storage_state_class,
     collect_persistent_storage_surface_inventory,
 )
+from tools.persistent_custom_profile_storage_schema_attribution_r4_probe import (
+    build_r4_false_green_audit,
+    build_restoration_hypothesis_packet,
+    build_schema_attribution_matrix,
+    classify_candidate_surface_type,
+    inspect_json_shapes,
+    inspect_sqlite_schema,
+    select_candidate_surfaces,
+)
 from tools.persistent_custom_profile_backup_repair_r1_probe import (
     classify_backup_surface,
 )
@@ -5663,6 +5672,154 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(classification["native_launch_attempted"])
         self.assertFalse(classification["live_mutation_attempted"])
         self.assertFalse(classification["final_e2e_claimed"])
+
+    def test_persistent_storage_r4_surface_type_classification(self) -> None:
+        self.assertEqual(classify_candidate_surface_type("sqlite/codex-dev.db"), "sqlite")
+        self.assertEqual(classify_candidate_surface_type("session_index.jsonl"), "jsonl")
+        self.assertEqual(classify_candidate_surface_type("config.json"), "json")
+        self.assertEqual(
+            classify_candidate_surface_type("electron-user-data/Local Storage/leveldb", kind="dir"),
+            "leveldb_like",
+        )
+
+    def test_persistent_storage_r4_sqlite_schema_records_no_row_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = root / "sessions.sqlite"
+            import sqlite3
+
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE threads (id TEXT, message TEXT)")
+            conn.execute("INSERT INTO threads VALUES ('t1', 'private fixture body')")
+            conn.commit()
+            conn.close()
+            candidate = {
+                "relative_path": "sessions.sqlite",
+                "surface_type": "sqlite",
+                "size": db.stat().st_size,
+                "mtime_ns": db.stat().st_mtime_ns,
+            }
+            packet = inspect_sqlite_schema(root, [candidate])
+            serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["schema_observed_count"], 1)
+        self.assertFalse(packet["row_values_recorded"])
+        self.assertFalse(packet["row_count_counts_as_thread_count"])
+        self.assertIn("threads", serialized)
+        self.assertIn("message", serialized)
+        self.assertNotIn("private fixture body", serialized)
+
+    def test_persistent_storage_r4_json_shape_records_no_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "thread.json"
+            path.write_text(
+                json.dumps({"thread": {"message": "private fixture body", "count": 3}}),
+                encoding="utf-8",
+            )
+            candidate = {
+                "relative_path": "thread.json",
+                "surface_type": "json",
+                "size": path.stat().st_size,
+                "mtime_ns": path.stat().st_mtime_ns,
+            }
+            packet = inspect_json_shapes(root, [candidate])
+            serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["shape_observed_count"], 1)
+        self.assertFalse(packet["raw_values_recorded"])
+        self.assertFalse(packet["raw_lines_recorded"])
+        self.assertIn("thread", serialized)
+        self.assertIn("message", serialized)
+        self.assertNotIn("private fixture body", serialized)
+
+    def test_persistent_storage_r4_json_shape_redacts_sensitive_key_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "settings.json"
+            path.write_text(
+                json.dumps({"custom_api_key": "private fixture body", "thread": {"id": 1}}),
+                encoding="utf-8",
+            )
+            candidate = {
+                "relative_path": "settings.json",
+                "surface_type": "json",
+                "size": path.stat().st_size,
+                "mtime_ns": path.stat().st_mtime_ns,
+            }
+            packet = inspect_json_shapes(root, [candidate])
+            serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertIn("<sensitive_key_name_redacted>", serialized)
+        self.assertNotIn("custom_api_key", serialized)
+        self.assertNotIn("private fixture body", serialized)
+
+    def test_persistent_storage_r4_hypothesis_is_not_durable_proof(self) -> None:
+        candidate = {
+            "status": "ok",
+            "candidates": [
+                {
+                    "relative_path": "sessions.sqlite",
+                    "surface_type": "sqlite",
+                    "state_class": "session_state",
+                }
+            ],
+        }
+        sqlite_packet = {
+            "databases": [{"relative_path": "sessions.sqlite", "schema_observed": True}]
+        }
+        matrix = build_schema_attribution_matrix(
+            candidate_packet=candidate,
+            sqlite_packet=sqlite_packet,
+            json_packet={"surfaces": []},
+            opaque_packet={"surfaces": []},
+        )
+        hypothesis = build_restoration_hypothesis_packet(
+            matrix_packet=matrix,
+            r3_reference_packet={"r3_counts_as_r4_proof": False},
+        )
+
+        self.assertEqual(matrix["status"], "ok")
+        self.assertEqual(hypothesis["status"], "ok")
+        self.assertEqual(hypothesis["hypothesis_count"], 1)
+        self.assertFalse(hypothesis["durable_restoration_proven"])
+        self.assertFalse(hypothesis["storage_level_thread_history_proven"])
+
+    def test_persistent_storage_r4_false_green_blocks_row_value_overclaim(self) -> None:
+        audit = build_r4_false_green_audit(
+            sqlite_packet={
+                "row_values_recorded": True,
+                "row_count_counts_as_thread_count": False,
+            },
+            json_packet={"raw_values_recorded": False, "raw_lines_recorded": False},
+            opaque_packet={"key_value_dump_recorded": False},
+            matrix_packet={"semantic_content_classified": False, "durable_restoration_proven": False},
+            hypothesis_packet={
+                "durable_restoration_proven": False,
+                "remote_or_sync_likely_claimed": False,
+            },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_persistent_storage_r4_candidate_selection_is_metadata_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "session_index.jsonl").write_text(
+                '{"message":"private fixture body"}\n',
+                encoding="utf-8",
+            )
+            packet = select_candidate_surfaces(root)
+            serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["metadata_only"])
+        self.assertFalse(packet["raw_content_recorded"])
+        self.assertNotIn("private fixture body", serialized)
 
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
