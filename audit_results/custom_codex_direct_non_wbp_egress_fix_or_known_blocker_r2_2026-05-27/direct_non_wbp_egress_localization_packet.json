@@ -1,0 +1,22 @@
+{
+  "broader_platform_redesign_proven_necessary": false,
+  "captured_at_utc": "2026-05-27T17:44:17.270510Z",
+  "classification": "declared_custom_direct_non_wbp_lane_direct_egress_observed_exact_subcause_unproven",
+  "contour_final_status": "CUSTOM_CODEX_DIRECT_NON_WBP_EGRESS_KNOWN_BLOCKER",
+  "custom_process_bound": true,
+  "direct_observer_classification": "direct_model_egress_observed",
+  "domain_attribution_available": false,
+  "exact_root_cause_proven": false,
+  "exact_root_cause_requires_separate_fix_contour": null,
+  "imported_evidence_only": true,
+  "localized_to_declared_custom_direct_non_wbp_lane": true,
+  "narrowest_truthful_source_domain": "direct_non_wbp_model_request_or_routing_path_after_custom_process_binding",
+  "packet_kind": "custom_direct_non_wbp_egress_localization",
+  "remediation_contour_need_classification": "unknown",
+  "route_trace_confirmed": true,
+  "source_current_truth_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_current_truth_reconciliation_closeout_r2_2026-05-27/direct_non_wbp_egress_current_truth_packet.json",
+  "source_r3_direct_claim_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27/native_direct_egress_claim_packet.json",
+  "source_r3_network_observation_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R3_2026-05-27/native_process_network_observation_packet.json",
+  "source_r4_network_classification_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/network_claim_classification_packet.json",
+  "status": "ok"
+}
