@@ -512,6 +512,19 @@ class ModelAvailabilityTests(unittest.TestCase):
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["direct_wbp_200_counted_as_codex_acceptance"])
 
+    def test_validate_model_availability_contour_packets_reports_all_missing_required_packets(self) -> None:
+        findings = validate_model_availability_contour_packets({})
+
+        for packet_name in (
+            "candidate_partition_packet.json",
+            "default_model_source_packet.json",
+            "route_family_classification_packet.json",
+            "external_route_admission_packet.json",
+            "model_availability_matrix.json",
+        ):
+            self.assertIn(f"missing.{packet_name}", findings)
+        self.assertIn("model_availability_matrix.json", findings)
+
     def test_model_availability_candidate_partition_required(self) -> None:
         candidates = build_candidate_model_list(
             configured_model="gpt-5.4-mini",

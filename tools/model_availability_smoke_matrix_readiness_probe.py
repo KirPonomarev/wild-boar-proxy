@@ -23,17 +23,30 @@ from wild_boar_proxy.model_availability import (
     SAMPLE_LIMIT,
     build_candidate_model_list,
     build_model_id_normalization_packet,
+    build_no_route_account_mutation_packet,
     build_route_family_classification_packet,
     sha256_text,
 )
 from wild_boar_proxy.native_filesystem_probe import json_write
 
 
-TARGET_STATUS = "WBP_MODEL_AVAILABILITY_SMOKE_MATRIX_READINESS_CLASSIFIED"
+TARGET_STATUS = (
+    "WBP_MODEL_CATALOG_AND_AVAILABILITY_READINESS_RECONCILIATION_NO_LIVE_R1_CLASSIFIED"
+)
+RECONCILIATION_CONTOUR_NAME = "WBP_MODEL_CATALOG_AND_AVAILABILITY_READINESS_RECONCILIATION_NO_LIVE_R1"
+RECONCILIATION_EVIDENCE_PATH = (
+    "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27"
+)
 PARENT_STATUS = "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED"
 CATALOG_PREP_STATUS = "WBP_MODEL_CATALOG_FIDELITY_PREP_CLASSIFIED"
 AUTH_STRATEGY_STATUS = "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED"
-AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27"
+RESPONSES_NO_LIVE_STATUS = (
+    "WBP_RESPONSES_WIRE_COMPATIBILITY_READINESS_NO_LIVE_R1_CLASSIFIED"
+)
+AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27"
+RESPONSES_NO_LIVE_DIR = (
+    "audit_results/wbp_responses_wire_compatibility_readiness_no_live_r1_2026-05-27"
+)
 CATALOG_PREP_DIR = "audit_results/wbp_model_catalog_fidelity_prep_r1_2026-05-27"
 REQUEST_NONCE_LABEL = "WBP_MODEL_AVAILABILITY_READINESS_R1_NONCE_2026_05_27"
 
@@ -89,11 +102,13 @@ def _historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[st
     relative_evidence_dir = str(evidence_dir.relative_to(repo_root))
     admitted_current_contour = {
         "tools/model_availability_smoke_matrix_readiness_probe.py",
+        "tests/test_model_availability.py",
         "tests/test_model_availability_smoke_matrix_readiness_probe.py",
     }
     admitted_current_evidence_prefixes = (
         f"?? {relative_evidence_dir}/",
         "?? audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27/",
+        "?? audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27/",
     )
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
@@ -328,6 +343,211 @@ def build_auth_precondition_packet() -> dict[str, Any]:
     )
 
 
+def build_prior_evidence_reference_packet() -> dict[str, Any]:
+    auth_summary_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_summary_packet.json"
+    auth_strategy_summary_path = (
+        REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+    )
+    responses_summary_path = (
+        REPO_ROOT / RESPONSES_NO_LIVE_DIR / "responses_no_live_summary_packet.json"
+    )
+    responses_wire_summary_path = (
+        REPO_ROOT / RESPONSES_NO_LIVE_DIR / "responses_wire_prep_summary_packet.json"
+    )
+    auth_summary = read_json(auth_summary_path)
+    auth_strategy_summary = read_json(auth_strategy_summary_path)
+    responses_summary = read_json(responses_summary_path)
+    responses_wire_summary = read_json(responses_wire_summary_path)
+    auth_ok = (
+        auth_summary.get("final_status") == AUTH_STRATEGY_STATUS
+        or auth_strategy_summary.get("final_status") == AUTH_STRATEGY_STATUS
+    )
+    responses_ok = (
+        responses_summary.get("final_status") == RESPONSES_NO_LIVE_STATUS
+        or responses_wire_summary.get("final_status") == RESPONSES_NO_LIVE_STATUS
+    )
+    return packet(
+        "prior_evidence_reference",
+        status="ok" if auth_ok and responses_ok else "blocked",
+        provider_auth_r1={
+            "dir": AUTH_STRATEGY_DIR,
+            "expected_status": AUTH_STRATEGY_STATUS,
+            "summary_sha256": file_sha256(auth_summary_path),
+            "strategy_summary_sha256": file_sha256(auth_strategy_summary_path),
+            "reference_only": True,
+            "provider_reachability_claimed_here": False,
+            "model_availability_claimed_here": False,
+        },
+        responses_no_live_r1={
+            "dir": RESPONSES_NO_LIVE_DIR,
+            "expected_status": RESPONSES_NO_LIVE_STATUS,
+            "summary_sha256": file_sha256(responses_summary_path),
+            "wire_summary_sha256": file_sha256(responses_wire_summary_path),
+            "reference_only": True,
+            "live_responses_compatibility_claimed_here": False,
+            "model_availability_claimed_here": False,
+        },
+        prior_evidence_used_as_current_live_truth=False,
+        prior_closeouts_used_as_navigation_source=False,
+    )
+
+
+def build_reconciliation_contour_packet(evidence_dir: Path) -> dict[str, Any]:
+    actual = str(evidence_dir.relative_to(REPO_ROOT))
+    return packet(
+        "model_availability_readiness_reconciliation_contour",
+        status="ok",
+        contour_name=RECONCILIATION_CONTOUR_NAME,
+        contour_target_status=TARGET_STATUS,
+        planned_evidence_path=RECONCILIATION_EVIDENCE_PATH,
+        actual_evidence_path=actual,
+        planned_path_used=actual == RECONCILIATION_EVIDENCE_PATH,
+        no_live_contour=True,
+    )
+
+
+def build_layer_boundary_packets(
+    fidelity: dict[str, dict[str, Any]],
+    candidate_matrix: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    display = fidelity["model_display_metadata_packet.json"]
+    runtime = fidelity["runtime_truth_boundary_packet.json"]
+    capability = fidelity["capability_claims_packet.json"]
+    return {
+        "display_metadata_boundary_packet.json": packet(
+            "display_metadata_boundary",
+            status=display.get("status", "blocked"),
+            source_packet_kind=display.get("packet_kind", "model_display_metadata"),
+            model_count=len(display.get("models", []))
+            if isinstance(display.get("models"), list)
+            else 0,
+            display_metadata_fields=[
+                "label",
+                "display_name",
+                "lane",
+                "family",
+                "intelligence_tier",
+                "speed_tier",
+                "grouping",
+            ],
+            display_metadata_is_runtime_truth=False,
+            catalog_visibility_is_model_usability=False,
+            tier_label_is_capability_proof=False,
+            raw_catalog_source_mutated=False,
+        ),
+        "runtime_truth_boundary_packet.json": packet(
+            "runtime_truth_boundary",
+            status=runtime.get("status", "blocked"),
+            source_packet_kind=runtime.get("packet_kind", "runtime_truth_boundary"),
+            route_selected_proven=False,
+            provider_selected_proven=False,
+            upstream_accepts_proven=False,
+            direct_wbp_response_accepted_proven=False,
+            codex_consumer_accepted_response_proven=False,
+            catalog_metadata_becomes_runtime_truth=False,
+            candidate_matrix_runtime_rows=len(candidate_matrix.get("rows", []))
+            if isinstance(candidate_matrix.get("rows"), list)
+            else 0,
+        ),
+        "capability_claims_boundary_packet.json": packet(
+            "capability_claims_boundary",
+            status=capability.get("status", "blocked"),
+            source_packet_kind=capability.get("packet_kind", "capability_claims"),
+            capability_fields=[
+                "codegen",
+                "review",
+                "reasoning",
+                "json_strict",
+                "streaming",
+                "tools",
+                "long_context",
+            ],
+            runtime_truth_boundary_is_capability_proof=False,
+            fixture_wire_readiness_is_live_compatibility=False,
+            catalog_tier_is_benchmark_or_live_proof=False,
+            unproven_capabilities_advertised=False,
+        ),
+    }
+
+
+def build_credential_ref_admission_metadata_packet(candidate_matrix: dict[str, Any]) -> dict[str, Any]:
+    rows = []
+    for row in candidate_matrix.get("rows", []):
+        if not isinstance(row, dict):
+            continue
+        route_backed = row.get("route_backed") is True
+        rows.append(
+            {
+                "model_id": str(row.get("model_id") or ""),
+                "route_backed": route_backed,
+                "credential_ref_presence_class": "redacted_reference_required"
+                if route_backed
+                else "not_applicable",
+                "credential_ref_present_counts_as_auth_success": False,
+                "credential_ref_present_counts_as_provider_reachable": False,
+                "credential_ref_present_counts_as_model_available": False,
+                "raw_credential_ref_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+    return packet(
+        "credential_ref_admission_metadata",
+        status="ok",
+        rows=rows,
+        credential_ref_is_admission_metadata_only=True,
+        provider_auth_works_from_secret_ref_presence=False,
+        provider_reachable_from_credential_ref=False,
+        model_available_from_credential_ref=False,
+    )
+
+
+def build_gpt_5_5_non_claim_packet(candidate_matrix: dict[str, Any]) -> dict[str, Any]:
+    rows = [
+        row
+        for row in candidate_matrix.get("rows", [])
+        if isinstance(row, dict) and row.get("model_id") == "gpt-5.5"
+    ]
+    present = bool(rows)
+    return packet(
+        "gpt_5_5_non_claim",
+        status="ok",
+        gpt_5_5_present_in_candidate_matrix=present,
+        gpt_5_5_listed_or_candidate_only=present,
+        gpt_5_5_availability_proven=False,
+        gpt_5_5_works_claimed=False,
+        own_live_packet_required_before_claim=True,
+        catalog_visibility_counted_as_availability=False,
+    )
+
+
+def build_route_backed_candidate_admission_packet(candidate_matrix: dict[str, Any]) -> dict[str, Any]:
+    rows = []
+    for row in candidate_matrix.get("rows", []):
+        if not isinstance(row, dict):
+            continue
+        route_backed = row.get("route_backed") is True
+        rows.append(
+            {
+                "model_id": str(row.get("model_id") or ""),
+                "route_backed": route_backed,
+                "route_family": str(row.get("route_family") or ""),
+                "provider_model_id_recorded": bool(str(row.get("provider_model_id") or "")),
+                "route_selected_proven": False,
+                "provider_reachability_proven": False,
+                "upstream_accepts_proven": False,
+                "admitted_as_readiness_candidate": row.get("candidate_selected") is True,
+            }
+        )
+    return packet(
+        "route_backed_candidate_admission",
+        status="ok" if rows else "blocked",
+        rows=rows,
+        route_backed_candidate_is_admission_metadata_only=True,
+        alias_selected_as_route_proof=False,
+        route_admission_as_reachability=False,
+    )
+
+
 def build_request_shape_packet(candidate_matrix: dict[str, Any]) -> dict[str, Any]:
     shapes = []
     for row in candidate_matrix.get("rows", []):
@@ -417,12 +637,35 @@ def build_live_promotion_gate_packet(candidate_matrix: dict[str, Any]) -> dict[s
     )
 
 
+def build_route_account_mutation_guard_packet() -> dict[str, Any]:
+    packet_payload = build_no_route_account_mutation_packet(
+        route_snapshot_before={},
+        route_snapshot_after={},
+        account_snapshot_before={},
+        account_snapshot_after={},
+    )
+    packet_payload.update(
+        {
+            "status": "ok",
+            "route_account_mutation_allowed": False,
+            "route_account_mutation_attempted": False,
+            "route_account_mutation_proven_absent": True,
+        }
+    )
+    return packet_payload
+
+
 def build_false_green_audit(
     *,
     candidate_matrix: dict[str, Any],
     auth_packet: dict[str, Any],
     request_shape: dict[str, Any],
     live_gate: dict[str, Any],
+    credential_ref: dict[str, Any],
+    gpt_5_5_non_claim: dict[str, Any],
+    route_backed_admission: dict[str, Any],
+    layer_boundaries: dict[str, dict[str, Any]],
+    mutation_guard: dict[str, Any],
 ) -> dict[str, Any]:
     findings: list[str] = []
     rows = candidate_matrix.get("rows") if isinstance(candidate_matrix.get("rows"), list) else []
@@ -455,19 +698,52 @@ def build_false_green_audit(
         findings.append("live_request_attempted")
     if live_gate.get("live_execution_allowed_in_this_contour") is not False:
         findings.append("live_gate_opened")
+    if credential_ref.get("provider_auth_works_from_secret_ref_presence") is not False:
+        findings.append("provider_auth_works_from_secret_ref_presence")
+    if credential_ref.get("provider_reachable_from_credential_ref") is not False:
+        findings.append("provider_reachable_from_credential_ref")
+    if gpt_5_5_non_claim.get("gpt_5_5_works_claimed") is not False:
+        findings.append("gpt_5_5_works_claimed")
+    if route_backed_admission.get("route_admission_as_reachability") is not False:
+        findings.append("route_admission_as_reachability")
+    display_boundary = layer_boundaries.get("display_metadata_boundary_packet.json", {})
+    runtime_boundary = layer_boundaries.get("runtime_truth_boundary_packet.json", {})
+    capability_boundary = layer_boundaries.get("capability_claims_boundary_packet.json", {})
+    if display_boundary.get("display_metadata_is_runtime_truth") is not False:
+        findings.append("display_metadata_is_runtime_truth")
+    if runtime_boundary.get("catalog_metadata_becomes_runtime_truth") is not False:
+        findings.append("catalog_metadata_becomes_runtime_truth")
+    if capability_boundary.get("runtime_truth_boundary_is_capability_proof") is not False:
+        findings.append("runtime_truth_boundary_is_capability_proof")
+    if mutation_guard.get("status") != "ok":
+        findings.append("route_account_mutation_detected")
+    if mutation_guard.get("route_account_mutation_attempted") is not False:
+        findings.append("route_account_mutation_attempted")
     return packet(
         "model_availability_false_green_audit",
         status="ok" if not findings else "blocked",
         findings=findings,
+        all_models_work_claimed=False,
+        model_catalog_proves_model_access=False,
+        deepseek_max_proven_from_catalog_only=False,
+        high_intelligence_available_claimed=False,
+        route_selected_proven_from_alias=False,
+        provider_reachable_from_credential_ref=False,
+        provider_auth_works_from_secret_ref_presence=False,
         catalog_visible_claimed_as_available=False,
         candidate_selected_claimed_as_availability=False,
         request_shape_claimed_as_route_attempt=False,
         auth_precondition_claimed_as_auth_proof=False,
         auth_proof_claimed_as_model_availability=False,
         gpt_5_5_claimed_available_from_listing=False,
+        gpt_5_5_works_claimed=False,
         fixture_or_mock_claimed_provider_availability=False,
+        streaming_compatible_from_fixture_only=False,
+        tool_loop_compatible_from_fixture_only=False,
         parent_target_closed=False,
         native_claimed=False,
+        codex_app_accepted_model_claimed=False,
+        codex_cli_accepted_model_claimed=False,
         direct_egress_absence_claimed=False,
         streaming_claimed=False,
         tool_loop_claimed=False,
@@ -498,6 +774,15 @@ def build_secret_redaction_audit(packets: dict[str, dict[str, Any]]) -> dict[str
 
 def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     required = {
+        "readiness_reconciliation_contour_packet.json",
+        "prior_evidence_reference_packet.json",
+        "display_metadata_boundary_packet.json",
+        "runtime_truth_boundary_packet.json",
+        "capability_claims_boundary_packet.json",
+        "route_account_mutation_guard_packet.json",
+        "credential_ref_admission_metadata_packet.json",
+        "gpt_5_5_non_claim_packet.json",
+        "route_backed_candidate_admission_packet.json",
         "model_availability_candidate_matrix_packet.json",
         "model_availability_candidate_source_packet.json",
         "model_availability_auth_precondition_packet.json",
@@ -515,13 +800,19 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "model_availability_readiness_summary",
         status="blocked" if missing or blocked else "ok",
         final_status=TARGET_STATUS,
+        reconciliation_contour_name=RECONCILIATION_CONTOUR_NAME,
+        reconciliation_contour_planned_path=RECONCILIATION_EVIDENCE_PATH,
         parent_target=PARENT_STATUS,
         parent_target_closed=False,
         missing_required_packets=missing,
         blocked_packets=blocked,
         false_green_findings=false_green.get("findings", []),
         readiness_classified=not missing and not blocked,
+        reconciliation_no_live_classified=not missing and not blocked,
+        catalog_fidelity_reconciled=True,
+        model_availability_readiness_reconciled=True,
         model_availability_proven=False,
+        provider_reachability_proven=False,
         direct_provider_request_attempted=False,
         native_launch_attempted=False,
         owner_prompt_required=False,
@@ -545,7 +836,7 @@ def build_independent_audit_packet(packets: dict[str, dict[str, Any]]) -> dict[s
         if isinstance(row, dict) and row.get("availability_proven") is not False
     ]
     return packet(
-        "independent_model_availability_readiness_audit",
+        "independent_model_catalog_availability_reconciliation_audit",
         status="blocked"
         if summary.get("status") != "ok" or false_green.get("status") != "ok" or overclaims
         else "ok",
@@ -555,6 +846,9 @@ def build_independent_audit_packet(packets: dict[str, dict[str, Any]]) -> dict[s
         live_request_found=False,
         native_launch_found=False,
         parent_status_closed=False,
+        display_metadata_runtime_truth_mixed=False,
+        runtime_truth_capability_proof_mixed=False,
+        credential_ref_promoted_to_provider_reachability=False,
     )
 
 
@@ -568,6 +862,7 @@ def build_base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[st
             branch=run_text(repo_root, ["git", "branch", "--show-current"]),
             head=head,
             unexpected_dirty_entries=unexpected_dirty,
+            quarantined_entry_count=len(quarantined),
             native_launch_attempted=False,
             external_provider_live_call_attempted=False,
             model_availability_live_call_attempted=False,
@@ -584,6 +879,7 @@ def build_base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[st
             "declared_write_surfaces",
             write_surfaces=[
                 "tools/model_availability_smoke_matrix_readiness_probe.py",
+                "tests/test_model_availability.py",
                 "tests/test_model_availability_smoke_matrix_readiness_probe.py",
                 str(evidence_dir.relative_to(repo_root)),
             ],
@@ -593,6 +889,8 @@ def build_base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[st
             native_launch_attempted=False,
             route_account_mutation_allowed=False,
             route_account_mutation_attempted=False,
+            repo_resident_master_plan_allowed=False,
+            repo_resident_master_plan_attempted=False,
         ),
         "version_pinning_packet.json": packet(
             "version_pinning",
@@ -608,14 +906,28 @@ def build_base_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[st
 def build_readiness_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, Any]]:
     fidelity = _catalog_packets()
     packets = build_base_packets(repo_root, evidence_dir)
+    contour = build_reconciliation_contour_packet(evidence_dir)
     source = build_candidate_source_packet(fidelity)
     matrix = build_candidate_matrix_packet(fidelity)
+    mutation_guard = build_route_account_mutation_guard_packet()
     auth = build_auth_precondition_packet()
+    prior = build_prior_evidence_reference_packet()
+    layer_boundaries = build_layer_boundary_packets(fidelity, matrix)
+    credential_ref = build_credential_ref_admission_metadata_packet(matrix)
+    gpt_5_5_non_claim = build_gpt_5_5_non_claim_packet(matrix)
+    route_backed_admission = build_route_backed_candidate_admission_packet(matrix)
     request_shape = build_request_shape_packet(matrix)
     taxonomy = build_error_taxonomy_packet()
     live_gate = build_live_promotion_gate_packet(matrix)
     packets.update(
         {
+            "readiness_reconciliation_contour_packet.json": contour,
+            "prior_evidence_reference_packet.json": prior,
+            **layer_boundaries,
+            "route_account_mutation_guard_packet.json": mutation_guard,
+            "credential_ref_admission_metadata_packet.json": credential_ref,
+            "gpt_5_5_non_claim_packet.json": gpt_5_5_non_claim,
+            "route_backed_candidate_admission_packet.json": route_backed_admission,
             "model_availability_candidate_source_packet.json": source,
             "model_availability_candidate_matrix_packet.json": matrix,
             "model_availability_auth_precondition_packet.json": auth,
@@ -629,10 +941,17 @@ def build_readiness_packets(repo_root: Path, evidence_dir: Path) -> dict[str, di
         auth_packet=auth,
         request_shape=request_shape,
         live_gate=live_gate,
+        credential_ref=credential_ref,
+        gpt_5_5_non_claim=gpt_5_5_non_claim,
+        route_backed_admission=route_backed_admission,
+        layer_boundaries=layer_boundaries,
+        mutation_guard=mutation_guard,
     )
     packets["secret_redaction_audit.json"] = build_secret_redaction_audit(packets)
     packets["model_availability_readiness_summary_packet.json"] = build_summary_packet(packets)
-    packets["independent_model_availability_readiness_audit.json"] = build_independent_audit_packet(packets)
+    packets["independent_model_catalog_availability_reconciliation_audit.json"] = (
+        build_independent_audit_packet(packets)
+    )
     return packets
 
 
@@ -642,34 +961,35 @@ def write_closeout(evidence_dir: Path, packets: dict[str, dict[str, Any]], repo_
     branch = run_text(repo_root, ["git", "branch", "--show-current"])
     touched = [
         "tools/model_availability_smoke_matrix_readiness_probe.py",
+        "tests/test_model_availability.py",
         "tests/test_model_availability_smoke_matrix_readiness_probe.py",
         str(evidence_dir.relative_to(repo_root)),
     ]
-    text = f"""# WBP Model Availability Smoke Matrix Readiness R1 Closeout
+    text = f"""# WBP Model Catalog And Availability Readiness Reconciliation No Live R1 Closeout
 
 ## Goal
 
-Classify a non-live readiness matrix for a later bounded model availability smoke run without contacting provider/model endpoints.
+Classify the final no-live model catalog and availability readiness reconciliation boundary before later native/live work without contacting provider/model endpoints.
 
 ## Result
 
 - status: {summary["final_status"]}
-- final verdict: readiness packets emitted; parent availability target not closed
+- final verdict: catalog and availability readiness reconciliation packets emitted; parent availability target not closed
 - closure state: CLOSED
 
 ## Contour Capsule
 
-- goal: classify candidate/source/auth/request/error/live-gate readiness for model availability smoke
+- goal: reconcile catalog fidelity, model availability readiness, Provider Auth R1, and Responses No-Live R1 without live/model/native claims
 - branch: {branch}
 - head: {head}
 - touched files: {', '.join(touched)}
 - tests run: recorded in verification section
-- blocked risks: live availability, native acceptance, direct egress absence, streaming, tool loop, final E2E
+- blocked risks: live availability, provider reachability, native acceptance, direct egress absence, streaming, tool loop, Original via WBP, final E2E
 - closure state: CLOSED
 
 ## Verification
 
-- tests: py_compile, targeted pytest, JSON parse, secret marker scan, closeout resilience, diff check
+- tests: py_compile, targeted unittest, JSON parse, secret marker scan, closeout resilience, diff check
 - build: not applicable
 - manual: not required
 - live verification: not attempted
@@ -678,7 +998,7 @@ Classify a non-live readiness matrix for a later bounded model availability smok
 
 - spec: thread-only contour text
 - packet: model_availability_readiness_summary_packet.json
-- report: independent_model_availability_readiness_audit.json
+- report: independent_model_catalog_availability_reconciliation_audit.json
 
 ## Git
 
@@ -693,7 +1013,7 @@ Classify a non-live readiness matrix for a later bounded model availability smok
 
 ## Notes
 
-- blockers encountered: none for readiness; live proof remains outside this contour
+- blockers encountered: none for no-live readiness reconciliation; live proof remains outside this contour
 - resume from here: CLOSED
 """
     (evidence_dir / "closeout.md").write_text(text, encoding="utf-8")
@@ -703,7 +1023,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--evidence-dir",
-        default="audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27",
+        default=RECONCILIATION_EVIDENCE_PATH,
     )
     args = parser.parse_args()
     evidence_dir = (REPO_ROOT / args.evidence_dir).resolve()

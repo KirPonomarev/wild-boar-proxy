@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-27T07:23:07.141848Z",
+  "packet_kind": "prior_evidence_reference",
+  "prior_closeouts_used_as_navigation_source": false,
+  "prior_evidence_used_as_current_live_truth": false,
+  "provider_auth_r1": {
+    "dir": "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27",
+    "expected_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+    "model_availability_claimed_here": false,
+    "provider_reachability_claimed_here": false,
+    "reference_only": true,
+    "strategy_summary_sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126",
+    "summary_sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126"
+  },
+  "responses_no_live_r1": {
+    "dir": "audit_results/wbp_responses_wire_compatibility_readiness_no_live_r1_2026-05-27",
+    "expected_status": "WBP_RESPONSES_WIRE_COMPATIBILITY_READINESS_NO_LIVE_R1_CLASSIFIED",
+    "live_responses_compatibility_claimed_here": false,
+    "model_availability_claimed_here": false,
+    "reference_only": true,
+    "summary_sha256": "c318dbcd92c2822dbc67f0bcae24e19a23c064aa1fce5a1bdac73895b8acc0ab",
+    "wire_summary_sha256": "0c2d02b56a629fdc4fecd2cd3668e124aaef4e97c2ee39c34061d5c8d729bd85"
+  },
+  "status": "ok"
+}

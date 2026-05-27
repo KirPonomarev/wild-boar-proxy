@@ -1,0 +1,73 @@
+{
+  "captured_at_utc": "2026-05-27T07:23:07.141923Z",
+  "live_request_allowed": false,
+  "live_request_attempted": false,
+  "non_stream_responses_shape_ready": true,
+  "packet_kind": "model_availability_request_shape",
+  "request_prepared_counted_as_model_availability": false,
+  "request_prepared_counted_as_route_attempted": false,
+  "shape_count": 4,
+  "shapes": [
+    {
+      "auth_header_recorded": false,
+      "counts_as_availability": false,
+      "endpoint": "/v1/responses",
+      "method": "POST",
+      "model_id": "gpt-5.3-codex",
+      "raw_prompt_recorded": false,
+      "request_attempted": false,
+      "request_body_hash": "c32ed2fe9056645bcda7f16adc2bd0bb69d79bd99c45f071e0bb86a7964aed91",
+      "request_body_recorded": false,
+      "request_prepared": true,
+      "route_attempted": false,
+      "streaming_shape_prepared": false,
+      "tool_loop_shape_prepared": false
+    },
+    {
+      "auth_header_recorded": false,
+      "counts_as_availability": false,
+      "endpoint": "/v1/responses",
+      "method": "POST",
+      "model_id": "gpt-5.4",
+      "raw_prompt_recorded": false,
+      "request_attempted": false,
+      "request_body_hash": "f842693b184bd8bba7861bf4d87b73cc40858d977ed73bb29750e614c59c14e2",
+      "request_body_recorded": false,
+      "request_prepared": true,
+      "route_attempted": false,
+      "streaming_shape_prepared": false,
+      "tool_loop_shape_prepared": false
+    },
+    {
+      "auth_header_recorded": false,
+      "counts_as_availability": false,
+      "endpoint": "/v1/responses",
+      "method": "POST",
+      "model_id": "gpt-5.5",
+      "raw_prompt_recorded": false,
+      "request_attempted": false,
+      "request_body_hash": "cb4ac9fa619de92783e9c4349e4942bf5b1c40fd458b982b7a3aafd2bcc02748",
+      "request_body_recorded": false,
+      "request_prepared": true,
+      "route_attempted": false,
+      "streaming_shape_prepared": false,
+      "tool_loop_shape_prepared": false
+    },
+    {
+      "auth_header_recorded": false,
+      "counts_as_availability": false,
+      "endpoint": "/v1/responses",
+      "method": "POST",
+      "model_id": "direct-mistral-devstral-2512",
+      "raw_prompt_recorded": false,
+      "request_attempted": false,
+      "request_body_hash": "dc9be80615d88ecb5e47d3bfe897e3df57cd4037ecedd129a298f1f7102cc907",
+      "request_body_recorded": false,
+      "request_prepared": true,
+      "route_attempted": false,
+      "streaming_shape_prepared": false,
+      "tool_loop_shape_prepared": false
+    }
+  ],
+  "status": "ok"
+}

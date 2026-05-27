@@ -9,6 +9,8 @@ from pathlib import Path
 
 from tools.model_availability_smoke_matrix_readiness_probe import (
     PARENT_STATUS,
+    RECONCILIATION_CONTOUR_NAME,
+    RECONCILIATION_EVIDENCE_PATH,
     TARGET_STATUS,
     build_summary_packet,
     build_readiness_packets,
@@ -26,14 +28,60 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         summary = packets["model_availability_readiness_summary_packet.json"]
         false_green = packets["model_availability_false_green_audit.json"]
         live_gate = packets["model_availability_live_promotion_gate_packet.json"]
+        contour = packets["readiness_reconciliation_contour_packet.json"]
 
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["final_status"], TARGET_STATUS)
+        self.assertEqual(summary["reconciliation_contour_name"], RECONCILIATION_CONTOUR_NAME)
+        self.assertEqual(summary["reconciliation_contour_planned_path"], RECONCILIATION_EVIDENCE_PATH)
         self.assertEqual(summary["parent_target"], PARENT_STATUS)
+        self.assertTrue(summary["reconciliation_no_live_classified"])
         self.assertFalse(summary["parent_target_closed"])
         self.assertFalse(summary["model_availability_proven"])
+        self.assertFalse(summary["provider_reachability_proven"])
+        self.assertEqual(contour["contour_name"], RECONCILIATION_CONTOUR_NAME)
+        self.assertEqual(contour["contour_target_status"], TARGET_STATUS)
+        self.assertEqual(contour["planned_evidence_path"], RECONCILIATION_EVIDENCE_PATH)
+        self.assertFalse(contour["planned_path_used"])
         self.assertFalse(false_green["parent_target_closed"])
         self.assertFalse(live_gate["live_execution_allowed_in_this_contour"])
+
+    def test_prior_evidence_reference_is_reference_only(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
+            packets = build_readiness_packets(REPO_ROOT, Path(tmp))
+
+        prior = packets["prior_evidence_reference_packet.json"]
+
+        self.assertEqual(prior["status"], "ok")
+        self.assertTrue(prior["provider_auth_r1"]["reference_only"])
+        self.assertTrue(prior["responses_no_live_r1"]["reference_only"])
+        self.assertFalse(prior["provider_auth_r1"]["provider_reachability_claimed_here"])
+        self.assertFalse(prior["provider_auth_r1"]["model_availability_claimed_here"])
+        self.assertFalse(prior["responses_no_live_r1"]["live_responses_compatibility_claimed_here"])
+        self.assertFalse(prior["responses_no_live_r1"]["model_availability_claimed_here"])
+        self.assertFalse(prior["prior_evidence_used_as_current_live_truth"])
+        self.assertFalse(prior["prior_closeouts_used_as_navigation_source"])
+
+    def test_layer_boundaries_keep_display_runtime_and_capability_separate(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
+            packets = build_readiness_packets(REPO_ROOT, Path(tmp))
+
+        display = packets["display_metadata_boundary_packet.json"]
+        runtime = packets["runtime_truth_boundary_packet.json"]
+        capability = packets["capability_claims_boundary_packet.json"]
+
+        self.assertEqual(display["status"], "ok")
+        self.assertFalse(display["display_metadata_is_runtime_truth"])
+        self.assertFalse(display["catalog_visibility_is_model_usability"])
+        self.assertFalse(display["tier_label_is_capability_proof"])
+        self.assertEqual(runtime["status"], "ok")
+        self.assertFalse(runtime["catalog_metadata_becomes_runtime_truth"])
+        self.assertFalse(runtime["route_selected_proven"])
+        self.assertFalse(runtime["upstream_accepts_proven"])
+        self.assertFalse(runtime["codex_consumer_accepted_response_proven"])
+        self.assertEqual(capability["status"], "ok")
+        self.assertFalse(capability["runtime_truth_boundary_is_capability_proof"])
+        self.assertFalse(capability["fixture_wire_readiness_is_live_compatibility"])
 
     def test_candidate_rows_keep_readiness_below_live_availability(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
@@ -99,6 +147,8 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
             packets = build_readiness_packets(REPO_ROOT, Path(tmp))
 
         auth = packets["model_availability_auth_precondition_packet.json"]
+        credential = packets["credential_ref_admission_metadata_packet.json"]
+        mutation_guard = packets["route_account_mutation_guard_packet.json"]
         request_shape = packets["model_availability_request_shape_packet.json"]
         false_green = packets["model_availability_false_green_audit.json"]
 
@@ -106,6 +156,14 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         self.assertFalse(auth["auth_reproved_in_this_contour"])
         self.assertFalse(auth["model_availability_proven_by_auth"])
         self.assertFalse(auth["auth_proven_counts_as_model_availability"])
+        self.assertTrue(credential["credential_ref_is_admission_metadata_only"])
+        self.assertFalse(credential["provider_auth_works_from_secret_ref_presence"])
+        self.assertFalse(credential["provider_reachable_from_credential_ref"])
+        self.assertFalse(credential["model_available_from_credential_ref"])
+        self.assertEqual(mutation_guard["status"], "ok")
+        self.assertFalse(mutation_guard["route_account_mutation_allowed"])
+        self.assertFalse(mutation_guard["route_account_mutation_attempted"])
+        self.assertTrue(mutation_guard["route_account_mutation_proven_absent"])
         self.assertFalse(request_shape["live_request_allowed"])
         self.assertFalse(request_shape["live_request_attempted"])
         self.assertFalse(request_shape["request_prepared_counted_as_route_attempted"])
@@ -119,6 +177,37 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
             self.assertFalse(shape["counts_as_availability"])
         self.assertFalse(false_green["auth_precondition_claimed_as_auth_proof"])
         self.assertFalse(false_green["auth_proof_claimed_as_model_availability"])
+        self.assertFalse(false_green["provider_reachable_from_credential_ref"])
+        self.assertFalse(false_green["provider_auth_works_from_secret_ref_presence"])
+
+    def test_route_backed_candidates_are_not_reachability_or_route_proof(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
+            packets = build_readiness_packets(REPO_ROOT, Path(tmp))
+
+        admission = packets["route_backed_candidate_admission_packet.json"]
+
+        self.assertEqual(admission["status"], "ok")
+        self.assertTrue(admission["route_backed_candidate_is_admission_metadata_only"])
+        self.assertFalse(admission["alias_selected_as_route_proof"])
+        self.assertFalse(admission["route_admission_as_reachability"])
+        for row in admission["rows"]:
+            self.assertFalse(row["route_selected_proven"])
+            self.assertFalse(row["provider_reachability_proven"])
+            self.assertFalse(row["upstream_accepts_proven"])
+
+    def test_gpt_5_5_non_claim_packet_blocks_listing_to_works(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
+            packets = build_readiness_packets(REPO_ROOT, Path(tmp))
+
+        packet = packets["gpt_5_5_non_claim_packet.json"]
+        false_green = packets["model_availability_false_green_audit.json"]
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["gpt_5_5_present_in_candidate_matrix"])
+        self.assertFalse(packet["gpt_5_5_availability_proven"])
+        self.assertFalse(packet["gpt_5_5_works_claimed"])
+        self.assertTrue(packet["own_live_packet_required_before_claim"])
+        self.assertFalse(false_green["gpt_5_5_works_claimed"])
 
     def test_secret_redaction_audit_does_not_record_raw_prompt_or_secret(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
@@ -146,6 +235,12 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         missing_packets = dict(packets)
         del missing_packets["model_availability_request_shape_packet.json"]
         missing_summary = build_summary_packet(missing_packets)
+        missing_prior_packets = dict(packets)
+        del missing_prior_packets["prior_evidence_reference_packet.json"]
+        missing_prior_summary = build_summary_packet(missing_prior_packets)
+        missing_contour_packets = dict(packets)
+        del missing_contour_packets["readiness_reconciliation_contour_packet.json"]
+        missing_contour_summary = build_summary_packet(missing_contour_packets)
 
         self.assertEqual(blocked_summary["status"], "blocked")
         self.assertIn(
@@ -156,6 +251,16 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         self.assertIn(
             "model_availability_request_shape_packet.json",
             missing_summary["missing_required_packets"],
+        )
+        self.assertEqual(missing_prior_summary["status"], "blocked")
+        self.assertIn(
+            "prior_evidence_reference_packet.json",
+            missing_prior_summary["missing_required_packets"],
+        )
+        self.assertEqual(missing_contour_summary["status"], "blocked")
+        self.assertIn(
+            "readiness_reconciliation_contour_packet.json",
+            missing_contour_summary["missing_required_packets"],
         )
 
 

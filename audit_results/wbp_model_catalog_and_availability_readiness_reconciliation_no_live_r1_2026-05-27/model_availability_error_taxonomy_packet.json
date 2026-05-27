@@ -1,0 +1,69 @@
+{
+  "captured_at_utc": "2026-05-27T07:23:07.141928Z",
+  "error_classes": [
+    {
+      "classification_effect": "availability_failed_for_model_only",
+      "counts_as_native_acceptance": false,
+      "error_class": "model_not_found",
+      "meaning": "provider_or_wbp_rejected_model_id"
+    },
+    {
+      "classification_effect": "auth_block_not_model_absence",
+      "counts_as_native_acceptance": false,
+      "error_class": "auth_required",
+      "meaning": "auth_precondition_missing_or_not_supplied"
+    },
+    {
+      "classification_effect": "auth_block_not_model_absence",
+      "counts_as_native_acceptance": false,
+      "error_class": "auth_failed",
+      "meaning": "provider_or_wbp_auth_rejected"
+    },
+    {
+      "classification_effect": "provider_blocked",
+      "counts_as_native_acceptance": false,
+      "error_class": "provider_unavailable",
+      "meaning": "upstream_unavailable_or_5xx"
+    },
+    {
+      "classification_effect": "availability_unclassified",
+      "counts_as_native_acceptance": false,
+      "error_class": "rate_limited",
+      "meaning": "quota_or_rate_limit"
+    },
+    {
+      "classification_effect": "availability_unclassified",
+      "counts_as_native_acceptance": false,
+      "error_class": "timeout",
+      "meaning": "request_or_provider_timeout"
+    },
+    {
+      "classification_effect": "wire_failure_not_native_acceptance",
+      "counts_as_native_acceptance": false,
+      "error_class": "malformed_response",
+      "meaning": "wire_shape_or_transform_error"
+    },
+    {
+      "classification_effect": "availability_failed_for_model_only",
+      "counts_as_native_acceptance": false,
+      "error_class": "unsupported_model",
+      "meaning": "route_or_provider_declares_unsupported_model"
+    },
+    {
+      "classification_effect": "streaming_unproven",
+      "counts_as_native_acceptance": false,
+      "error_class": "stream_not_classified",
+      "meaning": "streaming_not_covered_by_non_stream_shape"
+    },
+    {
+      "classification_effect": "tool_loop_unproven",
+      "counts_as_native_acceptance": false,
+      "error_class": "tool_loop_not_classified",
+      "meaning": "tool_loop_not_covered_by_non_stream_shape"
+    }
+  ],
+  "failure_semantics_proven": false,
+  "live_error_semantics_attempted": false,
+  "packet_kind": "model_availability_error_taxonomy",
+  "status": "ok"
+}
