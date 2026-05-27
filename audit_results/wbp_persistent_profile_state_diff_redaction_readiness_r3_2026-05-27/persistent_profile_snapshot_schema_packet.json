@@ -1,0 +1,36 @@
+{
+  "allowed_state_classes": [
+    "cache_or_incidental_state",
+    "integration_state",
+    "model_menu_state",
+    "provider_wbp_linkage_state",
+    "session_state",
+    "thread_history",
+    "unclassified_profile_state",
+    "user_settings"
+  ],
+  "captured_at_utc": "2026-05-27T06:07:15.265521Z",
+  "content_recorded": false,
+  "packet_kind": "persistent_profile_snapshot_schema",
+  "raw_prompt_recorded": false,
+  "raw_secret_recorded": false,
+  "required_entry_fields": [
+    "relative_path",
+    "kind",
+    "size",
+    "sha256",
+    "state_class"
+  ],
+  "sample_entry": {
+    "content_recorded": false,
+    "kind": "file",
+    "raw_prompt_recorded": false,
+    "raw_secret_recorded": false,
+    "relative_path": "conversations/thread-redacted.json",
+    "sha256": "e20b0b47c20481ae17c7da4516670c7faa2851fe7db6f4090c5863f7315c8d77",
+    "size": 1,
+    "state_class": "thread_history"
+  },
+  "snapshot_schema_is_live_profile_proof": false,
+  "status": "ok"
+}

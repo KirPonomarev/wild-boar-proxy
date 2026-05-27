@@ -1,0 +1,31 @@
+{
+  "allowed_evidence_fields": [
+    "relative_path",
+    "kind",
+    "size",
+    "sha256",
+    "state_class"
+  ],
+  "captured_at_utc": "2026-05-27T06:07:15.266173Z",
+  "clean_marker_scan": {
+    "exhaustive_dlp_claimed": false,
+    "marker_findings": [],
+    "raw_prompt_found": false,
+    "raw_secret_found": false,
+    "secret_pattern_findings": []
+  },
+  "dirty_marker_scan_detects_fixture": true,
+  "dirty_marker_scan_marker_count": 2,
+  "dirty_marker_scan_secret_pattern_count": 1,
+  "exhaustive_dlp_claimed": false,
+  "forbidden_evidence_fields": [
+    "raw_content",
+    "raw_prompt",
+    "raw_secret",
+    "token"
+  ],
+  "packet_kind": "persistent_redaction_policy",
+  "raw_prompt_recorded": false,
+  "raw_secret_recorded": false,
+  "status": "ok"
+}

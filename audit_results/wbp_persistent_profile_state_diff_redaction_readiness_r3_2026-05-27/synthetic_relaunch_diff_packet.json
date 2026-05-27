@@ -1,0 +1,76 @@
+{
+  "captured_at_utc": "2026-05-27T06:07:15.067344Z",
+  "changed": [
+    {
+      "hash_change_is_user_visible_state": false,
+      "new": {
+        "content_recorded": false,
+        "kind": "file",
+        "sha256": "564d6d297ebc633bd8acf9f7f559b40eb445e0bf35e9d6626f39eb9e3d4f56d2",
+        "size": 160,
+        "state_class": "cache_or_incidental_state"
+      },
+      "old": {
+        "content_recorded": false,
+        "kind": "file",
+        "sha256": "94525bc29b1459d197e6d83cf4a7f403c0b8616b9341064340f61959170d2ce7",
+        "size": 144,
+        "state_class": "cache_or_incidental_state"
+      },
+      "relative_path": "Cache/blob_storage/index",
+      "state_class": "cache_or_incidental_state",
+      "state_class_label_is_runtime_truth": false,
+      "state_class_label_is_thread_preservation_proof": false
+    },
+    {
+      "hash_change_is_user_visible_state": false,
+      "new": {
+        "content_recorded": false,
+        "kind": "file",
+        "sha256": "692e29d4334203e24f6b9b0cf72e90900d487e52bd0f7677749bd1b4316f262d",
+        "size": 300,
+        "state_class": "session_state"
+      },
+      "old": {
+        "content_recorded": false,
+        "kind": "file",
+        "sha256": "0ba74a2d9bbf96ed752d000913b5eb1fa6deaed547ce7bffd96f92f97340f748",
+        "size": 280,
+        "state_class": "session_state"
+      },
+      "relative_path": "Local Storage/state.vscdb",
+      "state_class": "session_state",
+      "state_class_label_is_runtime_truth": false,
+      "state_class_label_is_thread_preservation_proof": false
+    }
+  ],
+  "changed_count": 2,
+  "created": [],
+  "created_count": 0,
+  "deleted": [],
+  "deleted_count": 0,
+  "diff_detected": true,
+  "diff_detected_is_saved_thread_proof": false,
+  "diff_label": "synthetic_relaunch",
+  "hash_changed_is_user_visible_state": false,
+  "packet_kind": "synthetic_relaunch_diff",
+  "profile_storage_persistence_claimed": false,
+  "real_profile_pass_claimed": false,
+  "real_relaunch_performed": false,
+  "state_class_counts": {
+    "cache_or_incidental_state": 1,
+    "integration_state": 1,
+    "model_menu_state": 0,
+    "provider_wbp_linkage_state": 0,
+    "session_state": 1,
+    "thread_history": 1,
+    "unclassified_profile_state": 0,
+    "user_settings": 1
+  },
+  "status": "ok",
+  "synthetic_diff_is_real_profile_pass": false,
+  "synthetic_fixture": true,
+  "synthetic_relaunch_is_actual_relaunch_proof": false,
+  "thread_history_preservation_claimed": false,
+  "unchanged_count": 3
+}

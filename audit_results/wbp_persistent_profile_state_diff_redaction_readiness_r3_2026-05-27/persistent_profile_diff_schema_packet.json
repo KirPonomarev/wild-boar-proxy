@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T06:07:15.265645Z",
+  "diff_detected_is_saved_thread_proof": false,
+  "hash_changed_is_user_visible_state": false,
+  "packet_kind": "persistent_profile_diff_schema",
+  "required_fields": [
+    "created",
+    "deleted",
+    "changed",
+    "state_class_counts",
+    "diff_detected"
+  ],
+  "sample_counts": {
+    "changed_count": 3,
+    "created_count": 2,
+    "deleted_count": 0
+  },
+  "status": "ok",
+  "synthetic_diff_is_real_profile_pass": false
+}
