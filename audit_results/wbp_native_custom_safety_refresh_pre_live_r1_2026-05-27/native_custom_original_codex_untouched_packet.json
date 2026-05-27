@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T09:57:56.134865Z",
+  "counts_as_original_reversibility_proof": false,
+  "current_auth_json_execution_dependency": false,
+  "filesystem_write_performed": false,
+  "original_auth_boundary_status": "ok",
+  "original_codex_bundle_write_allowed": false,
+  "original_codex_mutated": false,
+  "original_codex_profile_write_allowed": false,
+  "original_profile_inventory_status": "ok",
+  "original_surface_read_status": "ok",
+  "packet_kind": "native_custom_original_codex_untouched",
+  "status": "ok"
+}

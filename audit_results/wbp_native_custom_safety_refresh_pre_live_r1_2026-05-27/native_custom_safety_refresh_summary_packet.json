@@ -1,0 +1,18 @@
+{
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T09:57:56.404472Z",
+  "custom_app_launch_attempted": false,
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "NATIVE_CUSTOM_SAFETY_REFRESH_CLASSIFIED",
+  "live_provider_request_attempted": false,
+  "missing_required_packets": [],
+  "native_launch_attempted": false,
+  "native_ux_claimed": false,
+  "original_codex_reversibility_claimed": false,
+  "owner_prompt_required": false,
+  "packet_kind": "native_custom_safety_refresh_summary",
+  "route_proof_claimed": false,
+  "status": "ok",
+  "this_target_closed": true
+}
