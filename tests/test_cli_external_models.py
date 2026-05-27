@@ -874,6 +874,7 @@ class ExternalModelsCliTests(unittest.TestCase):
                 "wbp-deepseek-v3",
             )
             request_count = server.request_count  # type: ignore[attr-defined]
+            request_payload = server.last_request_payload  # type: ignore[attr-defined]
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["data"]["check_kind"], "provider_route_smoke")
@@ -881,6 +882,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(payload["data"]["route_state"], "verified")
         self.assertEqual(payload["data"]["request_count"], 1)
         self.assertEqual(request_count, 1)
+        self.assertEqual(request_payload["max_tokens"], 96)
         self.assertFalse(payload["data"]["listener_proven"])
         state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(
@@ -930,6 +932,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(payload["data"]["request_shape"], "input_text")
         self.assertEqual(payload["data"]["response_shape"], "output_text")
         self.assertIsInstance(request_payload, dict)
+        self.assertEqual(request_payload["max_output_tokens"], 96)
         self.assertIn("input_text", request_payload)
         self.assertNotIn("messages", request_payload)
         evidence_payload = json.loads(

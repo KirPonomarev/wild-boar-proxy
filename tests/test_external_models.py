@@ -12,6 +12,7 @@ from pathlib import Path
 
 from wild_boar_proxy.external_models import contracts, routes
 from wild_boar_proxy.external_models import lifecycle
+from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.integration import ensure_installed_layout
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
 from wild_boar_proxy.external_models.state import capture_local_evidence, load_state_file
@@ -72,6 +73,32 @@ class ExternalModelContractTests(unittest.TestCase):
         validated = routes.validate_route_schema(route)
         self.assertEqual(validated["transform_profile"], "openai_chat_input_text")
         self.assertEqual(validated["response_profile"], "top_level_output_text")
+
+    def test_build_check_request_uses_shared_completion_budget_across_profiles(self) -> None:
+        request_payload, _metadata = transforms.build_check_request(
+            sample_route(),
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            request_payload["max_tokens"], transforms.CHECK_REQUEST_COMPLETION_BUDGET
+        )
+
+        developer_payload, _metadata = transforms.build_check_request(
+            sample_route() | {"transform_profile": "openai_chat_system_to_developer"},
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            developer_payload["max_tokens"], transforms.CHECK_REQUEST_COMPLETION_BUDGET
+        )
+
+        input_text_payload, _metadata = transforms.build_check_request(
+            sample_route() | {"transform_profile": "openai_chat_input_text"},
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            input_text_payload["max_output_tokens"],
+            transforms.CHECK_REQUEST_COMPLETION_BUDGET,
+        )
 
     def test_paths_from_env_uses_isolated_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1,0 +1,59 @@
+{
+  "contour": "WBP_ONE_EXTERNAL_PROVIDER_ROUTE_WORKS_WITH_LIMITS_R2",
+  "selected_provider": "openrouter",
+  "authority_boundary": {
+    "openrouter_credential_status": {
+      "status": "present",
+      "credential_ref": "OPENROUTER_API_KEY",
+      "supported_sources": [
+        "owner-env"
+      ],
+      "secret_value_exposed": false,
+      "browser_secret_intake": false,
+      "browser_path_intake": false,
+      "scope": "sandbox"
+    },
+    "deepseek_credential_status": {
+      "status": "missing",
+      "credential_ref": "DEEPSEEK_API_KEY",
+      "supported_sources": [
+        "owner-env"
+      ],
+      "scope": "sandbox"
+    },
+    "codex_desktop_profile_packet": {
+      "command": "WBP_EXTERNAL_MODELS_DIR=\"$HOME/.wild-boar-proxy/external-models\" WBP_MANAGED_DIR=\"$HOME/.wild-boar-proxy\" python3 -m wild_boar_proxy external-models profile codex-desktop --json --route wbp-web-primary-openrouter",
+      "packet": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Codex Desktop profile contract generated without mutating config.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "profile_kind": "codex_desktop_openai_compatible",
+          "route_id": "wbp-web-primary-openrouter",
+          "base_url": null,
+          "model": "wbp-web-primary-openrouter",
+          "api_key_source": "managed_local_token",
+          "writes_external_config": false,
+          "profile_ready": false,
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "synthetic_endpoint_contract": true,
+          "prerequisite": "live_listener_contour_required"
+        },
+        "timestamp_utc": "2026-05-27T15:36:05Z"
+      }
+    }
+  },
+  "boundary_claims": {
+    "selected_provider_only": true,
+    "second_provider_admitted": false,
+    "credential_presence_is_not_runtime_readiness": true,
+    "profile_contract_is_non_mutating": true
+  }
+}

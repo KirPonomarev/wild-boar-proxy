@@ -10,6 +10,7 @@ from . import errors
 
 DEFAULT_REQUEST_TRANSFORM = "openai_chat_passthrough"
 DEFAULT_RESPONSE_PROFILE = "openai_chat_choices_message"
+CHECK_REQUEST_COMPLETION_BUDGET = 96
 
 REQUEST_TRANSFORM_PROFILES = frozenset(
     {
@@ -60,7 +61,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
     base_payload = {
         "model": route["upstream_model"],
         "messages": [{"role": "user", "content": user_prompt}],
-        "max_tokens": 8,
+        "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
     }
     transform_profile = metadata["transform_profile"]
     if transform_profile == DEFAULT_REQUEST_TRANSFORM:
@@ -74,7 +75,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
             {
                 "model": route["upstream_model"],
                 "messages": transformed_messages,
-                "max_tokens": 8,
+                "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
             },
             metadata | {"request_shape": "openai_chat_messages"},
         )
@@ -85,7 +86,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
             {
                 "model": route["upstream_model"],
                 "input_text": input_text,
-                "max_output_tokens": 8,
+                "max_output_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
             },
             metadata | {"request_shape": "input_text"},
         )
