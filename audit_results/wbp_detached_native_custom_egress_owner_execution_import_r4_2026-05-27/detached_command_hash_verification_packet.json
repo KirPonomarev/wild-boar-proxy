@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T10:07:39.493095Z",
+  "command_executed_in_current_thread": false,
+  "command_hash_matches": true,
+  "expected_command_sha256": "f3f2673039a512d33a6de2fbb440b3f0ec8e5342bee2159eb9d72cf6f5762150",
+  "hash_covers_argv_cwd_target_and_evidence_dir": true,
+  "packet_kind": "detached_egress_command_hash_verification",
+  "reason_class": "",
+  "recomputed_command_sha256": "f3f2673039a512d33a6de2fbb440b3f0ec8e5342bee2159eb9d72cf6f5762150",
+  "status": "ok"
+}

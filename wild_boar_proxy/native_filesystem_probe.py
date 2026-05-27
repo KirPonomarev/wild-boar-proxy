@@ -6697,10 +6697,15 @@ def build_detached_egress_safety_admission_prerequisite_packet(
     source_packet: dict[str, Any] | None,
 ) -> dict[str, Any]:
     source_packet = source_packet if isinstance(source_packet, dict) else {}
+    allowed_final_claim = source_packet.get("allowed_final_claim")
+    final_status = source_packet.get("final_status")
     ok = (
         source_packet.get("status") == "ok"
-        and source_packet.get("allowed_final_claim")
-        == "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+        and (
+            allowed_final_claim
+            == "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+            or final_status == "NATIVE_CUSTOM_SAFETY_REFRESH_CLASSIFIED"
+        )
         and source_packet.get("native_launch_attempted") is False
     )
     return {
@@ -6710,7 +6715,8 @@ def build_detached_egress_safety_admission_prerequisite_packet(
         "reason_class": "" if ok else "SAFETY_ADMISSION_PREREQUISITE_NOT_OK",
         "source_path": source_path,
         "source_status": source_packet.get("status", "missing"),
-        "source_allowed_final_claim": source_packet.get("allowed_final_claim", ""),
+        "source_allowed_final_claim": allowed_final_claim or "",
+        "source_final_status": final_status or "",
         "safety_admission_classified": ok,
         "native_launch_attempted_in_prerequisite": source_packet.get(
             "native_launch_attempted"
@@ -7020,10 +7026,11 @@ def build_detached_egress_network_claim_classification_packet(
         final_status
         == "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS"
     )
+    classified = final_status.startswith("NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_")
     return {
         "captured_at_utc": utc_now(),
         "packet_kind": "detached_egress_network_claim_classification",
-        "status": "ok" if positive_absence else "blocked",
+        "status": "ok" if classified else "blocked",
         "final_status": final_status,
         "reason_class": reason_class,
         "network_claim_classified": True,

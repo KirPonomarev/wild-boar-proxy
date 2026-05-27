@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-27T10:07:39.494862Z",
+  "counts_as_native_ux_proof": false,
+  "external_evidence_dir_exists": true,
+  "native_process_bound": true,
+  "packet_kind": "detached_egress_process_binding_validation",
+  "reason_class": "",
+  "source_packet_present": true,
+  "status": "ok"
+}

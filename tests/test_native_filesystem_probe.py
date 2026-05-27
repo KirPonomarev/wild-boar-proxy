@@ -227,6 +227,15 @@ from tools.persistent_custom_profile_storage_schema_attribution_r4_probe import 
     inspect_sqlite_schema,
     select_candidate_surfaces,
 )
+from tools.persistent_custom_profile_restoration_correlation_r5_probe import (
+    build_r5_correlation_classification_packet,
+    build_r5_false_green_audit,
+    build_r5_nonce_prompt_packet,
+    build_r5_target_delta_packet,
+    build_storage_correlation_result_packet,
+    build_visibility_result_packet,
+    select_r5_hypotheses,
+)
 from tools.persistent_custom_profile_backup_repair_r1_probe import (
     classify_backup_surface,
 )
@@ -4612,6 +4621,23 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["safety_admission_classified"])
         self.assertFalse(packet["counts_as_native_egress_proof"])
 
+    def test_detached_egress_safety_admission_prerequisite_accepts_refresh_contour(self) -> None:
+        packet = build_detached_egress_safety_admission_prerequisite_packet(
+            source_path="/tmp/refresh.json",
+            source_packet={
+                "status": "ok",
+                "final_status": "NATIVE_CUSTOM_SAFETY_REFRESH_CLASSIFIED",
+                "native_launch_attempted": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["source_final_status"],
+            "NATIVE_CUSTOM_SAFETY_REFRESH_CLASSIFIED",
+        )
+        self.assertTrue(packet["safety_admission_classified"])
+
     def test_detached_egress_handoff_prerequisite_accepts_r2_ready_status(self) -> None:
         packet = build_detached_egress_handoff_prerequisite_packet(
             handoff_dir=Path("/tmp/handoff"),
@@ -5821,6 +5847,238 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(packet["raw_content_recorded"])
         self.assertNotIn("private fixture body", serialized)
 
+    def test_persistent_restore_r5_nonce_prompt_is_hash_only_and_r5_scoped(self) -> None:
+        nonce = "wbp-r5-secret-nonce"
+        packet = build_r5_nonce_prompt_packet(nonce=nonce)
+        serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "persistent_restore_r5_nonce_prompt")
+        self.assertIn("R5 restoration correlation", packet["prompt_template_shape"])
+        self.assertNotIn("R2C", packet["prompt_template_shape"])
+        self.assertNotIn(nonce, serialized)
+        self.assertFalse(packet["nonce_recorded"])
+        self.assertFalse(packet["raw_nonce_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertTrue(packet["prompt_hash_recorded"])
+
+    def test_persistent_restore_r5_selects_high_signal_hypotheses_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "r4"
+            profile = root / "profile"
+            evidence.mkdir()
+            profile.mkdir()
+            (profile / "session_index.jsonl").write_text("private fixture body\n", encoding="utf-8")
+            (profile / "sessions/2026/05/27").mkdir(parents=True)
+            (profile / "sessions/2026/05/27/rollout.jsonl").write_text(
+                "private fixture body\n",
+                encoding="utf-8",
+            )
+            candidate = {
+                "metadata_only": True,
+                "candidate_count": 4,
+                "candidates": [
+                    {
+                        "relative_path": "auth.json",
+                        "surface_type": "json",
+                        "state_class": "unknown",
+                    },
+                    {
+                        "relative_path": ".tmp/plugins/example/conversation-to-wiki.json",
+                        "surface_type": "json",
+                        "state_class": "thread_history",
+                    },
+                    {
+                        "relative_path": "session_index.jsonl",
+                        "surface_type": "jsonl",
+                        "state_class": "session_state",
+                    },
+                    {
+                        "relative_path": "sessions/2026/05/27/rollout.jsonl",
+                        "surface_type": "jsonl",
+                        "state_class": "session_state",
+                    },
+                ],
+            }
+            hypothesis = {
+                "hypothesis_count": 2,
+                "hypotheses": [
+                    {"relative_path": "session_index.jsonl"},
+                    {"relative_path": "sessions/2026/05/27/rollout.jsonl"},
+                ],
+            }
+            (evidence / "persistent_storage_candidate_selection_packet.json").write_text(
+                json.dumps(candidate),
+                encoding="utf-8",
+            )
+            (evidence / "persistent_storage_restoration_hypothesis_packet.json").write_text(
+                json.dumps(hypothesis),
+                encoding="utf-8",
+            )
+
+            packet = select_r5_hypotheses(r4_evidence_dir=evidence, profile_root=profile)
+            serialized = json.dumps(packet, sort_keys=True)
+
+        selected = {row["relative_path"] for row in packet["selected_hypotheses"]}
+        self.assertEqual(packet["status"], "ok")
+        self.assertIn("session_index.jsonl", selected)
+        self.assertIn("sessions/2026/05/27/rollout.jsonl", selected)
+        self.assertFalse(packet["auth_token_secret_surfaces_selected"])
+        self.assertFalse(packet["all_r4_hypotheses_treated_equal"])
+        self.assertNotIn("auth.json", selected)
+        self.assertNotIn(".tmp/plugins/example/conversation-to-wiki.json", selected)
+        self.assertNotIn("private fixture body", serialized)
+
+    def test_persistent_restore_r5_visibility_result_separate_from_storage_correlation(self) -> None:
+        identity = {
+            "status": "ok",
+            "persistent_profile_id": "wbp-custom-main",
+            "persistent_profile_root": "/tmp/wbp-custom-main",
+        }
+        visibility = {
+            "status": "ok",
+            "same_nonce_thread_visible": True,
+        }
+        result = build_visibility_result_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            owner_visibility_packet=visibility,
+            relaunch_packet={"custom_process_observed": True},
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["owner_visible_thread_continuity_classified"])
+        self.assertFalse(result["visibility_result_counts_as_storage_correlation"])
+        self.assertFalse(result["visibility_result_counts_as_durable_restoration_proof"])
+
+    def test_persistent_restore_r5_target_delta_does_not_imply_restoration_proof(self) -> None:
+        before = {
+            "targets": [
+                {
+                    "relative_path": "session_index.jsonl",
+                    "exists": True,
+                    "size": 10,
+                    "mtime_ns": 100,
+                }
+            ]
+        }
+        after = {
+            "targets": [
+                {
+                    "relative_path": "session_index.jsonl",
+                    "exists": True,
+                    "size": 20,
+                    "mtime_ns": 200,
+                }
+            ]
+        }
+        relaunch = {
+            "targets": [
+                {
+                    "relative_path": "session_index.jsonl",
+                    "exists": True,
+                    "size": 20,
+                    "mtime_ns": 200,
+                }
+            ]
+        }
+
+        packet = build_r5_target_delta_packet(
+            before_manifest=before,
+            after_action_manifest=after,
+            relaunch_manifest=relaunch,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["changed_target_count"], 1)
+        self.assertEqual(packet["retained_target_count"], 1)
+        self.assertFalse(packet["target_file_changed_counts_as_participation_proof"])
+        self.assertFalse(packet["target_file_retained_counts_as_participation_proof"])
+        self.assertFalse(packet["target_delta_rows"][0]["target_delta_counts_as_durable_restoration_proof"])
+
+    def test_persistent_restore_r5_visible_thread_does_not_imply_storage_proof(self) -> None:
+        visibility = {
+            "status": "ok",
+            "owner_visible_thread_continuity_classified": True,
+        }
+        target_delta = {
+            "status": "ok",
+            "changed_target_count": 0,
+            "retained_target_count": 0,
+        }
+        packet = build_storage_correlation_result_packet(
+            visibility_result_packet=visibility,
+            target_delta_packet=target_delta,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["storage_correlation_classified"])
+        self.assertFalse(packet["durable_restoration_proven"])
+        self.assertFalse(packet["local_only_restoration_source_proven"])
+        self.assertFalse(packet["storage_level_thread_history_proven"])
+
+    def test_persistent_restore_r5_false_green_blocks_adjacent_layer_claims(self) -> None:
+        classification = {
+            "durable_restoration_proven": False,
+            "local_only_restoration_source_proven": False,
+            "storage_level_thread_history_proven": False,
+            "route_proof_claimed": True,
+            "direct_egress_absence_claimed": False,
+            "model_availability_claimed": False,
+            "native_ux_acceptance_claimed": False,
+            "original_codex_reversibility_claimed": False,
+            "final_e2e_claimed": False,
+        }
+        audit = build_r5_false_green_audit(
+            classification_packet=classification,
+            visibility_result_packet={
+                "visibility_result_counts_as_durable_restoration_proof": False,
+            },
+            storage_correlation_packet={
+                "durable_restoration_proven": False,
+                "local_only_restoration_source_proven": False,
+                "storage_level_thread_history_proven": False,
+                "remote_sync_cache_or_mixed_remains_possible": True,
+            },
+            target_delta_packet={
+                "durable_restoration_proven": False,
+                "local_only_restoration_source_proven": False,
+                "storage_level_thread_history_proven": False,
+                "target_file_changed_counts_as_participation_proof": False,
+                "target_file_retained_counts_as_participation_proof": False,
+            },
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_persistent_restore_r5_correlation_does_not_promote_local_only_source(self) -> None:
+        visibility = {
+            "status": "ok",
+            "owner_visible_thread_continuity_classified": True,
+        }
+        storage = {
+            "status": "ok",
+            "storage_correlation_classified": True,
+        }
+        classification = build_r5_correlation_classification_packet(
+            visibility_result_packet=visibility,
+            storage_correlation_packet=storage,
+            owner_action_packet={"target_window_clear": True},
+            owner_visibility_packet={"target_window_clear": True},
+        )
+
+        self.assertEqual(classification["status"], "ok")
+        self.assertEqual(
+            classification["final_status"],
+            "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_LOCAL_RESTORATION_CORRELATION_CLASSIFIED",
+        )
+        self.assertFalse(classification["durable_restoration_proven"])
+        self.assertFalse(classification["local_only_restoration_source_proven"])
+        self.assertFalse(classification["storage_level_thread_history_proven"])
+        self.assertFalse(classification["route_proof_claimed"])
+
     def test_external_evidence_validation_accepts_import_derived_alternatives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             external_dir = Path(tmp)
@@ -5970,6 +6228,40 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             classification["final_status"],
             "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_PROCESS_BINDING_MISSING",
         )
+        self.assertFalse(
+            classification[
+                "direct_non_wbp_model_egress_absent_within_bounded_window"
+            ]
+        )
+
+    def test_detached_egress_direct_egress_observed_is_classified(self) -> None:
+        classification = build_detached_egress_network_claim_classification_packet(
+            safety_admission_prerequisite_packet={"status": "ok"},
+            handoff_prerequisite_packet={"status": "ok"},
+            command_hash_verification_packet={"status": "ok"},
+            external_evidence_import_packet={
+                "status": "ok",
+                "external_evidence_dir_exists": True,
+            },
+            secret_scan_packet={"status": "ok"},
+            process_binding_validation_packet={
+                "status": "ok",
+                "native_process_bound": True,
+            },
+            wbp_trace_validation_packet={"status": "ok", "wbp_trace_confirmed": True},
+            network_observation_validation_packet={
+                "status": "ok",
+                "direct_non_wbp_model_egress_observed": True,
+                "direct_non_wbp_model_egress_absent_within_bounded_window": False,
+            },
+        )
+
+        self.assertEqual(classification["status"], "ok")
+        self.assertEqual(
+            classification["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_OBSERVED",
+        )
+        self.assertTrue(classification["direct_non_wbp_model_egress_observed"])
         self.assertFalse(
             classification[
                 "direct_non_wbp_model_egress_absent_within_bounded_window"
