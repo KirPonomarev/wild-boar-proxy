@@ -1,0 +1,170 @@
+{
+  "all_current_rows_unavailable_unknown": true,
+  "captured_at_utc": "2026-05-28T14:24:52.815444Z",
+  "catalog_display_rows": [
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.4-mini",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.4-mini",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    }
+  ],
+  "display_rows_unavailable_unknown": true,
+  "measured_source_rows": [],
+  "measured_source_rows_present": false,
+  "metadata_completeness_without_stronger_truth": true,
+  "packet_kind": "metadata_source_and_proof_level",
+  "selector_metadata_is_display_only": true,
+  "selector_rows": [
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.4",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "intelligence_tier",
+      "model_id": "gpt-5.4-mini",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "codex_native",
+      "metadata_field": "speed_tier",
+      "model_id": "gpt-5.4-mini",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    },
+    {
+      "label": "unavailable_unknown",
+      "lane_kind": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "runtime_selection_proven": false,
+      "selection_intent_only": true,
+      "source": "unavailable_unknown"
+    }
+  ],
+  "selector_rows_unavailable_unknown": true,
+  "source_and_proof_complete": true,
+  "status": "ok",
+  "ui_badge_is_packet_proof": false
+}

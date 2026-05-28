@@ -1,0 +1,36 @@
+{
+  "all_api_tiers_unavailable_unknown": true,
+  "api_intelligence_metadata_rows": [
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "intelligence_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    }
+  ],
+  "api_label_equals_codex_high_or_extra_high": false,
+  "api_metadata_is_capability_proof": false,
+  "api_metadata_truth_strength": "unknown_unproven_only",
+  "api_speed_metadata_rows": [
+    {
+      "label": "unavailable_unknown",
+      "lane": "wbp_api",
+      "metadata_field": "speed_tier",
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "unproven",
+      "source": "unavailable_unknown",
+      "treated_as_capability_proof": false
+    }
+  ],
+  "captured_at_utc": "2026-05-28T14:24:52.815441Z",
+  "lane": "wbp_api",
+  "model_count": 1,
+  "packet_kind": "api_lane_metadata_fidelity",
+  "provider_declared_intelligence_parity_proven": false,
+  "provider_declared_speed_superiority_proven": false,
+  "status": "ok",
+  "wbp_prefixed_non_impersonating_display": true
+}

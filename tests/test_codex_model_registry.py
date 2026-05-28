@@ -398,6 +398,18 @@ class CodexModelRegistryTests(unittest.TestCase):
             self.assertIn("source", model["speed_tier"])
             self.assertIn("proof_level", model["speed_tier"])
 
+    def test_current_catalog_tiers_remain_unknown_unproven_without_stronger_metadata(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        display = packets["model_display_metadata_packet.json"]
+
+        for model in display["models"]:
+            self.assertEqual(model["intelligence_tier"]["label"], "unavailable_unknown")
+            self.assertEqual(model["intelligence_tier"]["source"], "unavailable_unknown")
+            self.assertEqual(model["intelligence_tier"]["proof_level"], "unproven")
+            self.assertEqual(model["speed_tier"]["label"], "unavailable_unknown")
+            self.assertEqual(model["speed_tier"]["source"], "unavailable_unknown")
+            self.assertEqual(model["speed_tier"]["proof_level"], "unproven")
+
     def test_measured_source_requires_measurement_packet(self) -> None:
         packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
         catalog = packets["codex_native_model_lane_packet.json"]
