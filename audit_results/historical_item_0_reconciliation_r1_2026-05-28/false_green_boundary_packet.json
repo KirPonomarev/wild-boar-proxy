@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-28T15:22:49.058381Z",
+  "closeout_narrative_outranks_packet_evidence": false,
+  "historical_rows_marked_reconfirmed_without_packet_support": false,
+  "historical_seed_material_treated_as_fresh_reproof": false,
+  "inventory_table_treated_as_fresh_runtime_validation": false,
+  "packet_kind": "false_green_boundary",
+  "status": "ok",
+  "superseded_rows_treated_as_current_runtime_proof": false
+}

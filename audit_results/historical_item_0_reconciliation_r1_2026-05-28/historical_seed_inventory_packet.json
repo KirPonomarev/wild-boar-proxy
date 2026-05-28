@@ -1,0 +1,82 @@
+{
+  "captured_at_utc": "2026-05-28T15:22:49.058148Z",
+  "packet_kind": "historical_seed_inventory",
+  "rows": [
+    {
+      "claims": [
+        "historical_model_seed_entries_present"
+      ],
+      "current_runtime_proof": false,
+      "entry_count": 12,
+      "evidence_level_classes": [
+        "limits_ui",
+        "manual_assumption_forbidden",
+        "runtime_failure",
+        "runtime_success"
+      ],
+      "id": "external_lab_model_registry_seed",
+      "kind": "json_seed",
+      "path": "external_agent_lab/model_registry_seed.json",
+      "source_plan": "External Agent Lab R&D Plan v1.4",
+      "source_role": "historical_seed_reference_only",
+      "summary": "isolated external-agent-lab model seed inventory"
+    },
+    {
+      "claims": [
+        "isolated_non_integrated_lane",
+        "historical_artifacts_not_canonical_runtime_proof",
+        "provider_live_free_unittest_first_acceptance"
+      ],
+      "contains_current_runtime_navigation": false,
+      "contains_forward_runtime_proof": false,
+      "current_runtime_proof": false,
+      "id": "external_lab_readme",
+      "kind": "markdown_seed",
+      "path": "EXTERNAL_AGENT_LAB.md",
+      "source_role": "historical_seed_reference_only",
+      "summary": "isolated lane boundary and non-integration narrative"
+    },
+    {
+      "claims": [
+        "isolated_non_integrated_lane",
+        "provider_live_free_unittest_first_acceptance",
+        "model_registry_seed_authoritative_for_isolated_lane_only"
+      ],
+      "contains_current_runtime_navigation": false,
+      "contains_forward_runtime_proof": false,
+      "current_runtime_proof": false,
+      "id": "external_lab_audit",
+      "kind": "markdown_seed",
+      "path": "EXTERNAL_AGENT_LAB_AUDIT.md",
+      "source_role": "historical_seed_reference_only",
+      "summary": "isolated lane audit and truth relock narrative"
+    },
+    {
+      "claims": [
+        "provider_live_free_unittest_first_acceptance"
+      ],
+      "contains_current_runtime_navigation": false,
+      "contains_forward_runtime_proof": false,
+      "current_runtime_proof": false,
+      "id": "external_lab_acceptance_verification",
+      "kind": "markdown_seed",
+      "path": "external_agent_lab_acceptance_verification.md",
+      "source_role": "historical_seed_reference_only",
+      "summary": "unittest-first acceptance verification narrative"
+    },
+    {
+      "claims": [
+        "provider_live_free_unittest_first_acceptance",
+        "isolated_lab_import_hygiene_and_json_preflight_contract"
+      ],
+      "contains_live_runtime_execution_proof": false,
+      "current_runtime_proof": false,
+      "id": "external_lab_tests",
+      "kind": "python_test_seed",
+      "path": "tests/test_external_agent_lab.py",
+      "source_role": "historical_seed_reference_only",
+      "summary": "isolated-lab import hygiene and JSON preflight contract tests"
+    }
+  ],
+  "status": "ok"
+}

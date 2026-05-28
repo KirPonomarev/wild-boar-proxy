@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-28T15:22:49.058383Z",
+  "findings": [
+    {
+      "id": "historical_seed_registry_is_not_current_runtime_catalog",
+      "severity": "high",
+      "status": "confirmed"
+    },
+    {
+      "id": "seed_only_models_remain_non_selectable_current_runtime_choices",
+      "severity": "high",
+      "status": "confirmed"
+    },
+    {
+      "id": "isolated_external_lab_acceptance_docs_remain_historical_only_non_counted",
+      "severity": "medium",
+      "status": "confirmed"
+    },
+    {
+      "id": "historical_item0_closed_as_reconciliation_not_runtime_upgrade",
+      "severity": "info",
+      "status": "confirmed"
+    }
+  ],
+  "packet_kind": "independent_audit",
+  "status": "ok"
+}
