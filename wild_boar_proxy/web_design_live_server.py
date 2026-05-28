@@ -101,9 +101,12 @@ from wild_boar_proxy.review_bridge_session_store import (
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 from wild_boar_proxy.operator_surface import (
     DEFAULT_CODEX_BIN,
+    DEFAULT_RUNTIME_CONFIG,
+    HybridOpenAICompatAdapter,
     OperatorSurfaceSession,
     clean_env,
     compare_snapshots,
+    extract_local_api_key,
     protected_snapshot,
     protected_surfaces_unchanged,
 )
@@ -1581,6 +1584,95 @@ def _route_id_from_route(route: dict[str, Any] | None) -> str:
     return str(route.get("route_id") or "") if isinstance(route, dict) else ""
 
 
+def _enabled_external_route_records(packet: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(packet, dict):
+        return []
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return []
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        return []
+    enabled_routes: list[dict[str, Any]] = []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        route_id = str(route.get("route_id") or "").strip()
+        auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+        secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+        if route_id and route.get("enabled") is True and secret_ref:
+            enabled_routes.append(route)
+    return enabled_routes
+
+
+def _primary_external_route_id(packet: dict[str, Any] | None) -> str:
+    enabled_routes = _enabled_external_route_records(packet)
+    if not enabled_routes:
+        return ""
+    return str(enabled_routes[0].get("route_id") or "").strip()
+
+
+@dataclass
+class _CustomNativeBridgeLease:
+    signature: str = ""
+    bridge: HybridOpenAICompatAdapter | None = None
+
+    def ensure(self, *, downstream_endpoint: str, routes_packet: dict[str, Any] | None) -> str:
+        route_records = _enabled_external_route_records(routes_packet)
+        if not route_records:
+            self.close()
+            return downstream_endpoint
+        try:
+            expected_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+        except RuntimeError:
+            self.close()
+            return downstream_endpoint
+        signature_source = {
+            "downstream_endpoint": downstream_endpoint,
+            "expected_api_key_present": bool(expected_api_key),
+            "routes": [
+                {
+                    "route_id": str(route.get("route_id") or ""),
+                    "provider": str(route.get("provider") or ""),
+                    "base_url": str(route.get("base_url") or ""),
+                    "endpoint_path": str(route.get("endpoint_path") or ""),
+                    "upstream_model": str(route.get("upstream_model") or ""),
+                    "secret_ref": str(
+                        (
+                            route.get("auth")
+                            if isinstance(route.get("auth"), dict)
+                            else {}
+                        ).get("secret_ref")
+                        or route.get("secret_ref")
+                        or ""
+                    ),
+                }
+                for route in route_records
+            ],
+        }
+        signature = hashlib.sha256(
+            json.dumps(signature_source, ensure_ascii=True, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if self.bridge is not None and self.signature == signature:
+            return self.bridge.listen_endpoint
+        self.close()
+        bridge = HybridOpenAICompatAdapter(
+            downstream_endpoint=downstream_endpoint,
+            expected_api_key=expected_api_key,
+            routes=route_records,
+        )
+        bridge.__enter__()
+        self.bridge = bridge
+        self.signature = signature
+        return bridge.listen_endpoint
+
+    def close(self) -> None:
+        if self.bridge is not None:
+            self.bridge.__exit__(None, None, None)
+        self.bridge = None
+        self.signature = ""
+
+
 def _server_owned_api_route_spec(runner: CommandRunner) -> dict[str, Any]:
     env = getattr(runner, "_env", None)
     source = env if isinstance(env, dict) else os.environ
@@ -2328,8 +2420,11 @@ def _launch_custom_native_codex_packet(
     payload: dict[str, Any],
     *,
     owner_authorized: bool,
+    commands: dict[str, dict[str, Any]],
     operator_status: dict[str, Any] | None,
     api_snapshot: dict[str, Any] | None,
+    external_routes_packet: dict[str, Any] | None = None,
+    native_bridge_lease: _CustomNativeBridgeLease | None = None,
 ) -> dict[str, Any]:
     forbidden = _forbidden_custom_live_launch_fields(payload)
     if forbidden:
@@ -2359,16 +2454,29 @@ def _launch_custom_native_codex_packet(
     model_id = payload.get("model_id")
     if not isinstance(model_id, str) or not model_id:
         registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
-        model_id = str(
+        route_fallback_id = ""
+        status_packet = operator_status.get("status") if isinstance(operator_status, dict) else {}
+        machine_error_code = str(status_packet.get("machine_error_code") or "")
+        if machine_error_code == "AUTH_UNAVAILABLE":
+            route_fallback_id = _primary_external_route_id(external_routes_packet)
+        model_id = route_fallback_id or str(
             registry.get("recommended_default_model")
             or registry.get("recommended_model")
             or ""
         )
     registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
     endpoint = str(registry.get("endpoint") or "")
+    bridge_endpoint = (
+        native_bridge_lease.ensure(
+            downstream_endpoint=endpoint,
+            routes_packet=external_routes_packet,
+        )
+        if native_bridge_lease is not None
+        else endpoint
+    )
     packet = launch_custom_native_app_packet(
         repo_root=ROOT,
-        endpoint=endpoint,
+        endpoint=bridge_endpoint,
         model=model_id,
         owner_authorization_phrase=(
             OWNER_STANDING_AUTHORIZATION_PHRASE if owner_authorized else None
@@ -2376,12 +2484,14 @@ def _launch_custom_native_codex_packet(
     )
     packet["selection_packet"] = _codex_custom_selection_packet(
         model_id=model_id,
-        commands={},
+        commands=commands,
         operator_status=operator_status,
         api_snapshot=api_snapshot,
     )
     packet["server_issued_model_list"] = bool(registry.get("available_models"))
     packet["wbp_endpoint_configured"] = endpoint.startswith("http://127.0.0.1:")
+    packet["bridge_endpoint_configured"] = bridge_endpoint != endpoint
+    packet["configured_bridge_endpoint"] = bridge_endpoint
     return packet
 
 
@@ -2825,9 +2935,22 @@ def run_ui_action(
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_custom_client_native":
+        account_commands = (
+            {
+                "status": execute_command(runner, "status"),
+                "accounts_list": execute_command(runner, "accounts_list"),
+                "rollout_rotation_inspect": execute_command(
+                    runner,
+                    "rollout_rotation_inspect",
+                ),
+            }
+            if owner_authorized
+            else {}
+        )
         packet = _launch_custom_native_codex_packet(
             {},
             owner_authorized=owner_authorized,
+            commands=account_commands,
             operator_status=native_operator_status if owner_authorized else None,
             api_snapshot=native_api_snapshot if owner_authorized else None,
         )
@@ -2995,6 +3118,7 @@ def build_handler(
         review_session_store,
         review_apply_context=query_review_apply_context,
     )
+    custom_native_bridge_lease = _CustomNativeBridgeLease()
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
@@ -3023,6 +3147,17 @@ def build_handler(
         api_connections_readonly_runner = sandbox_runner
         action_runner = sandbox_runner
     static_root = static_dir.resolve()
+
+    def _external_routes_packet() -> dict[str, Any] | None:
+        result = execute_external_command(
+            api_connections_readonly_runner,
+            "external-models",
+            "routes",
+            "list",
+            "--json",
+        )
+        packet = result.get("packet")
+        return packet if isinstance(packet, dict) else None
 
     def build_rollback_point_create_admission_packet() -> dict[str, Any]:
         original_status = build_original_status_packet()
@@ -3640,17 +3775,28 @@ def build_handler(
                     if codex_custom_live_prompt_authorized
                     else None
                 )
+                account_commands = (
+                    self._codex_account_commands()
+                    if codex_custom_live_prompt_authorized
+                    else {}
+                )
                 api_snapshot = (
                     build_api_connections_readonly_snapshot(api_connections_readonly_runner)
                     if codex_custom_live_prompt_authorized
                     else None
                 )
+                external_routes_packet = (
+                    _external_routes_packet() if codex_custom_live_prompt_authorized else None
+                )
                 self._send_json(
                     _launch_custom_native_codex_packet(
                         self._read_json_body(),
                         owner_authorized=codex_custom_live_prompt_authorized,
+                        commands=account_commands,
                         operator_status=operator_status,
                         api_snapshot=api_snapshot,
+                        external_routes_packet=external_routes_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
                     )
                 )
                 return

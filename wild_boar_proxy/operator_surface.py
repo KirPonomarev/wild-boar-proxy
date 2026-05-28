@@ -1152,6 +1152,219 @@ class ExternalRouteResponsesAdapter:
         return 200, {"Content-Type": "application/json"}, body_bytes
 
 
+class _HybridOpenAICompatServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        handler: type[http.server.BaseHTTPRequestHandler],
+        adapter: "HybridOpenAICompatAdapter",
+    ) -> None:
+        super().__init__(server_address, handler)
+        self.adapter = adapter
+
+
+class _HybridOpenAICompatHandler(http.server.BaseHTTPRequestHandler):
+    server: _HybridOpenAICompatServer
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        return
+
+    def do_GET(self) -> None:
+        self._handle()
+
+    def do_POST(self) -> None:
+        self._handle()
+
+    def _handle(self) -> None:
+        status, headers, body = self.server.adapter.handle(
+            method=self.command,
+            path=self.path,
+            headers={key: value for key, value in self.headers.items()},
+            body=self.rfile.read(int(self.headers.get("Content-Length", "0") or "0")),
+        )
+        self.send_response(status)
+        for key, value in headers.items():
+            if key.lower() != "content-length":
+                self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class HybridOpenAICompatAdapter:
+    """Persistent localhost bridge that merges native and route-backed models."""
+
+    def __init__(
+        self,
+        *,
+        downstream_endpoint: str,
+        expected_api_key: str,
+        routes: list[dict[str, Any]],
+        timeout_seconds: float = 120.0,
+    ) -> None:
+        self.downstream_endpoint = downstream_endpoint.rstrip("/")
+        self.expected_api_key = expected_api_key
+        self.timeout_seconds = timeout_seconds
+        self._server: _HybridOpenAICompatServer | None = None
+        self._thread: threading.Thread | None = None
+        self._route_adapters: dict[str, ExternalRouteResponsesAdapter] = {}
+        self._route_model_ids: list[str] = []
+        for route in routes:
+            if not isinstance(route, dict):
+                continue
+            route_id = str(route.get("route_id") or "").strip()
+            auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+            secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+            if not route_id or route.get("enabled") is not True or not secret_ref:
+                continue
+            try:
+                route_secret = _resolve_external_route_secret_value(route)
+            except RuntimeError:
+                continue
+            self._route_adapters[route_id] = ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key=expected_api_key,
+                route_secret=route_secret,
+                timeout_seconds=timeout_seconds,
+            )
+            self._route_model_ids.append(route_id)
+
+    @property
+    def listen_endpoint(self) -> str:
+        if self._server is None:
+            return "http://127.0.0.1:0/v1"
+        return f"http://127.0.0.1:{self._server.server_port}/v1"
+
+    @property
+    def route_model_ids(self) -> list[str]:
+        return list(self._route_model_ids)
+
+    def __enter__(self) -> "HybridOpenAICompatAdapter":
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+        self._server = _HybridOpenAICompatServer(
+            ("127.0.0.1", port),
+            _HybridOpenAICompatHandler,
+            self,
+        )
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
+
+    def handle(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> tuple[int, dict[str, str], bytes]:
+        normalized_path = path.split("?", 1)[0]
+        if str(headers.get("Authorization") or "") != f"Bearer {self.expected_api_key}":
+            payload = {"error": {"message": "unauthorized", "type": "auth_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 401, {"Content-Type": "application/json"}, body_bytes
+        if method == "GET" and normalized_path in {"/v1/models", "/models"}:
+            return self._handle_models(path, headers)
+        if method == "POST" and normalized_path in {"/v1/responses", "/responses"}:
+            try:
+                request_payload = json.loads(body.decode("utf-8"))
+            except Exception:
+                payload = {"error": {"message": "invalid json body", "type": "invalid_request_error"}}
+                body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+                return 400, {"Content-Type": "application/json"}, body_bytes
+            requested_model = str(request_payload.get("model") or "").strip()
+            route_adapter = self._route_adapters.get(requested_model)
+            if route_adapter is not None:
+                return route_adapter.handle(
+                    method=method,
+                    path=normalized_path,
+                    headers=headers,
+                    body=body,
+                )
+        return self._forward_downstream(method=method, path=path, headers=headers, body=body)
+
+    def _handle_models(
+        self,
+        path: str,
+        headers: dict[str, str],
+    ) -> tuple[int, dict[str, str], bytes]:
+        status, response_headers, response_body = self._forward_downstream(
+            method="GET",
+            path=path,
+            headers=headers,
+            body=b"",
+        )
+        if status >= 400:
+            return status, response_headers, response_body
+        try:
+            payload = json.loads(response_body.decode("utf-8"))
+        except Exception:
+            return status, response_headers, response_body
+        data = payload.get("data")
+        if not isinstance(data, list):
+            return status, response_headers, response_body
+        seen_model_ids = {
+            str(item.get("id") or "")
+            for item in data
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        }
+        for route_model_id in self._route_model_ids:
+            if route_model_id in seen_model_ids:
+                continue
+            data.append({"id": route_model_id})
+        body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        return status, {"Content-Type": "application/json"}, body_bytes
+
+    def _forward_downstream(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> tuple[int, dict[str, str], bytes]:
+        forwarded_url = f"{self.downstream_endpoint}{path[3:] if path.startswith('/v1/') else path}"
+        request_headers = _forward_request_headers(headers)
+        request = urllib.request.Request(
+            forwarded_url,
+            data=body if method != "GET" else None,
+            headers=request_headers,
+            method=method,
+        )
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(request, timeout=self.timeout_seconds) as response:
+                response_body = response.read()
+                status = int(response.status)
+                response_headers = {
+                    "Content-Type": response.headers.get("Content-Type", "application/json")
+                }
+                return status, response_headers, response_body
+        except urllib.error.HTTPError as exc:
+            return (
+                int(exc.code),
+                {"Content-Type": exc.headers.get("Content-Type", "application/json")},
+                exc.read(),
+            )
+        except Exception:
+            payload = {"error": {"message": "hybrid bridge upstream request failed", "type": "server_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 502, {"Content-Type": "application/json"}, body_bytes
+
+
 def stat_hash(path: str) -> dict[str, Any]:
     real_path = Path(path)
     record: dict[str, Any] = {

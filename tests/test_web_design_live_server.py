@@ -6188,6 +6188,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(endpoint_packet["native_window_observed"])
         self.assertTrue(endpoint_packet["native_app_usable"])
         self.assertFalse(endpoint_packet["workbench_ready"])
+        self.assertEqual(endpoint_packet["selection_packet"]["status"], "ok")
+        self.assertEqual(
+            endpoint_packet["selection_packet"]["ranking_inputs"]["launch_capable_count"],
+            1,
+        )
+        self.assertEqual(
+            endpoint_packet["selection_packet"]["refresh_packet"]["managed_total"],
+            1,
+        )
         self.assertEqual(ui_action["status"], "ok")
         self.assertEqual(ui_action["result"]["status"], "ok")
         self.assertEqual(
@@ -6196,7 +6205,119 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
         self.assertTrue(ui_action["result"]["data"]["real_codex_app_launched"])
         self.assertFalse(ui_action["result"]["data"]["native_launch_complete"])
+        self.assertEqual(ui_action["result"]["data"]["selection_packet"]["status"], "ok")
+        self.assertEqual(
+            ui_action["result"]["data"]["selection_packet"]["ranking_inputs"]["launch_capable_count"],
+            1,
+        )
+        self.assertEqual(
+            ui_action["result"]["data"]["selection_packet"]["refresh_packet"]["managed_total"],
+            1,
+        )
         self.assertTrue(metadata["actions"]["launch_custom_client_native"]["available"])
+
+    def test_custom_native_launch_uses_bridge_endpoint_and_api_route_when_codex_auth_unavailable(self) -> None:
+        native_packet = {
+            "schema_version": 1,
+            "captured_at_utc": "2026-05-29T00:00:00Z",
+            "mode_id": "codex_custom",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex native app launched.",
+            "next_action": "none",
+            "owner_authorization_phrase_present": True,
+            "process_started": True,
+            "expected_custom_identity_observed": True,
+            "native_window_observed": True,
+            "native_app_usable": True,
+            "real_codex_app_launched": True,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+        }
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            machine_error_code="AUTH_UNAVAILABLE",
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(
+            "wbp-web-primary-openrouter",
+            enabled=True,
+        )
+
+        with (
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {
+                        "configured_model": "gpt-5.3-codex",
+                        "machine_error_code": "AUTH_UNAVAILABLE",
+                    },
+                    "claim_gate": {"status": "ok"},
+                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": "wbp-web-primary-openrouter",
+                            "enabled": True,
+                            "primary": True,
+                            "secret_ref": "OPENROUTER_API_KEY",
+                        }
+                    ],
+                },
+            ),
+            mock.patch.object(
+                live_server._CustomNativeBridgeLease,
+                "ensure",
+                return_value="http://127.0.0.1:9543/v1",
+            ) as ensure_bridge,
+            mock.patch.object(
+                live_server,
+                "launch_custom_native_app_packet",
+                return_value=dict(native_packet),
+            ) as launch_native,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                endpoint_packet = json.loads(
+                    post_json(f"{base}/api/codex/custom/native-launch", {})
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(endpoint_packet["status"], "ok")
+        ensure_bridge.assert_called_once()
+        launch_native.assert_called_once()
+        _, kwargs = launch_native.call_args
+        self.assertEqual(kwargs["endpoint"], "http://127.0.0.1:9543/v1")
+        self.assertEqual(kwargs["model"], "wbp-web-primary-openrouter")
 
     def test_custom_native_launch_ui_action_rejects_browser_owned_route_field(self) -> None:
         server = ThreadingHTTPServer(

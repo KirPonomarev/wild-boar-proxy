@@ -16,6 +16,7 @@ from unittest import mock
 
 from wild_boar_proxy.operator_surface import (
     ExternalRouteResponsesAdapter,
+    HybridOpenAICompatAdapter,
     OwnerSideProcessNetworkObserver,
     OperatorSurfaceConfig,
     OperatorSurfaceSession,
@@ -596,6 +597,133 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertIn("gpt-5.3-codex", result["model_ids"])
         self.assertIn("wbp-web-primary-openrouter", result["model_ids"])
+
+    def test_hybrid_openai_compat_adapter_merges_route_ids_into_models(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_GET(self) -> None:
+                if self.path != "/v1/models":
+                    self.send_error(404)
+                    return
+                body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            route = {
+                "route_id": "wbp-web-primary-openrouter",
+                "enabled": True,
+                "base_url": "https://openrouter.ai/api/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "openai/gpt-5",
+                "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                ) as adapter,
+            ):
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/models",
+                    headers={"Authorization": "Bearer sk-local-test"},
+                    method="GET",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(
+            [item["id"] for item in payload["data"]],
+            ["gpt-5.3-codex", "wbp-web-primary-openrouter"],
+        )
+
+    def test_hybrid_openai_compat_adapter_dispatches_route_model_to_external_route(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            downstream_called = False
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                type(self).downstream_called = True
+                self.send_error(500)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            route = {
+                "route_id": "wbp-web-primary-openrouter",
+                "enabled": True,
+                "base_url": "https://openrouter.ai/api/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "openai/gpt-5",
+                "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                mock.patch.object(
+                    ExternalRouteResponsesAdapter,
+                    "handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps({"output_text": "API_OK"}).encode("utf-8"),
+                    ),
+                ) as route_handle,
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                ) as adapter,
+            ):
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/responses",
+                    data=json.dumps(
+                        {"model": "wbp-web-primary-openrouter", "input": "hello"}
+                    ).encode("utf-8"),
+                    headers={
+                        "Authorization": "Bearer sk-local-test",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(payload["output_text"], "API_OK")
+        self.assertFalse(DownstreamHandler.downstream_called)
+        route_handle.assert_called_once()
 
     def test_run_prompt_trace_mode_marks_path_proven_only_after_observer_request(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):
