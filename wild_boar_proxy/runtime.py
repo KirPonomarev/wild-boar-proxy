@@ -3860,11 +3860,12 @@ def login_session_auth_inventory_dir(paths: RuntimePaths) -> tuple[Path, dict[st
     return get_stable_auth_inventory_source(paths)
 
 
-def path_is_sandbox_scoped(paths: RuntimePaths, candidate: Path) -> bool:
+def path_is_admitted_owner_login_inventory_path(paths: RuntimePaths, candidate: Path) -> bool:
     resolved = candidate.expanduser().resolve(strict=False)
     allowed_roots = [
         paths.profile_dir.expanduser().resolve(strict=False),
         paths.managed_dir.expanduser().resolve(strict=False),
+        paths.stable_config.parent.expanduser().resolve(strict=False),
     ]
     return any(resolved == root or root in resolved.parents for root in allowed_roots)
 
@@ -3953,6 +3954,9 @@ def find_login_auth_candidates(
 
 
 def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
+    scope = str(session.get("inventory_scope") or "")
+    if not scope:
+        scope = "sandbox" if bool(session.get("sandbox_scope", False)) else "unknown"
     return {
         "status": str(session.get("state", "")),
         "provider": str(session.get("provider", "")),
@@ -3965,7 +3969,7 @@ def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
         "auth_materialized": bool(session.get("auth_materialized", False)),
         "auth_ref_present": bool(session.get("auth_ref")),
         "used": bool(session.get("used", False)),
-        "scope": "sandbox" if bool(session.get("sandbox_scope", False)) else "unknown",
+        "scope": scope,
         "created_at": str(session.get("created_at", "")),
         "expires_at": str(session.get("expires_at", "")),
         "browser_secret_intake": False,
@@ -4057,6 +4061,12 @@ def refresh_codex_login_session(
         if login_session_pid_is_running(pid):
             if current_state != "waiting_for_user":
                 session["state"] = "waiting_for_user"
+                changed = True
+        elif device_url and bool(session.get("device_code_present", False)):
+            if current_state != "waiting_for_user":
+                session["state"] = "waiting_for_user"
+                changed = True
+            if session.pop("failure_reason", None) is not None:
                 changed = True
         else:
             session["state"] = "failed"
@@ -11716,15 +11726,28 @@ def run_accounts_login_start(
                 )
 
         auth_dir, auth_inventory_source = login_session_auth_inventory_dir(paths)
-        if not path_is_sandbox_scoped(paths, auth_dir):
+        if not path_is_admitted_owner_login_inventory_path(paths, auth_dir):
             return build_command_payload(
                 ok=False,
-                human_message="Configured auth-dir is outside sandbox profile/managed paths.",
+                human_message=(
+                    "Configured auth-dir is outside admitted profile/managed/stable inventory paths."
+                ),
                 machine_error_code="LOGIN_SANDBOX_SCOPE_UNPROVEN",
                 liveness="unknown",
                 severity="fatal",
                 operator_action="stop",
                 changed_files=[],
+                extra={
+                    "provider": "codex",
+                    "mode": "device",
+                    "auth_inventory_dir": str(auth_dir),
+                    "admitted_owner_login_inventory_roots": [
+                        str(paths.profile_dir.expanduser().resolve(strict=False)),
+                        str(paths.managed_dir.expanduser().resolve(strict=False)),
+                        str(paths.stable_config.parent.expanduser().resolve(strict=False)),
+                    ],
+                    "stable_auth_inventory_source": auth_inventory_source,
+                },
             )
         auth_dir.mkdir(parents=True, exist_ok=True)
 
@@ -11790,6 +11813,7 @@ def run_accounts_login_start(
             "auth_inventory_before_digest": login_session_entries_digest(before_entries),
             "auth_inventory_source": auth_inventory_source,
             "sandbox_scope": True,
+            "inventory_scope": "admitted_owner_login",
             "used": False,
         }
         stdout_path.parent.mkdir(parents=True, exist_ok=True)

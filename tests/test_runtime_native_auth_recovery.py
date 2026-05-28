@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from wild_boar_proxy import runtime
@@ -103,6 +104,46 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertFalse(hint["owner_action_required"])
         self.assertEqual(hint["next_action"], "sync")
         self.assertEqual(hint["command_surface"], "sync --json")
+
+    def test_owner_login_inventory_scope_allows_stable_config_parent(self) -> None:
+        paths = runtime.RuntimePaths(
+            profile_dir=Path("/tmp/wbp-profile"),
+            managed_dir=Path("/tmp/wbp-profile/managed"),
+            stable_config=Path("/tmp/stable-engine/config.yaml"),
+            auth_file=Path("/tmp/wbp-profile/auth.json"),
+            config_toml=Path("/tmp/wbp-profile/config.toml"),
+            runtime_mode_file=Path("/tmp/wbp-profile/runtime-mode.txt"),
+            runtime_effective_mode_file=Path("/tmp/wbp-profile/runtime-effective-mode.txt"),
+            registry_file=Path("/tmp/wbp-profile/managed/backend-registry.json"),
+            state_file=Path("/tmp/wbp-profile/managed/supervisor-state.json"),
+            managed_config_file=Path("/tmp/wbp-profile/managed/managed-config.yaml"),
+            launcher_script=Path("/tmp/wbp-profile/codex-custom-launch.sh"),
+            sync_script=Path("/tmp/wbp-profile/managed/supervisor-sync.sh"),
+            accounts_bin=Path("/tmp/wbp-profile/managed/bin/codex-accounts"),
+            onboard_bin=Path("/tmp/wbp-profile/managed/bin/codex-account-onboard"),
+            lock_file=Path("/tmp/wbp-profile/managed/wild-boar-proxy.lock"),
+            launcher_lock_file=Path("/tmp/wbp-profile/managed/stable-runtime-launch.lock"),
+            repair_target_inventory_dir=Path("/tmp/wbp-profile/managed/stable-repair-target"),
+            repair_target_reference_file=Path("/tmp/wbp-profile/managed/approved-repair-target.json"),
+            target_switch_transaction_file=Path("/tmp/wbp-profile/managed/target-switch-transaction.json"),
+            stable_runtime_generated_config_file=Path("/tmp/wbp-profile/managed/stable-runtime-config.generated.yaml"),
+        )
+
+        self.assertTrue(
+            runtime.path_is_admitted_owner_login_inventory_path(
+                paths, Path("/tmp/stable-engine")
+            )
+        )
+        self.assertTrue(
+            runtime.path_is_admitted_owner_login_inventory_path(
+                paths, Path("/tmp/stable-engine/device-login")
+            )
+        )
+        self.assertFalse(
+            runtime.path_is_admitted_owner_login_inventory_path(
+                paths, Path("/tmp/unrelated-auth-root")
+            )
+        )
 
 
 if __name__ == "__main__":

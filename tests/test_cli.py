@@ -8667,6 +8667,72 @@ class CliTests(unittest.TestCase):
         cancelled_payload = json.loads(cancelled.stdout)
         self.assertEqual(cancelled_payload["login_result"]["status"], "cancelled")
 
+    def test_accounts_login_start_codex_device_allows_stable_config_parent_inventory(self) -> None:
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{self.stable_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-stable-parent"
+        argv_capture = self.managed_dir / "device-login-stable-parent-argv.json"
+        ready_file = self.managed_dir / "device-login-stable-parent.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["device_code"], "WBP-1234")
+        self.assertEqual(payload["login_result"]["scope"], "admitted_owner_login")
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", payload["session_id"], "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_start_codex_device_blocks_auth_dir_outside_admitted_roots(self) -> None:
+        auth_dir = Path(self.temp_dir.name) / "external-device-login-auth"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+
+        started = self.run_cli(
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertNotEqual(started.returncode, 0)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOGIN_SANDBOX_SCOPE_UNPROVEN")
+        self.assertEqual(payload["auth_inventory_dir"], str(auth_dir))
+        self.assertIn(
+            str(self.stable_dir.resolve(strict=False)),
+            payload["admitted_owner_login_inventory_roots"],
+        )
+        self.assertEqual(
+            payload["stable_auth_inventory_source"]["path_resolution"],
+            "absolute",
+        )
+
     def test_accounts_login_status_codex_detects_materialized_auth(self) -> None:
         auth_dir = self.managed_dir / "device-login-auth-status"
         self.stable_dir.joinpath("config.yaml").write_text(
@@ -8710,6 +8776,55 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "accounts_onboard")
         self.assertEqual(payload["login_result"]["status"], "auth_materialized")
         self.assertTrue(payload["login_result"]["auth_materialized"])
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_status_codex_keeps_waiting_after_device_handoff_process_exit(
+        self,
+    ) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-exit-after-handoff"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-exit-after-handoff"
+        argv_capture = self.managed_dir / "device-login-exit-after-handoff-argv.json"
+        ready_file = self.managed_dir / "device-login-exit-after-handoff.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_TEST_DEVICE_LOGIN_MODE": "exit-no-auth",
+            },
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        session_id = json.loads(started.stdout)["session_id"]
+
+        status = self.run_cli(
+            "accounts", "login", "status", "--session", session_id, "--json"
+        )
+        self.assertEqual(status.returncode, 0, status.stderr)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["next_action"], "wait_for_login")
+        self.assertEqual(payload["login_result"]["status"], "waiting_for_user")
+        self.assertFalse(payload["login_result"]["auth_materialized"])
 
         cancelled = self.run_cli(
             "accounts", "login", "cancel", "--session", session_id, "--json"
@@ -17776,7 +17891,10 @@ class CliTests(unittest.TestCase):
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', launcher_text)
         self.assertIn('export HOME="$APP_HOME"', launcher_text)
         self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', launcher_text)
-        self.assertIn('export TMPDIR="$APP_TMP_DIR"', launcher_text)
+        self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', launcher_text)
+        self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', launcher_text)
+        self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', launcher_text)
+        self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', launcher_text)
         self.assertIn(
             'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
             launcher_text,
@@ -17796,12 +17914,15 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"', payload)
         self.assertIn('APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"', payload)
         self.assertIn('APP_TMP_DIR="$PROFILE_DIR/tmp"', payload)
+        self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', payload)
+        self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', payload)
         self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', payload)
         self.assertIn('export HOME="$APP_HOME"', payload)
         self.assertIn('export XDG_CONFIG_HOME="$APP_HOME/.config"', payload)
         self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', payload)
-        self.assertIn('export TMPDIR="$APP_TMP_DIR"', payload)
+        self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
+        self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
         self.assertIn(
             'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',

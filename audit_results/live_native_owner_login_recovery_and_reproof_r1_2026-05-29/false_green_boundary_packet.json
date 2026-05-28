@@ -1,0 +1,7 @@
+{
+  "auth_materialized_without_runtime_200": false,
+  "captured_at_utc": "2026-05-28T23:16:40.728932Z",
+  "guardrail_status": "held",
+  "login_started_without_auth_materialized": true,
+  "stable_runtime_200_without_launched_reproof": false
+}
