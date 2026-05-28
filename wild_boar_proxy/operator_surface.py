@@ -1368,6 +1368,8 @@ class OperatorSurfaceSession:
             }
         prompt = payload.get("prompt")
         model_id = payload.get("model_id")
+        requested_slot_id = payload.get("slot_id")
+        requested_slot_id_text = requested_slot_id if isinstance(requested_slot_id, str) else ""
         if not isinstance(prompt, str) or not prompt.strip():
             return {
                 "status": "rejected",
@@ -1598,6 +1600,7 @@ class OperatorSurfaceSession:
             "prompt_id": prompt_id,
             "prompt_hash": prompt_hash,
             "selected_model": selected_model,
+            "requested_slot_id": requested_slot_id_text,
             "final_message": final_message,
             "exit_code": exit_code,
             "warning_classes": warning_classes,
@@ -1619,6 +1622,8 @@ class OperatorSurfaceSession:
             "machine_error_code": prompt_machine_error_code,
             "human_message": "Codex Operator prompt completed." if ok else "Codex Operator prompt failed.",
             "selected_model": selected_model,
+            "requested_slot_id": requested_slot_id_text,
+            "requested_slot_explicit": bool(requested_slot_id_text),
             "runtime_model": runtime_model,
             "configured_base_url": effective_endpoint,
             "downstream_wbp_endpoint": downstream_endpoint,

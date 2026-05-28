@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-28T13:37:16.764402Z",
+  "coding_agent_slot_dispatched": true,
+  "operator_mediated_sequential_dispatch_proven": true,
+  "packet_kind": "role_slot_dispatch",
+  "primary_slot_dispatched": true,
+  "requested_slot_ids": [
+    "primary_model_slot",
+    "coding_agent_model_slot",
+    "primary_model_slot"
+  ],
+  "reviewer_slot_dispatched": false,
+  "runner_received_slot_ids": [
+    "primary_model_slot",
+    "coding_agent_model_slot",
+    "primary_model_slot"
+  ],
+  "runtime_native_orchestration_proven": false,
+  "same_model_multi_role_disambiguation_proven": false,
+  "session_id": "ccs-cc3f9b8d698a4874bb63",
+  "slot_binding_implies_dispatch": false,
+  "status": "ok"
+}

@@ -5611,6 +5611,8 @@ class FakeOperatorSurfaceSession:
             "machine_error_code": "OK",
             "human_message": "Codex Operator prompt completed.",
             "selected_model": payload.get("model_id"),
+            "requested_slot_id": payload.get("slot_id", ""),
+            "requested_slot_explicit": "slot_id" in payload,
             "configured_provider": "cliproxy",
             "configured_wire_api": "responses",
             "wbp_endpoint_configured": True,
@@ -5700,6 +5702,8 @@ class DualLaneFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession
             "machine_error_code": "OK",
             "human_message": "Codex Operator prompt completed.",
             "selected_model": payload.get("model_id"),
+            "requested_slot_id": payload.get("slot_id", ""),
+            "requested_slot_explicit": "slot_id" in payload,
             "configured_provider": "external_route" if route_backed else "cliproxy",
             "configured_wire_api": "responses",
             "wbp_endpoint_configured": True,
@@ -8799,7 +8803,10 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 primary = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions/{session_id}/prompt",
-                        {"prompt": "Reply with exactly CHATGPT_LANE_OK."},
+                        {
+                            "prompt": "Reply with exactly CHATGPT_LANE_OK.",
+                            "slot_id": "primary_model_slot",
+                        },
                     )
                 )
                 api_lane = json.loads(
@@ -8820,6 +8827,8 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(created["status"], "ok")
         self.assertEqual(primary["status"], "ok")
         self.assertEqual(primary["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(primary["requested_slot_id"], "primary_model_slot")
+        self.assertTrue(primary["requested_slot_explicit"])
         self.assertEqual(primary["model_id"], "gpt-5.3-codex")
         self.assertEqual(primary["selected_source_provenance"], "backend_proven")
         self.assertEqual(primary["configured_provider"], "cliproxy")
@@ -8827,6 +8836,8 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(api_lane["status"], "ok")
         self.assertEqual(api_lane["session_id"], session_id)
         self.assertEqual(api_lane["current_execution_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(api_lane["requested_slot_id"], "coding_agent_model_slot")
+        self.assertTrue(api_lane["requested_slot_explicit"])
         self.assertEqual(api_lane["current_execution_path_source"], "session_bound_slot_runtime")
         self.assertEqual(api_lane["model_id"], "wbp-deepseek-v3")
         self.assertEqual(api_lane["selected_source_class"], "route_backed")
@@ -8847,10 +8858,12 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 {
                     "prompt": "Reply with exactly CHATGPT_LANE_OK.",
                     "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
                 },
                 {
                     "prompt": "Reply with exactly API_LANE_OK.",
                     "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
                 },
             ],
         )

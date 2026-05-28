@@ -1,0 +1,10 @@
+{
+  "blocked_handoff_treated_as_successful_fallback": false,
+  "captured_at_utc": "2026-05-28T13:37:16.764434Z",
+  "completed_chain_treated_as_workflow_value": false,
+  "operator_mediated_sequence_treated_as_autonomous": false,
+  "packet_kind": "orchestration_false_green_boundary",
+  "sequential_handoff_treated_as_concurrent": false,
+  "status": "ok",
+  "stored_slot_treated_as_dispatch_proof": false
+}

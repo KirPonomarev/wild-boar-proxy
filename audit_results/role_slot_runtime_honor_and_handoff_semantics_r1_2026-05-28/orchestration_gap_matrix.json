@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-28T13:37:16.764431Z",
+  "gaps": [
+    {
+      "id": "runtime_native_orchestration_not_proven",
+      "severity": "high",
+      "summary": "Current contour proves only operator-mediated sequential handoff truth."
+    },
+    {
+      "id": "downstream_reviewer_scanner_slots_unproven",
+      "severity": "medium",
+      "summary": "Reviewer/scanner/deep-reasoning slot runtime honor remains unproven here."
+    },
+    {
+      "id": "concurrent_orchestration_not_proven",
+      "severity": "medium",
+      "summary": "Sequential handoff truth does not prove concurrent orchestration readiness."
+    },
+    {
+      "id": "same_model_multi_role_disambiguation_not_proven",
+      "severity": "medium",
+      "summary": "Current runtime does not prove distinct slot honor when multiple roles share one model identity."
+    },
+    {
+      "id": "implicit_primary_defaulting_remains_admitted",
+      "severity": "medium",
+      "summary": "Omitted slot_id still defaults to primary_model_slot and must not be read as explicit handoff truth."
+    }
+  ],
+  "packet_kind": "orchestration_gap_matrix",
+  "status": "ok"
+}

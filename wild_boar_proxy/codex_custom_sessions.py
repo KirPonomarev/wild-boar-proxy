@@ -751,7 +751,13 @@ class CodexCustomSessionManager:
         role_slots = _canonical_role_slots(session.get("role_slots"))
         slot = dict(role_slots.get(requested_slot_id) or _unbound_slot(requested_slot_id))
         model_id = str(slot.get("model_id") or "")
+        requested_slot_explicit = payload.get("slot_id") is not None
+        requested_slot_defaulted_to_primary = (
+            not requested_slot_explicit and requested_slot_id == PRIMARY_MODEL_SLOT
+        )
         runner_payload = {"prompt": prompt, "model_id": model_id}
+        if requested_slot_explicit:
+            runner_payload["slot_id"] = requested_slot_id
         with self._active_prompt_lock:
             if session_id in self._active_prompt_sessions:
                 return {
@@ -782,6 +788,8 @@ class CodexCustomSessionManager:
             with self._active_prompt_lock:
                 self._active_prompt_sessions.discard(session_id)
         response_text = str(result.get("final_message") or result.get("response_text") or "")
+        runner_slot_id = result.get("requested_slot_id")
+        runner_slot_id_text = str(runner_slot_id) if isinstance(runner_slot_id, str) else ""
         response_digest = _digest(response_text) if response_text else ""
         token_usage_present, token_usage, token_burn = _token_usage(result)
         secret_value_recorded = result.get("secret_value_recorded") is True
@@ -831,9 +839,19 @@ class CodexCustomSessionManager:
         cli_proxy_api_path_proven = (
             wbp_path_proven and result.get("configured_provider") == "cliproxy"
         )
+        runtime_selected_model = str(
+            result.get("runtime_model") or result.get("selected_model") or ""
+        )
+        runtime_selected_model_recorded = bool(runtime_selected_model)
+        runtime_selected_model_matches_bound_model = (
+            runtime_selected_model == model_id if runtime_selected_model_recorded else False
+        )
         trace_missing_after_response = status_ok and not independent_wbp_trace_observed
         path_config_mismatch_after_response = (
             status_ok and independent_wbp_trace_observed and not path_config_proven
+        )
+        runtime_model_mismatch_after_response = (
+            status_ok and runtime_selected_model_recorded and not runtime_selected_model_matches_bound_model
         )
         route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
         current_codex_touched_after_response = status_ok and result.get("current_codex_home_used") is True
@@ -842,11 +860,18 @@ class CodexCustomSessionManager:
         )
         packet_status = (
             "ok"
-            if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
+            if (
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and isolated_engine_home_proven
+                and not runtime_model_mismatch_after_response
+            )
             else (
                 "blocked"
                 if trace_missing_after_response
                 or path_config_mismatch_after_response
+                or runtime_model_mismatch_after_response
                 or route_provenance_missing_after_response
                 or current_codex_touched_after_response
                 or isolation_missing_after_response
@@ -855,7 +880,13 @@ class CodexCustomSessionManager:
         )
         packet_machine_error_code = (
             "OK"
-            if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
+            if (
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and isolated_engine_home_proven
+                and not runtime_model_mismatch_after_response
+            )
             else (
                 "WBP_TRACE_PROOF_MISSING"
                 if trace_missing_after_response
@@ -863,15 +894,19 @@ class CodexCustomSessionManager:
                     "RUNTIME_SOURCE_PROVENANCE_MISMATCH"
                     if path_config_mismatch_after_response
                     else (
-                        "CURRENT_CODEX_TOUCHED"
-                        if current_codex_touched_after_response
+                        "RUNTIME_MODEL_ID_MISMATCH"
+                        if runtime_model_mismatch_after_response
                         else (
-                            "ISOLATION_PROOF_MISSING"
-                            if isolation_missing_after_response
+                            "CURRENT_CODEX_TOUCHED"
+                            if current_codex_touched_after_response
                             else (
-                                "ROUTE_PROVENANCE_MISSING"
-                                if route_provenance_missing_after_response
-                                else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                                "ISOLATION_PROOF_MISSING"
+                                if isolation_missing_after_response
+                                else (
+                                    "ROUTE_PROVENANCE_MISSING"
+                                    if route_provenance_missing_after_response
+                                    else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                                )
                             )
                         )
                     )
@@ -891,6 +926,13 @@ class CodexCustomSessionManager:
             "session_id": session_id,
             "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
             "current_execution_slot_id": requested_slot_id,
+            "requested_slot_id": requested_slot_id,
+            "requested_slot_explicit": requested_slot_explicit,
+            "requested_slot_defaulted_to_primary": requested_slot_defaulted_to_primary,
+            "runner_slot_id_echo": runner_slot_id_text,
+            "runner_slot_id_matches_requested": bool(
+                runner_slot_id_text and runner_slot_id_text == requested_slot_id
+            ),
             "current_execution_path_source": "session_bound_slot_runtime",
             "model_id": model_id,
             "model_server_issued": True,
@@ -921,7 +963,11 @@ class CodexCustomSessionManager:
             "model_response_present": status_ok,
             "inference_proven": status_ok,
             "live_prompt_full_success": (
-                status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and isolated_engine_home_proven
+                and not runtime_model_mismatch_after_response
             ),
             "response_digest": response_digest,
             "response_preview_bounded": _response_preview(response_text) if status_ok else "",
@@ -945,14 +991,25 @@ class CodexCustomSessionManager:
             "isolated_engine_home_proven": isolated_engine_home_proven,
             "current_codex_touched": result.get("current_codex_home_used") is True,
             "configured_provider": str(result.get("configured_provider") or "") if status_ok else "",
+            "runtime_selected_model": runtime_selected_model if status_ok else "",
+            "runtime_selected_model_recorded": runtime_selected_model_recorded,
+            "runtime_selected_model_matches_bound_model": (
+                runtime_selected_model_matches_bound_model
+                if runtime_selected_model_recorded
+                else False
+            ),
             "configured_wire_api": result.get("configured_wire_api") if status_ok else "",
             "path_proof_status": (
-                "independently_observed"
-                if wbp_path_proven
+                "runtime_model_mismatch_after_observation"
+                if runtime_model_mismatch_after_response
                 else (
-                    "runtime_source_mismatch_after_observation"
-                    if path_config_mismatch_after_response
-                    else "configured_not_independently_observed"
+                    "independently_observed"
+                    if wbp_path_proven
+                    else (
+                        "runtime_source_mismatch_after_observation"
+                        if path_config_mismatch_after_response
+                        else "configured_not_independently_observed"
+                    )
                 )
             ),
             "path_proof_basis": "operator_surface_isolated_codex_exec_config_requires_independent_trace",
@@ -965,7 +1022,13 @@ class CodexCustomSessionManager:
             "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": (
                 "inspect_transcript"
-                if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
+                if (
+                    status_ok
+                    and wbp_path_proven
+                    and source_provenance_proven
+                    and isolated_engine_home_proven
+                    and not runtime_model_mismatch_after_response
+                )
                 else (
                     "inspect_trace_observer"
                     if trace_missing_after_response
@@ -973,15 +1036,19 @@ class CodexCustomSessionManager:
                         "repair_runtime_source_provenance"
                         if path_config_mismatch_after_response
                         else (
-                            "stop_and_diagnose_current_codex_touch"
-                            if current_codex_touched_after_response
+                            "repair_runtime_model_identity"
+                            if runtime_model_mismatch_after_response
                             else (
-                                "repair_isolation_proof"
-                                if isolation_missing_after_response
+                                "stop_and_diagnose_current_codex_touch"
+                                if current_codex_touched_after_response
                                 else (
-                                    "repair_route_provenance"
-                                    if route_provenance_missing_after_response
-                                    else str(result.get("next_action") or "stop_and_diagnose")
+                                    "repair_isolation_proof"
+                                    if isolation_missing_after_response
+                                    else (
+                                        "repair_route_provenance"
+                                        if route_provenance_missing_after_response
+                                        else str(result.get("next_action") or "stop_and_diagnose")
+                                    )
                                 )
                             )
                         )
@@ -1007,6 +1074,13 @@ class CodexCustomSessionManager:
             event,
             {
                 "current_execution_slot_id": requested_slot_id,
+                "requested_slot_id": requested_slot_id,
+                "requested_slot_explicit": requested_slot_explicit,
+                "requested_slot_defaulted_to_primary": requested_slot_defaulted_to_primary,
+                "runner_slot_id_echo": runner_slot_id_text,
+                "runner_slot_id_matches_requested": bool(
+                    runner_slot_id_text and runner_slot_id_text == requested_slot_id
+                ),
                 "current_execution_path_source": "session_bound_slot_runtime",
                 "executed_slot_model_id": model_id,
                 "prompt_present": True,
@@ -1036,6 +1110,13 @@ class CodexCustomSessionManager:
                 "cli_proxy_api_path_proven": cli_proxy_api_path_proven,
                 "independent_wbp_trace_observed": independent_wbp_trace_observed,
                 "configured_provider": str(result.get("configured_provider") or "") if status_ok else "",
+                "runtime_selected_model": runtime_selected_model if status_ok else "",
+                "runtime_selected_model_recorded": runtime_selected_model_recorded,
+                "runtime_selected_model_matches_bound_model": (
+                    runtime_selected_model_matches_bound_model
+                    if runtime_selected_model_recorded
+                    else False
+                ),
                 "trace_observer_packet_present": bool(trace_observer_packet),
                 "isolated_engine_home_proven": isolated_engine_home_proven,
                 "fallback_attempted": False,
@@ -1473,7 +1554,13 @@ class CodexCustomSessionManager:
         return {
             **self._base_packet("rejected", failures[0]),
             "session_id": session_id,
-            "current_execution_slot_id": requested_slot_id,
+            "requested_slot_id": requested_slot_id,
+            "current_execution_slot_id": str(
+                session.get("current_execution_slot_id") or PRIMARY_MODEL_SLOT
+            ),
+            "current_execution_path_source": str(
+                session.get("current_execution_path_source") or "session_primary_model_slot"
+            ),
             "precondition_failures": failures,
             "model_response_present": False,
             "token_usage_present": False,
