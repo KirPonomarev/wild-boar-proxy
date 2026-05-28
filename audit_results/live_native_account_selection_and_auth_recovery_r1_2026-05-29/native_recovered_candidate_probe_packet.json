@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-28T23:01:34.293186Z",
+  "model_id": "gpt-5.5",
+  "post_healthcheck_selected_backend_ids_count": 0,
+  "post_sync_direct_probe": {
+    "body_preview": "{\"error\":{\"message\":\"auth_unavailable: no auth available (providers=codex, model=gpt-5.5)\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+    "http_status": 503,
+    "status": "http_error"
+  },
+  "post_sync_selected_backend_ids_count": 15,
+  "restored_on_admitted_surface": false
+}

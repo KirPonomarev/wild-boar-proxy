@@ -1,0 +1,7 @@
+{
+  "api_fallback_counts_as_native_recovery": false,
+  "captured_at_utc": "2026-05-28T23:01:34.293199Z",
+  "native_lane_restored_claim_blocked": true,
+  "selection_truth_separated_from_runtime_auth_truth": true,
+  "static_validate_counts_as_runnable_auth": false
+}

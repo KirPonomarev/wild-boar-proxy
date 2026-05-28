@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T23:01:34.293143Z",
+  "health_selected_backend_ids_observed_count": 15,
+  "health_selected_backend_ids_runtime_loaded_count": 0,
+  "health_selected_backend_observation_source": "runtime_state.selected_backend_snapshot",
+  "health_selected_backend_snapshot_validation_status": "valid",
+  "post_healthcheck_selected_backend_ids_count": 0,
+  "post_healthcheck_snapshot_count": 15,
+  "post_sync_selected_backend_ids_count": 15,
+  "post_sync_snapshot_count": 15,
+  "pre_sync_selected_backend_ids_count": 0,
+  "pre_sync_snapshot_count": 15,
+  "selection_gap_detected": true,
+  "status_hygiene_consistent_with_health": true,
+  "sync_repopulated_selected_backend_ids": true
+}

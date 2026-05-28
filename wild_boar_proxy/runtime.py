@@ -976,6 +976,8 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"',
             'APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"',
             'APP_TMP_DIR="$PROFILE_DIR/tmp"',
+            'PROFILE_BASENAME="$(basename "$PROFILE_DIR")"',
+            'APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"',
             'CODEX_APP_BIN="/Applications/Codex.app/Contents/MacOS/Codex"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
@@ -995,11 +997,16 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  [ -f "$AUTH_FILE" ] || exit 9',
             '  [ -x "$CODEX_APP_BIN" ] || exit 9',
             '  mkdir -p "$APP_USER_DATA_DIR" "$APP_SUPPORT_DIR" "$APP_CACHE_DIR" "$APP_HTTPSTORAGE_DIR" "$APP_TMP_DIR"',
+            '  if [ -e "$APP_RUNTIME_TMPDIR" ] && [ ! -L "$APP_RUNTIME_TMPDIR" ]; then',
+            '    printf "runtime tmp bind path occupied: %s\\n" "$APP_RUNTIME_TMPDIR" >&2',
+            "    exit 9",
+            "  fi",
+            '  ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"',
             '  export CODEX_HOME="$PROFILE_DIR"',
             '  export HOME="$APP_HOME"',
             '  export XDG_CONFIG_HOME="$APP_HOME/.config"',
             '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
-            '  export TMPDIR="$APP_TMP_DIR"',
+            '  export TMPDIR="$APP_RUNTIME_TMPDIR"',
             '  export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3} - "$AUTH_FILE" <<\'PY\'',
             "import json",
             "import sys",
@@ -1711,6 +1718,43 @@ def get_rotation_selected_backend_snapshot(state: dict[str, Any]) -> dict[str, A
     }
 
 
+def get_selected_backend_observation_summary(state: dict[str, Any]) -> dict[str, Any]:
+    runtime_loaded_ids = selected_backend_ids_from_state(state)
+    snapshot = get_rotation_selected_backend_snapshot(state)
+    snapshot_ids = normalize_selected_backend_ids(snapshot.get("selected_backend_ids"))
+    snapshot_present = isinstance(state.get(SELECTED_BACKEND_SNAPSHOT_FIELD), dict)
+    observed_ids = list(runtime_loaded_ids)
+    observation_source = "runtime_state.selected_backend_ids"
+    observation_source_class = "legacy_flat_compatibility"
+    observation_freshness = rotation_snapshot_freshness(state)
+    snapshot_validation_status = str(snapshot.get("validation_status") or "legacy")
+    snapshot_validation_error = str(snapshot.get("validation_error") or "")
+    if not observed_ids and snapshot_present and snapshot_validation_status in {
+        "valid",
+        "legacy",
+    }:
+        observed_ids = snapshot_ids
+        observation_source = str(
+            snapshot.get("source") or "runtime_state.selected_backend_snapshot"
+        )
+        observation_source_class = str(
+            snapshot.get("source_class") or "runtime_state.selected_backend_snapshot"
+        )
+        observation_freshness = str(snapshot.get("freshness") or "unknown")
+    return {
+        "runtime_loaded_backend_ids": runtime_loaded_ids,
+        "runtime_loaded_backend_count": len(runtime_loaded_ids),
+        "observed_backend_ids": observed_ids,
+        "observed_backend_count": len(observed_ids),
+        "observation_source": observation_source,
+        "observation_source_class": observation_source_class,
+        "observation_freshness": observation_freshness,
+        "snapshot_present": snapshot_present,
+        "snapshot_validation_status": snapshot_validation_status,
+        "snapshot_validation_error": snapshot_validation_error,
+    }
+
+
 def get_auth_basename(auth_ref: Any) -> str:
     return Path(str(auth_ref or "")).name
 
@@ -2031,14 +2075,23 @@ def summarize_auth_pool_hygiene(
         candidate_universe_backend_ids.append(normalized_id)
         class_backend_ids.setdefault(eligibility_class, []).append(normalized_id)
 
-    selected_backend_ids = sorted(
-        str(item) for item in state.get("selected_backend_ids", []) or []
+    selected_backend_observation = get_selected_backend_observation_summary(state)
+    selected_backend_ids = list(
+        selected_backend_observation["observed_backend_ids"]
+    )
+    runtime_loaded_backend_ids = list(
+        selected_backend_observation["runtime_loaded_backend_ids"]
     )
     launch_capable_backend_ids = get_launch_capable_backend_ids(registry)
     launch_capable_backend_id_set = set(launch_capable_backend_ids)
     selected_launch_capable_backend_ids = [
         backend_id
         for backend_id in selected_backend_ids
+        if backend_id in launch_capable_backend_id_set
+    ]
+    runtime_loaded_launch_capable_backend_ids = [
+        backend_id
+        for backend_id in runtime_loaded_backend_ids
         if backend_id in launch_capable_backend_id_set
     ]
     selected_unusable_backend_ids = [
@@ -2081,11 +2134,104 @@ def summarize_auth_pool_hygiene(
         "launch_capable_backend_count": len(launch_capable_backend_ids),
         "candidate_universe_backend_count": len(candidate_universe_backend_ids),
         "selected_backend_ids_observed": selected_backend_ids,
+        "selected_backend_ids_runtime_loaded": runtime_loaded_backend_ids,
+        "selected_backend_runtime_loaded_count": len(runtime_loaded_backend_ids),
+        "selected_backend_runtime_loaded_launch_capable_ids": runtime_loaded_launch_capable_backend_ids,
+        "selected_backend_runtime_loaded_launch_capable_count": len(
+            runtime_loaded_launch_capable_backend_ids
+        ),
+        "selected_backend_observation_source": selected_backend_observation[
+            "observation_source"
+        ],
+        "selected_backend_observation_source_class": selected_backend_observation[
+            "observation_source_class"
+        ],
+        "selected_backend_observation_freshness": selected_backend_observation[
+            "observation_freshness"
+        ],
+        "selected_backend_snapshot_present": selected_backend_observation[
+            "snapshot_present"
+        ],
+        "selected_backend_snapshot_validation_status": selected_backend_observation[
+            "snapshot_validation_status"
+        ],
+        "selected_backend_snapshot_validation_error": selected_backend_observation[
+            "snapshot_validation_error"
+        ],
         "selected_launch_capable_backend_ids": selected_launch_capable_backend_ids,
         "selected_unusable_backend_ids": selected_unusable_backend_ids,
         "selected_launch_capable_backend_count": len(selected_launch_capable_backend_ids),
         "selected_unusable_backend_count": len(selected_unusable_backend_ids),
         "selection_alignment_status": selection_alignment_status,
+    }
+
+
+def build_native_auth_recovery_hint(
+    *,
+    machine_error_code: str,
+    auth_pool_hygiene: dict[str, Any],
+) -> dict[str, Any]:
+    launch_capable_backend_count = int(
+        auth_pool_hygiene.get("launch_capable_backend_count", 0) or 0
+    )
+    selected_backend_ids_observed = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_observed")
+    )
+    selected_backend_ids_runtime_loaded = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_runtime_loaded")
+    )
+    observed_count = len(selected_backend_ids_observed)
+    runtime_loaded_count = len(selected_backend_ids_runtime_loaded)
+    selected_backend_observation_source = str(
+        auth_pool_hygiene.get("selected_backend_observation_source") or ""
+    )
+    base_packet = {
+        "launch_capable_backend_count": launch_capable_backend_count,
+        "selected_backend_observed_count": observed_count,
+        "selected_backend_runtime_loaded_count": runtime_loaded_count,
+        "selected_backend_observation_source": selected_backend_observation_source,
+        "selection_gap_detected": runtime_loaded_count <= 0 and observed_count > 0,
+        "api_fallback_counts_as_native_recovery": False,
+        "claim_scope": "bounded_native_auth_recovery_only",
+    }
+    if machine_error_code != "AUTH_UNAVAILABLE":
+        return {
+            "status": "not_needed",
+            "machine_error_code": machine_error_code or "OK",
+            "owner_action_required": False,
+            "next_action": "none",
+            "command_surface": "",
+            "reason": "",
+            **base_packet,
+        }
+    if launch_capable_backend_count <= 0:
+        return {
+            "status": "blocked_no_launch_capable_backend",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "inspect_accounts_inventory",
+            "command_surface": "accounts list --json",
+            "reason": "auth_unavailable_without_launch_capable_backend",
+            **base_packet,
+        }
+    if observed_count <= 0:
+        return {
+            "status": "sync_recommended",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "sync",
+            "command_surface": "sync --json",
+            "reason": "launch_capable_available_without_selected_backend_observation",
+            **base_packet,
+        }
+    return {
+        "status": "owner_action_required",
+        "machine_error_code": machine_error_code,
+        "owner_action_required": True,
+        "next_action": "accounts_login_start",
+        "command_surface": "accounts login start --provider codex --mode device --json",
+        "reason": "auth_unavailable_after_selected_backend_observation",
+        **base_packet,
     }
 
 
@@ -6877,6 +7023,18 @@ def summarize_status(
             **launch_readiness,
             "delegated_from_status": True,
         }
+    native_auth_recovery_hint = health_payload.get("native_auth_recovery_hint")
+    if isinstance(native_auth_recovery_hint, dict):
+        native_auth_recovery_hint = {
+            **native_auth_recovery_hint,
+            "delegated_from_status": True,
+        }
+    else:
+        native_auth_recovery_hint = build_native_auth_recovery_hint(
+            machine_error_code=delegated_machine_error_code,
+            auth_pool_hygiene=auth_pool_hygiene,
+        )
+        native_auth_recovery_hint["delegated_from_status"] = False
     runtime_guardrails = health_payload.get("runtime_guardrails")
     if isinstance(runtime_guardrails, dict):
         runtime_guardrails = {
@@ -6904,7 +7062,12 @@ def summarize_status(
         machine_error_code=delegated_machine_error_code,
         liveness=str(health_payload["liveness"]),
         severity=str(health_payload["severity"]),
-        operator_action=str(health_payload["operator_action"]),
+        operator_action=(
+            "user_action"
+            if native_auth_recovery_hint.get("owner_action_required") is True
+            and str(health_payload["operator_action"]) == "retry"
+            else str(health_payload["operator_action"])
+        ),
         changed_files=list(health_payload.get("changed_files") or []),
         exit_code=int(health_payload["exit_code"]),
         extra={
@@ -6927,6 +7090,7 @@ def summarize_status(
             ),
             "pool_summary": pool_summary,
             "auth_pool_hygiene": auth_pool_hygiene,
+            "native_auth_recovery_hint": native_auth_recovery_hint,
             "policy_drift": policy_drift,
             "policy_drift_observed": policy_drift_observed,
             "stable_runtime_consumer": stable_runtime_consumer,
@@ -7727,6 +7891,15 @@ def run_healthcheck(
         ),
         auth_pool_hygiene=auth_pool_hygiene,
     )
+    native_auth_recovery_hint = build_native_auth_recovery_hint(
+        machine_error_code=machine_error_code,
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+    if (
+        operator_action == "retry"
+        and native_auth_recovery_hint.get("owner_action_required") is True
+    ):
+        operator_action = "user_action"
     runtime_guardrails = build_runtime_guardrail_surface(
         paths,
         launch_readiness=launch_readiness,
@@ -7758,6 +7931,7 @@ def run_healthcheck(
         "auth_pool_hygiene": auth_pool_hygiene,
         "attestation": attestation,
         "launch_readiness": launch_readiness,
+        "native_auth_recovery_hint": native_auth_recovery_hint,
         "runtime_guardrails": runtime_guardrails,
         "last_error": reported_last_error,
     }
