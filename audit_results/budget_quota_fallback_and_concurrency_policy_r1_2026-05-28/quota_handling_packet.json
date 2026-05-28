@@ -1,0 +1,17 @@
+{
+  "401_403_429_5xx_separate_runtime_policy_proven": false,
+  "auth_invalid_count": 1,
+  "captured_at_utc": "2026-05-28T13:11:24.792599Z",
+  "cooldown_only_count": 1,
+  "launch_capable_count": 1,
+  "packet_kind": "quota_handling",
+  "quota_exhausted_count": 1,
+  "quota_failure_implies_provider_family_incompatibility": false,
+  "retry_policy_explicit": false,
+  "selected_backend_server_issued": true,
+  "selected_backend_source": "server",
+  "selection_machine_error_code": "OK",
+  "selection_status": "ok",
+  "silent_retry_storm_observed": false,
+  "status": "ok"
+}

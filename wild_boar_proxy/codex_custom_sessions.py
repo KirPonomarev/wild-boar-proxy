@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -447,6 +448,8 @@ class CodexCustomSessionManager:
         self.root = base.resolve()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._sessions: dict[str, dict[str, Any]] = {}
+        self._active_prompt_sessions: set[str] = set()
+        self._active_prompt_lock = threading.Lock()
         self._load_existing_sessions()
 
     def list_packet(self) -> dict[str, Any]:
@@ -749,6 +752,23 @@ class CodexCustomSessionManager:
         slot = dict(role_slots.get(requested_slot_id) or _unbound_slot(requested_slot_id))
         model_id = str(slot.get("model_id") or "")
         runner_payload = {"prompt": prompt, "model_id": model_id}
+        with self._active_prompt_lock:
+            if session_id in self._active_prompt_sessions:
+                return {
+                    **self._base_packet("blocked", "CONCURRENT_PROMPT_EXECUTION_NOT_ALLOWED"),
+                    "session_id": session_id,
+                    "current_execution_slot_id": requested_slot_id,
+                    "authorization_status": "authorized_by_owner_gate",
+                    "owner_authorization_phrase_present": True,
+                    "prompt_runner_called": False,
+                    "model_response_present": False,
+                    "fallback_attempted": False,
+                    "token_usage_present": False,
+                    "next_action": "wait_for_current_prompt_completion",
+                    "session": self._public_session(session),
+                    "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                }
+            self._active_prompt_sessions.add(session_id)
         try:
             result = prompt_runner(runner_payload)
         except Exception as exc:  # pragma: no cover - defensive live boundary
@@ -758,6 +778,9 @@ class CodexCustomSessionManager:
                 "error_class": type(exc).__name__,
                 "human_message": "Codex Custom prompt runner failed before returning a packet.",
             }
+        finally:
+            with self._active_prompt_lock:
+                self._active_prompt_sessions.discard(session_id)
         response_text = str(result.get("final_message") or result.get("response_text") or "")
         response_digest = _digest(response_text) if response_text else ""
         token_usage_present, token_usage, token_burn = _token_usage(result)

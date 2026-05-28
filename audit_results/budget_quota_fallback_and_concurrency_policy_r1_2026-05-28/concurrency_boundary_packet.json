@@ -1,0 +1,17 @@
+{
+  "browser_multi_slot_batch_request_forbidden": true,
+  "captured_at_utc": "2026-05-28T13:11:24.792611Z",
+  "classification": "forbidden_with_runtime_guard",
+  "coding_slot_route_proven": true,
+  "concurrency_classification_implies_throughput_gain": false,
+  "concurrent_execution_blocked_observed": true,
+  "concurrent_execution_observed": false,
+  "packet_kind": "concurrency_boundary",
+  "paid_parallel_fanout_proven": false,
+  "per_session_concurrency_cap_explicit": true,
+  "per_slot_concurrency_cap_explicit": false,
+  "prompt_run_single_slot_only": true,
+  "runner_call_count": 1,
+  "runner_payload_one_model_id_per_call": true,
+  "status": "ok"
+}
