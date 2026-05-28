@@ -2294,6 +2294,48 @@ button:disabled {
   line-height: 16px;
 }
 
+.model-catalog-list {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.model-catalog-row {
+  align-items: center;
+  column-gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  min-height: 36px;
+}
+
+.model-catalog-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-catalog-name {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.model-catalog-subtitle,
+.model-catalog-meta {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.model-catalog-status {
+  justify-self: end;
+}
+
 .accounts-table-card {
   max-height: calc(100vh - 372px);
   overflow: auto;

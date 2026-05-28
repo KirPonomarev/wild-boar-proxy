@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-28T09:08:11.647034Z",
+  "disabled_route_rejected": true,
+  "enabled_route_launch_not_claimed": true,
+  "enabled_route_server_issued": true,
+  "gpt_backend_server_issued": true,
+  "packet_kind": "server_selection_binding",
+  "provider_reachability_proven": false,
+  "raw_backend_id_exposed": false,
+  "raw_route_id_exposed": false,
+  "raw_secret_exposed": false,
+  "route_readiness_proven": false,
+  "server_owns_model_route_selection": true,
+  "server_owns_provider_endpoint_selection": true,
+  "session_creation_bypasses_selection_proof": false,
+  "status": "ok"
+}

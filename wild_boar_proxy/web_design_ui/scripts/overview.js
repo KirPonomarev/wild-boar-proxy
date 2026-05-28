@@ -1388,30 +1388,90 @@ function codexCustomModelsSetChip(visual, label) {
   }
 }
 
-function codexCustomAvailableModelIds(packet) {
+function codexCustomAvailableModelEntries(packet) {
   return (Array.isArray(packet?.available_models) ? packet.available_models : [])
-    .map((entry) => entry?.model_id)
+    .filter((entry) => typeof entry?.model_id === "string" && entry.model_id);
+}
+
+function codexCustomAvailableModelIds(packet) {
+  return codexCustomAvailableModelEntries(packet)
+    .map((entry) => entry.model_id)
     .filter((modelId) => typeof modelId === "string" && modelId);
+}
+
+function codexCustomDisabledReasonText(entry) {
+  const reasons = Array.isArray(entry?.selection_disabled_reasons) ? entry.selection_disabled_reasons : [];
+  if (reasons.includes("route_disabled") && reasons.includes("secret_ref_missing")) {
+    return "route disabled + secret missing";
+  }
+  if (reasons.includes("route_disabled")) {
+    return "route disabled";
+  }
+  if (reasons.includes("secret_ref_missing")) {
+    return "secret missing";
+  }
+  return entry?.selection_disabled_reason_code || "not selectable";
+}
+
+function renderCodexCustomModelCatalog(entries) {
+  const node = document.getElementById("codexCustomModelCatalog");
+  if (!node) {
+    return;
+  }
+  node.replaceChildren();
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "model-catalog-row";
+    const main = document.createElement("div");
+    main.className = "model-catalog-main";
+    const name = document.createElement("div");
+    name.className = "model-catalog-name";
+    name.textContent = entry?.display_name || entry?.model_id || "-";
+    const subtitle = document.createElement("div");
+    subtitle.className = "model-catalog-subtitle";
+    subtitle.textContent = entry?.model_id || "-";
+    main.append(name, subtitle);
+    const meta = document.createElement("div");
+    meta.className = "model-catalog-meta";
+    meta.textContent = `${entry?.provider_label || entry?.provider_class || "unknown"} · ${entry?.availability_claim_level || "listed_not_live_proven"}`;
+    const status = document.createElement("div");
+    status.className = "model-catalog-meta model-catalog-status";
+    status.textContent = entry?.selection_enabled === true
+      ? "selectable"
+      : `disabled · ${codexCustomDisabledReasonText(entry)}`;
+    row.append(main, meta, status);
+    node.append(row);
+  }
 }
 
 function renderCodexCustomModels(registry, compat) {
   const select = document.getElementById("codexCustomModelSelect");
-  const modelIds = codexCustomAvailableModelIds(registry);
+  const entries = codexCustomAvailableModelEntries(registry);
+  const modelIds = entries.map((entry) => entry.model_id);
+  const selectableIds = entries
+    .filter((entry) => entry?.selection_enabled === true)
+    .map((entry) => entry.model_id);
   const previous = select?.value || "";
   if (select) {
     select.replaceChildren();
-    for (const modelId of modelIds) {
+    for (const entry of entries) {
       const option = document.createElement("option");
-      option.value = modelId;
-      option.textContent = modelId;
+      option.value = entry.model_id;
+      option.textContent = entry?.display_name || entry.model_id;
+      option.disabled = entry?.selection_enabled !== true;
       select.append(option);
     }
-    if (modelIds.includes(previous)) {
+    if (selectableIds.includes(previous)) {
       select.value = previous;
-    } else if (modelIds.includes(registry?.recommended_default_model)) {
+    } else if (selectableIds.includes(registry?.recommended_default_model)) {
       select.value = registry.recommended_default_model;
+    } else if (selectableIds.length > 0) {
+      select.value = selectableIds[0];
+    } else if (modelIds.length > 0) {
+      select.value = modelIds[0];
     }
   }
+  renderCodexCustomModelCatalog(entries);
   const claimGate = registry?.claim_gate_status || compat?.claim_gate_status || "not_reported";
   const claimGateBlocked = String(claimGate).includes("blocked");
   const status = registry?.status || "unknown";
@@ -1421,7 +1481,7 @@ function renderCodexCustomModels(registry, compat) {
   );
   codexCustomModelsSetText(
     "codexCustomModelsSummary",
-    `${modelIds.length} server-issued models · ${registry?.launch_claim_scope || "model_registry_only"}`
+    `${entries.length} server-issued catalog entries · ${selectableIds.length} selectable`
   );
   codexCustomModelsSetText("codexCustomRecommendedModel", registry?.recommended_default_model || "-");
   codexCustomModelsSetText(
@@ -1454,6 +1514,9 @@ function renderCodexCustomModelDryRun(packet) {
       dry_run: packet?.dry_run === true,
       model_server_issued: packet?.model_server_issued === true,
       selected_model_server_issued: packet?.selected_model_server_issued === true,
+      selected_model_selectable: packet?.selected_model_selectable === true,
+      selection_state: packet?.selection_state || "",
+      selection_disabled_reason_code: packet?.selection_disabled_reason_code || "",
       codex_config_compatible: packet?.codex_config_compatible === true,
       model_provider: packet?.model_provider || "",
       wire_api: packet?.wire_api || "",

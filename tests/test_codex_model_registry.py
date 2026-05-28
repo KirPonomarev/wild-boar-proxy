@@ -127,6 +127,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertIn("source", first_model["intelligence_tier"])
         self.assertIn("proof_level", first_model["speed_tier"])
         self.assertIn("provider_class", first_model)
+        self.assertEqual(first_model["provider_label"], "Codex native")
         self.assertTrue(first_model["codex_compatible"])
         self.assertTrue(first_model["responses_supported"])
         self.assertEqual(first_model["responses_supported_claim_scope"], "shape_declared_not_live_proven")
@@ -138,6 +139,10 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
         self.assertFalse(first_model["chat_completions_live_acceptance_proven"])
         self.assertEqual(first_model["availability_claim_level"], "listed_not_live_proven")
+        self.assertTrue(first_model["selection_enabled"])
+        self.assertEqual(first_model["selection_state"], "selectable")
+        self.assertEqual(first_model["selection_disabled_reason_code"], "")
+        self.assertEqual(first_model["selection_disabled_reasons"], [])
         self.assertFalse(first_model["live_availability_proven"])
         self.assertFalse(first_model["account_health_proven"])
         self.assertFalse(first_model["native_proven_by_registry"])
@@ -247,6 +252,77 @@ class CodexModelRegistryTests(unittest.TestCase):
             ],
         )
         self.assertFalse(forged["network_call_summary"]["network_calls_made"])
+
+    def test_model_dry_run_rejects_visible_but_disabled_catalog_entry(self) -> None:
+        packet = build_custom_model_dry_run_packet(
+            {"model_id": "wbp-disabled-openrouter"},
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-disabled-openrouter",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": False,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "MODEL_NOT_SELECTABLE")
+        self.assertTrue(packet["model_server_issued"])
+        self.assertFalse(packet["selected_model_selectable"])
+        self.assertEqual(packet["selection_state"], "disabled")
+        self.assertEqual(packet["selection_disabled_reason_code"], "ROUTE_DISABLED")
+
+    def test_external_route_entries_can_be_visible_but_disabled(self) -> None:
+        registry = build_custom_model_registry_packet(
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-disabled-openrouter",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": False,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    },
+                    {
+                        "route_id": "wbp-missing-secret",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5-mini",
+                        "enabled": True,
+                    },
+                ]
+            },
+        )
+
+        rows = {entry["model_id"]: entry for entry in registry["available_models"]}
+        self.assertIn("wbp-disabled-openrouter", rows)
+        self.assertIn("wbp-missing-secret", rows)
+        self.assertEqual(registry["disabled_model_count"], 2)
+        self.assertFalse(rows["wbp-disabled-openrouter"]["selection_enabled"])
+        self.assertEqual(rows["wbp-disabled-openrouter"]["selection_state"], "disabled")
+        self.assertEqual(
+            rows["wbp-disabled-openrouter"]["selection_disabled_reason_code"],
+            "ROUTE_DISABLED",
+        )
+        self.assertEqual(
+            rows["wbp-disabled-openrouter"]["selection_disabled_reasons"],
+            ["route_disabled"],
+        )
+        self.assertFalse(rows["wbp-missing-secret"]["selection_enabled"])
+        self.assertEqual(
+            rows["wbp-missing-secret"]["selection_disabled_reason_code"],
+            "SECRET_REF_MISSING",
+        )
+        self.assertEqual(
+            rows["wbp-missing-secret"]["selection_disabled_reasons"],
+            ["secret_ref_missing"],
+        )
+        self.assertEqual(rows["wbp-missing-secret"]["provider_label"], "openrouter via WBP")
 
     def test_forbidden_custom_model_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_custom_model_fields({"model_id": "gpt-5.3-codex"}), [])

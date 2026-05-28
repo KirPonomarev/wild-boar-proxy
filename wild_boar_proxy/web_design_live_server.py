@@ -3670,10 +3670,12 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/custom/model-dry-run":
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
                 self._send_json(
                     build_custom_model_dry_run_packet(
                         self._read_json_body(),
                         operator_surface_session.status_payload(),
+                        api_snapshot=api_snapshot,
                     )
                 )
                 return

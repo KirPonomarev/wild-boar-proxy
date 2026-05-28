@@ -109,7 +109,7 @@ class WbpModelCatalogContractTests(unittest.TestCase):
         self.assertEqual(packet["catalog_generated_by"], "wbp_server")
         self.assertEqual(
             packet["catalog_source"],
-            "server_owned_operator_status_plus_enabled_external_routes",
+            "server_owned_operator_status_plus_external_route_registry",
         )
         self.assertTrue(packet["server_owned_source"])
         self.assertEqual(packet["contract_scope"], "provider_catalog_only")
@@ -142,7 +142,10 @@ class WbpModelCatalogContractTests(unittest.TestCase):
                     "label",
                     "source",
                     "provider_class",
+                    "provider_label",
                     "server_issued",
+                    "selection_enabled",
+                    "selection_state",
                     "availability_claim_level",
                     "capabilities",
                 }
@@ -165,10 +168,23 @@ class WbpModelCatalogContractTests(unittest.TestCase):
         self.assertEqual(model_ids, sorted(model_ids))
         self.assertIn("gpt-5.3-codex", model_ids)
         self.assertIn("wbp-web-primary-openrouter", model_ids)
-        self.assertNotIn("wbp-disabled-route", model_ids)
-        self.assertNotIn("wbp-missing-secret", model_ids)
+        self.assertIn("wbp-disabled-route", model_ids)
+        self.assertIn("wbp-missing-secret", model_ids)
         self.assertTrue(all(entry["server_issued"] is True for entry in packet["models"]))
         self.assertTrue(all(entry["model_id_authority"] == "server_issued" for entry in packet["models"]))
+
+        rows = {entry["model_id"]: entry for entry in packet["models"]}
+        self.assertFalse(rows["wbp-disabled-route"]["selection_enabled"])
+        self.assertEqual(rows["wbp-disabled-route"]["selection_state"], "disabled")
+        self.assertEqual(
+            rows["wbp-disabled-route"]["selection_disabled_reason_code"],
+            "ROUTE_DISABLED",
+        )
+        self.assertFalse(rows["wbp-missing-secret"]["selection_enabled"])
+        self.assertEqual(
+            rows["wbp-missing-secret"]["selection_disabled_reason_code"],
+            "SECRET_REF_MISSING",
+        )
 
     def test_wbp_model_catalog_default_model_explicit(self) -> None:
         packet = build_wbp_model_catalog_contract_packet(

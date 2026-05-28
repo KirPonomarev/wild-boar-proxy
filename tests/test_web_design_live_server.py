@@ -6569,6 +6569,56 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertEqual(route_entry["source"], "server_owned_external_route")
         self.assertEqual(route_entry["model_source_hint"], "server_owned_external_route")
 
+    def test_codex_custom_model_registry_keeps_disabled_route_visible_but_not_selectable(self) -> None:
+        api_snapshot = {
+            "status": "ok",
+            "source": "api_connections_readonly",
+            "primary_truth_ok": True,
+            "routes": [
+                {
+                    "route_id": "wbp-disabled-openrouter",
+                    "provider": "openrouter",
+                    "upstream_model": "openai/gpt-5",
+                    "enabled": False,
+                    "secret_ref": "OPENROUTER_API_KEY",
+                }
+            ],
+        }
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            with mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value=api_snapshot,
+            ):
+                server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    registry = json.loads(fetch(f"{base}/api/codex/custom/models"))
+                    dry_run = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/model-dry-run",
+                            {"model_id": "wbp-disabled-openrouter"},
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        route_entry = next(
+            entry for entry in registry["available_models"] if entry["model_id"] == "wbp-disabled-openrouter"
+        )
+        self.assertFalse(route_entry["selection_enabled"])
+        self.assertEqual(route_entry["selection_state"], "disabled")
+        self.assertEqual(route_entry["selection_disabled_reason_code"], "ROUTE_DISABLED")
+        self.assertEqual(dry_run["status"], "rejected")
+        self.assertEqual(dry_run["machine_error_code"], "MODEL_NOT_SELECTABLE")
+        self.assertTrue(dry_run["model_server_issued"])
+        self.assertFalse(dry_run["selected_model_selectable"])
+        self.assertFalse(dry_run["network_call_summary"]["network_calls_made"])
+
 
 class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
     def test_codex_custom_account_selection_endpoints_are_readonly_and_no_inference(self) -> None:

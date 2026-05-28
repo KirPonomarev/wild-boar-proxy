@@ -71,6 +71,7 @@ CATALOG_PROOF_LEVELS = {
     "unproven",
     "blocked_by_host_environment",
 }
+MODEL_SELECTION_STATES = {"selectable", "disabled"}
 CATALOG_ALLOWED_CLAIMS = (
     "catalog_generated_from_server_owned_sources",
     "catalog_schema_validated",
@@ -150,6 +151,20 @@ def _provider_class(model_id: str) -> str:
     return "external_alias"
 
 
+def _provider_label(model_id: str, *, provider: str = "", source_class: str = "") -> str:
+    provider_text = str(provider or "").strip()
+    source_class_text = str(source_class or "").strip()
+    if model_id.startswith("gpt-"):
+        return "Codex native"
+    if source_class_text == "server_registry":
+        if provider_text:
+            return f"{provider_text} via WBP"
+        return "WBP route"
+    if provider_text:
+        return provider_text
+    return "External route"
+
+
 def _model_lane(model_id: str) -> str:
     if model_id.startswith("gpt-"):
         return "codex_native"
@@ -182,14 +197,16 @@ def _tier_unknown() -> dict[str, str]:
 def _model_entry(model_id: str) -> dict[str, Any]:
     source = _model_source_hint(model_id)
     lane = _model_lane(model_id)
+    source_class = _source_class(model_id)
     return {
         "model_id": model_id,
         "label": model_id,
         "display_name": _display_name(model_id),
         "lane": lane,
         "source": source,
-        "source_class": _source_class(model_id),
+        "source_class": source_class,
         "provider_class": _provider_class(model_id),
+        "provider_label": _provider_label(model_id, source_class=source_class),
         "physical_provider": "",
         "physical_provider_proven": False,
         "provider_model_id": "" if lane == "codex_native" else model_id,
@@ -206,6 +223,10 @@ def _model_entry(model_id: str) -> dict[str, Any]:
         "chat_completions_live_acceptance_proven": False,
         "server_issued": True,
         "model_source_hint": source,
+        "selection_enabled": True,
+        "selection_state": "selectable",
+        "selection_disabled_reason_code": "",
+        "selection_disabled_reasons": [],
         "availability_claim_level": "listed_not_live_proven",
         "live_availability_proven": False,
         "account_health_proven": False,
@@ -234,11 +255,18 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
         if not isinstance(route, dict):
             continue
         route_id = str(route.get("route_id") or "").strip()
-        if not route_id or route.get("enabled") is not True:
-            continue
-        if not str(route.get("secret_ref") or "").strip():
+        if not route_id:
             continue
         entry = _model_entry(route_id)
+        enabled = route.get("enabled") is True
+        secret_ref_present = bool(str(route.get("secret_ref") or "").strip())
+        disabled_reasons: list[str] = []
+        if not enabled:
+            disabled_reasons.append("route_disabled")
+        if not secret_ref_present:
+            disabled_reasons.append("secret_ref_missing")
+        selection_enabled = not disabled_reasons
+        provider = str(route.get("provider") or "").strip()
         label = str(route.get("upstream_model") or route.get("display_name") or route_id).strip()
         entry.update(
             {
@@ -248,10 +276,23 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
                 "source": "server_owned_external_route",
                 "source_class": "server_registry",
                 "provider_class": "external_route",
+                "provider_label": _provider_label(
+                    route_id,
+                    provider=provider,
+                    source_class="server_registry",
+                ),
                 "physical_provider": "",
                 "physical_provider_proven": False,
                 "provider_model_id": str(route.get("upstream_model") or route_id),
                 "model_source_hint": "server_owned_external_route",
+                "selection_enabled": selection_enabled,
+                "selection_state": "selectable" if selection_enabled else "disabled",
+                "selection_disabled_reason_code": (
+                    ""
+                    if selection_enabled
+                    else "_AND_".join(reason.upper() for reason in disabled_reasons)
+                ),
+                "selection_disabled_reasons": disabled_reasons,
             }
         )
         entries.append(entry)
@@ -330,6 +371,13 @@ def _catalog_model_entry(
         "source": str(entry.get("source") or entry.get("model_source_hint") or "unknown"),
         "source_class": str(entry.get("source_class") or _source_class(model_id)),
         "provider_class": str(entry.get("provider_class") or "unknown"),
+        "provider_label": str(
+            entry.get("provider_label")
+            or _provider_label(
+                model_id,
+                source_class=str(entry.get("source_class") or _source_class(model_id)),
+            )
+        ),
         "physical_provider": str(entry.get("physical_provider") or ""),
         "physical_provider_proven": entry.get("physical_provider_proven") is True,
         "provider_model_id": str(entry.get("provider_model_id") or ""),
@@ -338,6 +386,13 @@ def _catalog_model_entry(
         "speed_tier": dict(entry.get("speed_tier") or _tier_unknown()),
         "server_issued": entry.get("server_issued") is True,
         "model_id_authority": "server_issued",
+        "selection_enabled": entry.get("selection_enabled") is True,
+        "selection_state": str(
+            entry.get("selection_state")
+            or ("selectable" if entry.get("selection_enabled") is True else "disabled")
+        ),
+        "selection_disabled_reason_code": str(entry.get("selection_disabled_reason_code") or ""),
+        "selection_disabled_reasons": [str(item) for item in entry.get("selection_disabled_reasons") or []],
         "availability_claim_level": str(
             availability_row.get("availability_claim_level") or "listed_not_live_proven"
         ),
@@ -437,7 +492,7 @@ def build_wbp_model_catalog_contract_packet(
         "model_provider": CONFIGURED_MODEL_PROVIDER,
         "base_url": endpoint,
         "wire_api": CONFIGURED_WIRE_API,
-        "catalog_source": "server_owned_operator_status_plus_enabled_external_routes",
+        "catalog_source": "server_owned_operator_status_plus_external_route_registry",
         "catalog_generated_by": "wbp_server",
         "catalog_deterministic_order": "model_id_ascending",
         "server_owned_source": True,
@@ -455,6 +510,8 @@ def build_wbp_model_catalog_contract_packet(
         "default_model_explicit": True,
         "default_model_in_catalog": any(entry["model_id"] == default_model for entry in catalog_models),
         "model_count": len(catalog_models),
+        "selectable_model_count": sum(1 for entry in catalog_models if entry["selection_enabled"] is True),
+        "disabled_model_count": sum(1 for entry in catalog_models if entry["selection_enabled"] is not True),
         "models": catalog_models,
         "availability_lattice_imported": bool(availability_rows),
         "availability_lattice_status": (
@@ -536,6 +593,26 @@ def validate_wbp_model_catalog_contract(packet: dict[str, Any]) -> list[str]:
             findings.append(f"models[{index}].model_id")
         if entry.get("server_issued") is not True:
             findings.append(f"models[{index}].server_issued")
+        if not isinstance(entry.get("provider_label"), str) or not str(entry.get("provider_label") or "").strip():
+            findings.append(f"models[{index}].provider_label")
+        selection_state = entry.get("selection_state")
+        if selection_state not in MODEL_SELECTION_STATES:
+            findings.append(f"models[{index}].selection_state")
+        selection_enabled = entry.get("selection_enabled") is True
+        if selection_enabled and selection_state != "selectable":
+            findings.append(f"models[{index}].selection_enabled")
+        if not selection_enabled and selection_state != "disabled":
+            findings.append(f"models[{index}].selection_enabled")
+        if selection_enabled:
+            if entry.get("selection_disabled_reason_code") not in {"", None}:
+                findings.append(f"models[{index}].selection_disabled_reason_code")
+            if list(entry.get("selection_disabled_reasons") or []):
+                findings.append(f"models[{index}].selection_disabled_reasons")
+        else:
+            if not str(entry.get("selection_disabled_reason_code") or "").strip():
+                findings.append(f"models[{index}].selection_disabled_reason_code")
+            if not list(entry.get("selection_disabled_reasons") or []):
+                findings.append(f"models[{index}].selection_disabled_reasons")
         if entry.get("availability_claim_level") not in CATALOG_AVAILABILITY_CLAIM_LEVELS:
             findings.append(f"models[{index}].availability_claim_level")
         if entry.get("availability_evidence_scope") not in CATALOG_AVAILABILITY_EVIDENCE_SCOPES:
@@ -911,6 +988,7 @@ def build_custom_model_registry_packet(
         available_models.append(route_entry)
         seen_model_ids.add(route_model_id)
 
+    available_model_ids = [str(entry["model_id"]) for entry in available_models]
     return {
         "schema_version": 1,
         "status": status,
@@ -927,13 +1005,15 @@ def build_custom_model_registry_packet(
         "recommended_model": recommended_default_model,
         "reported_configured_model": reported_configured_model,
         "configured_model": reported_configured_model,
-        "configured_model_visible": reported_configured_model in model_ids,
+        "configured_model_visible": reported_configured_model in available_model_ids,
         "server_issued": True,
         "canonical_internal_model_ids": list(CANONICAL_INTERNAL_MODEL_IDS),
         "canonical_internal_model_ids_visible": [
             model_id for model_id in CANONICAL_INTERNAL_MODEL_IDS if model_id in model_ids
         ],
         "model_count": len(available_models),
+        "selectable_model_count": sum(1 for entry in available_models if entry["selection_enabled"] is True),
+        "disabled_model_count": sum(1 for entry in available_models if entry["selection_enabled"] is not True),
         "available_models": available_models,
         "claim_gate_status": claim_gate_status,
         "allowed_browser_fields": ["model_id"],
@@ -1034,9 +1114,14 @@ def build_custom_model_dry_run_packet(
     operator_status: dict[str, Any] | None,
     *,
     endpoint: str = DEFAULT_ENDPOINT,
+    api_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     forbidden = forbidden_custom_model_fields(payload)
-    registry = build_custom_model_registry_packet(operator_status, endpoint=endpoint)
+    registry = build_custom_model_registry_packet(
+        operator_status,
+        endpoint=endpoint,
+        api_snapshot=api_snapshot,
+    )
     if forbidden:
         return {
             "schema_version": 1,
@@ -1106,6 +1191,45 @@ def build_custom_model_dry_run_packet(
             "next_action": "select_model_from_server_registry",
         }
     selected_entry = next(entry for entry in registry["available_models"] if entry["model_id"] == model_id)
+    if selected_entry.get("selection_enabled") is not True:
+        return {
+            "schema_version": 1,
+            "status": "rejected",
+            "machine_error_code": "MODEL_NOT_SELECTABLE",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "dry_run": True,
+            "human_message": "Model is visible in the server-issued catalog but not selectable.",
+            "selected_model": model_id,
+            "model_server_issued": True,
+            "selected_model_server_issued": True,
+            "selected_model_selectable": False,
+            "selection_state": selected_entry.get("selection_state", "disabled"),
+            "selection_disabled_reason_code": selected_entry.get("selection_disabled_reason_code", ""),
+            "selection_disabled_reasons": list(selected_entry.get("selection_disabled_reasons") or []),
+            "codex_config_compatible": False,
+            "model_provider": CONFIGURED_MODEL_PROVIDER,
+            "base_url": endpoint,
+            "wire_api": CONFIGURED_WIRE_API,
+            "model_source_hint": selected_entry["model_source_hint"],
+            "claim_gate_status": registry["claim_gate_status"],
+            "route_or_backend_exposed": False,
+            "inference_called": False,
+            "provider_called": False,
+            "responses_called": False,
+            "chat_completions_called": False,
+            "network_call_summary": {
+                "network_calls_made": False,
+                "allowed_calls_made": [],
+                "forbidden_calls_made": [],
+                "provider_direct_calls_made": False,
+            },
+            "token_burn": 0,
+            "negative_claim_basis": "catalog_visibility_without_selection_readiness",
+            "independent_runtime_meter_attached": False,
+            "refresh_packet": registry,
+            "next_action": "select_enabled_model_from_server_registry",
+        }
     return {
         "schema_version": 1,
         "status": registry["status"],
@@ -1117,6 +1241,10 @@ def build_custom_model_dry_run_packet(
         "selected_model": model_id,
         "model_server_issued": True,
         "selected_model_server_issued": True,
+        "selected_model_selectable": True,
+        "selection_state": selected_entry.get("selection_state", "selectable"),
+        "selection_disabled_reason_code": "",
+        "selection_disabled_reasons": [],
         "codex_config_compatible": bool(selected_entry["codex_config_compatible"]),
         "model_provider": CONFIGURED_MODEL_PROVIDER,
         "base_url": endpoint,
