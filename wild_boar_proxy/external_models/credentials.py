@@ -20,29 +20,87 @@ class CredentialProviderSpec:
     credential_ref: str
     owner_env_candidates: tuple[str, ...]
     provider_dashboard_url: str
+    provider_family: str
+    auth_type: str = "bearer"
+    seed_source: str = "current_runtime"
+
+
+def _owner_env_candidates(*names: str) -> tuple[str, ...]:
+    return tuple(str(name).strip() for name in names if str(name).strip())
 
 
 _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
     "deepseek": CredentialProviderSpec(
         provider="deepseek",
         credential_ref="DEEPSEEK_API_KEY",
-        owner_env_candidates=(
+        owner_env_candidates=_owner_env_candidates(
             "DEEPSEEK_API_KEY",
             "WBP_DEEPSEEK_API_KEY",
             "WBP_PROVIDER_DEEPSEEK_API_KEY",
         ),
         provider_dashboard_url="https://platform.deepseek.com/api_keys",
+        provider_family="direct_provider",
     ),
     "openrouter": CredentialProviderSpec(
         provider="openrouter",
         credential_ref="OPENROUTER_API_KEY",
-        owner_env_candidates=(
+        owner_env_candidates=_owner_env_candidates(
             "OPENROUTER_API_KEY",
             "WBP_OPENROUTER_API_KEY",
             "WBP_PROVIDER_OPENROUTER_API_KEY",
         ),
         provider_dashboard_url="https://openrouter.ai/settings/keys",
-    )
+        provider_family="provider_router",
+    ),
+    "mistral": CredentialProviderSpec(
+        provider="mistral",
+        credential_ref="MISTRAL_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "MISTRAL_API_KEY",
+            "WBP_MISTRAL_API_KEY",
+            "WBP_PROVIDER_MISTRAL_API_KEY",
+        ),
+        provider_dashboard_url="https://docs.mistral.ai/admin/security-access/api-keys",
+        provider_family="direct_provider",
+        seed_source="historical_seed_plus_current_schema",
+    ),
+    "gemini": CredentialProviderSpec(
+        provider="gemini",
+        credential_ref="GEMINI_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "WBP_GEMINI_API_KEY",
+            "WBP_PROVIDER_GEMINI_API_KEY",
+        ),
+        provider_dashboard_url="https://aistudio.google.com/app/apikey",
+        provider_family="direct_provider",
+        seed_source="historical_seed_plus_current_schema",
+    ),
+    "groq": CredentialProviderSpec(
+        provider="groq",
+        credential_ref="GROQ_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "GROQ_API_KEY",
+            "WBP_GROQ_API_KEY",
+            "WBP_PROVIDER_GROQ_API_KEY",
+        ),
+        provider_dashboard_url="https://console.groq.com/keys",
+        provider_family="direct_provider",
+        seed_source="historical_seed_plus_current_schema",
+    ),
+    "cerebras": CredentialProviderSpec(
+        provider="cerebras",
+        credential_ref="CEREBRAS_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "CEREBRAS_API_KEY",
+            "WBP_CEREBRAS_API_KEY",
+            "WBP_PROVIDER_CEREBRAS_API_KEY",
+        ),
+        provider_dashboard_url="https://inference-docs.cerebras.ai/api-reference/authentication",
+        provider_family="direct_provider",
+        seed_source="historical_seed_plus_current_schema",
+    ),
 }
 
 
@@ -119,17 +177,53 @@ def _credential_result(
     return {
         "status": status,
         "provider": provider,
+        "provider_family": spec.provider_family,
+        "auth_type": spec.auth_type,
         "source": source,
+        "seed_source": spec.seed_source,
         "credential_ref": credential_ref,
         "credential_present": credential_present,
+        "schema_admitted": True,
         "supported_sources": ["owner-env"],
         "expected_refs": list(spec.owner_env_candidates),
         "provider_dashboard_url": spec.provider_dashboard_url,
         "secret_value_exposed": False,
         "browser_secret_intake": False,
         "browser_path_intake": False,
+        "classification_scope": "credential_admission_only",
+        "provider_runtime_compatibility_claimed": False,
+        "model_runtime_compatibility_claimed": False,
+        "generic_route_transform_support_claimed": False,
+        "generic_response_compatibility_claimed": False,
+        "provider_family_compatibility_claimed": False,
         "scope": "sandbox",
     }
+
+
+def provider_specs_inventory() -> list[dict[str, Any]]:
+    inventory: list[dict[str, Any]] = []
+    for provider in sorted(_PROVIDER_SPECS):
+        spec = _PROVIDER_SPECS[provider]
+        inventory.append(
+            {
+                "provider": spec.provider,
+                "provider_family": spec.provider_family,
+                "credential_ref": spec.credential_ref,
+                "owner_env_candidates": list(spec.owner_env_candidates),
+                "provider_dashboard_url": spec.provider_dashboard_url,
+                "auth_type": spec.auth_type,
+                "supported_sources": ["owner-env"],
+                "schema_admitted": True,
+                "seed_source": spec.seed_source,
+                "classification_scope": "credential_admission_only",
+                "provider_runtime_compatibility_claimed": False,
+                "model_runtime_compatibility_claimed": False,
+                "generic_route_transform_support_claimed": False,
+                "generic_response_compatibility_claimed": False,
+                "provider_family_compatibility_claimed": False,
+            }
+        )
+    return inventory
 
 
 def _provider_spec(provider: str) -> CredentialProviderSpec:

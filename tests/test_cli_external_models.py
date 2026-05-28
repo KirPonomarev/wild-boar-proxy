@@ -391,6 +391,71 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(status_credential["credential_ref"], "DEEPSEEK_API_KEY")
         self.assertNotIn("deepseek-owner-key", status_result.stdout)
 
+    def test_mistral_credentials_admit_and_status_use_generic_provider_spec(self) -> None:
+        admit_result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "mistral",
+            "--source",
+            "owner-env",
+            "--json",
+            extra_env={"MISTRAL_API_KEY": "mistral-owner-key"},
+        )
+        admit_payload = self.parse_payload(admit_result)
+        self.assertEqual(admit_payload["status"], "ok")
+        credential_result = admit_payload["data"]["credential_result"]
+        self.assertEqual(credential_result["status"], "admitted")
+        self.assertEqual(credential_result["provider"], "mistral")
+        self.assertEqual(credential_result["provider_family"], "direct_provider")
+        self.assertEqual(credential_result["auth_type"], "bearer")
+        self.assertEqual(
+            credential_result["credential_ref"],
+            "MISTRAL_API_KEY",
+        )
+        self.assertEqual(
+            credential_result["expected_refs"],
+            [
+                "MISTRAL_API_KEY",
+                "WBP_MISTRAL_API_KEY",
+                "WBP_PROVIDER_MISTRAL_API_KEY",
+            ],
+        )
+        self.assertEqual(
+            credential_result["provider_dashboard_url"],
+            "https://docs.mistral.ai/admin/security-access/api-keys",
+        )
+        self.assertTrue(credential_result["schema_admitted"])
+        self.assertEqual(
+            credential_result["classification_scope"],
+            "credential_admission_only",
+        )
+        self.assertFalse(credential_result["provider_runtime_compatibility_claimed"])
+        self.assertFalse(credential_result["model_runtime_compatibility_claimed"])
+        self.assertFalse(credential_result["generic_route_transform_support_claimed"])
+        self.assertFalse(credential_result["generic_response_compatibility_claimed"])
+        self.assertFalse(credential_result["provider_family_compatibility_claimed"])
+        self.assertFalse(credential_result["secret_value_exposed"])
+        self.assertNotIn("mistral-owner-key", admit_result.stdout)
+
+        status_result = self.run_cli(
+            "external-models",
+            "credentials",
+            "status",
+            "--provider",
+            "mistral",
+            "--json",
+        )
+        status_payload = self.parse_payload(status_result)
+        self.assertEqual(status_payload["status"], "ok")
+        status_credential = status_payload["data"]["credential_result"]
+        self.assertEqual(status_credential["status"], "present")
+        self.assertEqual(status_credential["provider"], "mistral")
+        self.assertEqual(status_credential["credential_ref"], "MISTRAL_API_KEY")
+        self.assertFalse(status_credential["provider_runtime_compatibility_claimed"])
+        self.assertNotIn("mistral-owner-key", status_result.stdout)
+
     def test_credentials_admit_rejects_unsupported_provider(self) -> None:
         result = self.run_cli(
             "external-models",
@@ -402,6 +467,21 @@ class ExternalModelsCliTests(unittest.TestCase):
             "owner-env",
             "--json",
             extra_env={"OPENROUTER_API_KEY": "owner-key"},
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "EXTERNAL_MODELS_PROVIDER_UNSUPPORTED"
+        )
+
+    def test_credentials_status_rejects_unsupported_provider(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "status",
+            "--provider",
+            "unknown-provider",
+            "--json",
         )
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "error")

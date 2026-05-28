@@ -582,6 +582,54 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(status["status"], "ok")
         self.assertEqual(admit["status"], "ok")
 
+    def test_external_models_generic_provider_credential_bridge_commands_accept_server_owned_provider_only(self) -> None:
+        runner = RecordingRunner()
+
+        status = execute_command(
+            runner,
+            "external_models_credentials_status_provider",
+            structured_args={"provider": "mistral"},
+            allow_disabled=True,
+        )
+        admit = execute_command(
+            runner,
+            "external_models_credentials_admit_provider_owner_env",
+            structured_args={"provider": "mistral"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "credentials", "status", "--provider", "mistral", "--json"),
+                (
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "mistral",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ),
+            ],
+        )
+        self.assertEqual(status["status"], "ok")
+        self.assertEqual(admit["status"], "ok")
+
+    def test_external_models_generic_provider_credential_bridge_commands_reject_extra_browser_fields(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "external_models_credentials_status_provider",
+            structured_args={"provider": "mistral", "secret_ref": "SHOULD_NOT_PASS"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(runner.calls, [])
+
     def test_external_models_route_checks_require_only_route_id(self) -> None:
         runner = RecordingRunner()
 

@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-28T10:40:36.298138Z",
+  "classification_scope": "independent_read_only_audit",
+  "findings": [
+    {
+      "id": "route_selection_can_outpace_provider_auth_support",
+      "runtime_claim_blocked": true,
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "primary_route_heuristic_couples_credential_flows_to_snapshot_provider",
+      "runtime_claim_blocked": true,
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "validator_surface_is_narrower_than_generic_route_space",
+      "runtime_claim_blocked": true,
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "provider_auth_independent_audit",
+  "status": "ok"
+}

@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-28T10:40:36.298127Z",
+  "packet_kind": "admitted_provider_list",
+  "provider_count": 6,
+  "providers": [
+    "cerebras",
+    "deepseek",
+    "gemini",
+    "groq",
+    "mistral",
+    "openrouter"
+  ],
+  "seed_only_providers": [
+    "zai"
+  ],
+  "status": "ok"
+}
