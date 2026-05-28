@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-28T15:12:38.197911Z",
+  "gaps": [
+    {
+      "id": "original_side_timing_surface_not_observed_in_admitted_inputs",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "same_binary_not_proven_for_measured_paths",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "execution_path_equivalence_not_proven",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "model_mode_equivalence_remains_contract_only",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "bounded_measurements_do_not_prove_product_wide_speed_gain",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "acceleration_gap_matrix",
+  "status": "ok"
+}

@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-28T15:12:38.197845Z",
+  "custom_api_lane_median_packet_latency_ms": 46.5,
+  "custom_api_lane_median_wall_clock_ms": 47.5,
+  "custom_chatgpt_lane_median_packet_latency_ms": 37.5,
+  "custom_chatgpt_lane_median_wall_clock_ms": 38.5,
+  "custom_measurement_source_classification": "bounded_contour_local_runner_harness_only",
+  "custom_packet_latency_surface_present": true,
+  "custom_wall_clock_surface_present": true,
+  "measurement_surface_truth_only": true,
+  "original_side_request_count_visible": false,
+  "original_side_timing_visible": false,
+  "original_side_token_usage_visible": false,
+  "packet_kind": "acceleration_measurement",
+  "status": "ok",
+  "visible_timing_fields_authorize_comparison": false
+}
