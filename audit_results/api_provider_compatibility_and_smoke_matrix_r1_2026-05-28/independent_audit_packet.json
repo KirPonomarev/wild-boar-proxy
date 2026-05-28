@@ -1,0 +1,42 @@
+{
+  "captured_at_utc": "2026-05-28T13:00:00Z",
+  "findings": [
+    {
+      "id": "no_material_overclaim_found_in_updated_evidence_scope",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "live_provider_acceptance_remains_unproven_here",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "direct_external_catalog_row_blocks_on_current_route_visibility",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "disabled_route_row_remains_blocked_and_non_selectable",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "matrix_size_remains_narrower_than_target_current_snapshot",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "streaming_and_tool_semantics_remain_inherited_not_row_proven",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "provider_identity_remains_unresolved_where_snapshot_omits_provider",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "independent_audit",
+  "status": "ok"
+}
