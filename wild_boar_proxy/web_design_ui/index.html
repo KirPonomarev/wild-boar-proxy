@@ -432,25 +432,63 @@
         <section id="codexCustomModelsPanel" class="card log-card">
           <div class="log-head">
             <div>
-              <div class="card-title">Codex Custom Models</div>
-              <div id="codexCustomModelsSummary" class="secondary">Model registry ещё не загружен.</div>
+              <div class="card-title">Codex Custom Model Selector</div>
+              <div id="codexCustomModelsSummary" class="secondary">Dual-lane selector ещё не загружен.</div>
             </div>
             <span id="codexCustomModelsChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
           </div>
           <div class="action-panel-grid">
-            <div>Model</div>
+            <div>ChatGPT lane</div>
             <div>
-              <select id="codexCustomModelSelect" aria-label="Codex Custom model"></select>
+              <select id="codexCustomModelSelect" aria-label="Codex Custom ChatGPT lane model"></select>
             </div>
-            <div>Recommended</div><div id="codexCustomRecommendedModel">-</div>
-            <div>Configured</div><div id="codexCustomConfiguredModel">-</div>
+            <div>API lane</div>
+            <div>
+              <select id="codexCustomApiModelSelect" aria-label="Codex Custom API lane model"></select>
+            </div>
+            <div>ChatGPT default</div><div id="codexCustomRecommendedModel">-</div>
+            <div>API default</div><div id="codexCustomRecommendedApiModel">-</div>
             <div>Compatibility</div><div id="codexCustomApiCompat">not checked</div>
+            <div>Execution boundary</div><div id="codexCustomExecutionBoundary">ChatGPT lane only in this contour</div>
             <div>Claim gate</div><div id="codexCustomModelsClaimGate">not loaded</div>
           </div>
-          <div id="codexCustomModelCatalog" class="model-catalog-list" aria-live="polite"></div>
+          <div id="codexCustomModelCatalog" class="model-selector-lanes" aria-live="polite">
+            <section class="model-lane-section" aria-labelledby="codexCustomChatLaneHeading">
+              <div class="model-lane-head">
+                <div>
+                  <h3 id="codexCustomChatLaneHeading" class="model-lane-title">ChatGPT / Codex-native</h3>
+                  <p class="model-lane-note">Current launch/session lane for this contour.</p>
+                </div>
+                <span id="codexCustomChatLaneChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+              </div>
+              <div id="codexCustomChatLaneCatalog" class="model-catalog-list"></div>
+            </section>
+            <section class="model-lane-section" aria-labelledby="codexCustomApiLaneHeading">
+              <div class="model-lane-head">
+                <div>
+                  <h3 id="codexCustomApiLaneHeading" class="model-lane-title">API / WBP</h3>
+                  <p class="model-lane-note">Selection intent only. Runtime compatibility and execution proof are not closed here.</p>
+                </div>
+                <span id="codexCustomApiLaneChip" class="chip amber"><span class="dot"></span><span>intent only</span></span>
+              </div>
+              <div id="codexCustomApiLaneCatalog" class="model-catalog-list"></div>
+            </section>
+            <section class="model-lane-section" aria-labelledby="codexCustomSeedLaneHeading">
+              <div class="model-lane-head">
+                <div>
+                  <h3 id="codexCustomSeedLaneHeading" class="model-lane-title">Historical / not currently admitted</h3>
+                  <p class="model-lane-note">Reference-only entries. They are never current selectable runtime choices.</p>
+                </div>
+                <span id="codexCustomSeedLaneChip" class="chip neutral"><span class="dot"></span><span>reference</span></span>
+              </div>
+              <div id="codexCustomSeedLaneCatalog" class="model-catalog-list"></div>
+            </section>
+          </div>
           <div class="action-summary-footer">
             <div>
-              <span>models: <strong id="codexCustomModelCount">0</strong></span>
+              <span>chatgpt: <strong id="codexCustomChatModelCount">0</strong></span>
+              <span>api: <strong id="codexCustomApiModelCount">0</strong></span>
+              <span>seed: <strong id="codexCustomSeedModelCount">0</strong></span>
               <span>token burn: <strong id="codexCustomModelTokenBurn">0</strong></span>
             </div>
             <div class="action-row">
@@ -458,12 +496,18 @@
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
                 <span>Обновить</span>
               </button>
+              <button id="codexCustomSelectorIntentDryRunAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                <span>Selector intent</span>
+              </button>
               <button id="codexCustomModelDryRunAction" class="button" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Model dry-run</span>
               </button>
             </div>
           </div>
+          <p class="secondary model-selector-boundary-note">Selecting both lanes does not prove simultaneous execution semantics. Session and role-slot behavior remain separate contours.</p>
+          <pre id="codexCustomSelectorIntentResponse" class="mono-value">selector intent packet pending</pre>
           <pre id="codexCustomModelDryRunResponse" class="mono-value">model dry-run packet pending</pre>
         </section>
 

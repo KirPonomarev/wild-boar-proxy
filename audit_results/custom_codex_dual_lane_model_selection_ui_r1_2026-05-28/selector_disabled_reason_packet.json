@@ -1,0 +1,112 @@
+{
+  "captured_at_utc": "2026-05-28T11:18:51.088004Z",
+  "disabled_entries": [
+    {
+      "model_id": "wbp-disabled-openrouter",
+      "selection_disabled_reason_code": "ROUTE_DISABLED_AND_SECRET_REF_MISSING",
+      "selection_disabled_reasons": [
+        "route_disabled",
+        "secret_ref_missing"
+      ]
+    },
+    {
+      "model_id": "direct-cerebras-gpt-oss-120b",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-cerebras-llama3.1-8b",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-gemini-2.5-flash",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-groq-openai-gpt-oss-20b",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-mistral-devstral-2512",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "direct-mistral-small-latest",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "glm-4.7-flash",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "or-gpt-oss-120b",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "or-gpt-oss-20b",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "or-qwen3-coder",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    },
+    {
+      "model_id": "or-qwen3-next",
+      "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+      "selection_disabled_reasons": [
+        "historical_seed_only",
+        "not_current_runtime_catalog"
+      ]
+    }
+  ],
+  "disabled_reason_present": true,
+  "packet_kind": "selector_disabled_reason",
+  "status": "ok"
+}

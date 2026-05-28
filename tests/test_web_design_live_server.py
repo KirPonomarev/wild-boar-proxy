@@ -6620,6 +6620,101 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertFalse(dry_run["network_call_summary"]["network_calls_made"])
 
 
+class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
+    def test_codex_custom_dual_lane_selector_endpoint_separates_lanes_and_seed_reference(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                selector = json.loads(fetch(f"{base}/api/codex/custom/model-selector"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(selector["status"], "ok")
+        self.assertTrue(selector["server_issued"])
+        self.assertFalse(selector["flat_model_truth_presented"])
+        self.assertFalse(selector["selector_runtime_readiness_claimed"])
+        self.assertFalse(selector["simultaneous_execution_proven"])
+        self.assertEqual(selector["allowed_browser_fields"], ["chatgpt_model_id", "api_model_id"])
+        self.assertIn("model_id", selector["forbidden_browser_fields"])
+        self.assertFalse(any(selector["browser_authority"].values()))
+        self.assertGreaterEqual(selector["chatgpt_lane"]["model_count"], 1)
+        self.assertGreaterEqual(selector["api_lane"]["model_count"], 1)
+        self.assertGreaterEqual(selector["seed_only_reference"]["model_count"], 1)
+        self.assertTrue(
+            all(entry["lane_kind"] == "codex_native" for entry in selector["chatgpt_lane"]["models"])
+        )
+        self.assertTrue(
+            all(entry["lane_kind"] == "wbp_api" for entry in selector["api_lane"]["models"])
+        )
+        self.assertTrue(
+            all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
+        )
+
+    def test_codex_custom_dual_lane_selector_dry_run_is_intent_only_and_forbids_backend_fields(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/model-selector-dry-run",
+                        {
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/model-selector-dry-run",
+                        {
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "route_id": "browser-route",
+                            "provider": "deepseek",
+                            "base_url": "http://127.0.0.1:9999/v1",
+                            "account_id": "browser-account",
+                            "auth_path": "/tmp/browser-auth.json",
+                            "secret_ref": "BROWSER_SECRET_REF",
+                            "codex_home": "/tmp/browser-codex-home",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["selection_intent_only"])
+        self.assertFalse(packet["selector_runtime_readiness_claimed"])
+        self.assertFalse(packet["simultaneous_execution_proven"])
+        self.assertFalse(packet["role_slot_binding_proven"])
+        self.assertFalse(packet["session_execution_wired"])
+        self.assertEqual(packet["current_execution_path_scope"], "chatgpt_lane_only_in_this_contour")
+        self.assertEqual(packet["current_execution_path_source"], "operator_reported_configured_model")
+        self.assertEqual(packet["api_lane_scope"], "selection_intent_only_until_role_slot_session_contour")
+        self.assertEqual(packet["chatgpt_selection"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["api_selection"]["model_id"], "wbp-deepseek-v3")
+        self.assertFalse(packet["seed_only_selected"])
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("route_id", rejected["forbidden_fields"])
+        self.assertIn("provider", rejected["forbidden_fields"])
+        self.assertIn("base_url", rejected["forbidden_fields"])
+        self.assertIn("account_id", rejected["forbidden_fields"])
+        self.assertIn("auth_path", rejected["forbidden_fields"])
+        self.assertIn("secret_ref", rejected["forbidden_fields"])
+        self.assertIn("codex_home", rejected["forbidden_fields"])
+
+
 class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
     def test_codex_custom_account_selection_endpoints_are_readonly_and_no_inference(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []

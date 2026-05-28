@@ -1388,19 +1388,42 @@ function codexCustomModelsSetChip(visual, label) {
   }
 }
 
-function codexCustomAvailableModelEntries(packet) {
-  return (Array.isArray(packet?.available_models) ? packet.available_models : [])
+function codexCustomLaneSetChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function codexCustomLaneEntries(packet, lane) {
+  const section = packet?.[lane];
+  return (Array.isArray(section?.models) ? section.models : [])
     .filter((entry) => typeof entry?.model_id === "string" && entry.model_id);
 }
 
-function codexCustomAvailableModelIds(packet) {
-  return codexCustomAvailableModelEntries(packet)
-    .map((entry) => entry.model_id)
-    .filter((modelId) => typeof modelId === "string" && modelId);
+function codexCustomSeedEntries(packet) {
+  const section = packet?.seed_only_reference;
+  return (Array.isArray(section?.models) ? section.models : [])
+    .filter((entry) => typeof entry?.model_id === "string" && entry.model_id);
+}
+
+function codexCustomAvailableModelEntries(packet) {
+  return codexCustomLaneEntries(packet, "chatgpt_lane");
+}
+
+function codexCustomApiModelEntries(packet) {
+  return codexCustomLaneEntries(packet, "api_lane");
 }
 
 function codexCustomDisabledReasonText(entry) {
   const reasons = Array.isArray(entry?.selection_disabled_reasons) ? entry.selection_disabled_reasons : [];
+  if (reasons.includes("historical_seed_only") && reasons.includes("not_current_runtime_catalog")) {
+    return "historical reference only";
+  }
   if (reasons.includes("route_disabled") && reasons.includes("secret_ref_missing")) {
     return "route disabled + secret missing";
   }
@@ -1413,8 +1436,8 @@ function codexCustomDisabledReasonText(entry) {
   return entry?.selection_disabled_reason_code || "not selectable";
 }
 
-function renderCodexCustomModelCatalog(entries) {
-  const node = document.getElementById("codexCustomModelCatalog");
+function renderCodexCustomModelCatalog(listId, entries) {
+  const node = document.getElementById(listId);
   if (!node) {
     return;
   }
@@ -1445,56 +1468,124 @@ function renderCodexCustomModelCatalog(entries) {
 }
 
 function renderCodexCustomModels(registry, compat) {
-  const select = document.getElementById("codexCustomModelSelect");
-  const entries = codexCustomAvailableModelEntries(registry);
-  const modelIds = entries.map((entry) => entry.model_id);
-  const selectableIds = entries
+  const chatSelect = document.getElementById("codexCustomModelSelect");
+  const apiSelect = document.getElementById("codexCustomApiModelSelect");
+  const chatEntries = codexCustomAvailableModelEntries(registry);
+  const apiEntries = codexCustomApiModelEntries(registry);
+  const seedEntries = codexCustomSeedEntries(registry);
+  const modelIds = chatEntries.map((entry) => entry.model_id);
+  const selectableIds = chatEntries
     .filter((entry) => entry?.selection_enabled === true)
     .map((entry) => entry.model_id);
-  const previous = select?.value || "";
-  if (select) {
-    select.replaceChildren();
-    for (const entry of entries) {
+  const previous = chatSelect?.value || "";
+  const previousApi = apiSelect?.value || "";
+  if (chatSelect) {
+    chatSelect.replaceChildren();
+    for (const entry of chatEntries) {
       const option = document.createElement("option");
       option.value = entry.model_id;
       option.textContent = entry?.display_name || entry.model_id;
       option.disabled = entry?.selection_enabled !== true;
-      select.append(option);
+      chatSelect.append(option);
     }
     if (selectableIds.includes(previous)) {
-      select.value = previous;
-    } else if (selectableIds.includes(registry?.recommended_default_model)) {
-      select.value = registry.recommended_default_model;
+      chatSelect.value = previous;
+    } else if (selectableIds.includes(registry?.chatgpt_lane?.default_model_id)) {
+      chatSelect.value = registry.chatgpt_lane.default_model_id;
     } else if (selectableIds.length > 0) {
-      select.value = selectableIds[0];
+      chatSelect.value = selectableIds[0];
     } else if (modelIds.length > 0) {
-      select.value = modelIds[0];
+      chatSelect.value = modelIds[0];
     }
   }
-  renderCodexCustomModelCatalog(entries);
-  const claimGate = registry?.claim_gate_status || compat?.claim_gate_status || "not_reported";
+  const apiModelIds = apiEntries.map((entry) => entry.model_id);
+  const selectableApiIds = apiEntries
+    .filter((entry) => entry?.selection_enabled === true)
+    .map((entry) => entry.model_id);
+  if (apiSelect) {
+    apiSelect.replaceChildren();
+    for (const entry of apiEntries) {
+      const option = document.createElement("option");
+      option.value = entry.model_id;
+      option.textContent = entry?.display_name || entry.model_id;
+      option.disabled = entry?.selection_enabled !== true;
+      apiSelect.append(option);
+    }
+    if (selectableApiIds.includes(previousApi)) {
+      apiSelect.value = previousApi;
+    } else if (selectableApiIds.includes(registry?.api_lane?.default_model_id)) {
+      apiSelect.value = registry.api_lane.default_model_id;
+    } else if (selectableApiIds.length > 0) {
+      apiSelect.value = selectableApiIds[0];
+    } else if (apiModelIds.length > 0) {
+      apiSelect.value = apiModelIds[0];
+    }
+  }
+  renderCodexCustomModelCatalog("codexCustomChatLaneCatalog", chatEntries);
+  renderCodexCustomModelCatalog("codexCustomApiLaneCatalog", apiEntries);
+  renderCodexCustomModelCatalog("codexCustomSeedLaneCatalog", seedEntries);
+  codexCustomLaneSetChip("codexCustomChatLaneChip", chatEntries.length ? "green" : "amber", chatEntries.length ? "current catalog" : "empty");
+  codexCustomLaneSetChip("codexCustomApiLaneChip", apiEntries.length ? "amber" : "neutral", apiEntries.length ? "intent only" : "empty");
+  codexCustomLaneSetChip("codexCustomSeedLaneChip", seedEntries.length ? "neutral" : "neutral", seedEntries.length ? "reference" : "none");
+  const claimGate = compat?.claim_gate_status || "not_reported";
   const claimGateBlocked = String(claimGate).includes("blocked");
   const status = registry?.status || "unknown";
+  const selectorChipLabel = status === "ok"
+    ? (claimGateBlocked ? "loaded / gate blocked" : "loaded")
+    : (status === "degraded" && claimGateBlocked ? "degraded / gate blocked" : status);
   codexCustomModelsSetChip(
-    status === "ok" && !claimGateBlocked ? "green" : (status === "degraded" || claimGateBlocked ? "amber" : "red"),
-    status === "degraded" && claimGateBlocked ? "registry ready / gate blocked" : status
+    status === "ok" ? (claimGateBlocked ? "amber" : "neutral") : (status === "degraded" ? "amber" : "red"),
+    selectorChipLabel
   );
   codexCustomModelsSetText(
     "codexCustomModelsSummary",
-    `${entries.length} server-issued catalog entries · ${selectableIds.length} selectable`
+    `${chatEntries.length} ChatGPT entries · ${apiEntries.length} API entries · ${seedEntries.length} historical references`
   );
-  codexCustomModelsSetText("codexCustomRecommendedModel", registry?.recommended_default_model || "-");
+  codexCustomModelsSetText("codexCustomRecommendedModel", registry?.chatgpt_lane?.default_model_id || "-");
+  codexCustomModelsSetText("codexCustomRecommendedApiModel", registry?.api_lane?.default_model_id || "-");
   codexCustomModelsSetText(
-    "codexCustomConfiguredModel",
-    `${registry?.reported_configured_model || "-"} · visible ${registry?.configured_model_visible === true ? "yes" : "no"}`
+    "codexCustomExecutionBoundary",
+    "ChatGPT lane feeds current launch/session path; API lane remains selection intent only"
   );
   codexCustomModelsSetText(
     "codexCustomApiCompat",
     `shape ${compat?.openai_compatible_shape_declared === true ? "declared" : "unknown"} · wire ${compat?.configured_wire_api || "unknown"} · live ${compat?.live_api_checked === true ? "checked" : "not checked"}`
   );
   codexCustomModelsSetText("codexCustomModelsClaimGate", claimGate);
-  codexCustomModelsSetText("codexCustomModelCount", String(modelIds.length));
+  codexCustomModelsSetText("codexCustomChatModelCount", String(chatEntries.length));
+  codexCustomModelsSetText("codexCustomApiModelCount", String(apiEntries.length));
+  codexCustomModelsSetText("codexCustomSeedModelCount", String(seedEntries.length));
   codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
+}
+
+function renderCodexCustomSelectorIntent(packet) {
+  const response = document.getElementById("codexCustomSelectorIntentResponse");
+  const chatModel = packet?.chatgpt_selection?.model_id || "";
+  const apiModel = packet?.api_selection?.model_id || "";
+  codexCustomModelsSetChip(
+    packet?.status === "ok" ? "amber" : (packet?.status === "degraded" ? "amber" : (packet?.status === "rejected" ? "amber" : "red")),
+    packet?.status === "ok" ? "intent only" : (packet?.status || "failed")
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      chatgpt_model_id: chatModel,
+      api_model_id: apiModel,
+      current_execution_path_model_id: packet?.current_execution_path_model_id || "",
+      current_execution_path_source: packet?.current_execution_path_source || "",
+      selection_intent_only: packet?.selection_intent_only === true,
+      selector_runtime_readiness_claimed: packet?.selector_runtime_readiness_claimed === true,
+      simultaneous_execution_proven: packet?.simultaneous_execution_proven === true,
+      role_slot_binding_proven: packet?.role_slot_binding_proven === true,
+      selected_models_are_server_issued: packet?.selected_models_are_server_issued === true,
+      browser_selected_chatgpt_matches_current_execution_path:
+        packet?.browser_selected_chatgpt_matches_current_execution_path === true,
+      seed_only_selected: packet?.seed_only_selected === true,
+      session_execution_wired: packet?.session_execution_wired === true,
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
 }
 
 function renderCodexCustomModelDryRun(packet) {
@@ -1538,14 +1629,50 @@ function renderCodexCustomModelDryRun(packet) {
 async function refreshCodexCustomModelsPanel() {
   try {
     const [registry, compat] = await Promise.all([
-      fetchCodexLaunchJson("api/codex/custom/models"),
+      fetchCodexLaunchJson("api/codex/custom/model-selector"),
       fetchCodexLaunchJson("api/codex/custom/api-compat")
     ]);
     renderCodexCustomModels(registry, compat);
   } catch (error) {
     codexCustomModelsSetChip("red", "failed");
-    codexCustomModelsSetText("codexCustomModelsSummary", `Model registry fetch failed: ${error.message}`);
+    codexCustomModelsSetText("codexCustomModelsSummary", `Dual-lane selector fetch failed: ${error.message}`);
     codexCustomModelsSetText("codexCustomApiCompat", "fetch failed");
+  }
+}
+
+async function runCodexCustomSelectorIntentDryRun() {
+  const chatNode = document.getElementById("codexCustomModelSelect");
+  const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const chatgptModelId = chatNode ? chatNode.value : "";
+  const apiModelId = apiNode ? apiNode.value : "";
+  document.getElementById("codexCustomSelectorIntentDryRunAction")?.setAttribute("disabled", "disabled");
+  codexCustomModelsSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/custom/model-selector-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatgpt_model_id: chatgptModelId, api_model_id: apiModelId })
+    });
+    if (!response.ok) {
+      throw new Error(`selector intent dry-run http ${response.status}`);
+    }
+    renderCodexCustomSelectorIntent(await response.json());
+  } catch (error) {
+    renderCodexCustomSelectorIntent({
+      status: "failed",
+      machine_error_code: "CUSTOM_SELECTOR_INTENT_FETCH_FAILED",
+      human_message: error.message,
+      selection_intent_only: true,
+      selector_runtime_readiness_claimed: false,
+      simultaneous_execution_proven: false,
+      role_slot_binding_proven: false,
+      selected_models_are_server_issued: false,
+      seed_only_selected: false,
+      session_execution_wired: false
+    });
+  } finally {
+    document.getElementById("codexCustomSelectorIntentDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -10795,6 +10922,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("codexCustomSelectorIntentDryRunAction")?.addEventListener("click", () => runCodexCustomSelectorIntentDryRun());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());
   document.getElementById("codexCustomAccountSmokeDryRunAction")?.addEventListener("click", () => runCodexCustomAccountSmokeDryRun());

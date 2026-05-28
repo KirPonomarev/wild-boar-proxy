@@ -20,6 +20,7 @@ from wild_boar_proxy.runtime import REPO_ROOT
 
 
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
+DUAL_LANE_SELECTOR_ALLOWED_FIELDS = {"chatgpt_model_id", "api_model_id"}
 CANONICAL_INTERNAL_MODEL_IDS = (
     "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
@@ -114,7 +115,12 @@ def claim_gate_status_from_operator_status(operator_status: dict[str, Any] | Non
     return "not_reported"
 
 
-def forbidden_custom_model_fields(payload: Any, prefix: str = "") -> list[str]:
+def _forbidden_payload_fields(
+    payload: Any,
+    *,
+    allowed_fields: set[str],
+    prefix: str = "",
+) -> list[str]:
     findings: list[str] = []
     if isinstance(payload, dict):
         for key, value in payload.items():
@@ -123,13 +129,37 @@ def forbidden_custom_model_fields(payload: Any, prefix: str = "") -> list[str]:
             key_lower = key_text.lower()
             if key_lower in CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS:
                 findings.append(key_path)
-            elif prefix or key_text not in CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS:
+            elif prefix or key_text not in allowed_fields:
                 findings.append(key_path)
-            findings.extend(forbidden_custom_model_fields(value, key_path))
+            findings.extend(
+                _forbidden_payload_fields(value, allowed_fields=allowed_fields, prefix=key_path)
+            )
     elif isinstance(payload, list):
         for index, value in enumerate(payload):
-            findings.extend(forbidden_custom_model_fields(value, f"{prefix}[{index}]"))
+            findings.extend(
+                _forbidden_payload_fields(
+                    value,
+                    allowed_fields=allowed_fields,
+                    prefix=f"{prefix}[{index}]",
+                )
+            )
     return findings
+
+
+def forbidden_custom_model_fields(payload: Any, prefix: str = "") -> list[str]:
+    return _forbidden_payload_fields(
+        payload,
+        allowed_fields=CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS,
+        prefix=prefix,
+    )
+
+
+def forbidden_dual_lane_selector_fields(payload: Any, prefix: str = "") -> list[str]:
+    return _forbidden_payload_fields(
+        payload,
+        allowed_fields=DUAL_LANE_SELECTOR_ALLOWED_FIELDS,
+        prefix=prefix,
+    )
 
 
 def _models_payload(operator_status: dict[str, Any] | None) -> dict[str, Any]:
@@ -587,6 +617,13 @@ def _current_catalog_model_rows(
                 "current_status": "current_catalog",
                 "server_issued_for_runtime_selection": model.get("server_issued") is True,
                 "selection_enabled": model.get("selection_enabled") is True,
+                "selection_state": str(model.get("selection_state") or ""),
+                "selection_disabled_reason_code": str(
+                    model.get("selection_disabled_reason_code") or ""
+                ),
+                "selection_disabled_reasons": [
+                    str(item) for item in model.get("selection_disabled_reasons") or []
+                ],
                 "runtime_compatibility_claimed": False,
                 "model_availability_claimed": False,
                 "display_metadata_only": False,
@@ -686,6 +723,356 @@ def build_generic_model_registry_packet(
         "registry_export_implies_consumer_integration_complete": False,
         "allowed_browser_fields": ["model_id"],
         "browser_authority_widened": False,
+    }
+
+
+def _selector_rows_by_lane(model_registry: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    current_rows = model_registry.get("current_catalog_models")
+    seed_rows = model_registry.get("seed_only_models")
+    current_rows = current_rows if isinstance(current_rows, list) else []
+    seed_rows = seed_rows if isinstance(seed_rows, list) else []
+    chatgpt_rows = [
+        row for row in current_rows if isinstance(row, dict) and str(row.get("lane_kind") or "") == "codex_native"
+    ]
+    api_rows = [
+        row for row in current_rows if isinstance(row, dict) and str(row.get("lane_kind") or "") == "wbp_api"
+    ]
+    seed_rows = [row for row in seed_rows if isinstance(row, dict)]
+    return chatgpt_rows, api_rows, seed_rows
+
+
+def _default_selector_model_id(rows: list[dict[str, Any]], preferred_model_id: str = "") -> str:
+    if preferred_model_id:
+        for row in rows:
+            if (
+                str(row.get("model_id") or "") == preferred_model_id
+                and row.get("selection_enabled") is True
+            ):
+                return preferred_model_id
+    for row in rows:
+        if row.get("selection_enabled") is True:
+            return str(row.get("model_id") or "")
+    for row in rows:
+        model_id = str(row.get("model_id") or "")
+        if model_id:
+            return model_id
+    return ""
+
+
+def _selector_entry_from_row(
+    row: dict[str, Any],
+    *,
+    lane_display: str,
+    selection_note: str,
+) -> dict[str, Any]:
+    selection_enabled = row.get("selection_enabled") is True
+    return {
+        "model_id": str(row.get("model_id") or ""),
+        "display_name": str(row.get("display_name") or row.get("model_id") or ""),
+        "provider": str(row.get("provider") or ""),
+        "provider_label": str(row.get("provider_label") or ""),
+        "provider_model_id": str(row.get("provider_model_id") or ""),
+        "lane_kind": str(row.get("lane_kind") or ""),
+        "lane_display": lane_display,
+        "selection_enabled": selection_enabled,
+        "selection_state": str(
+            row.get("selection_state") or ("selectable" if selection_enabled else "disabled")
+        ),
+        "selection_disabled_reason_code": str(row.get("selection_disabled_reason_code") or ""),
+        "selection_disabled_reasons": [
+            str(item) for item in row.get("selection_disabled_reasons") or []
+        ],
+        "server_issued": row.get("server_issued_for_runtime_selection") is True,
+        "current_status": str(row.get("current_status") or ""),
+        "availability_state": str(row.get("availability_state") or "listed_not_live_proven"),
+        "proof_level": str(row.get("proof_level") or "classified"),
+        "speed_tier": dict(row.get("speed_tier") or _tier_unknown()),
+        "intelligence_tier": dict(row.get("intelligence_tier") or _tier_unknown()),
+        "selection_intent_only": True,
+        "runtime_selection_proven": False,
+        "session_execution_ready": False,
+        "selection_note": selection_note,
+    }
+
+
+def _seed_reference_entry_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "model_id": str(row.get("model_id") or ""),
+        "display_name": str(row.get("display_name") or row.get("model_id") or ""),
+        "provider": str(row.get("provider") or ""),
+        "provider_label": str(row.get("provider_label") or ""),
+        "lane_kind": "seed_only_reference",
+        "selection_enabled": False,
+        "selection_state": "disabled",
+        "selection_disabled_reason_code": "SEED_ONLY_REFERENCE",
+        "selection_disabled_reasons": ["historical_seed_only", "not_current_runtime_catalog"],
+        "server_issued": False,
+        "current_status": str(row.get("current_status") or "seed_only"),
+        "availability_state": str(
+            row.get("availability_state") or SEED_ONLY_MODEL_AVAILABILITY_STATE
+        ),
+        "proof_level": str(row.get("proof_level") or "declared"),
+        "selection_intent_only": True,
+        "runtime_selection_proven": False,
+        "session_execution_ready": False,
+        "selection_note": "historical reference only; not current runtime catalog",
+    }
+
+
+def build_dual_lane_model_selection_ui_packet(
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    model_registry = build_generic_model_registry_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    current_chat_rows, current_api_rows, seed_rows = _selector_rows_by_lane(model_registry)
+    chatgpt_entries = [
+        _selector_entry_from_row(
+            row,
+            lane_display="ChatGPT / Codex-native",
+            selection_note="current launch/session lane in this contour",
+        )
+        for row in current_chat_rows
+    ]
+    api_entries = [
+        _selector_entry_from_row(
+            row,
+            lane_display="API / WBP",
+            selection_note="selection intent only; runtime compatibility unresolved",
+        )
+        for row in current_api_rows
+    ]
+    seed_entries = [_seed_reference_entry_from_row(row) for row in seed_rows]
+    chatgpt_default = _default_selector_model_id(chatgpt_entries, recommended_default_model)
+    api_default = _default_selector_model_id(api_entries)
+    return {
+        "schema_version": 1,
+        "packet_kind": "dual_lane_model_selection_ui",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if chatgpt_entries or api_entries or seed_entries else "blocked",
+        "machine_error_code": "OK" if chatgpt_entries or api_entries or seed_entries else "CUSTOM_SELECTOR_EMPTY",
+        "selection_truth_scope": "display_and_intent_only",
+        "selection_intent_only": True,
+        "selector_runtime_readiness_claimed": False,
+        "simultaneous_execution_proven": False,
+        "role_slot_binding_proven": False,
+        "flat_model_truth_presented": False,
+        "server_issued": True,
+        "browser_authority": {
+            "provider": False,
+            "route_id": False,
+            "account_id": False,
+            "base_url": False,
+            "auth_path": False,
+            "secret_ref": False,
+            "codex_home": False,
+        },
+        "allowed_browser_fields": ["chatgpt_model_id", "api_model_id"],
+        "forbidden_browser_fields": ["model_id", *sorted(CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS)],
+        "chatgpt_lane": {
+            "lane_display": "ChatGPT / Codex-native",
+            "current_catalog_only": True,
+            "models": chatgpt_entries,
+            "model_count": len(chatgpt_entries),
+            "selectable_model_count": sum(
+                1 for entry in chatgpt_entries if entry.get("selection_enabled") is True
+            ),
+            "default_model_id": chatgpt_default,
+            "selection_note": "used by the current execution path in this contour",
+        },
+        "api_lane": {
+            "lane_display": "API / WBP",
+            "current_catalog_only": True,
+            "models": api_entries,
+            "model_count": len(api_entries),
+            "selectable_model_count": sum(
+                1 for entry in api_entries if entry.get("selection_enabled") is True
+            ),
+            "default_model_id": api_default,
+            "selection_note": "selection intent only until role-slot and session contours close",
+        },
+        "seed_only_reference": {
+            "visible_policy": "separate_reference_section_non_selectable",
+            "models": seed_entries,
+            "model_count": len(seed_entries),
+            "current_runtime_catalog": False,
+            "selectable": False,
+        },
+        "non_claims": {
+            "ui_selection_is_session_execution": False,
+            "selected_api_model_is_route_runtime_proven": False,
+            "selected_chatgpt_model_is_account_health_proven": False,
+            "dual_lane_selection_is_simultaneous_execution": False,
+            "seed_only_visibility_is_current_support": False,
+        },
+    }
+
+
+def _selector_entry_index(entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        str(entry.get("model_id") or ""): entry
+        for entry in entries
+        if isinstance(entry, dict) and str(entry.get("model_id") or "")
+    }
+
+
+def build_dual_lane_selection_intent_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_dual_lane_selector_fields(payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "dual_lane_selection_intent",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "selection_intent_only": True,
+            "selector_runtime_readiness_claimed": False,
+            "simultaneous_execution_proven": False,
+            "role_slot_binding_proven": False,
+            "browser_authority_widened": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    payload = payload if isinstance(payload, dict) else {}
+    reported_configured_model = _reported_configured_model(operator_status)
+    chatgpt_lane = dict(selector.get("chatgpt_lane") or {})
+    api_lane = dict(selector.get("api_lane") or {})
+    chatgpt_rows = list(chatgpt_lane.get("models") or [])
+    api_rows = list(api_lane.get("models") or [])
+    chatgpt_index = _selector_entry_index(chatgpt_rows)
+    api_index = _selector_entry_index(api_rows)
+    chatgpt_model_id = str(payload.get("chatgpt_model_id") or chatgpt_lane.get("default_model_id") or "")
+    api_model_id = str(payload.get("api_model_id") or api_lane.get("default_model_id") or "")
+    chatgpt_selected = chatgpt_index.get(chatgpt_model_id)
+    api_selected = api_index.get(api_model_id)
+
+    if chatgpt_model_id and chatgpt_selected is None:
+        return {
+            "schema_version": 1,
+            "packet_kind": "dual_lane_selection_intent",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "CHATGPT_MODEL_NOT_SERVER_ISSUED",
+            "selection_intent_only": True,
+            "selector_runtime_readiness_claimed": False,
+            "simultaneous_execution_proven": False,
+            "role_slot_binding_proven": False,
+            "browser_authority_widened": False,
+            "selected_chatgpt_model_id": chatgpt_model_id,
+            "next_action": "choose_server_issued_chatgpt_model",
+        }
+    if api_model_id and api_selected is None:
+        return {
+            "schema_version": 1,
+            "packet_kind": "dual_lane_selection_intent",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "API_MODEL_NOT_SERVER_ISSUED",
+            "selection_intent_only": True,
+            "selector_runtime_readiness_claimed": False,
+            "simultaneous_execution_proven": False,
+            "role_slot_binding_proven": False,
+            "browser_authority_widened": False,
+            "selected_api_model_id": api_model_id,
+            "next_action": "choose_server_issued_api_model",
+        }
+    if chatgpt_selected and chatgpt_selected.get("selection_enabled") is not True:
+        return {
+            "schema_version": 1,
+            "packet_kind": "dual_lane_selection_intent",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "CHATGPT_MODEL_NOT_SELECTABLE",
+            "selection_intent_only": True,
+            "selector_runtime_readiness_claimed": False,
+            "simultaneous_execution_proven": False,
+            "role_slot_binding_proven": False,
+            "browser_authority_widened": False,
+            "chatgpt_selection": chatgpt_selected,
+            "next_action": "choose_selectable_chatgpt_model",
+        }
+    if api_selected and api_selected.get("selection_enabled") is not True:
+        return {
+            "schema_version": 1,
+            "packet_kind": "dual_lane_selection_intent",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "API_MODEL_NOT_SELECTABLE",
+            "selection_intent_only": True,
+            "selector_runtime_readiness_claimed": False,
+            "simultaneous_execution_proven": False,
+            "role_slot_binding_proven": False,
+            "browser_authority_widened": False,
+            "api_selection": api_selected,
+            "next_action": "choose_selectable_api_model",
+        }
+
+    status = "ok" if chatgpt_selected and api_selected else "degraded"
+    machine_error_code = "OK"
+    if not chatgpt_selected:
+        machine_error_code = "CHATGPT_LANE_SELECTION_UNRESOLVED"
+    elif not api_selected:
+        machine_error_code = "API_LANE_SELECTION_UNRESOLVED"
+    return {
+        "schema_version": 1,
+        "packet_kind": "dual_lane_selection_intent",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "selection_intent_only": True,
+        "selector_runtime_readiness_claimed": False,
+        "simultaneous_execution_proven": False,
+        "role_slot_binding_proven": False,
+        "browser_authority_widened": False,
+        "allowed_browser_fields": ["chatgpt_model_id", "api_model_id"],
+        "current_execution_path_model_id": reported_configured_model,
+        "current_execution_path_scope": "chatgpt_lane_only_in_this_contour",
+        "current_execution_path_source": "operator_reported_configured_model",
+        "api_lane_scope": "selection_intent_only_until_role_slot_session_contour",
+        "chatgpt_selection": chatgpt_selected,
+        "api_selection": api_selected,
+        "selection_intent_proven": bool(chatgpt_selected and api_selected),
+        "selected_models_are_server_issued": bool(
+            (chatgpt_selected or {}).get("server_issued")
+            and (api_selected or {}).get("server_issued")
+        ),
+        "browser_selected_chatgpt_matches_current_execution_path": bool(
+            reported_configured_model
+            and str((chatgpt_selected or {}).get("model_id") or "") == reported_configured_model
+        ),
+        "seed_only_selected": False,
+        "session_execution_wired": False,
+        "non_claims": {
+            "ui_selection_is_session_execution": False,
+            "selected_api_model_is_route_runtime_proven": False,
+            "selected_chatgpt_model_is_account_health_proven": False,
+            "dual_lane_selection_is_simultaneous_execution": False,
+        },
+        "next_action": "none" if chatgpt_selected and api_selected else "choose_visible_lane_models",
     }
 
 

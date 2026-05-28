@@ -49,6 +49,8 @@ from wild_boar_proxy.codex_account_selection import (
 from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.codex_model_registry import (
     build_custom_api_compat_packet,
+    build_dual_lane_model_selection_ui_packet,
+    build_dual_lane_selection_intent_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
 )
@@ -3369,6 +3371,16 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/model-selector":
+                self._send_json(
+                    build_dual_lane_model_selection_ui_packet(
+                        operator_surface_session.status_payload(),
+                        api_snapshot=build_api_connections_readonly_snapshot(
+                            api_connections_readonly_runner
+                        ),
+                    )
+                )
+                return
             if parsed.path == "/api/codex/custom/api-compat":
                 self._send_json(
                     build_custom_api_compat_packet(operator_surface_session.status_payload())
@@ -3673,6 +3685,16 @@ def build_handler(
                 api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
                 self._send_json(
                     build_custom_model_dry_run_packet(
+                        self._read_json_body(),
+                        operator_surface_session.status_payload(),
+                        api_snapshot=api_snapshot,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/model-selector-dry-run":
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                self._send_json(
+                    build_dual_lane_selection_intent_packet(
                         self._read_json_body(),
                         operator_surface_session.status_payload(),
                         api_snapshot=api_snapshot,
