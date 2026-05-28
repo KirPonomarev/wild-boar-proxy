@@ -18,6 +18,8 @@ from pathlib import Path
 import subprocess
 from threading import RLock
 from typing import Any
+import urllib.error
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
@@ -54,6 +56,10 @@ from wild_boar_proxy.codex_model_registry import (
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
 )
+from wild_boar_proxy.model_availability import (
+    build_catalog_availability_lattice_packet,
+    build_model_direct_preflight_packet,
+)
 from wild_boar_proxy.native_window_probe import (
     OWNER_STANDING_AUTHORIZATION_PHRASE,
     launch_custom_native_app_packet,
@@ -80,6 +86,7 @@ from wild_boar_proxy.runtime import (
     DEFAULT_LAUNCHER_SCRIPT_NAME,
     RuntimePaths,
     build_command_payload,
+    proxyless_urlopen,
     run_legacy_import,
 )
 from wild_boar_proxy.review_bridge_apply_admission import (
@@ -100,6 +107,7 @@ from wild_boar_proxy.review_bridge_session_store import (
 )
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 from wild_boar_proxy.operator_surface import (
+    DEFAULT_ENDPOINT,
     DEFAULT_CODEX_BIN,
     DEFAULT_RUNTIME_CONFIG,
     HybridOpenAICompatAdapter,
@@ -1612,12 +1620,148 @@ def _primary_external_route_id(packet: dict[str, Any] | None) -> str:
     return str(enabled_routes[0].get("route_id") or "").strip()
 
 
+def _json_object_or_empty(raw_bytes: bytes) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw_bytes.decode("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _catalog_packet_from_registry(registry: dict[str, Any]) -> dict[str, Any]:
+    models = registry.get("available_models")
+    if not isinstance(models, list):
+        return {"models": []}
+    return {
+        "models": [
+            {
+                "model_id": str(entry.get("model_id") or ""),
+                "lane": str(entry.get("lane") or ""),
+            }
+            for entry in models
+            if isinstance(entry, dict) and str(entry.get("model_id") or "")
+        ]
+    }
+
+
+def _normalize_openai_compat_endpoint(raw_endpoint: str) -> str:
+    text = str(raw_endpoint or "").strip()
+    if not text:
+        return ""
+    if not text.startswith(("http://", "https://")):
+        text = f"http://{text}"
+    return text.rstrip("/") if text.rstrip("/").endswith("/v1") else f"{text.rstrip('/')}/v1"
+
+
+def _build_live_native_availability_lattice_packet(
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    status_packet = operator_status.get("status") if isinstance(operator_status, dict) else {}
+    reported_endpoint = (
+        str(status_packet.get("endpoint") or "").strip()
+        if isinstance(status_packet, dict)
+        else ""
+    )
+    live_endpoint = _normalize_openai_compat_endpoint(reported_endpoint or endpoint)
+    if not reported_endpoint:
+        return None
+    registry = build_custom_model_registry_packet(
+        operator_status,
+        endpoint=live_endpoint,
+        api_snapshot=api_snapshot,
+    )
+    native_entries = [
+        entry
+        for entry in registry.get("available_models") or []
+        if isinstance(entry, dict) and str(entry.get("lane") or "") == "codex_native"
+    ]
+    if not native_entries:
+        return None
+    try:
+        local_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+    except RuntimeError:
+        return None
+    current_packets: list[dict[str, Any]] = []
+    runtime_ready = True
+    for entry in native_entries:
+        model_id = str(entry.get("model_id") or "").strip()
+        if not model_id:
+            continue
+        request_payload = {
+            "model": model_id,
+            "input": "Reply with exactly WBP_NATIVE_LIVE_OK.",
+        }
+        request = urllib.request.Request(
+            f"{live_endpoint.rstrip('/')}/responses",
+            data=json.dumps(request_payload, ensure_ascii=True).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {local_api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "OpenAI-Beta": "responses=v1",
+            },
+            method="POST",
+        )
+        http_status: int | None = None
+        response_payload: dict[str, Any] | None = None
+        error_payload: dict[str, Any] | None = None
+        request_sent_to_wbp = False
+        try:
+            with proxyless_urlopen(request, timeout=10) as response:
+                http_status = int(response.status)
+                request_sent_to_wbp = True
+                response_payload = _json_object_or_empty(response.read())
+        except urllib.error.HTTPError as exc:
+            http_status = int(exc.code)
+            request_sent_to_wbp = True
+            error_payload = _json_object_or_empty(exc.read())
+        except Exception as exc:
+            runtime_ready = False
+            error_payload = {
+                "machine_error_code": "NATIVE_LIVE_PROBE_TRANSPORT_ERROR",
+                "error": {
+                    "type": "transport_error",
+                    "message": str(getattr(exc, "reason", exc))[:200],
+                },
+            }
+        current_packets.append(
+            build_model_direct_preflight_packet(
+                model_id=model_id,
+                source="current_live_native_probe",
+                listed=True,
+                selectable=entry.get("selection_enabled") is True,
+                route_selected=True,
+                runtime_ready=runtime_ready,
+                http_status=http_status,
+                upstream_status=http_status if http_status is not None and 200 <= http_status < 300 else None,
+                response_payload=response_payload,
+                error_payload=error_payload,
+                prompt_text="Reply with exactly WBP_NATIVE_LIVE_OK.",
+                request_sent_to_wbp=request_sent_to_wbp,
+                route_family="codex_native_account_route",
+            )
+        )
+    return build_catalog_availability_lattice_packet(
+        catalog_packet=_catalog_packet_from_registry(registry),
+        current_model_packets=current_packets,
+    )
+
+
 @dataclass
 class _CustomNativeBridgeLease:
     signature: str = ""
     bridge: HybridOpenAICompatAdapter | None = None
 
-    def ensure(self, *, downstream_endpoint: str, routes_packet: dict[str, Any] | None) -> str:
+    def ensure(
+        self,
+        *,
+        downstream_endpoint: str,
+        routes_packet: dict[str, Any] | None,
+        hidden_native_model_ids: list[str] | None = None,
+    ) -> str:
         route_records = _enabled_external_route_records(routes_packet)
         if not route_records:
             self.close()
@@ -1649,6 +1793,11 @@ class _CustomNativeBridgeLease:
                 }
                 for route in route_records
             ],
+            "hidden_native_model_ids": sorted(
+                str(model_id).strip()
+                for model_id in (hidden_native_model_ids or [])
+                if str(model_id).strip()
+            ),
         }
         signature = hashlib.sha256(
             json.dumps(signature_source, ensure_ascii=True, sort_keys=True).encode("utf-8")
@@ -1660,6 +1809,7 @@ class _CustomNativeBridgeLease:
             downstream_endpoint=downstream_endpoint,
             expected_api_key=expected_api_key,
             routes=route_records,
+            hidden_downstream_model_ids=hidden_native_model_ids,
         )
         bridge.__enter__()
         self.bridge = bridge
@@ -2356,9 +2506,17 @@ def _launch_custom_codex_packet(
                 next_action="provide_exact_owner_authorization_phrase",
             ),
         }
+    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
     model_id = payload.get("model_id")
     if not isinstance(model_id, str) or not model_id:
-        registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+        registry = build_custom_model_registry_packet(
+            operator_status,
+            api_snapshot=api_snapshot,
+            availability_lattice_packet=availability_lattice_packet,
+        )
         model_id = str(
             registry.get("recommended_default_model")
             or registry.get("recommended_model")
@@ -2381,7 +2539,11 @@ def _launch_custom_codex_packet(
     session_root_ready = bool(session.get("session_root_digest"))
     codex_home_ready = bool(session.get("codex_home_digest"))
     workbench_ready = created.get("status") == "ok" and session_root_ready and codex_home_ready
-    model_registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    model_registry = build_custom_model_registry_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
     return {
         **created,
         **base,
@@ -2451,9 +2613,17 @@ def _launch_custom_native_codex_packet(
                 next_action="provide_exact_owner_authorization_phrase",
             ),
         }
+    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
     model_id = payload.get("model_id")
     if not isinstance(model_id, str) or not model_id:
-        registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+        registry = build_custom_model_registry_packet(
+            operator_status,
+            api_snapshot=api_snapshot,
+            availability_lattice_packet=availability_lattice_packet,
+        )
         route_fallback_id = ""
         status_packet = operator_status.get("status") if isinstance(operator_status, dict) else {}
         machine_error_code = str(status_packet.get("machine_error_code") or "")
@@ -2464,12 +2634,24 @@ def _launch_custom_native_codex_packet(
             or registry.get("recommended_model")
             or ""
         )
-    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    registry = build_custom_model_registry_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
     endpoint = str(registry.get("endpoint") or "")
+    hidden_native_model_ids = [
+        str(entry.get("model_id") or "")
+        for entry in registry.get("available_models") or []
+        if isinstance(entry, dict)
+        and str(entry.get("lane") or "") == "codex_native"
+        and entry.get("selection_enabled") is not True
+    ]
     bridge_endpoint = (
         native_bridge_lease.ensure(
             downstream_endpoint=endpoint,
             routes_packet=external_routes_packet,
+            hidden_native_model_ids=hidden_native_model_ids,
         )
         if native_bridge_lease is not None
         else endpoint
@@ -3497,22 +3679,34 @@ def build_handler(
                 self._send_json(build_custom_status_packet(operator_surface_session.status_payload()))
                 return
             if parsed.path == "/api/codex/custom/models":
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_surface_session.status_payload(),
+                    api_snapshot=api_snapshot,
+                )
                 self._send_json(
                     build_custom_model_registry_packet(
                         operator_surface_session.status_payload(),
-                        api_snapshot=build_api_connections_readonly_snapshot(
-                            api_connections_readonly_runner
-                        ),
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return
             if parsed.path == "/api/codex/custom/model-selector":
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_surface_session.status_payload(),
+                    api_snapshot=api_snapshot,
+                )
                 self._send_json(
                     build_dual_lane_model_selection_ui_packet(
                         operator_surface_session.status_payload(),
-                        api_snapshot=build_api_connections_readonly_snapshot(
-                            api_connections_readonly_runner
-                        ),
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return
@@ -3829,21 +4023,31 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/custom/model-dry-run":
                 api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_surface_session.status_payload(),
+                    api_snapshot=api_snapshot,
+                )
                 self._send_json(
                     build_custom_model_dry_run_packet(
                         self._read_json_body(),
                         operator_surface_session.status_payload(),
                         api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return
             if parsed.path == "/api/codex/custom/model-selector-dry-run":
                 api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_surface_session.status_payload(),
+                    api_snapshot=api_snapshot,
+                )
                 self._send_json(
                     build_dual_lane_selection_intent_packet(
                         self._read_json_body(),
                         operator_surface_session.status_payload(),
                         api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return

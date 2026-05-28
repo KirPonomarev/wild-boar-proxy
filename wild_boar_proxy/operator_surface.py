@@ -1202,6 +1202,7 @@ class HybridOpenAICompatAdapter:
         downstream_endpoint: str,
         expected_api_key: str,
         routes: list[dict[str, Any]],
+        hidden_downstream_model_ids: list[str] | None = None,
         timeout_seconds: float = 120.0,
     ) -> None:
         self.downstream_endpoint = downstream_endpoint.rstrip("/")
@@ -1211,6 +1212,11 @@ class HybridOpenAICompatAdapter:
         self._thread: threading.Thread | None = None
         self._route_adapters: dict[str, ExternalRouteResponsesAdapter] = {}
         self._route_model_ids: list[str] = []
+        self._hidden_downstream_model_ids = {
+            str(model_id).strip()
+            for model_id in (hidden_downstream_model_ids or [])
+            if str(model_id).strip()
+        }
         for route in routes:
             if not isinstance(route, dict):
                 continue
@@ -1316,6 +1322,15 @@ class HybridOpenAICompatAdapter:
         data = payload.get("data")
         if not isinstance(data, list):
             return status, response_headers, response_body
+        if self._hidden_downstream_model_ids:
+            data[:] = [
+                item
+                for item in data
+                if not (
+                    isinstance(item, dict)
+                    and str(item.get("id") or "").strip() in self._hidden_downstream_model_ids
+                )
+            ]
         seen_model_ids = {
             str(item.get("id") or "")
             for item in data

@@ -1,0 +1,21 @@
+{
+  "blocked_native_hidden_from_bridge_models": true,
+  "bridge_hidden_native_model_ids": [
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "codex-auto-review",
+    "gpt-image-2"
+  ],
+  "bridge_route_model_ids_preserved": [
+    "wbp-web-primary-openrouter"
+  ],
+  "captured_at_utc": "2026-05-28T22:42:43.943286Z",
+  "gated_selectable_native_count": 0,
+  "hard_blocker_precisely_localized": true,
+  "native_lane_repaired": false,
+  "packet_kind": "native_lane_repair",
+  "raw_catalog_visible_native_count": 4,
+  "selection_gate_applied": true,
+  "selector_native_disabled_consistent": true,
+  "status": "ok"
+}

@@ -695,19 +695,28 @@ def classify_failure_cause(
     http_status: int | None,
     machine_error_code: str = "",
     error_type: str = "",
+    error_message: str = "",
     runtime_ready: bool = True,
     route_selected: bool = True,
     listed: bool = True,
 ) -> str:
     code = (machine_error_code or "").upper()
     error = (error_type or "").lower()
+    message = (error_message or "").lower()
     if not runtime_ready:
         return "wbp_runtime_unavailable"
     if not listed:
         return "model_not_listed"
     if not route_selected:
         return "route_not_found"
-    if http_status in {401, 403} or "auth" in code or "unauthorized" in error or "forbidden" in error:
+    if (
+        http_status in {401, 403}
+        or "auth" in code
+        or "auth_unavailable" in message
+        or "deactivated_workspace" in message
+        or "unauthorized" in error
+        or "forbidden" in error
+    ):
         return "account_auth_failed"
     if http_status == 429 or "quota" in code or "rate" in code or "rate_limit" in error:
         return "quota_or_rate_limit"
@@ -757,11 +766,23 @@ def build_model_direct_preflight_packet(
     status_ok = request_sent_to_wbp and http_status is not None and 200 <= http_status < 300 and response_shape_ok
     error = error_payload.get("error") if isinstance(error_payload, dict) else None
     error_type = str(error.get("type") if isinstance(error, dict) else "")
-    machine_error_code = str(error_payload.get("machine_error_code") if isinstance(error_payload, dict) else "")
+    error_message = str(error.get("message") if isinstance(error, dict) else "")
+    machine_error_code = str(
+        ((error_payload.get("machine_error_code") if isinstance(error_payload, dict) else "") or "")
+    )
+    if not machine_error_code:
+        lowered = error_message.lower()
+        if "auth_unavailable" in lowered:
+            machine_error_code = "AUTH_UNAVAILABLE"
+        elif "deactivated_workspace" in lowered:
+            machine_error_code = "DEACTIVATED_WORKSPACE"
+        elif "unsupported_for_account_path" in lowered:
+            machine_error_code = "UNSUPPORTED_FOR_ACCOUNT_PATH"
     failure_cause = "none" if status_ok else classify_failure_cause(
         http_status=http_status,
         machine_error_code=machine_error_code,
         error_type=error_type,
+        error_message=error_message,
         runtime_ready=runtime_ready,
         route_selected=route_selected,
         listed=listed,
@@ -831,6 +852,8 @@ def build_model_direct_preflight_packet(
         "auth_header_recorded": False,
         "raw_upstream_secret_recorded": False,
         "error_shape_classified": isinstance(error_payload, dict),
+        "machine_error_code": machine_error_code,
+        "error_message": error_message,
         "failure_cause": failure_cause,
         "blocked_reason_if_any": "" if status_ok else failure_cause,
         "catalog_presence_counted_as_availability": False,
@@ -1155,6 +1178,8 @@ def _catalog_availability_row_from_model_packet(
         ),
         "failure_cause": str(packet.get("failure_cause") or "none"),
         "blocked_reason_if_any": str(packet.get("blocked_reason_if_any") or ""),
+        "machine_error_code": str(packet.get("machine_error_code") or ""),
+        "http_status": packet.get("http_status"),
         "route_family": str(packet.get("route_family") or "unknown_unrouted"),
     }
 

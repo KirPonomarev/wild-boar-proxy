@@ -17,6 +17,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from wild_boar_proxy.model_availability import (
+    build_catalog_availability_lattice_packet,
+    build_model_direct_preflight_packet,
+)
 from wild_boar_proxy.runtime import RuntimePaths, run_installer_init
 from wild_boar_proxy.ui_shell import CommandResult
 import wild_boar_proxy.web_design_live_server as live_server
@@ -6808,6 +6812,57 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertFalse(dry_run["selected_model_selectable"])
         self.assertFalse(dry_run["network_call_summary"]["network_calls_made"])
 
+    def test_codex_custom_model_registry_disables_native_entry_after_live_probe_failure(self) -> None:
+        lattice = build_catalog_availability_lattice_packet(
+            catalog_packet={"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]},
+            current_model_packets=[
+                build_model_direct_preflight_packet(
+                    model_id="gpt-5.3-codex",
+                    source="current_live_native_probe",
+                    listed=True,
+                    selectable=True,
+                    route_selected=True,
+                    runtime_ready=True,
+                    http_status=503,
+                    error_payload={
+                        "machine_error_code": "AUTH_UNAVAILABLE",
+                        "error": {"type": "auth_error"},
+                    },
+                    prompt_text="Reply OK",
+                    request_sent_to_wbp=True,
+                    route_family="codex_native_account_route",
+                )
+            ],
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            with mock.patch.object(
+                live_server,
+                "_build_live_native_availability_lattice_packet",
+                return_value=lattice,
+            ):
+                server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    registry = json.loads(fetch(f"{base}/api/codex/custom/models"))
+                    dry_run = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/model-dry-run",
+                            {"model_id": "gpt-5.3-codex"},
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.3-codex")
+        self.assertFalse(row["selection_enabled"])
+        self.assertEqual(row["selection_disabled_reason_code"], "ACCOUNT_AUTH_UNAVAILABLE")
+        self.assertEqual(dry_run["status"], "rejected")
+        self.assertEqual(dry_run["machine_error_code"], "MODEL_NOT_SELECTABLE")
+
 
 class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
     def test_codex_custom_dual_lane_selector_endpoint_separates_lanes_and_seed_reference(self) -> None:
@@ -6843,6 +6898,49 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertTrue(
             all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
         )
+
+    def test_codex_custom_dual_lane_selector_disables_blocked_native_models(self) -> None:
+        lattice = build_catalog_availability_lattice_packet(
+            catalog_packet={"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]},
+            current_model_packets=[
+                build_model_direct_preflight_packet(
+                    model_id="gpt-5.3-codex",
+                    source="current_live_native_probe",
+                    listed=True,
+                    selectable=True,
+                    route_selected=True,
+                    runtime_ready=True,
+                    http_status=503,
+                    error_payload={
+                        "machine_error_code": "AUTH_UNAVAILABLE",
+                        "error": {"type": "auth_error"},
+                    },
+                    prompt_text="Reply OK",
+                    request_sent_to_wbp=True,
+                    route_family="codex_native_account_route",
+                )
+            ],
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            with mock.patch.object(
+                live_server,
+                "_build_live_native_availability_lattice_packet",
+                return_value=lattice,
+            ):
+                server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    selector = json.loads(fetch(f"{base}/api/codex/custom/model-selector"))
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        row = next(entry for entry in selector["chatgpt_lane"]["models"] if entry["model_id"] == "gpt-5.3-codex")
+        self.assertFalse(row["selection_enabled"])
+        self.assertEqual(row["selection_disabled_reason_code"], "ACCOUNT_AUTH_UNAVAILABLE")
 
     def test_codex_custom_dual_lane_selector_dry_run_is_intent_only_and_forbids_backend_fields(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):

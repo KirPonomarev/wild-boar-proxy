@@ -324,6 +324,59 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
         self.assertEqual(rows["wbp-missing-secret"]["provider_label"], "openrouter via WBP")
 
+    def test_current_live_native_failure_disables_selection_without_hiding_row(self) -> None:
+        catalog = {"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]}
+        current_packets = [
+            build_model_direct_preflight_packet(
+                model_id="gpt-5.3-codex",
+                source="current_live_native_probe",
+                listed=True,
+                selectable=True,
+                route_selected=True,
+                runtime_ready=True,
+                http_status=503,
+                error_payload={
+                    "machine_error_code": "AUTH_UNAVAILABLE",
+                    "error": {"type": "auth_error"},
+                },
+                prompt_text="Reply OK",
+                request_sent_to_wbp=True,
+                route_family="codex_native_account_route",
+            )
+        ]
+        lattice = build_catalog_availability_lattice_packet(
+            catalog_packet=catalog,
+            current_model_packets=current_packets,
+        )
+
+        registry = build_custom_model_registry_packet(
+            operator_status(claim_gate="passed"),
+            availability_lattice_packet=lattice,
+        )
+
+        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.3-codex")
+        self.assertFalse(row["selection_enabled"])
+        self.assertEqual(row["selection_state"], "disabled")
+        self.assertEqual(row["selection_disabled_reason_code"], "ACCOUNT_AUTH_UNAVAILABLE")
+        self.assertIn("account_auth_failed", row["selection_disabled_reasons"])
+        self.assertEqual(row["availability_claim_level"], "listed_not_live_proven")
+        self.assertTrue(registry["live_api_checked"])
+        self.assertTrue(registry["network_calls_made"])
+        self.assertTrue(registry["inference_called"])
+
+    def test_codex_prefixed_model_is_classified_as_native_lane(self) -> None:
+        registry = build_custom_model_registry_packet(
+            {
+                "status": {"configured_model": "codex-auto-review"},
+                "claim_gate": {"status": "passed"},
+                "models": {"ok": True, "model_ids": ["codex-auto-review"]},
+            }
+        )
+
+        row = registry["available_models"][0]
+        self.assertEqual(row["lane"], "codex_native")
+        self.assertEqual(row["provider_label"], "Codex native")
+
     def test_forbidden_custom_model_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_custom_model_fields({"model_id": "gpt-5.3-codex"}), [])
         self.assertEqual(forbidden_custom_model_fields({"dry_run": True}), ["dry_run"])

@@ -177,13 +177,13 @@ def _reported_configured_model(operator_status: dict[str, Any] | None) -> str:
 
 
 def _model_source_hint(model_id: str) -> str:
-    if model_id.startswith("gpt-"):
+    if _is_native_model_id(model_id):
         return "cliproxy_gpt_account_or_alias"
     return "cliproxy_external_alias"
 
 
 def _provider_class(model_id: str) -> str:
-    if model_id.startswith("gpt-"):
+    if _is_native_model_id(model_id):
         return "gpt_account_or_alias"
     return "external_alias"
 
@@ -191,7 +191,7 @@ def _provider_class(model_id: str) -> str:
 def _provider_label(model_id: str, *, provider: str = "", source_class: str = "") -> str:
     provider_text = str(provider or "").strip()
     source_class_text = str(source_class or "").strip()
-    if model_id.startswith("gpt-"):
+    if _is_native_model_id(model_id):
         return "Codex native"
     if source_class_text == "server_registry":
         if provider_text:
@@ -203,9 +203,13 @@ def _provider_label(model_id: str, *, provider: str = "", source_class: str = ""
 
 
 def _model_lane(model_id: str) -> str:
-    if model_id.startswith("gpt-"):
+    if _is_native_model_id(model_id):
         return "codex_native"
     return "wbp_api"
+
+
+def _is_native_model_id(model_id: str) -> bool:
+    return model_id.startswith("gpt-") or model_id.startswith("codex-")
 
 
 def _display_name(model_id: str, label: str | None = None) -> str:
@@ -221,6 +225,53 @@ def _source_class(model_id: str) -> str:
     if _model_lane(model_id) == "codex_native":
         return "current_build_catalog_visible"
     return "server_registry"
+
+
+def _selection_gate_from_live_availability(
+    entry: dict[str, Any],
+    availability_row: dict[str, Any] | None,
+) -> tuple[str, list[str]] | None:
+    if not isinstance(availability_row, dict):
+        return None
+    if str(entry.get("lane") or "") != "codex_native":
+        return None
+    if str(availability_row.get("availability_evidence_scope") or "") != "current_thread_direct_wbp_non_stream":
+        return None
+    if availability_row.get("live_availability_proven") is True:
+        return None
+    failure_cause = str(availability_row.get("failure_cause") or "").strip()
+    blocked_reason = str(availability_row.get("blocked_reason_if_any") or "").strip()
+    machine_error_code = str(availability_row.get("machine_error_code") or "").strip().upper()
+    http_status = availability_row.get("http_status")
+    if failure_cause in {"", "none"} and not blocked_reason and not machine_error_code:
+        return None
+    code = "LIVE_NATIVE_BLOCKED"
+    reasons = ["current_live_native_probe_blocked"]
+    if "DEACTIVATED_WORKSPACE" in machine_error_code:
+        code = "WORKSPACE_DEACTIVATED"
+        reasons.append("workspace_deactivated")
+    elif "UNSUPPORTED_FOR_ACCOUNT_PATH" in machine_error_code:
+        code = "ACCOUNT_PATH_UNSUPPORTED"
+        reasons.append("unsupported_for_account_path")
+    elif failure_cause == "account_auth_failed" or "AUTH_UNAVAILABLE" in machine_error_code:
+        code = "ACCOUNT_AUTH_UNAVAILABLE"
+        reasons.append("account_auth_failed")
+    elif failure_cause == "upstream_model_rejected":
+        code = "UPSTREAM_MODEL_REJECTED"
+        reasons.append("upstream_model_rejected")
+    elif failure_cause == "wbp_runtime_unavailable":
+        code = "LIVE_RUNTIME_UNAVAILABLE"
+        reasons.append("runtime_unavailable")
+    elif failure_cause:
+        reasons.append(failure_cause)
+    if isinstance(http_status, int):
+        reasons.append(f"http_{http_status}")
+    deduped: list[str] = []
+    for item in reasons:
+        text = str(item).strip()
+        if text and text not in deduped:
+            deduped.append(text)
+    return code, deduped
 
 
 def _tier_unknown() -> dict[str, str]:
@@ -1089,6 +1140,7 @@ def build_wbp_model_catalog_contract_packet(
         endpoint=endpoint,
         recommended_default_model=recommended_default_model,
         api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
     )
     availability_rows = _availability_rows_by_model_id(availability_lattice_packet)
     catalog_models = [
@@ -1586,6 +1638,7 @@ def build_custom_model_registry_packet(
     endpoint: str = DEFAULT_ENDPOINT,
     recommended_default_model: str = DEFAULT_MODEL,
     api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     models = _models_payload(operator_status)
     raw_model_ids = models.get("model_ids", [])
@@ -1598,7 +1651,31 @@ def build_custom_model_registry_packet(
         bool(models.get("ok")) or bool(model_ids),
     )
     reported_configured_model = _reported_configured_model(operator_status)
-    available_models = [_model_entry(model_id) for model_id in model_ids]
+    availability_rows = _availability_rows_by_model_id(availability_lattice_packet)
+    available_models = []
+    for model_id in model_ids:
+        entry = _model_entry(model_id)
+        availability_row = availability_rows.get(model_id)
+        if isinstance(availability_row, dict):
+            entry["availability_claim_level"] = str(
+                availability_row.get("availability_claim_level") or entry["availability_claim_level"]
+            )
+            entry["live_availability_proven"] = availability_row.get("live_availability_proven") is True
+            entry["responses_live_acceptance_proven"] = (
+                availability_row.get("direct_wbp_non_stream_response_accepted") is True
+            )
+            entry["responses_supported_claim_scope"] = str(
+                availability_row.get("availability_evidence_scope")
+                or entry["responses_supported_claim_scope"]
+            )
+            gated = _selection_gate_from_live_availability(entry, availability_row)
+            if gated is not None:
+                reason_code, reasons = gated
+                entry["selection_enabled"] = False
+                entry["selection_state"] = "disabled"
+                entry["selection_disabled_reason_code"] = reason_code
+                entry["selection_disabled_reasons"] = reasons
+        available_models.append(entry)
     seen_model_ids = {str(entry["model_id"]) for entry in available_models}
     for route_entry in _external_route_model_entries(api_snapshot):
         route_model_id = str(route_entry["model_id"])
@@ -1608,6 +1685,11 @@ def build_custom_model_registry_packet(
         seen_model_ids.add(route_model_id)
 
     available_model_ids = [str(entry["model_id"]) for entry in available_models]
+    live_probe_imported = any(
+        str(row.get("availability_evidence_scope") or "") == "current_thread_direct_wbp_non_stream"
+        for row in availability_rows.values()
+        if isinstance(row, dict)
+    )
     return {
         "schema_version": 1,
         "status": status,
@@ -1643,15 +1725,19 @@ def build_custom_model_registry_packet(
         "responses_shape_declared": True,
         "chat_completions_shape_declared": True,
         "codex_config_compatible": True,
-        "live_api_checked": False,
-        "network_calls_made": False,
-        "allowed_network_calls": [],
+        "live_api_checked": live_probe_imported,
+        "network_calls_made": live_probe_imported,
+        "allowed_network_calls": ["/v1/responses"] if live_probe_imported else [],
         "forbidden_network_calls": list(FORBIDDEN_INFERENCE_SURFACES),
         "models_endpoint_called": False,
-        "inference_called": False,
+        "inference_called": live_probe_imported,
         "provider_called": False,
         "token_burn": 0,
-        "negative_claim_basis": "shape_declaration_no_live_api_or_inference_call",
+        "negative_claim_basis": (
+            "live_native_availability_probe_imported_without_codex_acceptance_claim"
+            if live_probe_imported
+            else "shape_declaration_no_live_api_or_inference_call"
+        ),
         "independent_runtime_meter_attached": False,
         "fresh_truth": True,
         "launch_claim_scope": "model_registry_only",
@@ -1734,12 +1820,14 @@ def build_custom_model_dry_run_packet(
     *,
     endpoint: str = DEFAULT_ENDPOINT,
     api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     forbidden = forbidden_custom_model_fields(payload)
     registry = build_custom_model_registry_packet(
         operator_status,
         endpoint=endpoint,
         api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
     )
     if forbidden:
         return {

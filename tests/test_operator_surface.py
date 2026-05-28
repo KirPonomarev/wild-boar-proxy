@@ -657,6 +657,51 @@ class OperatorSurfaceTests(unittest.TestCase):
             ["gpt-5.3-codex", "wbp-web-primary-openrouter"],
         )
 
+    def test_hybrid_openai_compat_adapter_hides_blocked_native_models_from_models_surface(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_GET(self) -> None:
+                if self.path != "/v1/models":
+                    self.send_error(404)
+                    return
+                body = json.dumps(
+                    {"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4-mini"}]}
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with HybridOpenAICompatAdapter(
+                downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                expected_api_key="sk-local-test",
+                routes=[],
+                hidden_downstream_model_ids=["gpt-5.5"],
+            ) as adapter:
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/models",
+                    headers={"Authorization": "Bearer sk-local-test"},
+                    method="GET",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual([item["id"] for item in payload["data"]], ["gpt-5.4-mini"])
+
     def test_hybrid_openai_compat_adapter_dispatches_route_model_to_external_route(self) -> None:
         class DownstreamHandler(BaseHTTPRequestHandler):
             downstream_called = False
