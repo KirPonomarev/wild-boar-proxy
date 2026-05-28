@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T08:03:30.841635Z",
+  "packet_kind": "r2b_owner_action_stop",
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "reason_class": "OWNER_ACTION_REQUIRED",
+  "required_owner_marker": "owner_ready_now=true; prompt_entered=true; nonce_used=true; evidence_dir_preserved=true",
+  "status": "blocked",
+  "stop_required_before_relaunch_classification": true,
+  "thread_history_claimed": false
+}

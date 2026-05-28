@@ -1,0 +1,683 @@
+{
+  "after_entry_count": 27840,
+  "after_fingerprint_sha256": "5e0212d1e6eb751ed2d664208e925a8bd1d95a060b758478ca1eefd29e830893",
+  "before_entry_count": 27822,
+  "before_fingerprint_sha256": "9ec0e8758ba21aaac796251bcb6634d4ce3bf757bf3c455e13c3333a041fcbbb",
+  "bounded_diff": true,
+  "captured_at_utc": "2026-05-28T08:10:11.928600Z",
+  "changed_count": 131,
+  "classified_changes": [
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".codex-global-state.json",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".codex-global-state.json.bak",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "auth.json",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "codex-custom-launch.sh",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "computer-use",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "computer-use/config.json",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "config.toml",
+      "state_class": "user_settings"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "goals_1.sqlite-shm",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "goals_1.sqlite-wal",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Documents/Codex/2026-05-28",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Documents/Codex/2026-05-28/ok-<owner_nonce>",
+      "state_class": "provider_wbp_linkage_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Library/Logs/com.openai.codex/2026/05/28",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Library/Logs/com.openai.codex/2026/05/28/codex-desktop-50eb05b7-565c-4444-871f-b017226d4437-91955-t0-i1-080329-0.log",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Library/Logs/com.openai.codex/2026/05/28/codex-desktop-50eb05b7-565c-4444-871f-b017226d4437-91955-t1-i1-080336-0.log",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "home/Library/Preferences/com.apple.security.plist",
+      "state_class": "user_settings"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "logs_2.sqlite",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "logs_2.sqlite-shm",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "logs_2.sqlite-wal",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/.codex-plugin",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/assets",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/docs",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/docs/capabilities",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/docs/capabilities/browser",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/docs/capabilities/tab",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/lib",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/test",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/test/events",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/test/hooks",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/test/self",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/test/traits",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/abstract-level/types",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers/memenv",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/issues",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/win",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/patches",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/leveldb/port-libuv",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/freebsd",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/linux",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/mac",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/openbsd",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/snappy",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/snappy/cmake",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/solaris",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/deps/snappy/win32",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/android-arm",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/android-arm64",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/darwin-x64+arm64",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/linux-arm",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/linux-arm64",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/linux-x64",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/win32-ia32",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/classic-level/prebuilds/win32-x64",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/is-buffer",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/level-supports",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/level-supports/test",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/level-transcoder",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/level-transcoder/lib",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/maybe-combine-errors",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/module-error",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/napi-macros",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/scripts/node_modules/node-gyp-build",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/skills",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/skills/browser",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "plugins/cache/openai-bundled/browser/26.519.81530/skills/browser/agents",
+      "state_class": "integration_state_unclassified"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "session_index.jsonl",
+      "state_class": "session_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/28",
+      "state_class": "session_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-04-47-019e6d9d-5430-7fd1-aeeb-33d95682f388.jsonl",
+      "state_class": "session_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "shell_snapshots",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "shell_snapshots/019e6d9d-5430-7fd1-aeeb-33d95682f388.1779955487811854000.sh",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "shell_snapshots/019e6d9d-547e-7013-afc0-6f449d6c8bed.1779955487880192000.sh",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "state_5.sqlite-shm",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "state_5.sqlite-wal",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/.tmp6UhzXk",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/.tmpgmUQrQ",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0HJsDmm",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0HJsDmm/.lock",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0HJsDmm/apply_patch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0HJsDmm/applypatch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0HJsDmm/codex-execve-wrapper",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0o6pRl2",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0o6pRl2/.lock",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0o6pRl2/apply_patch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0o6pRl2/applypatch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0o6pRl2/codex-execve-wrapper",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0vtbJci",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0vtbJci/.lock",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0vtbJci/apply_patch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0vtbJci/applypatch",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/arg0/codex-arg0vtbJci/codex-execve-wrapper",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/codex-ipc",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "tmp/codex-ipc/ipc-501.sock",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills-curated-cache.json",
+      "state_class": "cache_or_incidental_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/FETCH_HEAD",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/index",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/info",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/info/sparse-checkout",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/logs/HEAD",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/objects",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/objects/pack",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/objects/pack/pack-e3577e848dd968621847145f9a4bab01a7363d39.pack",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/refs/heads",
+      "state_class": "unclassified_profile_state"
+    },
+    {
+      "raw_content_recorded": false,
+      "relative_path": "vendor_imports/skills/.git/shallow",
+      "state_class": "unclassified_profile_state"
+    }
+  ],
+  "created_count": 18,
+  "deleted_count": 0,
+  "packet_kind": "r2b_bounded_profile_state_diff",
+  "phase": "after_owner_action",
+  "raw_auth_recorded": false,
+  "raw_prompt_recorded": false,
+  "raw_session_body_recorded": false,
+  "reason_class": "",
+  "state_classes_observed": [
+    "cache_or_incidental_state",
+    "integration_state_unclassified",
+    "provider_wbp_linkage_state",
+    "session_state",
+    "unclassified_profile_state",
+    "user_settings"
+  ],
+  "status": "ok"
+}

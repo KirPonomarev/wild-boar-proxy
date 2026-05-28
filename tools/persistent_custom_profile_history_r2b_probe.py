@@ -50,7 +50,6 @@ from wild_boar_proxy.keychain_preflight import prepare_isolated_home_keychain
 from wild_boar_proxy.runtime import RuntimePaths
 from wild_boar_proxy.token_command import emit_local_token
 
-
 DEFAULT_REPAIR_EVIDENCE_DIR = (
     ROOT / "audit_results/wbp_persistent_custom_profile_backup_rollback_repair_r1_2026-05-27"
 )
@@ -83,6 +82,24 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _redact_owner_nonce_in_packet(value: Any, *, owner_nonce: str) -> Any:
+    if not owner_nonce:
+        return value
+    if isinstance(value, str):
+        return value.replace(owner_nonce, "<owner_nonce>")
+    if isinstance(value, list):
+        return [
+            _redact_owner_nonce_in_packet(item, owner_nonce=owner_nonce)
+            for item in value
+        ]
+    if isinstance(value, dict):
+        return {
+            key: _redact_owner_nonce_in_packet(item, owner_nonce=owner_nonce)
+            for key, item in value.items()
+        }
+    return value
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -108,6 +125,8 @@ def _historical_quarantine(
     admitted_current_contour = {
         "tools/persistent_custom_profile_history_r2b_probe.py",
         "tests/test_native_filesystem_probe.py",
+        "tests/test_persistent_custom_profile_history_r3_probe.py",
+        "wild_boar_proxy/native_filesystem_probe.py",
     }
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
@@ -115,6 +134,8 @@ def _historical_quarantine(
         "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
         "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
         "?? audit_results/_tmp_wbp_catalog_prep_inspect/",
+        "?? audit_results/custom_codex_persistent_thread_history_proof_r2_2026-05-28/",
+        "?? audit_results/custom_codex_persistent_thread_history_proof_r3_2026-05-28/",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
@@ -496,6 +517,539 @@ def build_owner_action_boundary_packet(
         "owner_action_counts_as_ux_acceptance": False,
         "raw_prompt_recorded": False,
         "raw_nonce_recorded": False,
+    }
+
+
+def build_r3_thread_target_selection_packet(
+    *,
+    profile_root: Path,
+    max_session_jsonl: int = 1,
+    owner_nonce: str = "",
+) -> dict[str, Any]:
+    session_index = profile_root / "session_index.jsonl"
+    selected: list[dict[str, Any]] = []
+    nonce_sha256 = _sha256_text(owner_nonce) if owner_nonce else ""
+    if session_index.exists():
+        stat = session_index.lstat()
+        selected.append(
+            {
+                "relative_path": "session_index.jsonl",
+                "surface_type": "jsonl",
+                "state_class": "session_state",
+                "selection_reason": "session_index_root",
+                "exists_now": True,
+                "selection_score": 100,
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+                "raw_content_recorded": False,
+            }
+        )
+    session_rows: list[tuple[int, int, int, str]] = []
+    sessions_root = profile_root / "sessions"
+    if sessions_root.exists():
+        for path in sessions_root.rglob("*.jsonl"):
+            try:
+                stat = path.lstat()
+            except OSError:
+                continue
+            nonce_candidate = False
+            if owner_nonce:
+                try:
+                    text = path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    text = ""
+                nonce_candidate = owner_nonce in text
+            session_rows.append(
+                (
+                    1 if nonce_candidate else 0,
+                    int(stat.st_mtime_ns),
+                    int(stat.st_size),
+                    str(path.relative_to(profile_root)),
+                )
+            )
+    session_rows.sort(reverse=True)
+    for nonce_rank, mtime_ns, size, relative_path in session_rows[:max_session_jsonl]:
+        selected.append(
+            {
+                "relative_path": relative_path,
+                "surface_type": "jsonl",
+                "state_class": "session_state",
+                "selection_reason": "same_nonce_session_history_path"
+                if nonce_rank
+                else "session_history_path",
+                "exists_now": True,
+                "selection_score": 110 if nonce_rank else 90,
+                "size": size,
+                "mtime_ns": mtime_ns,
+                "same_nonce_candidate": bool(nonce_rank),
+                "nonce_sha256": nonce_sha256 if nonce_rank else "",
+                "raw_content_recorded": False,
+            }
+        )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_thread_target_selection_r3",
+        "status": "ok" if selected else "blocked",
+        "reason_class": "" if selected else "NO_SAFE_THREAD_TARGETS_SELECTED",
+        "selection_policy": "session_index_and_recent_sessions_jsonl_only",
+        "owner_nonce_hash_recorded": bool(nonce_sha256),
+        "same_nonce_candidate_selected": any(
+            item.get("same_nonce_candidate") is True for item in selected
+        ),
+        "selected_hypothesis_count": len(selected),
+        "selected_hypotheses": selected,
+        "raw_content_recorded": False,
+    }
+
+
+def build_r3_cutoff_baseline_target_manifest(
+    *,
+    selection_packet: dict[str, Any],
+    profile_root: Path,
+    cutoff_ns: int,
+    phase: str,
+) -> dict[str, Any]:
+    targets = []
+    for item in selection_packet.get("selected_hypotheses", []):
+        if not isinstance(item, dict):
+            continue
+        relative_path = str(item.get("relative_path", ""))
+        selected_mtime = int(item.get("mtime_ns", 0) or 0)
+        selected_size = int(item.get("size", 0) or 0)
+        changed_after_cutoff = selected_mtime >= cutoff_ns if cutoff_ns else False
+        targets.append(
+            {
+                "relative_path": relative_path,
+                "exists": not changed_after_cutoff,
+                "kind": "file",
+                "size": 0 if changed_after_cutoff else selected_size,
+                "mtime_ns": 0 if changed_after_cutoff else selected_mtime,
+                "baseline_inferred_from_cutoff": True,
+                "cutoff_ns": cutoff_ns,
+                "selected_mtime_ns": selected_mtime,
+                "selected_path_changed_after_cutoff": changed_after_cutoff,
+                "raw_content_recorded": False,
+                "content_hash_recorded": False,
+                "durable_restoration_proven": False,
+            }
+        )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_restore_r5_target_manifest",
+        "status": "ok" if targets else "blocked",
+        "reason_class": "" if targets else "NO_TARGETS_SELECTED",
+        "phase": phase,
+        "profile_root": str(profile_root),
+        "target_count": len(targets),
+        "targets": targets,
+        "metadata_only": True,
+        "baseline_inferred_from_cutoff": True,
+        "raw_content_recorded": False,
+        "content_hash_recorded": False,
+    }
+
+
+def build_r3_owner_visible_thread_continuity_packet(
+    *,
+    visibility_result_packet: dict[str, Any],
+    owner_visibility_packet: dict[str, Any],
+) -> dict[str, Any]:
+    same_nonce_visible = owner_visibility_packet.get("same_nonce_thread_visible") is True
+    same_identity = visibility_result_packet.get("same_persistent_profile_identity") is True
+    continuity = (
+        visibility_result_packet.get("owner_visible_thread_continuity_classified") is True
+        and same_nonce_visible
+        and same_identity
+    )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "owner_visible_thread_continuity_r3",
+        "status": "ok" if continuity else "blocked",
+        "reason_class": ""
+        if continuity
+        else (
+            "SAME_NONCE_THREAD_NOT_VISIBLE"
+            if not same_nonce_visible
+            else "PERSISTENT_PROFILE_IDENTITY_MISMATCH"
+            if not same_identity
+            else "OWNER_VISIBLE_THREAD_CONTINUITY_UNPROVEN"
+        ),
+        "same_persistent_profile_identity": same_identity,
+        "same_nonce_thread_visible": same_nonce_visible,
+        "owner_visible_thread_continuity_classified": continuity,
+        "owner_visible_thread_counts_as_storage_proof": False,
+        "storage_level_thread_history_proven": False,
+        "durable_restoration_proven": False,
+        "raw_thread_content_recorded": False,
+    }
+
+
+def build_r3_storage_level_history_correlation_packet(
+    *,
+    selection_packet: dict[str, Any],
+    target_delta_packet: dict[str, Any],
+    storage_correlation_packet: dict[str, Any],
+    correlation_classification_packet: dict[str, Any],
+) -> dict[str, Any]:
+    selected_paths = [
+        str(item.get("relative_path", ""))
+        for item in selection_packet.get("selected_hypotheses", [])
+        if isinstance(item, dict) and item.get("relative_path")
+    ]
+    rows = [
+        row
+        for row in target_delta_packet.get("target_delta_rows", [])
+        if isinstance(row, dict) and str(row.get("relative_path", ""))
+    ]
+    has_session_index = "session_index.jsonl" in selected_paths
+    session_rollout_paths = [path for path in selected_paths if path.startswith("sessions/")]
+    has_single_session_rollout = len(session_rollout_paths) == 1
+    selected_target_set_sufficient = (
+        len(selected_paths) == 2 and has_session_index and has_single_session_rollout
+    )
+    row_by_path = {
+        str(row.get("relative_path", "")): row
+        for row in rows
+        if row.get("relative_path")
+    }
+    session_index_row = row_by_path.get("session_index.jsonl", {})
+    session_rollout_row = row_by_path.get(session_rollout_paths[0], {}) if session_rollout_paths else {}
+    changed = int(target_delta_packet.get("changed_target_count", 0) or 0)
+    retained = int(target_delta_packet.get("retained_target_count", 0) or 0)
+    selected_target_delta_sufficient = (
+        bool(session_index_row)
+        and bool(session_rollout_row)
+        and session_index_row.get("changed_after_owner_action") is True
+        and session_index_row.get("retained_after_relaunch") is True
+        and session_rollout_row.get("changed_after_owner_action") is True
+        and session_rollout_row.get("retained_after_relaunch") is True
+    )
+    selected_same_nonce_binding = any(
+        item.get("same_nonce_candidate") is True
+        for item in selection_packet.get("selected_hypotheses", [])
+        if isinstance(item, dict)
+    )
+    same_nonce_target_binding_proven = (
+        selected_same_nonce_binding and selected_target_delta_sufficient
+    )
+    correlated = (
+        storage_correlation_packet.get("storage_correlation_classified") is True
+        and selected_target_set_sufficient
+        and selected_target_delta_sufficient
+    )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "storage_level_history_correlation_r3",
+        "status": "ok" if correlated else "blocked",
+        "reason_class": ""
+        if correlated
+        else (
+            "SELECTED_THREAD_TARGET_SET_INSUFFICIENT"
+            if not selected_target_set_sufficient
+            else "SELECTED_THREAD_TARGET_DELTA_INSUFFICIENT"
+            if not selected_target_delta_sufficient
+            else "STORAGE_LEVEL_HISTORY_CORRELATION_UNPROVEN"
+        ),
+        "selected_target_count": len(selected_paths),
+        "selected_target_paths": selected_paths,
+        "selected_target_set_sufficient": selected_target_set_sufficient,
+        "selected_target_delta_sufficient": selected_target_delta_sufficient,
+        "selected_targets_changed_after_action": changed,
+        "selected_targets_retained_after_relaunch": retained,
+        "storage_correlation_classified": correlated,
+        "correlation_classification": correlation_classification_packet.get(
+            "final_status", ""
+        ),
+        "bounded_selected_session_target_correlation_proven": correlated,
+        "same_nonce_target_binding_proven": same_nonce_target_binding_proven,
+        "storage_level_thread_history_proven": same_nonce_target_binding_proven,
+        "durable_restoration_proven": False,
+        "target_delta_counts_as_thread_identity_proof": False,
+        "raw_thread_content_recorded": False,
+    }
+
+
+def build_r3_thread_history_preservation_packet(
+    *,
+    profile_state_packet: dict[str, Any],
+    owner_visible_thread_continuity_packet: dict[str, Any],
+    storage_level_history_correlation_packet: dict[str, Any],
+    keychain_packet: dict[str, Any],
+) -> dict[str, Any]:
+    profile_state_preserved = profile_state_packet.get("profile_state_preserved") is True
+    same_nonce_visible = (
+        owner_visible_thread_continuity_packet.get("same_nonce_thread_visible") is True
+    )
+    visible_continuity = (
+        owner_visible_thread_continuity_packet.get(
+            "owner_visible_thread_continuity_classified"
+        )
+        is True
+    )
+    storage_correlated = (
+        storage_level_history_correlation_packet.get("storage_correlation_classified") is True
+    )
+    bounded_correlation_proven = (
+        storage_level_history_correlation_packet.get(
+            "bounded_selected_session_target_correlation_proven"
+        )
+        is True
+    )
+    same_nonce_target_binding_proven = (
+        storage_level_history_correlation_packet.get("same_nonce_target_binding_proven")
+        is True
+    )
+    keychain_ok = keychain_packet.get("status") == "ok"
+    storage_level_thread_history_proven = (
+        bounded_correlation_proven and same_nonce_target_binding_proven and keychain_ok
+    )
+    candidate = (
+        profile_state_preserved
+        and same_nonce_visible
+        and visible_continuity
+        and storage_correlated
+        and keychain_ok
+    )
+    with_limits = candidate and bounded_correlation_proven and not storage_level_thread_history_proven
+    preserved = candidate and storage_level_thread_history_proven
+    if not profile_state_preserved:
+        reason = "PROFILE_STATE_PRESERVATION_UNPROVEN"
+    elif not same_nonce_visible:
+        reason = "SAME_NONCE_THREAD_NOT_VISIBLE"
+    elif not visible_continuity:
+        reason = "OWNER_VISIBLE_THREAD_CONTINUITY_UNPROVEN"
+    elif not storage_correlated:
+        reason = "STORAGE_LEVEL_HISTORY_CORRELATION_UNPROVEN"
+    elif not keychain_ok:
+        reason = "PERSISTENT_KEYCHAIN_PRECONDITION_UNPROVEN"
+    elif preserved or with_limits:
+        reason = ""
+    elif not bounded_correlation_proven:
+        reason = "SELECTED_SESSION_TARGET_CORRELATION_UNPROVEN"
+    elif not same_nonce_target_binding_proven:
+        reason = "SAME_NONCE_STORAGE_BINDING_UNPROVEN"
+    else:
+        reason = "STORAGE_LEVEL_THREAD_HISTORY_UNPROVEN"
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "thread_history_preservation_r3",
+        "status": "ok" if preserved or with_limits else "blocked",
+        "reason_class": reason,
+        "profile_state_preserved": profile_state_preserved,
+        "same_nonce_thread_visible": same_nonce_visible,
+        "owner_visible_thread_continuity_classified": visible_continuity,
+        "storage_correlation_classified": storage_correlated,
+        "bounded_selected_session_target_correlation_proven": bounded_correlation_proven,
+        "same_nonce_target_binding_proven": same_nonce_target_binding_proven,
+        "thread_history_preservation_candidate": candidate,
+        "thread_history_preserved": preserved,
+        "storage_level_thread_history_proven": storage_level_thread_history_proven,
+        "durable_restoration_proven": False,
+        "thread_history_preserved_with_limits": with_limits,
+        "thread_history_limit_class": "SAME_NONCE_STORAGE_BINDING_UNPROVEN"
+        if with_limits
+        else "",
+        "storage_level_proof_scope": "selected_session_surface_metadata_plus_same_nonce_binding"
+        if storage_level_thread_history_proven
+        else "selected_session_surface_metadata_plus_same_nonce_visibility"
+        if with_limits
+        else "unproven",
+        "owner_visible_thread_counted_as_storage_proof": False,
+        "selected_target_delta_counts_as_thread_identity_proof": False,
+        "prompt_absence_counted_as_auth_proof": False,
+        "raw_thread_content_recorded": False,
+    }
+
+
+def build_r3_profile_state_with_thread_target_retention_packet(
+    *,
+    profile_state_packet: dict[str, Any],
+    target_delta_packet: dict[str, Any],
+) -> dict[str, Any]:
+    retained_selected_targets = int(target_delta_packet.get("retained_target_count", 0) or 0)
+    changed_selected_targets = int(target_delta_packet.get("changed_target_count", 0) or 0)
+    target_retention_proven = retained_selected_targets >= 2 and changed_selected_targets >= 2
+    if profile_state_packet.get("profile_state_preserved") is True or not target_retention_proven:
+        return profile_state_packet
+    if profile_state_packet.get("same_persistent_profile_identity") is not True:
+        return profile_state_packet
+    if profile_state_packet.get("after_action_storage_changed") is not True:
+        return profile_state_packet
+    adjusted = dict(profile_state_packet)
+    adjusted.update(
+        {
+            "status": "ok",
+            "reason_class": "",
+            "profile_state_preserved": True,
+            "after_relaunch_state_kept": True,
+            "profile_state_preserved_by_selected_thread_target_retention": True,
+            "selected_thread_targets_changed_after_action": changed_selected_targets,
+            "selected_thread_targets_retained_after_relaunch": retained_selected_targets,
+            "service_runtime_churn_not_counted_as_thread_history_loss": True,
+            "counts_as_thread_history_proof": False,
+        }
+    )
+    return adjusted
+
+
+def build_r3_false_green_audit(
+    *,
+    owner_visible_thread_continuity_packet: dict[str, Any],
+    storage_level_history_correlation_packet: dict[str, Any],
+    thread_history_preservation_packet: dict[str, Any],
+    legacy_r2_thread_history_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "owner_visible_not_storage_proof",
+            "passed": owner_visible_thread_continuity_packet.get(
+                "owner_visible_thread_counts_as_storage_proof"
+            )
+            is False,
+        },
+        {
+            "name": "storage_correlation_not_durable_proof",
+            "passed": storage_level_history_correlation_packet.get(
+                "durable_restoration_proven"
+            )
+            is False
+            and storage_level_history_correlation_packet.get(
+                "target_delta_counts_as_thread_identity_proof"
+            )
+            is False,
+        },
+        {
+            "name": "thread_history_packet_only_claims_bounded_storage_level_proof",
+            "passed": thread_history_preservation_packet.get("durable_restoration_proven")
+            is False
+            and (
+                thread_history_preservation_packet.get(
+                    "storage_level_thread_history_proven"
+                )
+                is False
+                or thread_history_preservation_packet.get("storage_level_proof_scope")
+                in {
+                    "selected_session_surface_metadata_plus_same_nonce_visibility",
+                    "selected_session_surface_metadata_plus_same_nonce_binding",
+                }
+            ),
+        },
+        {
+            "name": "thread_history_preserved_requires_storage_level_proof",
+            "passed": thread_history_preservation_packet.get("thread_history_preserved")
+            is not True
+            or thread_history_preservation_packet.get("storage_level_thread_history_proven")
+            is True,
+        },
+        {
+            "name": "with_limits_not_promoted_to_full_storage_proof",
+            "passed": thread_history_preservation_packet.get(
+                "thread_history_preserved_with_limits"
+            )
+            is not True
+            or (
+                thread_history_preservation_packet.get("thread_history_preserved") is False
+                and thread_history_preservation_packet.get(
+                    "storage_level_thread_history_proven"
+                )
+                is False
+                and thread_history_preservation_packet.get("thread_history_limit_class")
+                == "SAME_NONCE_STORAGE_BINDING_UNPROVEN"
+            ),
+        },
+        {
+            "name": "legacy_r2_packet_not_used_as_final_claim",
+            "passed": legacy_r2_thread_history_packet.get("thread_history_preserved") is False
+            or thread_history_preservation_packet.get("thread_history_preserved") is True,
+        },
+    ]
+    ok = all(check["passed"] for check in checks)
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_thread_history_r3_false_green_audit",
+        "status": "ok" if ok else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": not ok,
+        "legacy_r2_thread_history_packet_counted_as_final_claim": False,
+        "text_only_audit_counted_as_pass": False,
+    }
+
+
+def build_r3_summary_packet(
+    *,
+    profile_id: str,
+    profile_root: Path,
+    relaunch_packet: dict[str, Any],
+    profile_state_packet: dict[str, Any],
+    owner_continuity_packet: dict[str, Any],
+    storage_correlation_packet: dict[str, Any],
+    thread_history_packet: dict[str, Any],
+    keychain_packet: dict[str, Any],
+    false_green_packet: dict[str, Any],
+    legacy_false_green_packet: dict[str, Any],
+) -> dict[str, Any]:
+    full_pass = (
+        relaunch_packet.get("custom_process_observed") is True
+        and profile_state_packet.get("profile_state_preserved") is True
+        and thread_history_packet.get("thread_history_preserved") is True
+        and keychain_packet.get("status") == "ok"
+        and false_green_packet.get("status") == "ok"
+        and legacy_false_green_packet.get("status") == "ok"
+    )
+    with_limits = (
+        relaunch_packet.get("custom_process_observed") is True
+        and profile_state_packet.get("profile_state_preserved") is True
+        and owner_continuity_packet.get("owner_visible_thread_continuity_classified") is True
+        and storage_correlation_packet.get("storage_correlation_classified") is True
+        and keychain_packet.get("status") == "ok"
+        and false_green_packet.get("status") == "ok"
+        and legacy_false_green_packet.get("status") == "ok"
+        and thread_history_packet.get("thread_history_preserved_with_limits") is True
+    )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_custom_profile_history_r3_summary",
+        "status": "ok" if full_pass or with_limits else "blocked",
+        "final_status": (
+            "CUSTOM_CODEX_THREAD_HISTORY_PRESERVED_ACROSS_RELAUNCH"
+            if full_pass
+            else "CUSTOM_CODEX_PERSISTENT_THREAD_HISTORY_CLASSIFIED_WITH_LIMITS"
+            if with_limits
+            else "CUSTOM_CODEX_PERSISTENT_THREAD_HISTORY_BLOCKED"
+        ),
+        "execution_mode": "relaunch-classify",
+        "profile_id": profile_id,
+        "profile_root": str(profile_root),
+        "native_launch_attempted": True,
+        "relaunch_attempted": True,
+        "profile_state_preserved": profile_state_packet.get("profile_state_preserved") is True,
+        "owner_visible_thread_continuity_classified": (
+            owner_continuity_packet.get("owner_visible_thread_continuity_classified") is True
+        ),
+        "storage_correlation_classified": (
+            storage_correlation_packet.get("storage_correlation_classified") is True
+        ),
+        "thread_history_preservation_candidate": (
+            thread_history_packet.get("thread_history_preservation_candidate") is True
+        ),
+        "thread_history_preserved": (
+            thread_history_packet.get("thread_history_preserved") is True
+        ),
+        "thread_history_preserved_with_limits": (
+            thread_history_packet.get("thread_history_preserved_with_limits") is True
+        ),
+        "storage_level_thread_history_proven": (
+            thread_history_packet.get("storage_level_thread_history_proven") is True
+        ),
+        "durable_restoration_proven": (
+            thread_history_packet.get("durable_restoration_proven") is True
+        ),
+        "direct_egress_absence_claimed": False,
+        "model_availability_claimed": False,
+        "keychain_prompt_resolved_claimed": False,
+        "keychain_preflight_status": keychain_packet.get("status"),
+        "native_ux_acceptance_claimed": False,
+        "final_e2e_claimed": False,
     }
 
 
@@ -967,6 +1521,388 @@ def _max_manifest_mtime_ns(manifest: dict[str, Any]) -> int:
     return max(mtimes) if mtimes else 0
 
 
+_R4_RELAUNCH_STAGE_PACKET_NAMES = (
+    "persistent_custom_profile_before_bounded_manifest.json",
+    "persistent_custom_profile_after_owner_action_bounded_manifest.json",
+    "persistent_custom_profile_after_relaunch_bounded_manifest.json",
+    "persistent_custom_profile_identity_before_packet.json",
+    "persistent_r2b_identity_relaunch_packet.json",
+    "persistent_r2b_keychain_preflight_relaunch_packet.json",
+    "persistent_r2b_relaunch_packet.json",
+    "persistent_r3_thread_target_selection_packet.json",
+    "persistent_r3_before_target_manifest_packet.json",
+    "persistent_r3_after_action_target_manifest_packet.json",
+    "persistent_r3_relaunch_target_manifest_packet.json",
+    "r2b_original_codex_before_snapshot.json",
+)
+
+
+def _r4_missing_relaunch_stage_packets(evidence_dir: Path) -> list[str]:
+    return [
+        name
+        for name in _R4_RELAUNCH_STAGE_PACKET_NAMES
+        if not (evidence_dir / name).exists()
+    ]
+
+
+def _r4_relaunch_stage_available(evidence_dir: Path) -> bool:
+    return not _r4_missing_relaunch_stage_packets(evidence_dir)
+
+
+def _build_r4_owner_visibility_stop_packet(*, observed: bool) -> dict[str, Any]:
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "r4_owner_visibility_stop",
+        "status": "blocked",
+        "reason_class": "R4_OWNER_RELAUNCH_VISIBILITY_REQUIRED",
+        "required_owner_marker": (
+            "owner_confirmation_collected=true; same_nonce_thread_visible=true|false; "
+            "owner_visible_prior_thread=true|false|unknown; owner_ready_now=true; "
+            "prompt_entered=true; nonce_used=true; evidence_dir_preserved=true"
+        ),
+        "stop_required_before_thread_history_classification": observed,
+    }
+
+
+def _build_r4_relaunch_stage_required_summary(
+    *,
+    profile_id: str,
+    profile_root: Path,
+    observed: bool,
+    keychain_preflight_status: str,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_custom_profile_history_r2b_summary",
+        "status": "blocked",
+        "final_status": (
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R4_STOP_RELAUNCH_VISIBILITY_REQUIRED"
+            if observed
+            else "WBP_CUSTOM_PERSISTENT_PROFILE_R4_BLOCKED_NATIVE_RELAUNCH_FAILED"
+        ),
+        "execution_mode": "relaunch-classify",
+        "profile_id": profile_id,
+        "profile_root": str(profile_root),
+        "native_launch_attempted": True,
+        "relaunch_attempted": True,
+        "custom_process_observed": observed,
+        "owner_action_required": observed,
+        "profile_state_preserved": False,
+        "thread_history_preserved": False,
+        "thread_history_preserved_with_limits": False,
+        "storage_level_thread_history_proven": False,
+        "durable_restoration_proven": False,
+        "keychain_preflight_status": keychain_preflight_status,
+        "direct_egress_absence_claimed": False,
+        "model_availability_claimed": False,
+        "keychain_prompt_resolved_claimed": False,
+        "native_ux_acceptance_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def _build_r4_relaunch_stage_missing_summary(
+    *,
+    profile_id: str,
+    profile_root: Path,
+    missing_packets: list[str],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_custom_profile_history_r2b_summary",
+        "status": "blocked",
+        "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_R4_BLOCKED_RELAUNCH_STAGE_MISSING",
+        "execution_mode": "relaunch-classify",
+        "profile_id": profile_id,
+        "profile_root": str(profile_root),
+        "native_launch_attempted": False,
+        "relaunch_attempted": False,
+        "owner_action_required": False,
+        "missing_relaunch_stage_packets": missing_packets,
+        "profile_state_preserved": False,
+        "thread_history_preserved": False,
+        "thread_history_preserved_with_limits": False,
+        "storage_level_thread_history_proven": False,
+        "durable_restoration_proven": False,
+        "direct_egress_absence_claimed": False,
+        "model_availability_claimed": False,
+        "keychain_prompt_resolved_claimed": False,
+        "native_ux_acceptance_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def _build_r4_classification_from_saved_relaunch(
+    *,
+    evidence_dir: Path,
+    repair_evidence_dir: Path,
+    profile_id: str,
+    base_dir: Path | None,
+    owner_visible_prior_thread: bool | None,
+    same_nonce_thread_visible: bool | None,
+    owner_confirmation_collected: bool,
+    owner_ready_now: bool,
+    prompt_entered: bool,
+    nonce_used: bool,
+    evidence_dir_preserved: bool,
+) -> dict[str, dict[str, Any]]:
+    from tools.persistent_custom_profile_restoration_correlation_r5_probe import (
+        build_owner_visibility_packet as build_r5_owner_visibility_packet,
+        build_r5_correlation_classification_packet,
+        build_r5_target_delta_packet,
+        build_storage_correlation_result_packet,
+        build_visibility_result_packet,
+    )
+
+    paths = _paths(profile_id, base_dir)
+    profile_root = Path(paths["persistent_profile_root"])
+    user_data_dir = Path(paths["user_data_dir"])
+    codex_home = Path(paths["codex_home"])
+    missing_packets = _r4_missing_relaunch_stage_packets(evidence_dir)
+    owner_boundary = build_owner_action_boundary_packet(
+        owner_ready_now=owner_ready_now,
+        prompt_entered=prompt_entered,
+        nonce_used=nonce_used,
+        evidence_dir_preserved=evidence_dir_preserved,
+    )
+    if owner_boundary.get("status") != "ok":
+        return {
+            "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+                repair_evidence_dir=repair_evidence_dir
+            ),
+            "r2b_owner_action_boundary_packet.json": owner_boundary,
+            "persistent_custom_profile_history_r2b_summary_packet.json": {
+                **_build_r4_relaunch_stage_missing_summary(
+                    profile_id=profile_id,
+                    profile_root=profile_root,
+                    missing_packets=missing_packets,
+                ),
+                "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_OWNER_ACTION_REQUIRED",
+                "missing_relaunch_stage_packets": missing_packets,
+            },
+        }
+    if missing_packets:
+        return {
+            "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+                repair_evidence_dir=repair_evidence_dir
+            ),
+            "r2b_owner_action_boundary_packet.json": owner_boundary,
+            "persistent_custom_profile_history_r2b_summary_packet.json": (
+                _build_r4_relaunch_stage_missing_summary(
+                    profile_id=profile_id,
+                    profile_root=profile_root,
+                    missing_packets=missing_packets,
+                )
+            ),
+        }
+    before_manifest = _read_json(
+        evidence_dir / "persistent_custom_profile_before_bounded_manifest.json"
+    )
+    after_action_manifest = _read_json(
+        evidence_dir / "persistent_custom_profile_after_owner_action_bounded_manifest.json"
+    )
+    relaunch_manifest = _read_json(
+        evidence_dir / "persistent_custom_profile_after_relaunch_bounded_manifest.json"
+    )
+    protected_before = _read_json(evidence_dir / "r2b_original_codex_before_snapshot.json")
+    before_identity = _read_json(evidence_dir / "persistent_custom_profile_identity_before_packet.json")
+    relaunch_identity = _read_json(evidence_dir / "persistent_r2b_identity_relaunch_packet.json")
+    keychain_preflight = _read_json(evidence_dir / "persistent_r2b_keychain_preflight_relaunch_packet.json")
+    relaunch = _read_json(evidence_dir / "persistent_r2b_relaunch_packet.json")
+    r3_selection = _read_json(evidence_dir / "persistent_r3_thread_target_selection_packet.json")
+    r3_before_targets = _read_json(
+        evidence_dir / "persistent_r3_before_target_manifest_packet.json"
+    )
+    r3_after_action_targets = _read_json(
+        evidence_dir / "persistent_r3_after_action_target_manifest_packet.json"
+    )
+    r3_relaunch_targets = _read_json(
+        evidence_dir / "persistent_r3_relaunch_target_manifest_packet.json"
+    )
+    after_action_diff = build_bounded_state_diff_packet(
+        before_manifest=before_manifest,
+        after_manifest=after_action_manifest,
+        phase="after_owner_action",
+    )
+    relaunch_diff = build_bounded_state_diff_packet(
+        before_manifest=after_action_manifest,
+        after_manifest=relaunch_manifest,
+        phase="after_relaunch",
+    )
+    profile_state = build_persistent_profile_state_preservation_packet(
+        before_identity_packet=before_identity,
+        relaunch_identity_packet=relaunch_identity,
+        after_action_state_diff_packet=after_action_diff,
+        after_relaunch_state_diff_packet=relaunch_diff,
+    )
+    owner_context = build_owner_visible_thread_context_packet(
+        owner_visible_prior_thread=owner_visible_prior_thread,
+        owner_confirmation_collected=owner_confirmation_collected,
+    )
+    owner_visibility = build_r5_owner_visibility_packet(
+        owner_relaunch_checked=owner_confirmation_collected,
+        same_nonce_thread_visible=same_nonce_thread_visible,
+        target_window_clear=owner_ready_now,
+        evidence_dir_preserved=evidence_dir_preserved,
+    )
+    visibility_result = build_visibility_result_packet(
+        before_identity_packet=before_identity,
+        relaunch_identity_packet=relaunch_identity,
+        owner_visibility_packet=owner_visibility,
+        relaunch_packet=relaunch,
+    )
+    target_delta = build_r5_target_delta_packet(
+        before_manifest=r3_before_targets,
+        after_action_manifest=r3_after_action_targets,
+        relaunch_manifest=r3_relaunch_targets,
+    )
+    profile_state = build_r3_profile_state_with_thread_target_retention_packet(
+        profile_state_packet=profile_state,
+        target_delta_packet=target_delta,
+    )
+    thread_history = build_persistent_thread_history_preservation_r2_packet(
+        profile_state_preservation_packet=profile_state,
+        state_diff_packet=after_action_diff,
+        owner_visible_thread_context_packet=owner_context,
+    )
+    storage_correlation = build_storage_correlation_result_packet(
+        visibility_result_packet=visibility_result,
+        target_delta_packet=target_delta,
+    )
+    correlation_classification = build_r5_correlation_classification_packet(
+        visibility_result_packet=visibility_result,
+        storage_correlation_packet=storage_correlation,
+        owner_action_packet=owner_boundary,
+        owner_visibility_packet=owner_visibility,
+    )
+    r3_owner_continuity = build_r3_owner_visible_thread_continuity_packet(
+        visibility_result_packet=visibility_result,
+        owner_visibility_packet=owner_visibility,
+    )
+    r3_storage_correlation = build_r3_storage_level_history_correlation_packet(
+        selection_packet=r3_selection,
+        target_delta_packet=target_delta,
+        storage_correlation_packet=storage_correlation,
+        correlation_classification_packet=correlation_classification,
+    )
+    r3_thread_history = build_r3_thread_history_preservation_packet(
+        profile_state_packet=profile_state,
+        owner_visible_thread_continuity_packet=r3_owner_continuity,
+        storage_level_history_correlation_packet=r3_storage_correlation,
+        keychain_packet=keychain_preflight,
+    )
+    original_drift = build_original_codex_profile_drift_packet(
+        before_surfaces=protected_before,
+        after_surfaces=scan_protected_surfaces(),
+    )
+    cleanup = build_persistent_cleanup_policy_packet(
+        profile_root=profile_root,
+        cleanup_attempted=True,
+        profile_exists_after_cleanup=profile_root.exists(),
+    )
+    false_green = build_persistent_profile_false_green_audit(
+        thread_history_packet={
+            "route_trace_counted_as_saved_thread_proof": False,
+            "status": thread_history.get("status"),
+        },
+        owner_visible_thread_context_packet=owner_context,
+        cleanup_policy_packet=cleanup,
+        original_drift_packet=original_drift,
+    )
+    r3_false_green = build_r3_false_green_audit(
+        owner_visible_thread_continuity_packet=r3_owner_continuity,
+        storage_level_history_correlation_packet=r3_storage_correlation,
+        thread_history_preservation_packet=r3_thread_history,
+        legacy_r2_thread_history_packet=thread_history,
+    )
+    persistent_identity = {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_profile_identity_r3",
+        "status": "ok"
+        if before_identity.get("status") == "ok"
+        and relaunch_identity.get("status") == "ok"
+        and before_identity.get("persistent_profile_id")
+        == relaunch_identity.get("persistent_profile_id")
+        and before_identity.get("persistent_profile_root")
+        == relaunch_identity.get("persistent_profile_root")
+        else "blocked",
+        "reason_class": "",
+        "before_profile_id": before_identity.get("persistent_profile_id", ""),
+        "relaunch_profile_id": relaunch_identity.get("persistent_profile_id", ""),
+        "before_profile_root": before_identity.get("persistent_profile_root", ""),
+        "relaunch_profile_root": relaunch_identity.get("persistent_profile_root", ""),
+        "same_persistent_profile_identity": before_identity.get("persistent_profile_id")
+        == relaunch_identity.get("persistent_profile_id")
+        and before_identity.get("persistent_profile_root")
+        == relaunch_identity.get("persistent_profile_root"),
+    }
+    keychain_persistent_lane = {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "keychain_persistent_lane_r3",
+        "status": keychain_preflight.get("status", ""),
+        "reason_class": keychain_preflight.get("reason_class", ""),
+        "keychain_preflight_status": keychain_preflight.get("status", ""),
+        "isolated_default_keychain_verified": (
+            keychain_preflight.get("isolated_default_keychain_verified") is True
+        ),
+        "isolated_search_list_verified": (
+            keychain_preflight.get("isolated_search_list_verified") is True
+        ),
+        "prompt_absence_counts_as_auth_proof": False,
+        "prompt_absence_counts_as_persistence_proof": False,
+    }
+    r3_summary = build_r3_summary_packet(
+        profile_id=profile_id,
+        profile_root=profile_root,
+        relaunch_packet=relaunch,
+        profile_state_packet=profile_state,
+        owner_continuity_packet=r3_owner_continuity,
+        storage_correlation_packet=r3_storage_correlation,
+        thread_history_packet=r3_thread_history,
+        keychain_packet=keychain_preflight,
+        false_green_packet=r3_false_green,
+        legacy_false_green_packet=false_green,
+    )
+    return {
+        "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+            repair_evidence_dir=repair_evidence_dir
+        ),
+        "r2b_owner_action_boundary_packet.json": owner_boundary,
+        "persistent_custom_profile_after_owner_action_bounded_manifest.json": (
+            after_action_manifest
+        ),
+        "persistent_r2b_keychain_preflight_relaunch_packet.json": keychain_preflight,
+        "persistent_r2b_relaunch_packet.json": relaunch,
+        "persistent_custom_profile_after_relaunch_bounded_manifest.json": relaunch_manifest,
+        "persistent_r2b_identity_relaunch_packet.json": relaunch_identity,
+        "persistent_r2b_after_action_state_diff_packet.json": after_action_diff,
+        "persistent_r2b_relaunch_state_diff_packet.json": relaunch_diff,
+        "persistent_r2b_profile_state_preservation_packet.json": profile_state,
+        "persistent_r2b_owner_visible_thread_context_packet.json": owner_context,
+        "persistent_r2b_thread_history_preservation_packet.json": thread_history,
+        "persistent_r3_thread_target_selection_packet.json": r3_selection,
+        "persistent_r3_before_target_manifest_packet.json": r3_before_targets,
+        "persistent_r3_after_action_target_manifest_packet.json": r3_after_action_targets,
+        "persistent_r3_relaunch_target_manifest_packet.json": r3_relaunch_targets,
+        "persistent_r3_owner_visibility_packet.json": owner_visibility,
+        "persistent_r3_visibility_result_packet.json": visibility_result,
+        "persistent_r3_target_delta_packet.json": target_delta,
+        "persistent_r3_storage_correlation_result_packet.json": storage_correlation,
+        "persistent_r3_correlation_classification_packet.json": correlation_classification,
+        "persistent_profile_identity_packet.json": persistent_identity,
+        "persistent_profile_state_preservation_packet.json": profile_state,
+        "owner_visible_thread_continuity_packet.json": r3_owner_continuity,
+        "storage_level_history_correlation_packet.json": r3_storage_correlation,
+        "thread_history_preservation_packet.json": r3_thread_history,
+        "keychain_persistent_lane_packet.json": keychain_persistent_lane,
+        "persistent_r2b_original_codex_drift_packet.json": original_drift,
+        "persistent_r2b_cleanup_policy_packet.json": cleanup,
+        "persistent_r2b_false_green_audit.json": false_green,
+        "false_green_audit.json": r3_false_green,
+        "persistent_custom_profile_history_r2b_summary_packet.json": r3_summary,
+    }
+
+
 def build_relaunch_classification_packets(
     *,
     repo_root: Path,
@@ -975,21 +1911,22 @@ def build_relaunch_classification_packets(
     profile_id: str,
     base_dir: Path | None,
     owner_visible_prior_thread: bool | None,
+    same_nonce_thread_visible: bool | None = None,
     owner_confirmation_collected: bool,
     owner_ready_now: bool,
     prompt_entered: bool,
     nonce_used: bool,
     evidence_dir_preserved: bool,
     startup_wait_seconds: float,
+    owner_nonce: str = "",
 ) -> dict[str, dict[str, Any]]:
+    from tools.persistent_custom_profile_restoration_correlation_r5_probe import (
+        collect_target_manifest,
+    )
+
     paths = _paths(profile_id, base_dir)
     profile_root = Path(paths["persistent_profile_root"])
     user_data_dir = Path(paths["user_data_dir"])
-    codex_home = Path(paths["codex_home"])
-    before_manifest = _read_json(
-        evidence_dir / "persistent_custom_profile_before_bounded_manifest.json"
-    )
-    protected_before = _read_json(evidence_dir / "r2b_original_codex_before_snapshot.json")
     owner_boundary = build_owner_action_boundary_packet(
         owner_ready_now=owner_ready_now,
         prompt_entered=prompt_entered,
@@ -1015,6 +1952,9 @@ def build_relaunch_classification_packets(
                 "owner_action_required": True,
                 "profile_state_preserved": False,
                 "thread_history_preserved": False,
+                "thread_history_preserved_with_limits": False,
+                "storage_level_thread_history_proven": False,
+                "durable_restoration_proven": False,
                 "direct_egress_absence_claimed": False,
                 "model_availability_claimed": False,
                 "keychain_prompt_resolved_claimed": False,
@@ -1022,9 +1962,66 @@ def build_relaunch_classification_packets(
                 "final_e2e_claimed": False,
             },
         }
+    classification_requested = same_nonce_thread_visible is not None
+    if classification_requested:
+        return _build_r4_classification_from_saved_relaunch(
+            evidence_dir=evidence_dir,
+            repair_evidence_dir=repair_evidence_dir,
+            profile_id=profile_id,
+            base_dir=base_dir,
+            owner_visible_prior_thread=owner_visible_prior_thread,
+            same_nonce_thread_visible=same_nonce_thread_visible,
+            owner_confirmation_collected=owner_confirmation_collected,
+            owner_ready_now=owner_ready_now,
+            prompt_entered=prompt_entered,
+            nonce_used=nonce_used,
+            evidence_dir_preserved=evidence_dir_preserved,
+        )
+    if _r4_relaunch_stage_available(evidence_dir):
+        relaunch = _read_json(evidence_dir / "persistent_r2b_relaunch_packet.json")
+        keychain_preflight = _read_json(
+            evidence_dir / "persistent_r2b_keychain_preflight_relaunch_packet.json"
+        )
+        return {
+            "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+                repair_evidence_dir=repair_evidence_dir
+            ),
+            "r2b_owner_action_boundary_packet.json": owner_boundary,
+            "r4_owner_visibility_stop_packet.json": _build_r4_owner_visibility_stop_packet(
+                observed=relaunch.get("custom_process_observed") is True
+            ),
+            "persistent_custom_profile_history_r2b_summary_packet.json": (
+                _build_r4_relaunch_stage_required_summary(
+                    profile_id=profile_id,
+                    profile_root=profile_root,
+                    observed=relaunch.get("custom_process_observed") is True,
+                    keychain_preflight_status=str(keychain_preflight.get("status", "")),
+                )
+            ),
+        }
+
+    before_manifest = _read_json(
+        evidence_dir / "persistent_custom_profile_before_bounded_manifest.json"
+    )
     after_action_manifest = collect_bounded_profile_manifest(
         profile_root,
         phase="after_owner_action",
+        changed_since_ns=_max_manifest_mtime_ns(before_manifest),
+    )
+    r3_selection = build_r3_thread_target_selection_packet(
+        profile_root=profile_root,
+        owner_nonce=owner_nonce,
+    )
+    r3_before_targets = build_r3_cutoff_baseline_target_manifest(
+        selection_packet=r3_selection,
+        profile_root=profile_root,
+        cutoff_ns=_max_manifest_mtime_ns(before_manifest),
+        phase="r3_before",
+    )
+    r3_after_action_targets = collect_target_manifest(
+        profile_root,
+        r3_selection,
+        phase="r3_after_owner_action",
         changed_since_ns=_max_manifest_mtime_ns(before_manifest),
     )
     termination = terminate_custom_processes(str(user_data_dir))
@@ -1066,6 +2063,9 @@ def build_relaunch_classification_packets(
                 "owner_action_required": False,
                 "profile_state_preserved": False,
                 "thread_history_preserved": False,
+                "thread_history_preserved_with_limits": False,
+                "storage_level_thread_history_proven": False,
+                "durable_restoration_proven": False,
                 "direct_egress_absence_claimed": False,
                 "model_availability_claimed": False,
                 "keychain_prompt_resolved_claimed": False,
@@ -1091,9 +2091,7 @@ def build_relaunch_classification_packets(
             "persistent_r2b_same_profile_process_gate_before_relaunch_packet.json": (
                 same_profile_gate
             ),
-            "persistent_r2b_keychain_preflight_relaunch_packet.json": (
-                keychain_preflight
-            ),
+            "persistent_r2b_keychain_preflight_relaunch_packet.json": keychain_preflight,
             "persistent_custom_profile_history_r2b_summary_packet.json": {
                 "captured_at_utc": _utc_now(),
                 "packet_kind": "persistent_custom_profile_history_r2b_summary",
@@ -1107,6 +2105,9 @@ def build_relaunch_classification_packets(
                 "owner_action_required": False,
                 "profile_state_preserved": False,
                 "thread_history_preserved": False,
+                "thread_history_preserved_with_limits": False,
+                "storage_level_thread_history_proven": False,
+                "durable_restoration_proven": False,
                 "direct_egress_absence_claimed": False,
                 "model_availability_claimed": False,
                 "keychain_prompt_resolved_claimed": False,
@@ -1126,77 +2127,20 @@ def build_relaunch_classification_packets(
         phase="after_relaunch",
         changed_since_ns=_max_manifest_mtime_ns(after_action_manifest),
     )
-    after_action_diff = build_bounded_state_diff_packet(
-        before_manifest=before_manifest,
-        after_manifest=after_action_manifest,
-        phase="after_owner_action",
-    )
-    relaunch_diff = build_bounded_state_diff_packet(
-        before_manifest=after_action_manifest,
-        after_manifest=relaunch_manifest,
-        phase="after_relaunch",
-    )
-    before_identity = build_persistent_custom_profile_identity_packet(
-        phase="before",
-        profile_id=profile_id,
-        profile_root=profile_root,
-        codex_home=codex_home,
-        user_data_dir=user_data_dir,
-    )
     relaunch_identity = build_persistent_custom_profile_identity_packet(
         phase="relaunch",
         profile_id=profile_id,
         profile_root=profile_root,
-        codex_home=codex_home,
+        codex_home=Path(paths["codex_home"]),
         user_data_dir=user_data_dir,
         expected_profile_id=profile_id,
         expected_profile_root=profile_root,
     )
-    profile_state = build_persistent_profile_state_preservation_packet(
-        before_identity_packet=before_identity,
-        relaunch_identity_packet=relaunch_identity,
-        after_action_state_diff_packet=after_action_diff,
-        after_relaunch_state_diff_packet=relaunch_diff,
-    )
-    owner_context = build_owner_visible_thread_context_packet(
-        owner_visible_prior_thread=owner_visible_prior_thread,
-        owner_confirmation_collected=owner_confirmation_collected,
-    )
-    thread_history = build_persistent_thread_history_preservation_r2_packet(
-        profile_state_preservation_packet=profile_state,
-        state_diff_packet=after_action_diff,
-        owner_visible_thread_context_packet=owner_context,
-    )
-    original_drift = build_original_codex_profile_drift_packet(
-        before_surfaces=protected_before,
-        after_surfaces=scan_protected_surfaces(),
-    )
-    cleanup = build_persistent_cleanup_policy_packet(
-        profile_root=profile_root,
-        cleanup_attempted=True,
-        profile_exists_after_cleanup=profile_root.exists(),
-    )
-    false_green = build_persistent_profile_false_green_audit(
-        thread_history_packet={
-            "route_trace_counted_as_saved_thread_proof": False,
-            "status": thread_history.get("status"),
-        },
-        owner_visible_thread_context_packet=owner_context,
-        cleanup_policy_packet=cleanup,
-        original_drift_packet=original_drift,
-    )
-    final_ok = (
-        owner_boundary.get("status") == "ok"
-        and relaunch.get("custom_process_observed") is True
-        and profile_state.get("profile_state_preserved") is True
-        and thread_history.get("thread_history_preserved") is True
-        and false_green.get("status") == "ok"
-    )
-    profile_state_only = (
-        owner_boundary.get("status") == "ok"
-        and relaunch.get("custom_process_observed") is True
-        and profile_state.get("profile_state_preserved") is True
-        and false_green.get("status") == "ok"
+    r3_relaunch_targets = collect_target_manifest(
+        profile_root,
+        r3_selection,
+        phase="r3_after_relaunch",
+        changed_since_ns=_max_manifest_mtime_ns(before_manifest),
     )
     return {
         "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
@@ -1220,39 +2164,21 @@ def build_relaunch_classification_packets(
         },
         "persistent_custom_profile_after_relaunch_bounded_manifest.json": relaunch_manifest,
         "persistent_r2b_identity_relaunch_packet.json": relaunch_identity,
-        "persistent_r2b_after_action_state_diff_packet.json": after_action_diff,
-        "persistent_r2b_relaunch_state_diff_packet.json": relaunch_diff,
-        "persistent_r2b_profile_state_preservation_packet.json": profile_state,
-        "persistent_r2b_owner_visible_thread_context_packet.json": owner_context,
-        "persistent_r2b_thread_history_preservation_packet.json": thread_history,
-        "persistent_r2b_original_codex_drift_packet.json": original_drift,
-        "persistent_r2b_cleanup_policy_packet.json": cleanup,
-        "persistent_r2b_false_green_audit.json": false_green,
-        "persistent_custom_profile_history_r2b_summary_packet.json": {
-            "captured_at_utc": _utc_now(),
-            "packet_kind": "persistent_custom_profile_history_r2b_summary",
-            "status": "ok" if final_ok else "blocked",
-            "final_status": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_HISTORY_CLASSIFIED"
-            if final_ok
-            else (
-                "WBP_CUSTOM_PERSISTENT_PROFILE_STATE_PRESERVED_THREAD_HISTORY_UNCONFIRMED"
-                if profile_state_only
-                else "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_HISTORY_UNPROVEN"
-            ),
-            "execution_mode": "relaunch-classify",
-            "profile_id": profile_id,
-            "profile_root": str(profile_root),
-            "native_launch_attempted": True,
-            "relaunch_attempted": True,
-            "profile_state_preserved": profile_state.get("profile_state_preserved") is True,
-            "thread_history_preserved": thread_history.get("thread_history_preserved") is True,
-            "direct_egress_absence_claimed": False,
-            "model_availability_claimed": False,
-            "keychain_prompt_resolved_claimed": False,
-            "keychain_preflight_status": keychain_preflight.get("status"),
-            "native_ux_acceptance_claimed": False,
-            "final_e2e_claimed": False,
-        },
+        "persistent_r3_thread_target_selection_packet.json": r3_selection,
+        "persistent_r3_before_target_manifest_packet.json": r3_before_targets,
+        "persistent_r3_after_action_target_manifest_packet.json": r3_after_action_targets,
+        "persistent_r3_relaunch_target_manifest_packet.json": r3_relaunch_targets,
+        "r4_owner_visibility_stop_packet.json": _build_r4_owner_visibility_stop_packet(
+            observed=relaunch.get("custom_process_observed") is True
+        ),
+        "persistent_custom_profile_history_r2b_summary_packet.json": (
+            _build_r4_relaunch_stage_required_summary(
+                profile_id=profile_id,
+                profile_root=profile_root,
+                observed=relaunch.get("custom_process_observed") is True,
+                keychain_preflight_status=str(keychain_preflight.get("status", "")),
+            )
+        ),
     }
 
 
@@ -1273,6 +2199,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--owner-nonce", default="")
     parser.add_argument("--startup-wait-seconds", type=float, default=12.0)
     parser.add_argument("--owner-visible-prior-thread", default="unknown")
+    parser.add_argument("--same-nonce-thread-visible", default="unknown")
     parser.add_argument("--owner-confirmation-collected", action="store_true")
     parser.add_argument("--owner-ready-now", action="store_true")
     parser.add_argument("--prompt-entered", action="store_true")
@@ -1309,7 +2236,9 @@ def main() -> int:
             repair_evidence_dir=repair_evidence_dir,
             profile_id=args.profile_id,
             base_dir=base_dir,
+            owner_nonce=args.owner_nonce,
             owner_visible_prior_thread=_parse_nullable_bool(args.owner_visible_prior_thread),
+            same_nonce_thread_visible=_parse_nullable_bool(args.same_nonce_thread_visible),
             owner_confirmation_collected=args.owner_confirmation_collected,
             owner_ready_now=args.owner_ready_now,
             prompt_entered=args.prompt_entered,
@@ -1326,6 +2255,10 @@ def main() -> int:
             base_dir=base_dir,
             skip_git=args.skip_git,
         )
+    packets = {
+        name: _redact_owner_nonce_in_packet(packet, owner_nonce=args.owner_nonce)
+        for name, packet in packets.items()
+    }
     for name, packet in packets.items():
         json_write(evidence_dir / name, packet)
     summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]

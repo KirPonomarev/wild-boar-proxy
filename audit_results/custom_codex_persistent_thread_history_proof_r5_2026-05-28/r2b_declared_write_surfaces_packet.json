@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-28T08:03:26.733931Z",
+  "codex_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main"
+  ],
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "r2b_declared_write_surfaces",
+  "persistent_profile_deletion_allowed": false,
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "protected_surfaces_write_allowed": false,
+  "status": "ok",
+  "user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+}

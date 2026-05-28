@@ -1,0 +1,1239 @@
+{
+  "all_protected_surfaces_unchanged": false,
+  "captured_at_utc": "2026-05-28T08:10:16.114699Z",
+  "drift": {
+    "all_protected_surfaces_unchanged": false,
+    "captured_at_utc": "2026-05-28T08:10:16.114682Z",
+    "surfaces": {
+      "codex_dir": {
+        "diff": {
+          "changed": [
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955785214017777,
+                "relative_path": ".",
+                "size": 1536
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955315650876982,
+                "relative_path": ".",
+                "size": 1536
+              },
+              "relative_path": "."
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955785205379599,
+                "relative_path": ".codex-global-state.json",
+                "sha256": "c2c91d65bc621aaf0679de23c7ecd5020aa92ff3728ccc7e76e36e95fbd362a8",
+                "size": 1591718
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955315645279743,
+                "relative_path": ".codex-global-state.json",
+                "sha256": "27839668e66ba2663ef2840d4b2d2ac0ffbfc4f36f893b39138201f21dd24faa",
+                "size": 1594171
+              },
+              "relative_path": ".codex-global-state.json"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955785213190575,
+                "relative_path": ".codex-global-state.json.bak",
+                "sha256": "c2c91d65bc621aaf0679de23c7ecd5020aa92ff3728ccc7e76e36e95fbd362a8",
+                "size": 1591718
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955315650228863,
+                "relative_path": ".codex-global-state.json.bak",
+                "sha256": "27839668e66ba2663ef2840d4b2d2ac0ffbfc4f36f893b39138201f21dd24faa",
+                "size": 1594171
+              },
+              "relative_path": ".codex-global-state.json.bak"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955615208502727,
+                "relative_path": "cache/codex_apps_tools/372f7619ffb3e03079539c47269eb51170c313bd.json",
+                "sha256": "6d0371e5b303f392c1108415cf903ae9463200849530efbc41e21f77a2cb63f7",
+                "size": 40
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955344452843679,
+                "relative_path": "cache/codex_apps_tools/372f7619ffb3e03079539c47269eb51170c313bd.json",
+                "sha256": "6d0371e5b303f392c1108415cf903ae9463200849530efbc41e21f77a2cb63f7",
+                "size": 40
+              },
+              "relative_path": "cache/codex_apps_tools/372f7619ffb3e03079539c47269eb51170c313bd.json"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955417488404148,
+                "relative_path": "config.toml",
+                "sha256": "baadc7ea4c1185b6e671439cfdca8cc4805078d5ee7787c72d54d4f9b56651f8",
+                "size": 6298
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953852179653979,
+                "relative_path": "config.toml",
+                "sha256": "7fc1490e37465ec7ae9694105664a17e43c79e63f7405d80bf8d9f7287f70a67",
+                "size": 6232
+              },
+              "relative_path": "config.toml"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955170569932908,
+                "relative_path": "goals_1.sqlite-shm",
+                "sha256": "80b0a3da098eb397ac05160a34543e2da194950127796857384a4166e28439af",
+                "size": 32768
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955170569932908,
+                "relative_path": "goals_1.sqlite-shm",
+                "sha256": "04cf6d5f7ab809a8fc799321c4259d1acafa08c82790e3ce08b554909cf802db",
+                "size": 32768
+              },
+              "relative_path": "goals_1.sqlite-shm"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955745816192382,
+                "relative_path": "goals_1.sqlite-wal",
+                "sha256": "c49739da3acbefe99bbd7f7a10e9589ad182476aa96fa7e106de0a0255deea85",
+                "size": 391432
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955342997971600,
+                "relative_path": "goals_1.sqlite-wal",
+                "sha256": "1e04a00a880d9f4784f4ed30fb96fea8a76d4637f3702f1665a9f52225fba3b2",
+                "size": 370832
+              },
+              "relative_path": "goals_1.sqlite-wal"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955813847988733,
+                "relative_path": "logs_2.sqlite",
+                "size": 2570313728
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955398074732457,
+                "relative_path": "logs_2.sqlite",
+                "size": 2570313728
+              },
+              "relative_path": "logs_2.sqlite"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779953848676364219,
+                "relative_path": "logs_2.sqlite-shm",
+                "sha256": "25168c2ff4e7664e4832cf5967b35ffeecdb7237176f1dee5093cab942d698e0",
+                "size": 32768
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953848676364219,
+                "relative_path": "logs_2.sqlite-shm",
+                "sha256": "3467ca9796cb9b9343bd713058f05673af40735ad7cceee4cae0ce4c158908d1",
+                "size": 32768
+              },
+              "relative_path": "logs_2.sqlite-shm"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955814523068477,
+                "relative_path": "logs_2.sqlite-wal",
+                "size": 110766232
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955398150228377,
+                "relative_path": "logs_2.sqlite-wal",
+                "size": 110766232
+              },
+              "relative_path": "logs_2.sqlite-wal"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955813019645969,
+                "relative_path": "models_cache.json",
+                "sha256": "2042c06ca84171ff7e7a17a1ca8eb55dba20fce12574f4309ed0f8c774820de1",
+                "size": 231683
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397768133148,
+                "relative_path": "models_cache.json",
+                "sha256": "519de4e7f519baac800f953dde6919bcc5a75407b0cdbfc87f6db5cc029badbf",
+                "size": 231683
+              },
+              "relative_path": "models_cache.json"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955623250776032,
+                "relative_path": "session_index.jsonl",
+                "sha256": "d0d4de079f754cb7327032f627116ee7cfc88e269c3671419906bc3866b8584b",
+                "size": 192805
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955156108746883,
+                "relative_path": "session_index.jsonl",
+                "sha256": "db75b8efb24b8ab86b6a56249123a26ea290be177a5620999c754c9819a10a1d",
+                "size": 192663
+              },
+              "relative_path": "session_index.jsonl"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955785212459456,
+                "relative_path": "sessions/2026/05/24/rollout-2026-05-24T14-20-12-019e59b6-cd40-7543-b99a-bf5c92d6503f.jsonl",
+                "size": 47043280
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955376963181775,
+                "relative_path": "sessions/2026/05/24/rollout-2026-05-24T14-20-12-019e59b6-cd40-7543-b99a-bf5c92d6503f.jsonl",
+                "size": 46832590
+              },
+              "relative_path": "sessions/2026/05/24/rollout-2026-05-24T14-20-12-019e59b6-cd40-7543-b99a-bf5c92d6503f.jsonl"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955812944197509,
+                "relative_path": "sessions/2026/05/27/rollout-2026-05-27T16-18-05-019e6995-cb27-71e1-90ba-3188df6e2495.jsonl",
+                "size": 35296281
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955395857147473,
+                "relative_path": "sessions/2026/05/27/rollout-2026-05-27T16-18-05-019e6995-cb27-71e1-90ba-3188df6e2495.jsonl",
+                "size": 34970107
+              },
+              "relative_path": "sessions/2026/05/27/rollout-2026-05-27T16-18-05-019e6995-cb27-71e1-90ba-3188df6e2495.jsonl"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955594223936449,
+                "relative_path": "sessions/2026/05/28",
+                "size": 3008
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955342800722716,
+                "relative_path": "sessions/2026/05/28",
+                "size": 2976
+              },
+              "relative_path": "sessions/2026/05/28"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955503210004450,
+                "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-02-22-019e6d9b-1d65-7be0-a31e-ec6785e7c5a2.jsonl",
+                "sha256": "fe06202e7f9654086bc2b1cc1ac433b1333835ccab064af5388fe89abdc006a9",
+                "size": 574040
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397470886304,
+                "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-02-22-019e6d9b-1d65-7be0-a31e-ec6785e7c5a2.jsonl",
+                "sha256": "54f94d45da245665db14726718cfba068afce7bdd125eca4e4d8af44b6dc5fc7",
+                "size": 348040
+              },
+              "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-02-22-019e6d9b-1d65-7be0-a31e-ec6785e7c5a2.jsonl"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955614068579269,
+                "relative_path": "shell_snapshots",
+                "size": 608
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955148101835586,
+                "relative_path": "shell_snapshots",
+                "size": 608
+              },
+              "relative_path": "shell_snapshots"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955684581698218,
+                "relative_path": "state_5.sqlite",
+                "size": 12656640
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955350981792967,
+                "relative_path": "state_5.sqlite",
+                "size": 12656640
+              },
+              "relative_path": "state_5.sqlite"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955416762303776,
+                "relative_path": "state_5.sqlite-shm",
+                "sha256": "eb0dd29034ef7ef8364bf8e4ef5070fa4c7741c7f43be4cf928b75c7e20db062",
+                "size": 32768
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955171187054142,
+                "relative_path": "state_5.sqlite-shm",
+                "sha256": "86a91df6a4cad2cc28c69ee7453a64e626a3cbdf1cb2b3af29e2b5077c9409da",
+                "size": 32768
+              },
+              "relative_path": "state_5.sqlite-shm"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955812944644381,
+                "relative_path": "state_5.sqlite-wal",
+                "sha256": "736f8e6a734cb80ddd4a38e0587f0e180588c22f19feb565524161f895cc0292",
+                "size": 4223032
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397471317216,
+                "relative_path": "state_5.sqlite-wal",
+                "sha256": "e5d8ee9e9ca80bf929c885e5a926ae1b50b81fc4167722bcbdc65bb56fa9faea",
+                "size": 4223032
+              },
+              "relative_path": "state_5.sqlite-wal"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955682925057816,
+                "relative_path": "tmp/arg0",
+                "size": 512
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955342950793080,
+                "relative_path": "tmp/arg0",
+                "size": 416
+              },
+              "relative_path": "tmp/arg0"
+            }
+          ],
+          "changed_count": 21,
+          "created": [
+            "sessions/2026/05/28/rollout-2026-05-28T11-06-34-019e6d9e-f38d-7d41-aba1-6c5965400e0f.jsonl",
+            "shell_snapshots/019e6d9f-40c1-7132-84d0-34a6ef29d42a.1779955613909255000.sh",
+            "tmp/arg0/codex-arg05NS8t0",
+            "tmp/arg0/codex-arg05NS8t0/.lock",
+            "tmp/arg0/codex-arg05NS8t0/apply_patch",
+            "tmp/arg0/codex-arg05NS8t0/applypatch",
+            "tmp/arg0/codex-arg05NS8t0/codex-execve-wrapper",
+            "tmp/arg0/codex-arg0O3iCE9",
+            "tmp/arg0/codex-arg0O3iCE9/.lock",
+            "tmp/arg0/codex-arg0O3iCE9/apply_patch",
+            "tmp/arg0/codex-arg0O3iCE9/applypatch",
+            "tmp/arg0/codex-arg0O3iCE9/codex-execve-wrapper",
+            "tmp/arg0/codex-arg0UERfY6",
+            "tmp/arg0/codex-arg0UERfY6/.lock",
+            "tmp/arg0/codex-arg0UERfY6/apply_patch",
+            "tmp/arg0/codex-arg0UERfY6/applypatch",
+            "tmp/arg0/codex-arg0UERfY6/codex-execve-wrapper",
+            "tmp/arg0/codex-arg0uBfPMJ",
+            "tmp/arg0/codex-arg0uBfPMJ/.lock",
+            "tmp/arg0/codex-arg0uBfPMJ/apply_patch",
+            "tmp/arg0/codex-arg0uBfPMJ/applypatch",
+            "tmp/arg0/codex-arg0uBfPMJ/codex-execve-wrapper"
+          ],
+          "created_count": 22,
+          "deleted": [
+            "shell_snapshots/019e6d98-24a9-7f13-9576-fb25ac604524.1779955147965858000.sh",
+            "tmp/arg0/codex-arg0QbtUow",
+            "tmp/arg0/codex-arg0QbtUow/.lock",
+            "tmp/arg0/codex-arg0QbtUow/apply_patch",
+            "tmp/arg0/codex-arg0QbtUow/applypatch",
+            "tmp/arg0/codex-arg0QbtUow/codex-execve-wrapper"
+          ],
+          "deleted_count": 6,
+          "unchanged": [
+            "..codex-global-state.json.bak.tmp-1779848029879-3dafdf72-c216-4c21-a1cb-ba9afc7fc2d7",
+            ".env",
+            ".env.save",
+            ".personality_migration",
+            ".tmp",
+            ".tmp/app-server-remote-plugin-sync-v1",
+            ".tmp/bundled-marketplaces",
+            ".tmp/bundled-marketplaces/openai-bundled",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/.agents",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/.agents/plugins",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/.agents/plugins/marketplace.json",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/.codex-plugin",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/.codex-plugin/plugin.json",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/assets",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/assets/browser.png",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/assets/composer-icon.png",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities/browser",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities/browser/viewport.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities/browser/visibility.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities/tab",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/docs/capabilities/tab/pageAssets.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/browser-client.mjs",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/CHANGELOG.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/LICENSE",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/README.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/UPGRADING.md",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/abstract-chained-batch.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/abstract-iterator.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/abstract-level.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/abstract-snapshot.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/index.d.ts",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/index.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel-iterator.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/common.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/default-chained-batch.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/default-kv-iterator.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/deferred-iterator.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/deferred-queue.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/errors.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/event-monitor.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/hooks.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/prefixes.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/prewrite-batch.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/lib/range-options.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/package.json",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/async-iterator-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/batch-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/chained-batch-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/clear-range-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/clear-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/common.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/deferred-open-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/del-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/encoding-buffer-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/encoding-custom-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/encoding-decode-error-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/encoding-json-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/encoding-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/events",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/events/write.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/factory-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/get-many-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/get-sync-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/get-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/has-many-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/has-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/hooks",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/hooks/newsub.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/hooks/postopen.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/hooks/prewrite.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/hooks/shared.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/index.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-explicit-snapshot-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-no-snapshot-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-range-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-seek-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-snapshot-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/iterator-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/manifest-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/open-create-if-missing-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/open-error-if-exists-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/open-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/put-get-del-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/put-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/self",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/self.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/self/abstract-iterator-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/self/async-iterator-test.js",
+            ".tmp/bundled-marketplaces/openai-bundled.staging-0421fbcc-74e0-41dc-bd40-8fd719a2497a/plugins/browser/scripts/node_modules/abstract-level/test/self/attach-resource-test.js"
+          ],
+          "unchanged_count": 10448
+        },
+        "root": "/Users/kirillponomarev/.codex",
+        "unchanged": false
+      },
+      "default_app_support_codex": {
+        "diff": {
+          "changed": [
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955661006765902,
+                "relative_path": ".",
+                "size": 1152
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955054626372327,
+                "relative_path": ".",
+                "size": 1152
+              },
+              "relative_path": "."
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955785533818803,
+                "relative_path": "Cache/Cache_Data",
+                "size": 79776
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955362557587840,
+                "relative_path": "Cache/Cache_Data",
+                "size": 79776
+              },
+              "relative_path": "Cache/Cache_Data"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955767716583303,
+                "relative_path": "Cache/Cache_Data/3df811c9a5a0cd3a_0",
+                "sha256": "6bd782d2d01d5cd4faa81fe79f82d9bc1bfff0b1d78bb33e0b7b88ef0cedd03e",
+                "size": 3169
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955141837549030,
+                "relative_path": "Cache/Cache_Data/3df811c9a5a0cd3a_0",
+                "sha256": "8c755a88b824aed79c5169662d1a48e482dd0294aa32628d32a44e6359da8f8c",
+                "size": 3165
+              },
+              "relative_path": "Cache/Cache_Data/3df811c9a5a0cd3a_0"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955785871459431,
+                "relative_path": "Cache/Cache_Data/840867cc82557cb4_0",
+                "sha256": "6c416d154234e631af66ff48dea7bfbae645027ab3f0d7c1ab752be05f4fd6e2",
+                "size": 2675
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955362944076133,
+                "relative_path": "Cache/Cache_Data/840867cc82557cb4_0",
+                "sha256": "89728118be400ea54f176afa583e470f80a371815349da63a69b0a20cbb495c4",
+                "size": 2667
+              },
+              "relative_path": "Cache/Cache_Data/840867cc82557cb4_0"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955527478681776,
+                "relative_path": "Cache/Cache_Data/be1d6e8b2d964403_0",
+                "sha256": "cb1170bd0bc212f747ed451a0e63df9b7063b1084327a94d543f87b228a0220f",
+                "size": 2897
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955119846679586,
+                "relative_path": "Cache/Cache_Data/be1d6e8b2d964403_0",
+                "sha256": "6a82c0f7447d96efe2037bfb98aa59654d9ae5bef4557e011a84e5461299847e",
+                "size": 2893
+              },
+              "relative_path": "Cache/Cache_Data/be1d6e8b2d964403_0"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955465857412492,
+                "relative_path": "Cache/Cache_Data/d2e0bc687271e93f_0",
+                "sha256": "29931294ee807ca233fb08f7af9e7131e8a967d15368495116809458eee25350",
+                "size": 2721
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1778907342152111444,
+                "relative_path": "Cache/Cache_Data/d2e0bc687271e93f_0",
+                "sha256": "d60ddf17eed70a63c4ffbbd6a371343f9f6858c297d472183416453835c164e0",
+                "size": 2721
+              },
+              "relative_path": "Cache/Cache_Data/d2e0bc687271e93f_0"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955805868157379,
+                "relative_path": "Cache/Cache_Data/index-dir",
+                "size": 96
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779955382907486709,
+                "relative_path": "Cache/Cache_Data/index-dir",
+                "size": 96
+              },
+              "relative_path": "Cache/Cache_Data/index-dir"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955805867936922,
+                "relative_path": "Cache/Cache_Data/index-dir/the-real-index",
+                "sha256": "4a1246f444872f21c9788b78b7ead85557c13059abf7e1598549dfbca44bccdb",
+                "size": 59784
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955382907249585,
+                "relative_path": "Cache/Cache_Data/index-dir/the-real-index",
+                "sha256": "d7566ef44edd30df235627c32d590312c645e4cf1a715974f79b9c3603204554",
+                "size": 59784
+              },
+              "relative_path": "Cache/Cache_Data/index-dir/the-real-index"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955510014202229,
+                "relative_path": "Cache/No_Vary_Search",
+                "size": 128
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779953849558051038,
+                "relative_path": "Cache/No_Vary_Search",
+                "size": 128
+              },
+              "relative_path": "Cache/No_Vary_Search"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955510019269521,
+                "relative_path": "Cache/No_Vary_Search/journal.baj",
+                "sha256": "9c169428d852e25bd59b27652ed533d2a1f09f96e4c329fa5e06f47e16731543",
+                "size": 4
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953849558165620,
+                "relative_path": "Cache/No_Vary_Search/journal.baj",
+                "sha256": "9c169428d852e25bd59b27652ed533d2a1f09f96e4c329fa5e06f47e16731543",
+                "size": 4
+              },
+              "relative_path": "Cache/No_Vary_Search/journal.baj"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955815536613689,
+                "relative_path": "Cookies",
+                "sha256": "508de482bae3f373637c4564e6799178386d1ca2a30debff29823eaca5ec3b50",
+                "size": 36864
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955392573010187,
+                "relative_path": "Cookies",
+                "sha256": "c7512bce8b1a3d1a59768814db1bd86728a8ffcf6be724754d55c7cdcbbb6d91",
+                "size": 36864
+              },
+              "relative_path": "Cookies"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955815536647897,
+                "relative_path": "Cookies-journal",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955392573040311,
+                "relative_path": "Cookies-journal",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              "relative_path": "Cookies-journal"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955509469819507,
+                "relative_path": "Crashpad/settings.dat",
+                "sha256": "1e26fce38044fb296cb512eb22981b3bda5de34f2d422e35fbf5e0e07a698bda",
+                "size": 40
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953847878398044,
+                "relative_path": "Crashpad/settings.dat",
+                "sha256": "1e26fce38044fb296cb512eb22981b3bda5de34f2d422e35fbf5e0e07a698bda",
+                "size": 40
+              },
+              "relative_path": "Crashpad/settings.dat"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955810275361112,
+                "relative_path": "DawnGraphiteCache/data_1",
+                "sha256": "124075667f20ddf295f4776c58d620af87bc93484fd19ec864b9e81eadcbade5",
+                "size": 270336
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397244736333,
+                "relative_path": "DawnGraphiteCache/data_1",
+                "sha256": "b58030804db062551fc9f9d9354e0d4b910c13189b8dd1ad7ad5c77bb40f3a03",
+                "size": 270336
+              },
+              "relative_path": "DawnGraphiteCache/data_1"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955416730018055,
+                "relative_path": "DawnGraphiteCache/index",
+                "sha256": "d572cd4709c8ed18d35cca69f372b0b8c423611a97a86fd9b4ee5b6aca2777b7",
+                "size": 262512
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954882827765062,
+                "relative_path": "DawnGraphiteCache/index",
+                "sha256": "a19179bc52c4544eab880643e628f861e441eaccf43fd5274d851e81e4d460fb",
+                "size": 262512
+              },
+              "relative_path": "DawnGraphiteCache/index"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955810275355653,
+                "relative_path": "DawnWebGPUCache/data_1",
+                "sha256": "56fbc6dc1e86c397d70071bb30d8cd728995e40ccd9cf4c2c4ae380bc54a8ddd",
+                "size": 270336
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397244697458,
+                "relative_path": "DawnWebGPUCache/data_1",
+                "sha256": "4eaf850965b1f6a1651b22709b9653aaa65795425eab6ff305adfc6122a21375",
+                "size": 270336
+              },
+              "relative_path": "DawnWebGPUCache/data_1"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955416729922264,
+                "relative_path": "DawnWebGPUCache/index",
+                "sha256": "16eaac123d1ece494a4eccd61ccee68bf7616ccb6d1f293658be8926908fbcf6",
+                "size": 262512
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954882827691521,
+                "relative_path": "DawnWebGPUCache/index",
+                "sha256": "d201d82426ac4968cb4834ad697e3f5f0bc29b08f134b9ea53f85169ce45e960",
+                "size": 262512
+              },
+              "relative_path": "DawnWebGPUCache/index"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955810275344403,
+                "relative_path": "GPUCache/data_1",
+                "sha256": "cb898640baaf621b17686e1c26ce66e31043f1f3ed9ca1c8dc53f52cc8e59ce2",
+                "size": 270336
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955397244645250,
+                "relative_path": "GPUCache/data_1",
+                "sha256": "dd3fdc4e809dc1b1e0d686a8299446d28769b962e6f8a0457ab32d0c008a6906",
+                "size": 270336
+              },
+              "relative_path": "GPUCache/data_1"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955416729845057,
+                "relative_path": "GPUCache/index",
+                "sha256": "9eaa0012ffc9ef8279888ca1695b7fcca3bcaf40d8c17d5dd28ec0c09e6a4ae6",
+                "size": 262512
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954882827619189,
+                "relative_path": "GPUCache/index",
+                "sha256": "bfc099fd4fed97139617cc057c7b27abf7939b6006e2887055b6efcdd9821b54",
+                "size": 262512
+              },
+              "relative_path": "GPUCache/index"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955511699881403,
+                "relative_path": "Local Storage/leveldb",
+                "size": 320
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779953908107981978,
+                "relative_path": "Local Storage/leveldb",
+                "size": 320
+              },
+              "relative_path": "Local Storage/leveldb"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955769443267255,
+                "relative_path": "Local Storage/leveldb/000764.log",
+                "sha256": "b268a75fe52e5dc3afef0bc35da8f08315a9add8d7d7fae15f6dbd0eaa101e57",
+                "size": 6227
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955349449623951,
+                "relative_path": "Local Storage/leveldb/000764.log",
+                "sha256": "889aba8f683c614c08594481985089ad21bce60ccd9aa9dbdffb084748009ab8",
+                "size": 4869
+              },
+              "relative_path": "Local Storage/leveldb/000764.log"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955511699877778,
+                "relative_path": "Local Storage/leveldb/LOG",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953908107474030,
+                "relative_path": "Local Storage/leveldb/LOG",
+                "sha256": "d5265000e6daafca835711e2f7677dcbafcccc768e821a9a560035d90cd28031",
+                "size": 1018
+              },
+              "relative_path": "Local Storage/leveldb/LOG"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955509685615079,
+                "relative_path": "Local Storage/leveldb/LOG.old",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779952038344214648,
+                "relative_path": "Local Storage/leveldb/LOG.old",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              "relative_path": "Local Storage/leveldb/LOG.old"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955519687180342,
+                "relative_path": "Preferences",
+                "sha256": "e498bafeae7ae1d31f4a3e7f9ce416cd5fb6a810a4716159989c1f1b95b4cfda",
+                "size": 213
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953858075357937,
+                "relative_path": "Preferences",
+                "sha256": "e498bafeae7ae1d31f4a3e7f9ce416cd5fb6a810a4716159989c1f1b95b4cfda",
+                "size": 213
+              },
+              "relative_path": "Preferences"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955660999295132,
+                "relative_path": "TransportSecurity",
+                "sha256": "1cdc877dee04038839753cccf60e20ad4d9171c781145e5f4add969a7107d0c2",
+                "size": 34141
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955054616848740,
+                "relative_path": "TransportSecurity",
+                "sha256": "6a99f6c2536d7fd64cd16fefc66bce9a28d8741f3b82d51e3a4351aec757478a",
+                "size": 34141
+              },
+              "relative_path": "TransportSecurity"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955509821270221,
+                "relative_path": "blob_storage",
+                "size": 96
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779953848075409950,
+                "relative_path": "blob_storage",
+                "size": 96
+              },
+              "relative_path": "blob_storage"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955510303416993,
+                "relative_path": "sentry/queue/queue-v2.json",
+                "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "size": 2
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953852867660572,
+                "relative_path": "sentry/queue/queue-v2.json",
+                "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "size": 2
+              },
+              "relative_path": "sentry/queue/queue-v2.json"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955814823762431,
+                "relative_path": "sentry/scope_v3.json",
+                "sha256": "c20b8bf9c49fdbfce036333c9abb34ff2e1b4908232d19e24c24eb6a6b37efb3",
+                "size": 235523
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955399132848163,
+                "relative_path": "sentry/scope_v3.json",
+                "sha256": "9e4814b4172c7a221632386fee0c7cb20a58339216e6d2bec6fc570e128ded2c",
+                "size": 112996
+              },
+              "relative_path": "sentry/scope_v3.json"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955809476852335,
+                "relative_path": "sentry/session.json",
+                "sha256": "49268a9aff8b3d1027e5b734a9835932ccafe238f972e31a2e1ad057e8732f41",
+                "size": 216
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779955347977156657,
+                "relative_path": "sentry/session.json",
+                "sha256": "9a4396a5735d3d307ee5d2340f286d7da1a8462ed73392274f81c2899ab898bd",
+                "size": 253
+              },
+              "relative_path": "sentry/session.json"
+            }
+          ],
+          "changed_count": 29,
+          "created": [
+            "blob_storage/0711e4e8-ed47-4390-912b-765b5b375a69"
+          ],
+          "created_count": 1,
+          "deleted": [
+            "blob_storage/10368a0a-5476-4e7b-a1e1-0e1763832d6f"
+          ],
+          "deleted_count": 1,
+          "unchanged": [
+            ".com.openai.codex.1Sz67m",
+            ".com.openai.codex.DKX37t",
+            ".com.openai.codex.FeS79E",
+            ".com.openai.codex.MMkFQm",
+            ".com.openai.codex.NmUc0p",
+            ".com.openai.codex.UxdZPH",
+            ".com.openai.codex.ZZpdUw",
+            ".com.openai.codex.Zobr5C",
+            ".com.openai.codex.tvEqSU",
+            "Cache",
+            "Cache/Cache_Data/00231dcf1242f3aa_0",
+            "Cache/Cache_Data/0032157c91445f8b_0",
+            "Cache/Cache_Data/0034f613f3d4bea5_0",
+            "Cache/Cache_Data/003ec81d727c39f3_0",
+            "Cache/Cache_Data/005a1beec5c34108_0",
+            "Cache/Cache_Data/00cb32b8d9d90bb9_0",
+            "Cache/Cache_Data/00d9358b610261b8_0",
+            "Cache/Cache_Data/00fb0781113d3dc7_0",
+            "Cache/Cache_Data/016de927bec3f53c_0",
+            "Cache/Cache_Data/018fa7bee1a91fb8_0",
+            "Cache/Cache_Data/0190f2d883f46993_0",
+            "Cache/Cache_Data/01a5fc29775d780d_0",
+            "Cache/Cache_Data/01b23abcb346e133_0",
+            "Cache/Cache_Data/01e966790f0ebd2e_0",
+            "Cache/Cache_Data/01fdc9824e3dae45_0",
+            "Cache/Cache_Data/02510df8c76e7587_0",
+            "Cache/Cache_Data/027fcfb42175c83d_0",
+            "Cache/Cache_Data/0282ae03916b76c7_0",
+            "Cache/Cache_Data/029de5c32b083e8c_0",
+            "Cache/Cache_Data/029fb8a442a83ba9_0",
+            "Cache/Cache_Data/02a42efe9f037fc0_0",
+            "Cache/Cache_Data/02bf42e3aaf194a1_0",
+            "Cache/Cache_Data/02c405bf564b4e54_0",
+            "Cache/Cache_Data/02dc5e37287ab2ca_0",
+            "Cache/Cache_Data/02f37732d5119d76_0",
+            "Cache/Cache_Data/02f52631d3113e31_0",
+            "Cache/Cache_Data/030df69aaf99cf04_0",
+            "Cache/Cache_Data/030fbfeed3d6f3c6_0",
+            "Cache/Cache_Data/03135c9838ead30e_0",
+            "Cache/Cache_Data/0320d7a1d3524c61_0",
+            "Cache/Cache_Data/0328c4a4d8de2a06_0",
+            "Cache/Cache_Data/0371d7d867a8e233_0",
+            "Cache/Cache_Data/037b3a6029148e0f_0",
+            "Cache/Cache_Data/03946722e246e1fb_0",
+            "Cache/Cache_Data/04193561771d9f02_0",
+            "Cache/Cache_Data/041b8b1b962d3945_0",
+            "Cache/Cache_Data/04255f66d5ef4c5c_0",
+            "Cache/Cache_Data/045d260d434f9ab8_0",
+            "Cache/Cache_Data/0478456668085046_0",
+            "Cache/Cache_Data/047ea4996d2581e9_0",
+            "Cache/Cache_Data/0498064ec22306c9_0",
+            "Cache/Cache_Data/04b686b4bac6f1fb_0",
+            "Cache/Cache_Data/04d185e37481c626_0",
+            "Cache/Cache_Data/04d1b97a7ecdeeab_0",
+            "Cache/Cache_Data/0503e8d9b7dbe47d_0",
+            "Cache/Cache_Data/0517e9bd109bf643_0",
+            "Cache/Cache_Data/054316932a187626_0",
+            "Cache/Cache_Data/05779019cae03d76_0",
+            "Cache/Cache_Data/0581bb172f3f33cd_0",
+            "Cache/Cache_Data/058342e71877ecbd_0",
+            "Cache/Cache_Data/0590c446766d8dcd_0",
+            "Cache/Cache_Data/05b28cf2abbcac8d_0",
+            "Cache/Cache_Data/05bfe5d31b616465_0",
+            "Cache/Cache_Data/05ffb67b2ecce0bc_0",
+            "Cache/Cache_Data/05fff1dfc0b2130b_0",
+            "Cache/Cache_Data/060276bc90d160ea_0",
+            "Cache/Cache_Data/06052c262a6525f4_0",
+            "Cache/Cache_Data/061f55c5b31c38d4_0",
+            "Cache/Cache_Data/06362f5f6ae2527e_0",
+            "Cache/Cache_Data/064d1f6d2cea567a_0",
+            "Cache/Cache_Data/066f26ed11bf6ff4_0",
+            "Cache/Cache_Data/06830ac639a76f8e_0",
+            "Cache/Cache_Data/06c441dfc35cc35a_0",
+            "Cache/Cache_Data/06e48b50519d2dc8_0",
+            "Cache/Cache_Data/06e7fd12f1ee2e27_0",
+            "Cache/Cache_Data/06ff4e53711c84c5_0",
+            "Cache/Cache_Data/07091896e52c5fa8_0",
+            "Cache/Cache_Data/074e9b5c080e6891_0",
+            "Cache/Cache_Data/07584440f6b630fb_0",
+            "Cache/Cache_Data/07cb6a2be588b887_0",
+            "Cache/Cache_Data/07d181b25ba84302_0",
+            "Cache/Cache_Data/07e8875fc62a2121_0",
+            "Cache/Cache_Data/07e8ffab788273d0_0",
+            "Cache/Cache_Data/07ee32def4498ee0_0",
+            "Cache/Cache_Data/07fd100c5062b42b_0",
+            "Cache/Cache_Data/083c746b68f0bffc_0",
+            "Cache/Cache_Data/08478aa047af5630_0",
+            "Cache/Cache_Data/08583c177f44d35a_0",
+            "Cache/Cache_Data/0860159c3678c75b_0",
+            "Cache/Cache_Data/086cec176fd47573_0",
+            "Cache/Cache_Data/087daf2bc5a0cef7_0",
+            "Cache/Cache_Data/0892e83da66ab755_0",
+            "Cache/Cache_Data/08a9559935c29a3f_0",
+            "Cache/Cache_Data/08dda3b96b4e4a82_0",
+            "Cache/Cache_Data/08f86ba48ea17378_0",
+            "Cache/Cache_Data/09550a3eef54af38_0",
+            "Cache/Cache_Data/09607b52036edb8e_0",
+            "Cache/Cache_Data/0974a3c43909ca14_0",
+            "Cache/Cache_Data/098f4014093ae662_0",
+            "Cache/Cache_Data/09ab553e759124d9_0"
+          ],
+          "unchanged_count": 3818
+        },
+        "root": "/Users/kirillponomarev/Library/Application Support/Codex",
+        "unchanged": false
+      },
+      "default_cache_codex": {
+        "diff": {
+          "changed": [
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955413445652645,
+                "relative_path": "Cache.db-shm",
+                "sha256": "c02d1e2927e5232aa2d8a8dc9b0975be3c49723c57b7d93ede4d986735889504",
+                "size": 32768
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953848752208593,
+                "relative_path": "Cache.db-shm",
+                "sha256": "933b0d595dff16ea50fc5384c024db449fd8bf33fca72ce63103603e11b4a63c",
+                "size": 32768
+              },
+              "relative_path": "Cache.db-shm"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955648547195750,
+                "relative_path": "Cache.db-wal",
+                "sha256": "cd7ed120f083cda895a814c1a3bd7b601b9df869cf06d471980b36af34d9c400",
+                "size": 3209512
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954748571190667,
+                "relative_path": "Cache.db-wal",
+                "sha256": "b3f18ecb34787e08f0755f0f5451a0f67f9ba08b6b135957555022df79a4b095",
+                "size": 3147712
+              },
+              "relative_path": "Cache.db-wal"
+            },
+            {
+              "after": {
+                "kind": "dir",
+                "mtime_ns": 1779955648547036417,
+                "relative_path": "fsCachedData",
+                "size": 96
+              },
+              "before": {
+                "kind": "dir",
+                "mtime_ns": 1779954748570897421,
+                "relative_path": "fsCachedData",
+                "size": 96
+              },
+              "relative_path": "fsCachedData"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955648546800253,
+                "relative_path": "fsCachedData/97ACE1F2-18E0-403E-8A1E-AC9A94DDD548",
+                "sha256": "793c2fbfdc731ccee3b91cd97e428b35f757b38731efab5e47560b8dd3eb79f7",
+                "size": 9644
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954748570782380,
+                "relative_path": "fsCachedData/97ACE1F2-18E0-403E-8A1E-AC9A94DDD548",
+                "sha256": "793c2fbfdc731ccee3b91cd97e428b35f757b38731efab5e47560b8dd3eb79f7",
+                "size": 9644
+              },
+              "relative_path": "fsCachedData/97ACE1F2-18E0-403E-8A1E-AC9A94DDD548"
+            }
+          ],
+          "changed_count": 4,
+          "created": [],
+          "created_count": 0,
+          "deleted": [],
+          "deleted_count": 0,
+          "unchanged": [
+            ".",
+            "Cache.db",
+            "org.sparkle-project.Sparkle",
+            "org.sparkle-project.Sparkle/Launcher"
+          ],
+          "unchanged_count": 4
+        },
+        "root": "/Users/kirillponomarev/Library/Caches/com.openai.codex",
+        "unchanged": false
+      },
+      "default_httpstorage_codex": {
+        "diff": {
+          "changed": [
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955413410847285,
+                "relative_path": "httpstorages.sqlite-shm",
+                "sha256": "051fb45859cc133f745373087c8a40f5c913f724e2dbc6b63f0110d0f2ecff6d",
+                "size": 32768
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779953848262864135,
+                "relative_path": "httpstorages.sqlite-shm",
+                "sha256": "fe2595c58736383e62428606f13024c4783376ab406a56dfd1bddbcc969067a3",
+                "size": 32768
+              },
+              "relative_path": "httpstorages.sqlite-shm"
+            },
+            {
+              "after": {
+                "kind": "file",
+                "mtime_ns": 1779955648545541597,
+                "relative_path": "httpstorages.sqlite-wal",
+                "sha256": "9aab25c392c2277b34d929c3741d534d14281552776cd9d0ec545fb1f57baa3b",
+                "size": 1643912
+              },
+              "before": {
+                "kind": "file",
+                "mtime_ns": 1779954748566169941,
+                "relative_path": "httpstorages.sqlite-wal",
+                "sha256": "9d9776c243d8aabf68a8cb60d1515daa82c5944d7534c10f0b53269658d6734b",
+                "size": 1610952
+              },
+              "relative_path": "httpstorages.sqlite-wal"
+            }
+          ],
+          "changed_count": 2,
+          "created": [],
+          "created_count": 0,
+          "deleted": [],
+          "deleted_count": 0,
+          "unchanged": [
+            ".",
+            "httpstorages.sqlite"
+          ],
+          "unchanged_count": 2
+        },
+        "root": "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex",
+        "unchanged": false
+      }
+    }
+  },
+  "original_codex_runtime_input": false,
+  "original_codex_write_performed_by_contour": false,
+  "packet_kind": "original_codex_profile_drift",
+  "reason_class": "ORIGINAL_CODEX_PROTECTED_SURFACE_DRIFT",
+  "status": "blocked"
+}

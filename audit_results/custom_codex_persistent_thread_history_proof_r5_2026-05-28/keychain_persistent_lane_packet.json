@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T08:10:16.116055Z",
+  "isolated_default_keychain_verified": true,
+  "isolated_search_list_verified": true,
+  "keychain_preflight_status": "ok",
+  "packet_kind": "keychain_persistent_lane_r3",
+  "prompt_absence_counts_as_auth_proof": false,
+  "prompt_absence_counts_as_persistence_proof": false,
+  "reason_class": "OK",
+  "status": "ok"
+}
