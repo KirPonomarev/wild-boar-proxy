@@ -1,0 +1,26 @@
+{
+  "baseline_output_view": {
+    "artifact_consumed_by_next_step": false,
+    "artifact_kind": "single_path_summary",
+    "artifact_task_relevant": true,
+    "configured_provider": "cliproxy",
+    "execution_slot_id": "primary_model_slot",
+    "live_prompt_full_success": true,
+    "machine_error_code": "OK",
+    "model_id": "gpt-5.3-codex",
+    "response_preview_bounded": "BASELINE_SINGLE_PATH::single_plan_and_fix_summary",
+    "selected_source_provenance": "backend_proven",
+    "status": "ok"
+  },
+  "captured_at_utc": "2026-05-28T13:50:46.109795Z",
+  "completion_observed": true,
+  "output_present": true,
+  "packet_kind": "primary_only_baseline",
+  "path_kind": "primary_only",
+  "session_id": "ccs-fe57348c4c174679984b",
+  "status": "ok",
+  "step_count": 1,
+  "task_fixture_id": "workflow_task_alpha",
+  "transcript_entry_count": 2,
+  "transcript_preserves_response_event": true
+}
