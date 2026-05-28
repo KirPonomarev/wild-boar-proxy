@@ -1736,7 +1736,7 @@ function renderCodexCustomAccounts(accounts, selection) {
   const claimGate = accounts?.claim_gate_status || selection?.claim_gate_status || "not_reported";
   const claimGateBlocked = String(claimGate).includes("blocked");
   const status = accounts?.status || "unknown";
-  const selectionDryRunProven = selection?.selection_dry_run_proven === true || selection?.selection_proven === true;
+  const selectionDryRunProven = selection?.selection_dry_run_proven === true;
   const liveSelectionProven = selection?.live_selection_proven === true;
   codexCustomAccountsSetChip(
     status === "ok" && selectionDryRunProven && !claimGateBlocked ? "green" : (status === "failed" ? "red" : "amber"),
@@ -1769,7 +1769,7 @@ function renderCodexCustomAccounts(accounts, selection) {
 
 function renderCodexCustomAccountDryRun(packet) {
   const response = document.getElementById("codexCustomAccountDryRunResponse");
-  const selectionDryRunProven = packet?.selection_dry_run_proven === true || packet?.selection_proven === true;
+  const selectionDryRunProven = packet?.selection_dry_run_proven === true;
   const ok = packet?.dry_run === true && selectionDryRunProven && packet?.browser_selected_backend === false;
   const claimGateBlocked = String(packet?.claim_gate_status || packet?.refresh_packet?.claim_gate_status || "").includes("blocked");
   codexCustomAccountsSetChip(
@@ -1895,6 +1895,7 @@ function currentCodexCustomSessionUrl(action = "") {
 
 function renderCodexCustomSessionPacket(packet) {
   const session = packet?.session || {};
+  const roleSlots = session?.role_slots || packet?.role_slot_binding_packet?.role_slots || {};
   const sessionId = session?.session_id || packet?.session_id || codexCustomSelectedSessionId || "";
   if (sessionId) {
     codexCustomSelectedSessionId = sessionId;
@@ -1904,30 +1905,57 @@ function renderCodexCustomSessionPacket(packet) {
   const modelResponsePresent = packet?.model_response_present === true || session?.model_response_present === true;
   const wbpPathProven = packet?.wbp_path_proven === true;
   const traceMissingAfterResponse = inference && modelResponsePresent && !wbpPathProven;
-  const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true || session?.selection_proven === true || packet?.selection_proven === true;
+  const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true;
   const liveSelection = session?.live_selection_proven === true || packet?.live_selection_proven === true;
+  const slotCatalogRevalidated = session?.slot_catalog_revalidated === true || packet?.role_slot_binding_packet?.slot_catalog_revalidated === true;
+  const packetStatus = packet?.status || session?.status || "unknown";
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
-  codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packet?.status || "unknown");
+  codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packetStatus || "unknown");
   codexCustomSessionsSetText("codexCustomSessionModel", session?.model_id || packet?.selected_model || "-");
+  const boundSlotCount = Object.values(roleSlots).filter((slot) => slot?.binding_status === "bound").length;
+  codexCustomSessionsSetText(
+    "codexCustomSessionSlots",
+    `${boundSlotCount} bound · current ${session?.current_execution_slot_id || packet?.current_execution_slot_id || "primary_model_slot"}`
+  );
   codexCustomSessionsSetText(
     "codexCustomSessionSelection",
-    selectionDryRun ? `${session?.selected_source_class || packet?.selected_source_class || "gpt_account"} · ${liveSelection ? "live proven" : "selection dry-run"}` : "not proven"
+    selectionDryRun
+      ? `${session?.selected_source_class || packet?.selected_source_class || "gpt_account"} · ${liveSelection ? "live proven" : (slotCatalogRevalidated ? "selection dry-run" : "reload needs revalidation")}`
+      : "not proven"
   );
   codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
   codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
   codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
-  const ok = packet?.status === "ok";
-  const chipLabel = inference && modelResponsePresent ? (wbpPathProven ? "trace proven" : "trace missing") : "session ready";
-  const chipVisual = ok && !traceMissingAfterResponse ? "green" : ((packet?.status === "rejected" || packet?.status === "blocked" || traceMissingAfterResponse) ? "amber" : "red");
-  codexCustomSessionsSetChip(chipVisual, ok ? chipLabel : (packet?.status || "unknown"));
+  let chipVisual = "neutral";
+  let chipLabel = packetStatus;
+  if (inference && modelResponsePresent) {
+    chipLabel = wbpPathProven ? "trace proven" : "trace missing";
+    chipVisual = packetStatus === "ok" && !traceMissingAfterResponse ? "green" : "amber";
+  } else if (packetStatus === "ok") {
+    chipLabel = slotCatalogRevalidated && selectionDryRun ? "dry-run proven" : "selection loaded";
+    chipVisual = slotCatalogRevalidated && selectionDryRun ? "amber" : "neutral";
+  } else if (packetStatus === "loaded") {
+    chipLabel = slotCatalogRevalidated && selectionDryRun ? "loaded / dry-run proven" : "loaded / revalidation required";
+    chipVisual = slotCatalogRevalidated && selectionDryRun ? "amber" : "neutral";
+  } else if (packetStatus === "rejected" || packetStatus === "blocked") {
+    chipVisual = "amber";
+  }
+  codexCustomSessionsSetChip(chipVisual, chipLabel || "unknown");
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
-      status: packet?.status || "unknown",
+      status: packetStatus,
       machine_error_code: packet?.machine_error_code || "UNKNOWN",
       session_id: sessionId,
+      session_schema_version: session?.session_schema_version ?? packet?.session_schema_version ?? 0,
       model_id: session?.model_id || packet?.selected_model || "",
       model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
+      current_execution_slot_id: session?.current_execution_slot_id || packet?.current_execution_slot_id || "",
+      current_execution_path_source: session?.current_execution_path_source || packet?.current_execution_path_source || "",
+      role_slot_binding_proven: session?.role_slot_binding_proven === true || packet?.role_slot_binding_proven === true,
+      role_slot_binding_count: session?.role_slot_binding_count ?? packet?.role_slot_binding_packet?.role_slot_binding_count ?? 0,
+      slot_catalog_revalidated: slotCatalogRevalidated,
+      role_slots: roleSlots,
       selection_dry_run_proven: selectionDryRun,
       live_selection_proven: liveSelection,
       selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
@@ -1992,7 +2020,11 @@ function renderCodexCustomSessionList(packet) {
   }
   const selected = sessions.find((session) => session.session_id === codexCustomSelectedSessionId) || sessions[0] || null;
   if (selected) {
-    renderCodexCustomSessionPacket({ status: "ok", machine_error_code: "OK", session: selected });
+    renderCodexCustomSessionPacket({
+      status: "loaded",
+      machine_error_code: selected?.selection_machine_error_code || "SESSION_LOADED_FROM_LIST",
+      session: selected
+    });
     codexCustomSessionsSetText("codexCustomSessionsSummary", `${sessions.length} sessions · selected ${selected.session_id}`);
   } else {
     codexCustomSessionsSetChip("neutral", "no sessions");
@@ -2078,13 +2110,19 @@ async function postCodexCustomSessionAction(action, payload = {}) {
 }
 
 async function createCodexCustomSession() {
-  const modelNode = document.getElementById("codexCustomModelSelect");
-  let modelId = modelNode ? modelNode.value : "";
-  if (!modelId) {
+  const primaryNode = document.getElementById("codexCustomModelSelect");
+  const codingNode = document.getElementById("codexCustomApiModelSelect");
+  let primaryModelId = primaryNode ? primaryNode.value : "";
+  let codingAgentModelId = codingNode ? codingNode.value : "";
+  if (!primaryModelId) {
     await refreshCodexCustomModelsPanel();
-    modelId = modelNode ? modelNode.value : "";
+    primaryModelId = primaryNode ? primaryNode.value : "";
+    codingAgentModelId = codingNode ? codingNode.value : "";
   }
-  await postCodexCustomSessionAction("create", { model_id: modelId });
+  await postCodexCustomSessionAction("create", {
+    primary_model_id: primaryModelId,
+    coding_agent_model_id: codingAgentModelId
+  });
 }
 
 async function runCodexCustomSessionPromptDryRun() {

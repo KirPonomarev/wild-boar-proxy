@@ -52,6 +52,7 @@ TEST_SANDBOX_AUTH_REF = "/tmp/wbp-sandbox-auth.json"
 TEST_CODEX_LOGIN_SESSION_ID = "codex-test-session"
 TEST_CODEX_DEVICE_URL = "https://auth.openai.com/codex/device"
 TEST_CODEX_DEVICE_CODE = "WBP-1234"
+REAL_CODEX_CUSTOM_SESSION_MANAGER = live_server.CodexCustomSessionManager
 
 
 class StableProbeHandler(BaseHTTPRequestHandler):
@@ -6846,6 +6847,23 @@ class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
 
 
 class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self._codex_custom_session_tempdir = tempfile.TemporaryDirectory()
+        self._codex_custom_session_manager_patcher = mock.patch.object(
+            live_server,
+            "CodexCustomSessionManager",
+            side_effect=lambda: REAL_CODEX_CUSTOM_SESSION_MANAGER(
+                Path(self._codex_custom_session_tempdir.name)
+            ),
+        )
+        self._codex_custom_session_manager_patcher.start()
+
+    def tearDown(self) -> None:
+        self._codex_custom_session_manager_patcher.stop()
+        self._codex_custom_session_tempdir.cleanup()
+        super().tearDown()
+
     def test_codex_custom_session_lifecycle_is_dry_run_and_server_owned(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []
 
@@ -6877,7 +6895,10 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
                     )
                 )
                 session_id = created["session"]["session_id"]
@@ -6920,11 +6941,31 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(created["session_created"])
         self.assertFalse(created["live_prompt_admitted"])
         self.assertTrue(created["session"]["model_server_issued"])
+        self.assertEqual(created["session"]["session_schema_version"], 2)
+        self.assertEqual(created["session"]["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(created["session"]["current_execution_path_source"], "session_primary_model_slot")
+        self.assertEqual(created["session"]["role_slot_binding_count"], 2)
+        self.assertEqual(
+            created["session"]["role_slots"]["primary_model_slot"]["model_id"],
+            "gpt-5.3-codex",
+        )
+        self.assertEqual(
+            created["session"]["role_slots"]["coding_agent_model_slot"]["model_id"],
+            "wbp-deepseek-v3",
+        )
         self.assertTrue(created["session"]["selection_dry_run_proven"])
         self.assertFalse(created["session"]["live_selection_proven"])
         self.assertTrue(created["session"]["selection_proven"])
         self.assertTrue(created["session"]["selected_backend_id_redacted"])
         self.assertEqual(created["session"]["session_root_scope"], "owned_temp_session_root")
+        self.assertEqual(
+            created["role_slot_binding_packet"]["current_execution_slot_id"],
+            "primary_model_slot",
+        )
+        self.assertEqual(
+            created["role_slot_binding_packet"]["role_slot_binding_count"],
+            2,
+        )
         self.assertNotIn("/tmp/wbp-auth.json", json.dumps(created))
         self.assertNotIn("acct-active", json.dumps(created))
         self.assertEqual(detail["session"]["session_id"], session_id)

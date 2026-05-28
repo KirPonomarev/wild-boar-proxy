@@ -3713,7 +3713,9 @@ def build_handler(
             if parsed.path == "/api/codex/custom/sessions":
                 operator_status = operator_surface_session.status_payload()
                 payload = self._read_json_body()
-                model_id = payload.get("model_id")
+                model_id = payload.get("primary_model_id")
+                if not isinstance(model_id, str) or not model_id:
+                    model_id = payload.get("model_id")
                 if not isinstance(model_id, str):
                     model_id = ""
                 account_commands = self._codex_account_commands()

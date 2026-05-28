@@ -97,9 +97,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"model_id": "gpt-5.3-codex"},
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-web-primary-openrouter",
+                },
                 commands(),
                 operator_status(),
+                api_snapshot=api_snapshot(),
             )
 
             self.assertEqual(packet["status"], "ok")
@@ -107,8 +111,29 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["live_prompt_admitted"])
             self.assertFalse(packet["current_codex_home_used"])
             self.assertTrue(packet["selected_backend_id_redacted"])
+            self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
+            self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["current_execution_path_source"], "session_primary_model_slot")
             session = packet["session"]
+            self.assertEqual(session["session_schema_version"], 2)
+            self.assertFalse(session["legacy_single_model_migrated"])
+            self.assertTrue(session["role_slot_binding_proven"])
+            self.assertEqual(session["role_slot_binding_count"], 2)
             self.assertTrue(session["model_server_issued"])
+            self.assertEqual(session["current_execution_slot_id"], "primary_model_slot")
+            self.assertEqual(session["current_execution_path_source"], "session_primary_model_slot")
+            self.assertEqual(
+                session["role_slots"]["primary_model_slot"]["model_id"],
+                "gpt-5.3-codex",
+            )
+            self.assertEqual(
+                session["role_slots"]["coding_agent_model_slot"]["model_id"],
+                "wbp-web-primary-openrouter",
+            )
+            self.assertEqual(
+                session["role_slots"]["reviewer_model_slot"]["binding_status"],
+                "unbound",
+            )
             self.assertTrue(session["selection_dry_run_proven"])
             self.assertFalse(session["live_selection_proven"])
             self.assertTrue(session["selection_proven"])
@@ -129,6 +154,83 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["network_calls_made"])
             self.assertFalse(packet["provider_called"])
             self.assertEqual(packet["token_burn"], 0)
+
+    def test_manager_loads_legacy_single_model_session_and_migrates_to_role_slots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            session_root = root / "ccs-legacy1234"
+            session_root.mkdir()
+            (session_root / "codex-home").mkdir()
+            (session_root / "workdir").mkdir()
+            legacy_payload = {
+                "session": {
+                    "session_id": "ccs-legacy1234",
+                    "created_at_utc": "2026-05-28T00:00:00Z",
+                    "updated_at_utc": "2026-05-28T00:00:00Z",
+                    "status": "ready",
+                    "model_id": "gpt-5.3-codex",
+                    "model_server_issued": True,
+                    "selected_source_class": "gpt_account",
+                    "selected_backend_digest": "digest-acct-a",
+                    "selected_backend_id_redacted": True,
+                    "selected_backend_server_issued": True,
+                    "selected_route_digest": "",
+                    "selected_route_server_issued": False,
+                    "route_provenance_required": False,
+                    "route_provenance_proven": False,
+                    "source_provenance_status": "backend_proven",
+                    "source_provenance_proven": True,
+                    "selection_dry_run_proven": True,
+                    "live_selection_proven": False,
+                    "selection_proven": True,
+                    "selection_machine_error_code": "OK",
+                    "session_root_digest": "legacy-root",
+                    "codex_home_digest": "legacy-home",
+                    "session_root_scope": "owned_temp_session_root",
+                    "current_codex_home_used": False,
+                    "prompt_admission_count": 0,
+                    "cleanup_state": "not_cleaned",
+                    "cancel_state": "not_cancelled",
+                    "ledger_entry_count": 0,
+                    "model_response_present": False,
+                    "inference_proven": False,
+                    "runtime_meter_attached": False,
+                    "network_calls_made": False,
+                    "provider_called": False,
+                    "token_burn": 0,
+                },
+                "ledger": [],
+            }
+            (session_root / "session.json").write_text(
+                json.dumps(legacy_payload, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            manager = CodexCustomSessionManager(root)
+            packet = manager.get_packet("ccs-legacy1234")
+
+            self.assertEqual(packet["status"], "ok")
+            session = packet["session"]
+            self.assertEqual(session["session_schema_version"], 2)
+            self.assertTrue(session["legacy_single_model_migrated"])
+            self.assertEqual(session["migration_status"], "legacy_single_model_migrated")
+            self.assertEqual(session["model_id"], "gpt-5.3-codex")
+            self.assertEqual(
+                session["role_slots"]["primary_model_slot"]["binding_source"],
+                "legacy_single_model_migration",
+            )
+            self.assertEqual(
+                session["role_slots"]["primary_model_slot"]["model_id"],
+                "gpt-5.3-codex",
+            )
+            self.assertEqual(
+                session["role_slots"]["coding_agent_model_slot"]["binding_status"],
+                "unbound",
+            )
+            self.assertEqual(
+                packet["role_slot_binding_packet"]["current_execution_slot_id"],
+                "primary_model_slot",
+            )
+            self.assertFalse(session["slot_catalog_revalidated"])
 
     def test_create_session_rejects_free_form_model_and_browser_backend_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -187,6 +289,37 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["session"]["selected_route_server_issued"])
             self.assertTrue(packet["session"]["route_provenance_proven"])
 
+    def test_create_session_accepts_all_declared_role_slots_when_server_issued(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-web-primary-openrouter",
+                    "reviewer_model_id": "gpt-5.4",
+                    "cheap_scanner_model_id": "gpt-5.4",
+                    "deep_reasoning_model_id": "gpt-5.4",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["session"]["role_slot_binding_count"], 5)
+            self.assertEqual(
+                packet["session"]["role_slots"]["reviewer_model_slot"]["model_id"],
+                "gpt-5.4",
+            )
+            self.assertEqual(
+                packet["session"]["role_slots"]["cheap_scanner_model_slot"]["model_id"],
+                "gpt-5.4",
+            )
+            self.assertEqual(
+                packet["session"]["role_slots"]["deep_reasoning_model_slot"]["model_id"],
+                "gpt-5.4",
+            )
+
     def test_create_session_rejects_when_account_selection_is_not_proven(self) -> None:
         weak_commands = commands()
         weak_commands["accounts_list"] = command({"accounts": []})
@@ -204,6 +337,38 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["session_created"])
             self.assertEqual(packet["next_action"], "repair_account_selection_truth")
             self.assertEqual(manager.list_packet()["session_count"], 0)
+
+    def test_reloaded_multi_slot_session_requires_slot_revalidation_before_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manager = CodexCustomSessionManager(root)
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-web-primary-openrouter",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
+
+            reloaded = CodexCustomSessionManager(root)
+            detail = reloaded.get_packet(session_id)
+            blocked = reloaded.prompt_packet(
+                session_id,
+                {"prompt": "Reply with exactly OK."},
+                lambda payload: {"status": "ok", "final_message": "OK"},
+                owner_authorized=True,
+            )
+
+            self.assertEqual(detail["status"], "ok")
+            self.assertFalse(detail["session"]["slot_catalog_revalidated"])
+            self.assertFalse(detail["role_slot_binding_packet"]["slot_catalog_revalidated"])
+            self.assertEqual(blocked["status"], "rejected")
+            self.assertEqual(blocked["machine_error_code"], "SLOT_CATALOG_REVALIDATION_REQUIRED")
+            self.assertIn("SLOT_CATALOG_REVALIDATION_REQUIRED", blocked["precondition_failures"])
 
     def test_prompt_dry_run_hashes_prompt_and_does_not_claim_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

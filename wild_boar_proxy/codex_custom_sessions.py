@@ -18,20 +18,57 @@ from wild_boar_proxy.operator_surface import redact_text
 
 from wild_boar_proxy.codex_account_selection import (
     build_account_selection_packet,
-    forbidden_account_smoke_fields,
 )
 from wild_boar_proxy.codex_model_registry import (
     build_custom_model_registry_packet,
-    forbidden_custom_model_fields,
+    build_dual_lane_model_selection_ui_packet,
 )
 
-
-SESSION_CREATE_ALLOWED_FIELDS = {"model_id"}
+PRIMARY_MODEL_SLOT = "primary_model_slot"
+CODING_AGENT_MODEL_SLOT = "coding_agent_model_slot"
+REVIEWER_MODEL_SLOT = "reviewer_model_slot"
+CHEAP_SCANNER_MODEL_SLOT = "cheap_scanner_model_slot"
+DEEP_REASONING_MODEL_SLOT = "deep_reasoning_model_slot"
+ROLE_SLOT_PAYLOAD_FIELDS = {
+    PRIMARY_MODEL_SLOT: "primary_model_id",
+    CODING_AGENT_MODEL_SLOT: "coding_agent_model_id",
+    REVIEWER_MODEL_SLOT: "reviewer_model_id",
+    CHEAP_SCANNER_MODEL_SLOT: "cheap_scanner_model_id",
+    DEEP_REASONING_MODEL_SLOT: "deep_reasoning_model_id",
+}
+ROLE_SLOT_IDS = tuple(ROLE_SLOT_PAYLOAD_FIELDS)
+SESSION_CREATE_ALLOWED_FIELDS = {"model_id", *ROLE_SLOT_PAYLOAD_FIELDS.values()}
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
 PROMPT_RUN_ALLOWED_FIELDS = {"prompt"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {"ready", "prompt_admitted_dry_run"}
 BOUNDED_RESPONSE_PREVIEW_CHARS = 240
+SESSION_SCHEMA_VERSION = 2
+SESSION_CREATE_FORBIDDEN_FIELDS = {
+    "api_key",
+    "apikey",
+    "secret",
+    "token",
+    "auth",
+    "auth_path",
+    "path",
+    "backend_id",
+    "route_id",
+    "provider",
+    "endpoint",
+    "base_url",
+    "openai_base_url",
+    "model_provider",
+    "wire_api",
+    "proxy",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "home",
+    "codex_home",
+    "runtime_config",
+    "account_id",
+}
 
 
 def utc_now() -> str:
@@ -63,13 +100,35 @@ def _forbidden_fields(payload: Any, allowed_fields: set[str], prefix: str = "") 
 
 
 def forbidden_session_create_fields(payload: Any) -> list[str]:
-    return sorted(
-        set(
-            _forbidden_fields(payload, SESSION_CREATE_ALLOWED_FIELDS)
-            + forbidden_custom_model_fields(payload)
-            + forbidden_account_smoke_fields(payload)
-        )
-    )
+    findings = _forbidden_fields(payload, SESSION_CREATE_ALLOWED_FIELDS)
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = key_text
+            if key_text.lower() in SESSION_CREATE_FORBIDDEN_FIELDS:
+                findings.append(key_path)
+            findings.extend(_session_create_forbidden_nested_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(_session_create_forbidden_nested_fields(value, f"[{index}]"))
+    return sorted(set(findings))
+
+
+def _session_create_forbidden_nested_fields(payload: Any, prefix: str) -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if key_text.lower() in SESSION_CREATE_FORBIDDEN_FIELDS:
+                findings.append(key_path)
+            else:
+                findings.append(key_path)
+            findings.extend(_session_create_forbidden_nested_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(_session_create_forbidden_nested_fields(value, f"{prefix}[{index}]"))
+    return findings
 
 
 def forbidden_prompt_dry_run_fields(payload: Any) -> list[str]:
@@ -86,6 +145,96 @@ def _model_ids(
 ) -> list[str]:
     registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
     return [str(entry["model_id"]) for entry in registry.get("available_models", [])]
+
+
+def _selector_entry_index(
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+    entries: dict[str, dict[str, Any]] = {}
+    for lane in ("chatgpt_lane", "api_lane"):
+        for entry in selector.get(lane, {}).get("models", []):
+            if not isinstance(entry, dict):
+                continue
+            model_id = str(entry.get("model_id") or "")
+            if model_id:
+                entries[model_id] = entry
+    return entries
+
+
+def _unbound_slot(slot_id: str) -> dict[str, Any]:
+    return {
+        "slot_id": slot_id,
+        "model_id": "",
+        "lane_kind": "unbound",
+        "server_issued": False,
+        "binding_status": "unbound",
+        "binding_source": "none",
+        "selection_intent_only": False,
+        "runtime_dispatch_state": "unresolved_in_this_contour",
+        "persisted": False,
+        "persisted_source": "session_state_file",
+    }
+
+
+def _bound_slot(
+    *,
+    slot_id: str,
+    model_id: str,
+    lane_kind: str,
+    binding_source: str,
+) -> dict[str, Any]:
+    return {
+        "slot_id": slot_id,
+        "model_id": model_id,
+        "lane_kind": lane_kind,
+        "server_issued": True,
+        "binding_status": "bound",
+        "binding_source": binding_source,
+        "selection_intent_only": False,
+        "runtime_dispatch_state": "unresolved_in_this_contour",
+        "persisted": True,
+        "persisted_source": "session_state_file",
+    }
+
+
+def _slot_model_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    slot_model_ids: dict[str, str] = {}
+    legacy_model_id = payload.get("model_id")
+    primary_model_id = payload.get(ROLE_SLOT_PAYLOAD_FIELDS[PRIMARY_MODEL_SLOT])
+    if isinstance(primary_model_id, str) and primary_model_id:
+        slot_model_ids[PRIMARY_MODEL_SLOT] = primary_model_id
+    elif isinstance(legacy_model_id, str) and legacy_model_id:
+        slot_model_ids[PRIMARY_MODEL_SLOT] = legacy_model_id
+    for slot_id, field in ROLE_SLOT_PAYLOAD_FIELDS.items():
+        if slot_id == PRIMARY_MODEL_SLOT:
+            continue
+        value = payload.get(field)
+        if isinstance(value, str) and value:
+            slot_model_ids[slot_id] = value
+    return slot_model_ids
+
+
+def _canonical_role_slots(
+    bound_slots: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    bound_slots = bound_slots or {}
+    role_slots: dict[str, dict[str, Any]] = {}
+    for slot_id in ROLE_SLOT_IDS:
+        role_slots[slot_id] = dict(bound_slots.get(slot_id) or _unbound_slot(slot_id))
+    return role_slots
+
+
+def _primary_model_id_from_role_slots(role_slots: dict[str, dict[str, Any]]) -> str:
+    return str(role_slots.get(PRIMARY_MODEL_SLOT, {}).get("model_id") or "")
+
+
+def _primary_model_lane_kind(role_slots: dict[str, dict[str, Any]]) -> str:
+    return str(role_slots.get(PRIMARY_MODEL_SLOT, {}).get("lane_kind") or "unbound")
 
 
 def _response_preview(value: str) -> str:
@@ -184,6 +333,7 @@ class CodexCustomSessionManager:
         self.root = base.resolve()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._sessions: dict[str, dict[str, Any]] = {}
+        self._load_existing_sessions()
 
     def list_packet(self) -> dict[str, Any]:
         sessions = [self._public_session(session) for session in self._sessions.values()]
@@ -193,6 +343,7 @@ class CodexCustomSessionManager:
             "machine_error_code": "OK",
             "captured_at_utc": utc_now(),
             "mode_id": "codex_custom",
+            "session_schema_version": SESSION_SCHEMA_VERSION,
             "session_count": len(sessions),
             "sessions": sessions,
             "inference_proven": False,
@@ -212,15 +363,35 @@ class CodexCustomSessionManager:
         forbidden = forbidden_session_create_fields(payload)
         if forbidden:
             return self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden)
-        model_id = payload.get("model_id")
+        slot_model_ids = _slot_model_ids_from_payload(payload)
+        primary_model_id = slot_model_ids.get(PRIMARY_MODEL_SLOT, "")
+        legacy_model_id = payload.get("model_id")
+        if (
+            isinstance(legacy_model_id, str)
+            and legacy_model_id
+            and primary_model_id
+            and legacy_model_id != primary_model_id
+        ):
+            return {
+                **self._base_packet("rejected", "PRIMARY_MODEL_CONFLICT"),
+                "human_message": "Session create received conflicting primary model fields.",
+                "next_action": "align_primary_model_fields",
+            }
         model_ids = _model_ids(operator_status, api_snapshot)
-        if not isinstance(model_id, str) or model_id not in model_ids:
+        if not primary_model_id or primary_model_id not in model_ids:
             return {
                 **self._base_packet("rejected", "MODEL_NOT_SERVER_ISSUED"),
                 "human_message": "Session create accepts only server-issued model_id.",
                 "model_server_issued": False,
                 "next_action": "select_model_from_server_registry",
             }
+        slot_bindings, slot_error = self._slot_bindings_from_payload(
+            slot_model_ids,
+            operator_status,
+            api_snapshot=api_snapshot,
+        )
+        if slot_error is not None:
+            return slot_error
         selection = selection or build_account_selection_packet(commands, operator_status)
         if selection.get("selection_proven") is not True:
             return {
@@ -229,7 +400,7 @@ class CodexCustomSessionManager:
                     str(selection.get("machine_error_code") or "SELECTION_NOT_PROVEN"),
                 ),
                 "human_message": "Codex Custom session requires server-issued account selection proof.",
-                "model_id": model_id,
+                "model_id": primary_model_id,
                 "model_server_issued": True,
                 "selection_proven": False,
                 "selection_packet": self._selection_summary(selection),
@@ -253,8 +424,17 @@ class CodexCustomSessionManager:
             "created_at_utc": now,
             "updated_at_utc": now,
             "status": "ready",
-            "model_id": model_id,
+            "session_schema_version": SESSION_SCHEMA_VERSION,
+            "migration_status": "native_multi_slot_schema",
+            "legacy_single_model_migrated": False,
+            "role_slots": _canonical_role_slots(slot_bindings),
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "current_execution_path_source": "session_primary_model_slot",
+            "model_id": primary_model_id,
             "model_server_issued": True,
+            "role_slot_binding_proven": True,
+            "slot_catalog_revalidated": True,
+            "slot_binding_runtime_dispatch_claimed": False,
             "selected_source_class": selection.get("selected_source_class"),
             "selected_backend_ref": selection.get("selected_backend_ref"),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
@@ -285,8 +465,12 @@ class CodexCustomSessionManager:
             "live_prompt_admitted": False,
             "current_codex_home_used": False,
             "selected_backend_id_redacted": True,
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "current_execution_path_model_id": primary_model_id,
+            "current_execution_path_source": "session_primary_model_slot",
             "session": self._public_session(session),
             "selection_packet": self._selection_summary(selection),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "prompt_dry_run",
         }
 
@@ -297,6 +481,7 @@ class CodexCustomSessionManager:
         return {
             **self._base_packet("ok", "OK"),
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "none",
         }
 
@@ -362,6 +547,7 @@ class CodexCustomSessionManager:
             "token_burn": 0,
             "negative_claim_basis": "prompt_admission_dry_run_no_inference_adapter",
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "codex_custom_gpt_api_e2e_pass",
         }
 
@@ -387,6 +573,7 @@ class CodexCustomSessionManager:
             "fallback_attempted": False,
             "token_burn": 0,
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "provide_exact_owner_authorization_phrase",
         }
         if forbidden:
@@ -431,7 +618,8 @@ class CodexCustomSessionManager:
         if not owner_authorized:
             return self.prompt_not_admitted_packet(session_id, {"prompt": prompt})
         prompt_hash = _digest(prompt)
-        model_id = str(session.get("model_id") or "")
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        model_id = _primary_model_id_from_role_slots(role_slots)
         runner_payload = {"prompt": prompt, "model_id": model_id}
         try:
             result = prompt_runner(runner_payload)
@@ -542,8 +730,13 @@ class CodexCustomSessionManager:
             "captured_at_utc": utc_now(),
             "mode_id": "codex_custom",
             "session_id": session_id,
+            "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "current_execution_path_source": "session_primary_model_slot",
             "model_id": model_id,
             "model_server_issued": True,
+            "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
+            "slot_binding_runtime_dispatch_claimed": False,
             "selected_source_class": session.get("selected_source_class"),
             "selected_backend_digest": str(session.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
@@ -601,6 +794,7 @@ class CodexCustomSessionManager:
             "raw_auth_ref_exposed": False,
             "secret_value_recorded": secret_value_recorded,
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": (
                 "inspect_transcript"
                 if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
@@ -719,6 +913,7 @@ class CodexCustomSessionManager:
             "provider_called": False,
             "token_burn": 0,
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "cleanup_session",
         }
 
@@ -762,7 +957,171 @@ class CodexCustomSessionManager:
             "provider_called": False,
             "token_burn": 0,
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "none",
+        }
+
+    def _slot_bindings_from_payload(
+        self,
+        slot_model_ids: dict[str, str],
+        operator_status: dict[str, Any] | None,
+        *,
+        api_snapshot: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, Any] | None]:
+        selector_index = _selector_entry_index(operator_status, api_snapshot=api_snapshot)
+        bound_slots: dict[str, dict[str, Any]] = {}
+        for slot_id, model_id in slot_model_ids.items():
+            entry = selector_index.get(model_id)
+            if entry is None:
+                return {}, {
+                    **self._base_packet("rejected", "MODEL_NOT_SERVER_ISSUED"),
+                    "human_message": "Session slot binding accepts only server-issued current-catalog model ids.",
+                    "slot_id": slot_id,
+                    "model_id": model_id,
+                    "next_action": "choose_server_issued_slot_model",
+                }
+            if entry.get("selection_enabled") is not True:
+                return {}, {
+                    **self._base_packet("rejected", "MODEL_NOT_SELECTABLE"),
+                    "human_message": "Session slot binding accepts only selectable current-catalog model ids.",
+                    "slot_id": slot_id,
+                    "model_id": model_id,
+                    "selection_disabled_reason_code": entry.get("selection_disabled_reason_code") or "",
+                    "next_action": "choose_selectable_slot_model",
+                }
+            bound_slots[slot_id] = _bound_slot(
+                slot_id=slot_id,
+                model_id=model_id,
+                lane_kind=str(entry.get("lane_kind") or "unknown"),
+                binding_source="browser_payload_server_validated",
+            )
+        return bound_slots, None
+
+    def _load_existing_sessions(self) -> None:
+        for session_root in sorted(self.root.iterdir()):
+            if not session_root.is_dir():
+                continue
+            session_file = session_root / "session.json"
+            if not session_file.exists():
+                continue
+            try:
+                session = self._load_session_state(session_root)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            session_id = str(session.get("session_id") or "")
+            if session_id:
+                self._sessions[session_id] = session
+
+    def _load_session_state(self, session_root: Path) -> dict[str, Any]:
+        payload = json.loads((session_root / "session.json").read_text(encoding="utf-8"))
+        public_session = payload.get("session") if isinstance(payload, dict) else None
+        if not isinstance(public_session, dict):
+            raise ValueError("session payload missing public session")
+        ledger = payload.get("ledger") if isinstance(payload.get("ledger"), list) else []
+        public_role_slots = (
+            public_session.get("role_slots")
+            if isinstance(public_session.get("role_slots"), dict)
+            else None
+        )
+        migrated = public_role_slots is None
+        bound_slots: dict[str, dict[str, Any]] = {}
+        if isinstance(public_role_slots, dict):
+            for slot_id in ROLE_SLOT_IDS:
+                raw_slot = public_role_slots.get(slot_id)
+                if not isinstance(raw_slot, dict):
+                    continue
+                model_id = str(raw_slot.get("model_id") or "")
+                if model_id:
+                    bound_slots[slot_id] = {
+                        **_bound_slot(
+                            slot_id=slot_id,
+                            model_id=model_id,
+                            lane_kind=str(raw_slot.get("lane_kind") or "unknown"),
+                            binding_source=str(
+                                raw_slot.get("binding_source") or "persisted_session_state"
+                            ),
+                        ),
+                        "runtime_dispatch_state": str(
+                            raw_slot.get("runtime_dispatch_state")
+                            or "unresolved_in_this_contour"
+                        ),
+                        "persisted": raw_slot.get("persisted") is not False,
+                        "persisted_source": str(
+                            raw_slot.get("persisted_source") or "session_state_file"
+                        ),
+                    }
+        else:
+            legacy_model_id = str(public_session.get("model_id") or "")
+            if legacy_model_id:
+                bound_slots[PRIMARY_MODEL_SLOT] = _bound_slot(
+                    slot_id=PRIMARY_MODEL_SLOT,
+                    model_id=legacy_model_id,
+                    lane_kind=str(public_session.get("selected_source_class") or "unknown"),
+                    binding_source="legacy_single_model_migration",
+                )
+        role_slots = _canonical_role_slots(bound_slots)
+        primary_model_id = _primary_model_id_from_role_slots(role_slots)
+        session = {
+            "session_id": str(public_session.get("session_id") or session_root.name),
+            "created_at_utc": public_session.get("created_at_utc"),
+            "updated_at_utc": public_session.get("updated_at_utc"),
+            "status": public_session.get("status"),
+            "session_schema_version": SESSION_SCHEMA_VERSION,
+            "migration_status": (
+                "legacy_single_model_migrated" if migrated else str(public_session.get("migration_status") or "native_multi_slot_schema")
+            ),
+            "legacy_single_model_migrated": migrated,
+            "role_slots": role_slots,
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "current_execution_path_source": "session_primary_model_slot",
+            "model_id": primary_model_id,
+            "model_server_issued": public_session.get("model_server_issued") is True or bool(primary_model_id),
+            "role_slot_binding_proven": True,
+            "slot_catalog_revalidated": False,
+            "slot_binding_runtime_dispatch_claimed": False,
+            "selected_source_class": public_session.get("selected_source_class"),
+            "selected_backend_ref": str(public_session.get("selected_backend_digest") or ""),
+            "selected_backend_server_issued": public_session.get("selected_backend_server_issued") is True,
+            "selected_route_ref": str(public_session.get("selected_route_digest") or ""),
+            "selected_route_server_issued": public_session.get("selected_route_server_issued") is True,
+            "route_provenance_required": public_session.get("route_provenance_required") is True,
+            "route_provenance_proven": public_session.get("route_provenance_proven") is True,
+            "source_provenance_status": str(public_session.get("source_provenance_status") or "not_proven"),
+            "selection_dry_run_proven": public_session.get("selection_dry_run_proven") is True,
+            "live_selection_proven": public_session.get("live_selection_proven") is True,
+            "selection_proven": public_session.get("selection_proven") is True,
+            "selection_machine_error_code": public_session.get("selection_machine_error_code"),
+            "session_root": str(session_root.resolve()),
+            "codex_home": str((session_root / "codex-home").resolve()),
+            "workdir": str((session_root / "workdir").resolve()),
+            "ledger": ledger,
+            "prompt_admission_count": int(public_session.get("prompt_admission_count") or 0),
+            "cleanup_state": public_session.get("cleanup_state") or "not_cleaned",
+            "cancel_state": public_session.get("cancel_state") or "not_cancelled",
+            "model_response_present": public_session.get("model_response_present") is True,
+            "inference_proven": public_session.get("inference_proven") is True,
+            "token_burn": public_session.get("token_burn"),
+        }
+        if migrated:
+            self._write_session(session)
+        return session
+
+    def _role_slot_binding_packet(self, session: dict[str, Any]) -> dict[str, Any]:
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        bound_count = sum(1 for slot in role_slots.values() if slot.get("binding_status") == "bound")
+        return {
+            "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
+            "role_slot_binding_present": bound_count > 0,
+            "role_slot_binding_count": bound_count,
+            "slot_catalog_revalidated": session.get("slot_catalog_revalidated") is True,
+            "current_execution_slot_id": str(
+                session.get("current_execution_slot_id") or PRIMARY_MODEL_SLOT
+            ),
+            "current_execution_path_source": str(
+                session.get("current_execution_path_source") or "session_primary_model_slot"
+            ),
+            "runtime_execution_truth_closed_here": False,
+            "role_slots": role_slots,
         }
 
     def _append_ledger(
@@ -785,6 +1144,7 @@ class CodexCustomSessionManager:
         if not self._is_owned_session_path(root):
             raise ValueError("session root outside approved root")
         payload = {
+            "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
             "session": self._public_session(session),
             "ledger": session.get("ledger", []),
         }
@@ -806,13 +1166,32 @@ class CodexCustomSessionManager:
         selected_backend_ref = str(session.get("selected_backend_ref") or "")
         session_root = str(session.get("session_root") or "")
         codex_home = str(session.get("codex_home") or "")
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        primary_model_id = _primary_model_id_from_role_slots(role_slots)
+        bound_slot_count = sum(
+            1 for slot in role_slots.values() if slot.get("binding_status") == "bound"
+        )
         return {
+            "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
             "session_id": session_id,
             "created_at_utc": session.get("created_at_utc"),
             "updated_at_utc": session.get("updated_at_utc"),
             "status": session.get("status"),
-            "model_id": session.get("model_id"),
+            "migration_status": str(session.get("migration_status") or "native_multi_slot_schema"),
+            "legacy_single_model_migrated": session.get("legacy_single_model_migrated") is True,
+            "current_execution_slot_id": str(
+                session.get("current_execution_slot_id") or PRIMARY_MODEL_SLOT
+            ),
+            "current_execution_path_source": str(
+                session.get("current_execution_path_source") or "session_primary_model_slot"
+            ),
+            "model_id": primary_model_id,
             "model_server_issued": session.get("model_server_issued") is True,
+            "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
+            "slot_catalog_revalidated": session.get("slot_catalog_revalidated") is True,
+            "slot_binding_runtime_dispatch_claimed": False,
+            "role_slot_binding_count": bound_slot_count,
+            "role_slots": role_slots,
             "selected_source_class": session.get("selected_source_class"),
             "selected_backend_digest": selected_backend_ref,
             "selected_backend_id_redacted": True,
@@ -846,12 +1225,18 @@ class CodexCustomSessionManager:
     def _prompt_precondition_failure(self, session: dict[str, Any]) -> dict[str, Any] | None:
         session_id = str(session.get("session_id") or "")
         failures: list[str] = []
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        primary_slot = role_slots.get(PRIMARY_MODEL_SLOT) or {}
         if session.get("cleanup_state") == "cleaned":
             failures.append("SESSION_ALREADY_CLEANED")
         if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
             failures.append("SESSION_STATUS_NOT_RUNNABLE")
-        if session.get("model_server_issued") is not True:
+        if primary_slot.get("binding_status") != "bound":
+            failures.append("PRIMARY_SLOT_NOT_BOUND")
+        if primary_slot.get("server_issued") is not True or session.get("model_server_issued") is not True:
             failures.append("MODEL_NOT_SERVER_ISSUED")
+        if session.get("slot_catalog_revalidated") is not True:
+            failures.append("SLOT_CATALOG_REVALIDATION_REQUIRED")
         if session.get("selection_proven") is not True:
             failures.append("SELECTION_NOT_PROVEN")
         route_required = session.get("route_provenance_required") is True
