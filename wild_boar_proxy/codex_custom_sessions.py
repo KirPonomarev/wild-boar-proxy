@@ -39,11 +39,16 @@ ROLE_SLOT_PAYLOAD_FIELDS = {
 ROLE_SLOT_IDS = tuple(ROLE_SLOT_PAYLOAD_FIELDS)
 SESSION_CREATE_ALLOWED_FIELDS = {"model_id", *ROLE_SLOT_PAYLOAD_FIELDS.values()}
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
-PROMPT_RUN_ALLOWED_FIELDS = {"prompt"}
+PROMPT_RUN_ALLOWED_FIELDS = {"prompt", "slot_id"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
-PROMPT_RUN_ALLOWED_STATUSES = {"ready", "prompt_admitted_dry_run"}
+PROMPT_RUN_ALLOWED_STATUSES = {
+    "ready",
+    "prompt_admitted_dry_run",
+    "prompt_completed_e2e",
+    "prompt_failed_e2e",
+}
 BOUNDED_RESPONSE_PREVIEW_CHARS = 240
-SESSION_SCHEMA_VERSION = 2
+SESSION_SCHEMA_VERSION = 3
 SESSION_CREATE_FORBIDDEN_FIELDS = {
     "api_key",
     "apikey",
@@ -178,6 +183,17 @@ def _unbound_slot(slot_id: str) -> dict[str, Any]:
         "runtime_dispatch_state": "unresolved_in_this_contour",
         "persisted": False,
         "persisted_source": "session_state_file",
+        "selected_source_class": "none",
+        "selected_backend_ref": "",
+        "selected_backend_server_issued": False,
+        "selected_route_ref": "",
+        "selected_route_server_issued": False,
+        "route_provenance_required": False,
+        "route_provenance_proven": False,
+        "source_provenance_status": "not_proven",
+        "selection_proven": False,
+        "selection_dry_run_proven": False,
+        "live_selection_proven": False,
     }
 
 
@@ -187,6 +203,7 @@ def _bound_slot(
     model_id: str,
     lane_kind: str,
     binding_source: str,
+    selection: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "slot_id": slot_id,
@@ -199,6 +216,19 @@ def _bound_slot(
         "runtime_dispatch_state": "unresolved_in_this_contour",
         "persisted": True,
         "persisted_source": "session_state_file",
+        "selected_source_class": str(selection.get("selected_source_class") or "none"),
+        "selected_backend_ref": str(selection.get("selected_backend_ref") or ""),
+        "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
+        "selected_route_ref": str(selection.get("selected_route_ref") or ""),
+        "selected_route_server_issued": selection.get("selected_route_server_issued") is True,
+        "route_provenance_required": selection.get("route_provenance_required") is True,
+        "route_provenance_proven": selection.get("route_provenance_proven") is True,
+        "source_provenance_status": str(
+            selection.get("source_provenance_status") or "not_proven"
+        ),
+        "selection_proven": selection.get("selection_proven") is True,
+        "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
+        "live_selection_proven": selection.get("live_selection_proven") is True,
     }
 
 
@@ -235,6 +265,15 @@ def _primary_model_id_from_role_slots(role_slots: dict[str, dict[str, Any]]) -> 
 
 def _primary_model_lane_kind(role_slots: dict[str, dict[str, Any]]) -> str:
     return str(role_slots.get(PRIMARY_MODEL_SLOT, {}).get("lane_kind") or "unbound")
+
+
+def _slot_id_from_prompt_payload(payload: dict[str, Any]) -> str | None:
+    slot_id = payload.get("slot_id")
+    if slot_id is None:
+        return PRIMARY_MODEL_SLOT
+    if isinstance(slot_id, str) and slot_id in ROLE_SLOT_IDS:
+        return slot_id
+    return None
 
 
 def _response_preview(value: str) -> str:
@@ -327,6 +366,81 @@ def _source_provenance_satisfied(session: dict[str, Any]) -> bool:
     return _source_provenance_status(session) in {"backend_proven", "route_proven"}
 
 
+def _slot_source_provenance_status(slot: dict[str, Any], session: dict[str, Any]) -> str:
+    if slot.get("selected_source_class") == "route_backed" or slot.get(
+        "route_provenance_required"
+    ) is True:
+        if (
+            slot.get("selected_route_server_issued") is True
+            and slot.get("route_provenance_proven") is True
+        ):
+            return "route_proven"
+        return "route_provenance_missing"
+    if slot.get("selected_backend_server_issued") is True:
+        return "backend_proven"
+    if slot.get("slot_id") == PRIMARY_MODEL_SLOT:
+        return _source_provenance_status(session)
+    return "not_proven"
+
+
+def _slot_source_provenance_satisfied(slot: dict[str, Any], session: dict[str, Any]) -> bool:
+    return _slot_source_provenance_status(slot, session) in {"backend_proven", "route_proven"}
+
+
+def _external_route_selection_packet(model_id: str, api_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else []
+    route = None
+    if isinstance(routes, list):
+        for item in routes:
+            if isinstance(item, dict) and str(item.get("route_id") or "").strip() == model_id:
+                route = item
+                break
+    if not isinstance(route, dict):
+        return {
+            "selection_dry_run_proven": False,
+            "live_selection_proven": False,
+            "selection_proven": False,
+            "selected_source_class": "none",
+            "selected_backend_ref": "",
+            "selected_backend_server_issued": False,
+            "selected_route_ref": "",
+            "selected_route_server_issued": False,
+            "route_provenance_required": False,
+            "route_provenance_proven": False,
+            "source_provenance_status": "not_proven",
+            "machine_error_code": "EXTERNAL_API_ROUTE_NOT_VISIBLE",
+        }
+    route_id = str(route.get("route_id") or "").strip()
+    secret_ref = str(route.get("secret_ref") or "").strip()
+    enabled = route.get("enabled") is True
+    proven = enabled and bool(secret_ref)
+    return {
+        "selection_dry_run_proven": proven,
+        "live_selection_proven": False,
+        "selection_proven": proven,
+        "selected_source_class": "route_backed" if proven else "none",
+        "selected_backend_ref": "",
+        "selected_backend_server_issued": False,
+        "selected_route_ref": _digest(route_id) if route_id else "",
+        "selected_route_server_issued": proven,
+        "route_provenance_required": proven,
+        "route_provenance_proven": proven,
+        "source_provenance_status": "route_proven" if proven else "route_provenance_missing",
+        "machine_error_code": "OK" if proven else "EXTERNAL_API_ROUTE_NOT_READY",
+    }
+
+
+def _selection_packet_for_slot(
+    model_id: str,
+    commands: dict[str, dict[str, Any]],
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if model_id.startswith("gpt-"):
+        return build_account_selection_packet(commands, operator_status)
+    return _external_route_selection_packet(model_id, api_snapshot)
+
+
 class CodexCustomSessionManager:
     def __init__(self, root: Path | None = None) -> None:
         base = root or Path(tempfile.gettempdir()) / "wbp-codex-custom-sessions"
@@ -387,6 +501,7 @@ class CodexCustomSessionManager:
             }
         slot_bindings, slot_error = self._slot_bindings_from_payload(
             slot_model_ids,
+            commands,
             operator_status,
             api_snapshot=api_snapshot,
         )
@@ -594,9 +709,6 @@ class CodexCustomSessionManager:
         session = self._sessions.get(session_id)
         if not session:
             return self._unknown_session()
-        precondition_failure = self._prompt_precondition_failure(session)
-        if precondition_failure:
-            return precondition_failure
         forbidden = forbidden_prompt_run_fields(payload)
         if forbidden:
             return {
@@ -605,6 +717,18 @@ class CodexCustomSessionManager:
                 "model_response_present": False,
                 "fallback_attempted": False,
             }
+        requested_slot_id = _slot_id_from_prompt_payload(payload)
+        if requested_slot_id is None:
+            return {
+                **self._base_packet("rejected", "SLOT_ID_NOT_SERVER_ISSUED"),
+                "session_id": session_id,
+                "model_response_present": False,
+                "fallback_attempted": False,
+                "next_action": "choose_server_issued_slot_id",
+            }
+        precondition_failure = self._prompt_precondition_failure(session, requested_slot_id)
+        if precondition_failure:
+            return precondition_failure
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             return {
@@ -616,10 +740,14 @@ class CodexCustomSessionManager:
                 "next_action": "enter_prompt",
             }
         if not owner_authorized:
-            return self.prompt_not_admitted_packet(session_id, {"prompt": prompt})
+            not_admitted_payload: dict[str, Any] = {"prompt": prompt}
+            if payload.get("slot_id") is not None:
+                not_admitted_payload["slot_id"] = payload.get("slot_id")
+            return self.prompt_not_admitted_packet(session_id, not_admitted_payload)
         prompt_hash = _digest(prompt)
         role_slots = _canonical_role_slots(session.get("role_slots"))
-        model_id = _primary_model_id_from_role_slots(role_slots)
+        slot = dict(role_slots.get(requested_slot_id) or _unbound_slot(requested_slot_id))
+        model_id = str(slot.get("model_id") or "")
         runner_payload = {"prompt": prompt, "model_id": model_id}
         try:
             result = prompt_runner(runner_payload)
@@ -643,8 +771,8 @@ class CodexCustomSessionManager:
             and result.get("command_output_file_is_temp") is True
             and result.get("current_codex_home_used") is False
         )
-        route_backed_source = session.get("selected_source_class") == "route_backed"
-        allowed_providers = {"cliproxy", "external_route", "wbp"} if route_backed_source else {"cliproxy", "wbp"}
+        route_backed_source = slot.get("selected_source_class") == "route_backed"
+        allowed_providers = {"external_route", "wbp"} if route_backed_source else {"cliproxy", "wbp"}
         allowed_wire_apis = {"responses", "chat_completions"} if route_backed_source else {"responses"}
         path_config_proven = (
             result.get("configured_provider") in allowed_providers
@@ -672,15 +800,18 @@ class CodexCustomSessionManager:
         forwarded_to_wbp = trace_observer_packet.get("forwarded_to_wbp") is True
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
-        source_provenance_status = _source_provenance_status(session)
-        source_provenance_proven = _source_provenance_satisfied(session)
+        source_provenance_status = _slot_source_provenance_status(slot, session)
+        source_provenance_proven = _slot_source_provenance_satisfied(slot, session)
         cli_proxy_api_path_configured = (
             wbp_path_configured and result.get("configured_provider") == "cliproxy"
         )
         cli_proxy_api_path_proven = (
             wbp_path_proven and result.get("configured_provider") == "cliproxy"
         )
-        trace_missing_after_response = status_ok and not wbp_path_proven
+        trace_missing_after_response = status_ok and not independent_wbp_trace_observed
+        path_config_mismatch_after_response = (
+            status_ok and independent_wbp_trace_observed and not path_config_proven
+        )
         route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
         current_codex_touched_after_response = status_ok and result.get("current_codex_home_used") is True
         isolation_missing_after_response = (
@@ -692,6 +823,7 @@ class CodexCustomSessionManager:
             else (
                 "blocked"
                 if trace_missing_after_response
+                or path_config_mismatch_after_response
                 or route_provenance_missing_after_response
                 or current_codex_touched_after_response
                 or isolation_missing_after_response
@@ -705,15 +837,19 @@ class CodexCustomSessionManager:
                 "WBP_TRACE_PROOF_MISSING"
                 if trace_missing_after_response
                 else (
-                    "CURRENT_CODEX_TOUCHED"
-                    if current_codex_touched_after_response
+                    "RUNTIME_SOURCE_PROVENANCE_MISMATCH"
+                    if path_config_mismatch_after_response
                     else (
-                        "ISOLATION_PROOF_MISSING"
-                        if isolation_missing_after_response
+                        "CURRENT_CODEX_TOUCHED"
+                        if current_codex_touched_after_response
                         else (
-                            "ROUTE_PROVENANCE_MISSING"
-                            if route_provenance_missing_after_response
-                            else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                            "ISOLATION_PROOF_MISSING"
+                            if isolation_missing_after_response
+                            else (
+                                "ROUTE_PROVENANCE_MISSING"
+                                if route_provenance_missing_after_response
+                                else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                            )
                         )
                     )
                 )
@@ -731,24 +867,24 @@ class CodexCustomSessionManager:
             "mode_id": "codex_custom",
             "session_id": session_id,
             "session_schema_version": int(session.get("session_schema_version") or SESSION_SCHEMA_VERSION),
-            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
-            "current_execution_path_source": "session_primary_model_slot",
+            "current_execution_slot_id": requested_slot_id,
+            "current_execution_path_source": "session_bound_slot_runtime",
             "model_id": model_id,
             "model_server_issued": True,
             "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
             "slot_binding_runtime_dispatch_claimed": False,
-            "selected_source_class": session.get("selected_source_class"),
-            "selected_backend_digest": str(session.get("selected_backend_ref") or ""),
-            "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
-            "selected_route_digest": str(session.get("selected_route_ref") or ""),
-            "selected_route_server_issued": session.get("selected_route_server_issued") is True,
-            "route_provenance_required": session.get("route_provenance_required") is True,
-            "route_provenance_proven": session.get("route_provenance_proven") is True,
+            "selected_source_class": slot.get("selected_source_class"),
+            "selected_backend_digest": str(slot.get("selected_backend_ref") or ""),
+            "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
+            "selected_route_digest": str(slot.get("selected_route_ref") or ""),
+            "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
+            "route_provenance_required": slot.get("route_provenance_required") is True,
+            "route_provenance_proven": slot.get("route_provenance_proven") is True,
             "source_provenance_status": source_provenance_status,
             "source_provenance_proven": source_provenance_proven,
             "selected_source_provenance": source_provenance_status,
-            "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
-            "live_selection_proven": session.get("live_selection_proven") is True,
+            "selection_dry_run_proven": slot.get("selection_dry_run_proven") is True,
+            "live_selection_proven": slot.get("live_selection_proven") is True,
             "browser_selected_backend": False,
             "authorization_status": "authorized_by_owner_gate",
             "owner_authorization_phrase_present": True,
@@ -785,8 +921,17 @@ class CodexCustomSessionManager:
             "process_network_observation_packet": process_network_observation_packet,
             "isolated_engine_home_proven": isolated_engine_home_proven,
             "current_codex_touched": result.get("current_codex_home_used") is True,
+            "configured_provider": str(result.get("configured_provider") or "") if status_ok else "",
             "configured_wire_api": result.get("configured_wire_api") if status_ok else "",
-            "path_proof_status": "independently_observed" if wbp_path_proven else "configured_not_independently_observed",
+            "path_proof_status": (
+                "independently_observed"
+                if wbp_path_proven
+                else (
+                    "runtime_source_mismatch_after_observation"
+                    if path_config_mismatch_after_response
+                    else "configured_not_independently_observed"
+                )
+            ),
             "path_proof_basis": "operator_surface_isolated_codex_exec_config_requires_independent_trace",
             "fallback_attempted": False,
             "auth_command_invoked": result.get("auth_command_invoked") is True,
@@ -802,44 +947,58 @@ class CodexCustomSessionManager:
                     "inspect_trace_observer"
                     if trace_missing_after_response
                     else (
-                        "stop_and_diagnose_current_codex_touch"
-                        if current_codex_touched_after_response
+                        "repair_runtime_source_provenance"
+                        if path_config_mismatch_after_response
                         else (
-                            "repair_isolation_proof"
-                            if isolation_missing_after_response
+                            "stop_and_diagnose_current_codex_touch"
+                            if current_codex_touched_after_response
                             else (
-                                "repair_route_provenance"
-                                if route_provenance_missing_after_response
-                                else str(result.get("next_action") or "stop_and_diagnose")
+                                "repair_isolation_proof"
+                                if isolation_missing_after_response
+                                else (
+                                    "repair_route_provenance"
+                                    if route_provenance_missing_after_response
+                                    else str(result.get("next_action") or "stop_and_diagnose")
+                                )
                             )
                         )
                     )
                 )
             ),
         }
-        event = "prompt_completed_e2e" if status_ok else "prompt_failed_e2e"
+        persisted_success = packet_status == "ok"
+        event = (
+            "prompt_completed_e2e"
+            if persisted_success
+            else ("prompt_blocked_after_response_e2e" if status_ok else "prompt_failed_e2e")
+        )
         session["status"] = event
-        session["inference_proven"] = status_ok
+        session["inference_proven"] = persisted_success
         session["model_response_present"] = status_ok
         session["token_burn"] = token_burn
+        session["current_execution_slot_id"] = requested_slot_id
+        session["current_execution_path_source"] = "session_bound_slot_runtime"
         session["updated_at_utc"] = utc_now()
         self._append_ledger(
             session,
             event,
             {
+                "current_execution_slot_id": requested_slot_id,
+                "current_execution_path_source": "session_bound_slot_runtime",
+                "executed_slot_model_id": model_id,
                 "prompt_present": True,
                 "prompt_length": len(prompt),
                 "prompt_sha256": prompt_hash,
                 "prompt_preview_redacted": _safe_preview(prompt),
                 "model_response_present": status_ok,
-                "inference_proven": status_ok,
+                "inference_proven": persisted_success,
                 "response_digest": response_digest,
                 "response_preview_bounded": _response_preview(response_text) if status_ok else "",
-                "selected_source_class": session.get("selected_source_class"),
-                "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
-                "selected_route_server_issued": session.get("selected_route_server_issued") is True,
-                "route_provenance_required": session.get("route_provenance_required") is True,
-                "route_provenance_proven": session.get("route_provenance_proven") is True,
+                "selected_source_class": slot.get("selected_source_class"),
+                "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
+                "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
+                "route_provenance_required": slot.get("route_provenance_required") is True,
+                "route_provenance_proven": slot.get("route_provenance_proven") is True,
                 "source_provenance_status": source_provenance_status,
                 "source_provenance_proven": source_provenance_proven,
                 "token_usage_present": token_usage_present,
@@ -853,6 +1012,7 @@ class CodexCustomSessionManager:
                 "wbp_path_proven": wbp_path_proven,
                 "cli_proxy_api_path_proven": cli_proxy_api_path_proven,
                 "independent_wbp_trace_observed": independent_wbp_trace_observed,
+                "configured_provider": str(result.get("configured_provider") or "") if status_ok else "",
                 "trace_observer_packet_present": bool(trace_observer_packet),
                 "isolated_engine_home_proven": isolated_engine_home_proven,
                 "fallback_attempted": False,
@@ -964,6 +1124,7 @@ class CodexCustomSessionManager:
     def _slot_bindings_from_payload(
         self,
         slot_model_ids: dict[str, str],
+        commands: dict[str, dict[str, Any]],
         operator_status: dict[str, Any] | None,
         *,
         api_snapshot: dict[str, Any] | None = None,
@@ -989,11 +1150,37 @@ class CodexCustomSessionManager:
                     "selection_disabled_reason_code": entry.get("selection_disabled_reason_code") or "",
                     "next_action": "choose_selectable_slot_model",
                 }
+            selection = _selection_packet_for_slot(
+                model_id,
+                commands,
+                operator_status,
+                api_snapshot,
+            )
+            if selection.get("selection_proven") is not True:
+                next_action = (
+                    "repair_account_selection_truth"
+                    if model_id.startswith("gpt-")
+                    else "repair_slot_selection_truth"
+                )
+                return {}, {
+                    **self._base_packet(
+                        "rejected",
+                        str(selection.get("machine_error_code") or "SLOT_SELECTION_NOT_PROVEN"),
+                    ),
+                    "human_message": "Session slot binding requires server-issued slot selection proof.",
+                    "slot_id": slot_id,
+                    "model_id": model_id,
+                    "selection_proven": False,
+                    "session_created": False,
+                    "selection_packet": self._selection_summary(selection),
+                    "next_action": next_action,
+                }
             bound_slots[slot_id] = _bound_slot(
                 slot_id=slot_id,
                 model_id=model_id,
                 lane_kind=str(entry.get("lane_kind") or "unknown"),
                 binding_source="browser_payload_server_validated",
+                selection=selection,
             )
         return bound_slots, None
 
@@ -1040,6 +1227,7 @@ class CodexCustomSessionManager:
                             binding_source=str(
                                 raw_slot.get("binding_source") or "persisted_session_state"
                             ),
+                            selection=raw_slot,
                         ),
                         "runtime_dispatch_state": str(
                             raw_slot.get("runtime_dispatch_state")
@@ -1058,6 +1246,7 @@ class CodexCustomSessionManager:
                     model_id=legacy_model_id,
                     lane_kind=str(public_session.get("selected_source_class") or "unknown"),
                     binding_source="legacy_single_model_migration",
+                    selection=public_session,
                 )
         role_slots = _canonical_role_slots(bound_slots)
         primary_model_id = _primary_model_id_from_role_slots(role_slots)
@@ -1072,8 +1261,13 @@ class CodexCustomSessionManager:
             ),
             "legacy_single_model_migrated": migrated,
             "role_slots": role_slots,
-            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
-            "current_execution_path_source": "session_primary_model_slot",
+            "current_execution_slot_id": str(
+                public_session.get("current_execution_slot_id") or PRIMARY_MODEL_SLOT
+            ),
+            "current_execution_path_source": str(
+                public_session.get("current_execution_path_source")
+                or "session_primary_model_slot"
+            ),
             "model_id": primary_model_id,
             "model_server_issued": public_session.get("model_server_issued") is True or bool(primary_model_id),
             "role_slot_binding_proven": True,
@@ -1222,36 +1416,41 @@ class CodexCustomSessionManager:
             "token_burn": session.get("token_burn") if session.get("token_burn") is not None else 0,
         }
 
-    def _prompt_precondition_failure(self, session: dict[str, Any]) -> dict[str, Any] | None:
+    def _prompt_precondition_failure(
+        self,
+        session: dict[str, Any],
+        requested_slot_id: str,
+    ) -> dict[str, Any] | None:
         session_id = str(session.get("session_id") or "")
         failures: list[str] = []
         role_slots = _canonical_role_slots(session.get("role_slots"))
-        primary_slot = role_slots.get(PRIMARY_MODEL_SLOT) or {}
+        target_slot = role_slots.get(requested_slot_id) or {}
         if session.get("cleanup_state") == "cleaned":
             failures.append("SESSION_ALREADY_CLEANED")
         if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
             failures.append("SESSION_STATUS_NOT_RUNNABLE")
-        if primary_slot.get("binding_status") != "bound":
-            failures.append("PRIMARY_SLOT_NOT_BOUND")
-        if primary_slot.get("server_issued") is not True or session.get("model_server_issued") is not True:
+        if target_slot.get("binding_status") != "bound":
+            failures.append("SLOT_NOT_BOUND")
+        if target_slot.get("server_issued") is not True:
             failures.append("MODEL_NOT_SERVER_ISSUED")
         if session.get("slot_catalog_revalidated") is not True:
             failures.append("SLOT_CATALOG_REVALIDATION_REQUIRED")
-        if session.get("selection_proven") is not True:
+        if target_slot.get("selection_proven") is not True:
             failures.append("SELECTION_NOT_PROVEN")
-        route_required = session.get("route_provenance_required") is True
+        route_required = target_slot.get("route_provenance_required") is True
         if route_required:
-            if session.get("selected_route_server_issued") is not True:
+            if target_slot.get("selected_route_server_issued") is not True:
                 failures.append("ROUTE_NOT_SERVER_ISSUED")
-            if session.get("route_provenance_proven") is not True:
+            if target_slot.get("route_provenance_proven") is not True:
                 failures.append("ROUTE_PROVENANCE_MISSING")
-        elif session.get("selected_backend_server_issued") is not True:
+        elif target_slot.get("selected_backend_server_issued") is not True:
             failures.append("BACKEND_NOT_SERVER_ISSUED")
         if not failures:
             return None
         return {
             **self._base_packet("rejected", failures[0]),
             "session_id": session_id,
+            "current_execution_slot_id": requested_slot_id,
             "precondition_failures": failures,
             "model_response_present": False,
             "token_usage_present": False,

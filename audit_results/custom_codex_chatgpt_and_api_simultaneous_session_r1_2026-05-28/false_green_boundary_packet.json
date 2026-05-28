@@ -1,0 +1,9 @@
+{
+  "binding_treated_as_dispatch": false,
+  "captured_at_utc": "2026-05-28T12:35:21.728234Z",
+  "one_api_lane_treated_as_provider_family_proof": false,
+  "packet_kind": "false_green_boundary",
+  "same_session_callability_treated_as_concurrent_execution": false,
+  "selector_or_persistence_truth_treated_as_runtime_proof": false,
+  "status": "ok"
+}

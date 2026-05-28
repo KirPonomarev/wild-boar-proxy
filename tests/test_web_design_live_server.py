@@ -5674,6 +5674,69 @@ class ExternalRouteFakeOperatorSurfaceSession(ReadyFakeOperatorSurfaceSession):
             "server_issued": True,
         }
 
+    def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
+        result = super().run_prompt(payload, trace_wbp=trace_wbp)
+        result["configured_provider"] = "external_route"
+        return result
+
+
+class DualLaneFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession):
+    def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
+        self.run_payloads.append(payload)
+        trace_packet = {
+            "request_observed": trace_wbp,
+            "response_observed": trace_wbp,
+            "forwarded_to_wbp": trace_wbp,
+            "forwarded_endpoint": "http://127.0.0.1:8318/v1" if trace_wbp else "",
+            "path": "/v1/responses" if trace_wbp else "",
+            "upstream_status": 200 if trace_wbp else None,
+            "prompt_body_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+        }
+        route_backed = payload.get("model_id") == "wbp-deepseek-v3"
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Codex Operator prompt completed.",
+            "selected_model": payload.get("model_id"),
+            "configured_provider": "external_route" if route_backed else "cliproxy",
+            "configured_wire_api": "responses",
+            "wbp_endpoint_configured": True,
+            "config_endpoint_matches": True,
+            "config_provider_matches": True,
+            "config_wire_api_matches": True,
+            "command_uses_stdin_dash": True,
+            "command_json_mode": True,
+            "env_codex_home_is_temp": True,
+            "env_home_is_temp": True,
+            "workdir_is_temp": True,
+            "command_workdir_is_temp": True,
+            "command_output_file_is_temp": True,
+            "current_codex_home_used": False,
+            "trace_observer_enabled": trace_wbp,
+            "trace_observer_packet": trace_packet,
+            "independent_wbp_trace_observed": trace_wbp,
+            "final_message": "API_LANE_OK" if route_backed else "CHATGPT_LANE_OK",
+            "stdin_prompt_used": True,
+            "temp_root_removed": True,
+            "refresh_packet": self.status_payload(),
+            "transcript": {
+                "entries": [
+                    {
+                        "prompt_id": "operator_prompt_1",
+                        "prompt_hash": "hash",
+                        "selected_model": payload.get("model_id"),
+                        "final_message": "API_LANE_OK" if route_backed else "CHATGPT_LANE_OK",
+                        "exit_code": 0,
+                        "captured_at_utc": "2026-05-23T00:00:00Z",
+                    }
+                ],
+                "secret_value_recorded": False,
+            },
+            "secret_value_recorded": False,
+        }
+
 
 class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
     def test_operator_endpoints_expose_status_models_transcript_and_run(self) -> None:
@@ -6941,7 +7004,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(created["session_created"])
         self.assertFalse(created["live_prompt_admitted"])
         self.assertTrue(created["session"]["model_server_issued"])
-        self.assertEqual(created["session"]["session_schema_version"], 2)
+        self.assertEqual(created["session"]["session_schema_version"], 3)
         self.assertEqual(created["session"]["current_execution_slot_id"], "primary_model_slot")
         self.assertEqual(created["session"]["current_execution_path_source"], "session_primary_model_slot")
         self.assertEqual(created["session"]["role_slot_binding_count"], 2)
@@ -8682,12 +8745,114 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(proof["wbp_path_proven"])
         self.assertTrue(proof["cli_proxy_api_path_proven"])
         self.assertEqual(proof["selected_source_provenance"], "backend_proven")
+        self.assertEqual(proof["configured_provider"], "cliproxy")
         self.assertFalse(proof["current_codex_touched"])
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["browser_selected_backend"])
         self.assertEqual(
             created_sessions[0].run_payloads,
             [{"prompt": "Reply with exactly WBP_LIVE_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+    def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                primary = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "Reply with exactly CHATGPT_LANE_OK."},
+                    )
+                )
+                api_lane = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {
+                            "prompt": "Reply with exactly API_LANE_OK.",
+                            "slot_id": "coding_agent_model_slot",
+                        },
+                    )
+                )
+                detail = json.loads(fetch(f"{base}/api/codex/custom/sessions/{session_id}"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(created["status"], "ok")
+        self.assertEqual(primary["status"], "ok")
+        self.assertEqual(primary["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(primary["model_id"], "gpt-5.3-codex")
+        self.assertEqual(primary["selected_source_provenance"], "backend_proven")
+        self.assertEqual(primary["configured_provider"], "cliproxy")
+        self.assertTrue(primary["live_prompt_full_success"])
+        self.assertEqual(api_lane["status"], "ok")
+        self.assertEqual(api_lane["session_id"], session_id)
+        self.assertEqual(api_lane["current_execution_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(api_lane["current_execution_path_source"], "session_bound_slot_runtime")
+        self.assertEqual(api_lane["model_id"], "wbp-deepseek-v3")
+        self.assertEqual(api_lane["selected_source_class"], "route_backed")
+        self.assertEqual(api_lane["selected_source_provenance"], "route_proven")
+        self.assertEqual(api_lane["configured_provider"], "external_route")
+        self.assertFalse(api_lane["selected_backend_server_issued"])
+        self.assertTrue(api_lane["selected_route_server_issued"])
+        self.assertTrue(api_lane["route_provenance_required"])
+        self.assertTrue(api_lane["route_provenance_proven"])
+        self.assertTrue(api_lane["live_prompt_full_success"])
+        self.assertEqual(
+            detail["session"]["current_execution_slot_id"],
+            "coding_agent_model_slot",
+        )
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [
+                {
+                    "prompt": "Reply with exactly CHATGPT_LANE_OK.",
+                    "model_id": "gpt-5.3-codex",
+                },
+                {
+                    "prompt": "Reply with exactly API_LANE_OK.",
+                    "model_id": "wbp-deepseek-v3",
+                },
+            ],
         )
 
     def test_codex_custom_launch_and_prompt_support_route_backed_external_model(self) -> None:
@@ -8751,6 +8916,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(proof["status"], "ok")
         self.assertEqual(proof["machine_error_code"], "OK")
         self.assertEqual(proof["selected_source_provenance"], "route_proven")
+        self.assertEqual(proof["configured_provider"], "external_route")
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["current_codex_touched"])
         self.assertEqual(

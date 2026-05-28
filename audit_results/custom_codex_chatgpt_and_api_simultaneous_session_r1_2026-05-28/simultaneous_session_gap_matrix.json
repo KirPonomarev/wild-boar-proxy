@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-28T12:35:21.728232Z",
+  "gaps": [
+    {
+      "id": "concurrent_execution_not_observed_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "provider_family_compatibility_not_proven_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "reviewer_scanner_deep_slots_not_runtime_proven_here",
+      "severity": "low",
+      "status": "open"
+    },
+    {
+      "id": "responses_streaming_tools_semantics_not_proven_here",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "same_session_gap_matrix",
+  "status": "ok"
+}
