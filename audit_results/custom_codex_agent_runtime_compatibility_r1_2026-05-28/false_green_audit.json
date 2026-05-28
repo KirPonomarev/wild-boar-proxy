@@ -1,0 +1,12 @@
+{
+  "auth_proof_claimed": false,
+  "captured_at_utc": "2026-05-28T08:40:00.046329Z",
+  "final_e2e_claimed": false,
+  "findings": [],
+  "forbidden_claims_present": false,
+  "model_grid_claimed": false,
+  "packet_kind": "agent_runtime_false_green_audit",
+  "parity_claimed": false,
+  "performance_claimed": false,
+  "status": "ok"
+}

@@ -1,0 +1,91 @@
+{
+  "agent_id": "019e6db3-a6d0-7111-8125-96989068394a",
+  "agent_model": "gpt-5.4-mini",
+  "agent_role": "read_only_scanner",
+  "captured_at_utc": "2026-05-28T08:36:00Z",
+  "current_contour": "CUSTOM_CODEX_AGENT_RUNTIME_COMPATIBILITY_CLASSIFICATION_R1",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "verified_code_surfaces": [
+    {
+      "fact": "browser/client authority and protected snapshot isolation exist in operator surface",
+      "references": [
+        "wild_boar_proxy/operator_surface.py:1174",
+        "wild_boar_proxy/operator_surface.py:1208",
+        "wild_boar_proxy/operator_surface.py:1564",
+        "wild_boar_proxy/operator_surface.py:1691"
+      ]
+    },
+    {
+      "fact": "persistent Custom profile root and protected overlap guard exist in native filesystem probe",
+      "references": [
+        "wild_boar_proxy/native_filesystem_probe.py:42",
+        "wild_boar_proxy/native_filesystem_probe.py:5858",
+        "wild_boar_proxy/native_filesystem_probe.py:5891"
+      ]
+    },
+    {
+      "fact": "persistent launcher dry-run enforces isolated paths and forbidden browser authority",
+      "references": [
+        "wild_boar_proxy/persistent_launcher_dry_run.py:25",
+        "wild_boar_proxy/persistent_launcher_dry_run.py:71",
+        "wild_boar_proxy/persistent_launcher_dry_run.py:122",
+        "wild_boar_proxy/persistent_launcher_dry_run.py:164"
+      ]
+    },
+    {
+      "fact": "launch mode split and forbidden browser payload checks are present",
+      "references": [
+        "wild_boar_proxy/codex_launch_modes.py:18",
+        "wild_boar_proxy/codex_launch_modes.py:161",
+        "wild_boar_proxy/codex_launch_modes.py:233"
+      ]
+    },
+    {
+      "fact": "model registry capability metadata is not live availability proof",
+      "references": [
+        "wild_boar_proxy/codex_model_registry.py:18",
+        "wild_boar_proxy/codex_model_registry.py:74",
+        "wild_boar_proxy/codex_model_registry.py:109",
+        "wild_boar_proxy/codex_model_registry.py:182"
+      ]
+    }
+  ],
+  "verified_test_surfaces": [
+    "tests/test_operator_surface.py:45",
+    "tests/test_operator_surface.py:842",
+    "tests/test_operator_surface.py:864",
+    "tests/test_persistent_profile_launcher_dry_run_enforcement_r2.py:64",
+    "tests/test_persistent_profile_launcher_dry_run_enforcement_r2.py:93",
+    "tests/test_persistent_profile_launcher_dry_run_enforcement_r2.py:182",
+    "tests/test_native_launch_contract.py:245",
+    "tests/test_native_launch_contract.py:282",
+    "tests/test_native_launch_contract.py:302",
+    "tests/test_native_launch_contract.py:432",
+    "tests/test_native_launch_contract.py:488",
+    "tests/test_codex_launch_modes.py:58",
+    "tests/test_codex_launch_modes.py:81",
+    "tests/test_codex_launch_modes.py:396",
+    "tests/test_codex_model_registry.py:210",
+    "tests/test_codex_model_registry.py:301",
+    "tests/test_codex_model_registry.py:398",
+    "tests/test_codex_custom_sessions.py:133",
+    "tests/test_codex_custom_sessions.py:281",
+    "tests/test_codex_custom_sessions.py:389",
+    "tests/test_native_filesystem_probe.py:5006",
+    "tests/test_native_filesystem_probe.py:6122",
+    "tests/test_native_filesystem_probe.py:6430",
+    "tests/test_native_filesystem_probe.py:6472"
+  ],
+  "visible_gaps": [
+    "No first-class repo API was found for documents, spreadsheets, or presentations as separate capabilities; current evidence is plugin-cache presence plus generic path classification.",
+    "No structured marketplace/plugin-install contract was found in this scan; current evidence is path classification and remote_plugin_sync_401 warning handling.",
+    "No direct mapping was found from external_agent_lab capability_tags to browser/documents/spreadsheets/presentations capability code paths."
+  ],
+  "claim_limits_confirmed": {
+    "all_plugins_proven": false,
+    "model_grid_proven": false,
+    "performance_or_latency_proven": false,
+    "runtime_repair_required_by_scan": false
+  }
+}

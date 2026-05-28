@@ -1,0 +1,20 @@
+{
+  "blocked_packet_count": 0,
+  "captured_at_utc": "2026-05-28T08:40:00.047233Z",
+  "ok_packet_count": 11,
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "top_level_packet_statuses": {
+    "agent_capable_workflow_classification_packet.json": "ok",
+    "agent_runtime_claim_limits_packet.json": "ok",
+    "agent_runtime_compatibility_summary_packet.json": "ok",
+    "agent_runtime_inventory_packet.json": "ok",
+    "bundled_plugin_availability_packet.json": "ok",
+    "false_green_audit.json": "ok",
+    "independent_agent_runtime_audit.json": "ok",
+    "original_profile_contamination_guard_packet.json": "ok",
+    "profile_isolation_during_runtime_packet.json": "ok",
+    "runtime_cache_path_classification_packet.json": "ok",
+    "sync_gate_packet.json": "ok"
+  }
+}
