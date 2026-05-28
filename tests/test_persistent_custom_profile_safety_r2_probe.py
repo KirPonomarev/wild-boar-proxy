@@ -12,10 +12,13 @@ from unittest import mock
 from tools.persistent_custom_profile_safety_r2_probe import (
     TARGET_STATUS,
     build_false_green_audit,
+    build_backup_restore_dry_run_packet,
+    build_failed_launch_non_destructive_packet,
     build_packets,
     build_persistent_backup_readiness_packet,
     build_persistent_cleanup_scope_boundary_packet,
     build_persistent_profile_lock_enforcement_packet,
+    build_persistent_profile_root_safety_packet,
     build_restore_target_safety_packet,
     build_source_inventory_packet,
     build_summary_packet,
@@ -204,6 +207,41 @@ class PersistentCustomProfileSafetyR2ProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["custom_process_count"], 0)
 
+    def test_lock_enforcement_classifies_existing_owner_without_claiming_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch(
+                "tools.persistent_custom_profile_safety_r2_probe.build_same_profile_process_gate_packet",
+                return_value={
+                    "status": "blocked",
+                    "reason_class": "SAME_PROFILE_PROCESS_ALREADY_RUNNING",
+                    "inventory_usable": True,
+                    "same_profile_process_present": True,
+                    "custom_process_count": 1,
+                },
+            ):
+                packet = build_persistent_profile_lock_enforcement_packet(
+                    profile_id="wbp-custom-main",
+                    base_dir=Path(tmp) / "profiles",
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["same_profile_conflict_observed"])
+        self.assertTrue(packet["same_profile_new_launch_would_be_blocked"])
+        self.assertFalse(packet["lock_acquired"])
+
+    def test_persistent_profile_root_safety_keeps_children_inside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_persistent_profile_root_safety_packet(
+                profile_id="wbp-custom-main",
+                base_dir=Path(tmp) / "profiles",
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["codex_home_equals_profile_root"])
+        self.assertTrue(all(packet["child_paths_under_profile_root"].values()))
+        self.assertTrue(packet["runtime_tmp_dir_under_tmp_root"])
+        self.assertFalse(packet["protected_surface_overlap"])
+
     def test_restore_target_safety_uses_actual_backup_root_and_no_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repair = write_repair_fixture(Path(tmp))
@@ -274,13 +312,58 @@ class PersistentCustomProfileSafetyR2ProbeTests(unittest.TestCase):
         self.assertFalse(packet["cleanup_attempted"])
         self.assertFalse(packet["cleanup_executed"])
 
+    def test_backup_restore_dry_run_and_failed_launch_packets_do_not_execute(self) -> None:
+        backup = {
+            "status": "ok",
+            "rollback_ready": True,
+            "timestamped_backup_root": "/tmp/example.backup",
+            "backup_created_in_current_contour": False,
+        }
+        marker = {
+            "status": "ok",
+            "complete_marker_created": True,
+            "complete_marker_created_after_manifest_success": True,
+        }
+        restore = {
+            "status": "ok",
+            "restore_target_is_persistent_profile_root": True,
+            "restore_target_overlaps_backup_root": False,
+            "restore_executed": False,
+            "restore_execution_allowed": False,
+        }
+        root = {"status": "ok"}
+        cleanup = {"status": "ok", "cleanup_attempted": False, "cleanup_executed": False}
+
+        dry_run = build_backup_restore_dry_run_packet(
+            backup_readiness_packet=backup,
+            marker_packet=marker,
+            restore_target_packet=restore,
+        )
+        failed_launch = build_failed_launch_non_destructive_packet(
+            root_safety_packet=root,
+            cleanup_boundary_packet=cleanup,
+            restore_target_packet=restore,
+        )
+
+        self.assertEqual(dry_run["status"], "ok")
+        self.assertFalse(dry_run["backup_created_in_current_contour"])
+        self.assertFalse(dry_run["restore_executed"])
+        self.assertEqual(failed_launch["status"], "ok")
+        self.assertFalse(failed_launch["live_failed_launch_executed"])
+        self.assertFalse(failed_launch["failed_launch_can_delete_profile"])
+
     def test_false_green_audit_blocks_memory_and_auth_overclaims(self) -> None:
         packets = {
             "persistent_profile_lock_enforcement_packet.json": {"status": "ok"},
+            "same_profile_lock_packet.json": {"status": "ok"},
+            "persistent_profile_root_safety_packet.json": {"status": "ok"},
+            "backup_restore_dry_run_packet.json": {"status": "ok"},
             "persistent_backup_readiness_packet.json": {"status": "ok", "thread_history_claimed": True},
             "timestamped_backup_complete_marker_packet.json": {"status": "ok"},
+            "cleanup_boundary_packet.json": {"status": "ok"},
             "restore_target_safety_packet.json": {"status": "ok", "auth_proof_claimed": True},
             "persistent_cleanup_scope_boundary_packet.json": {"status": "ok"},
+            "failed_launch_non_destructive_packet.json": {"status": "ok"},
         }
 
         audit = build_false_green_audit(packets)
@@ -354,6 +437,11 @@ class PersistentCustomProfileSafetyR2ProbeTests(unittest.TestCase):
         self.assertFalse(summary["thread_history_claimed"])
         self.assertFalse(summary["auth_proof_claimed"])
         self.assertFalse(summary["final_e2e_claimed"])
+        self.assertIn("persistent_profile_root_safety_packet.json", packets)
+        self.assertIn("same_profile_lock_packet.json", packets)
+        self.assertIn("backup_restore_dry_run_packet.json", packets)
+        self.assertIn("cleanup_boundary_packet.json", packets)
+        self.assertIn("failed_launch_non_destructive_packet.json", packets)
         self.assertFalse(packets["sync_gate_packet.json"]["cross_contour_support_declared"])
         self.assertEqual(
             packets["persistent_profile_lock_enforcement_packet.json"]["custom_process_count"],
@@ -366,11 +454,16 @@ class PersistentCustomProfileSafetyR2ProbeTests(unittest.TestCase):
         packets = {
             "sync_gate_packet.json": {"status": "ok"},
             "source_inventory_packet.json": {"status": "ok"},
+            "persistent_profile_root_safety_packet.json": {"status": "ok"},
+            "same_profile_lock_packet.json": {"status": "ok"},
             "persistent_profile_lock_enforcement_packet.json": {"status": "ok"},
+            "backup_restore_dry_run_packet.json": {"status": "ok"},
             "persistent_backup_readiness_packet.json": {"status": "ok"},
             "timestamped_backup_complete_marker_packet.json": {"status": "ok"},
+            "cleanup_boundary_packet.json": {"status": "ok"},
             "restore_target_safety_packet.json": {"status": "ok"},
             "persistent_cleanup_scope_boundary_packet.json": {"status": "ok"},
+            "failed_launch_non_destructive_packet.json": {"status": "ok"},
             "false_green_audit.json": {"status": "ok"},
             "secret_redaction_audit.json": {"status": "ok"},
         }

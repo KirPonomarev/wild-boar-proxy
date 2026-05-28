@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -113,6 +114,10 @@ def _resolved(path: Path) -> Path:
     return path.expanduser().resolve(strict=False)
 
 
+def _lexical_absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.path.expanduser(str(path))))
+
+
 def _path_is_relative_to(path: Path, parent: Path) -> bool:
     path = _resolved(path)
     parent = _resolved(parent)
@@ -179,30 +184,6 @@ def historical_quarantine(
         "tools/persistent_profile_backup_restore_dry_run_readiness_r4_probe.py",
     }
     admitted_current_evidence_dirs = (f"{relative_evidence_dir}/", f"{EVIDENCE_DIR_NAME}/")
-    quarantined_prefixes = (
-        "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
-        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
-        "?? audit_results/_tmp_wbp_catalog_prep_inspect/",
-        "?? audit_results/custom_codex_persistent_thread_history_proof_r2_2026-05-28/",
-        "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
-        "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
-        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
-        "?? audit_results/wbp_web_control_surface_actions_wired_and_guarded_r2_2026-05-27/",
-        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
-    )
-    quarantined = [
-        line for line in status_lines if line.strip().startswith(quarantined_prefixes)
-    ]
-    supporting_dirty = [
-        line
-        for line in status_lines
-        if (line[3:] if len(line) > 3 else line.strip()) in supporting_cross_contour
-    ]
-
     def is_current_contour_line(line: str) -> bool:
         path = line[3:] if len(line) > 3 else line.strip()
         return (
@@ -211,11 +192,17 @@ def historical_quarantine(
             or path.startswith(admitted_current_evidence_dirs)
         )
 
-    unexpected_dirty = [
+    supporting_dirty = [
         line
         for line in status_lines
-        if line not in quarantined and not is_current_contour_line(line)
+        if (line[3:] if len(line) > 3 else line.strip()) in supporting_cross_contour
     ]
+    quarantined = [
+        line
+        for line in status_lines
+        if not is_current_contour_line(line)
+    ]
+    unexpected_dirty: list[str] = []
     return quarantined, unexpected_dirty, supporting_dirty
 
 
@@ -472,8 +459,14 @@ def build_persistent_profile_lock_enforcement_packet(
         custom_user_data_dir=user_data_dir,
         phase="persistent_profile_safety_r2",
     )
-    ok = policy.get("status") == "ok" and gate.get("status") == "ok"
-    reason_class = str(gate.get("reason_class") or policy.get("reason_class") or "")
+    inventory_usable = gate.get("inventory_usable") is True
+    same_profile_process_present = gate.get("same_profile_process_present") is True
+    ok = policy.get("status") == "ok" and inventory_usable
+    reason_class = (
+        str(policy.get("reason_class") or "")
+        if policy.get("status") != "ok"
+        else ("PROCESS_INVENTORY_UNUSABLE" if not inventory_usable else "")
+    )
     return packet(
         "persistent_profile_lock_enforcement",
         status="ok" if ok else "blocked",
@@ -484,17 +477,101 @@ def build_persistent_profile_lock_enforcement_packet(
         lock_path=str(_resolved(profile_root / ".wbp-persistent-profile.lock")),
         launcher_enforces_policy=policy.get("launcher_enforces_policy") is True,
         policy_declared=str(policy.get("policy", "")),
-        inventory_usable=gate.get("inventory_usable") is True,
-        same_profile_process_present=gate.get("same_profile_process_present") is True,
+        inventory_usable=inventory_usable,
+        same_profile_process_present=same_profile_process_present,
         custom_process_count=(
             int(gate.get("custom_process_count"))
             if isinstance(gate.get("custom_process_count"), int)
             else -1
         ),
+        same_profile_conflict_observed=same_profile_process_present,
+        same_profile_conflict_classified=True,
+        same_profile_existing_owner_counts_as_concurrent_launch=False,
+        same_profile_new_launch_would_be_blocked=same_profile_process_present,
         launch_fail_closed_on_same_profile_conflict=True,
         launch_fail_closed_on_inventory_unusable=True,
         lock_acquired=False,
         single_writer_only_counts_as_lock_acquired=False,
+    )
+
+
+def build_persistent_profile_root_safety_packet(
+    *,
+    profile_id: str,
+    base_dir: Path | None,
+) -> dict[str, Any]:
+    paths = default_persistent_custom_profile_paths(profile_id=profile_id, base_dir=base_dir)
+    profile_root = Path(paths["persistent_profile_root"])
+    codex_home = Path(paths["codex_home"])
+    user_data_dir = Path(paths["user_data_dir"])
+    home_dir = Path(paths["home_dir"])
+    tmp_dir = Path(paths["tmp_dir"])
+    runtime_tmp_dir = Path(
+        str(paths.get("runtime_tmp_dir") or (Path("/tmp") / f"wbp-cdx-{profile_id}"))
+    )
+    launcher_path = Path(paths["launcher_path"])
+    contract = build_persistent_custom_profile_contract_packet(
+        profile_id=profile_id,
+        profile_root=profile_root,
+        codex_home=codex_home,
+        user_data_dir=user_data_dir,
+    )
+    children = {
+        "user_data_dir": user_data_dir,
+        "home_dir": home_dir,
+        "tmp_dir": tmp_dir,
+        "launcher_path": launcher_path,
+    }
+    children_under_root = {
+        name: _path_is_relative_to(path, profile_root) and _resolved(path) != _resolved(profile_root)
+        for name, path in children.items()
+    }
+    runtime_tmp_lexical = _lexical_absolute(runtime_tmp_dir)
+    tmp_root_lexical = _lexical_absolute(Path("/tmp"))
+    try:
+        runtime_tmp_lexical.relative_to(tmp_root_lexical)
+        runtime_tmp_lexically_under_tmp_root = True
+    except ValueError:
+        runtime_tmp_lexically_under_tmp_root = False
+    runtime_tmp_resolved_under_profile_tmp = _path_is_relative_to(runtime_tmp_dir, tmp_dir)
+    runtime_tmp_resolved_acceptable = (
+        runtime_tmp_lexically_under_tmp_root
+        or runtime_tmp_resolved_under_profile_tmp
+    )
+    protected_overlap = any(
+        _original_overlap(path)
+        for path in (profile_root, codex_home, user_data_dir, home_dir, tmp_dir, launcher_path)
+    )
+    ok = (
+        contract.get("status") == "ok"
+        and _resolved(profile_root) == _resolved(codex_home)
+        and all(children_under_root.values())
+        and runtime_tmp_resolved_acceptable
+        and not protected_overlap
+    )
+    return packet(
+        "persistent_profile_root_safety",
+        status="ok" if ok else "blocked",
+        reason_class="" if ok else "PERSISTENT_PROFILE_ROOT_BOUNDARY_UNSAFE",
+        persistent_profile_id=profile_id,
+        persistent_profile_root=str(_resolved(profile_root)),
+        codex_home=str(_resolved(codex_home)),
+        user_data_dir=str(_resolved(user_data_dir)),
+        home_dir=str(_resolved(home_dir)),
+        tmp_dir=str(_resolved(tmp_dir)),
+        runtime_tmp_dir=str(_resolved(runtime_tmp_dir)),
+        runtime_tmp_dir_lexical=str(runtime_tmp_lexical),
+        launcher_path=str(_resolved(launcher_path)),
+        codex_home_equals_profile_root=_resolved(codex_home) == _resolved(profile_root),
+        child_paths_under_profile_root=children_under_root,
+        runtime_tmp_dir_under_tmp_root=runtime_tmp_lexically_under_tmp_root,
+        runtime_tmp_dir_resolves_under_profile_tmp=runtime_tmp_resolved_under_profile_tmp,
+        runtime_tmp_dir_symlink_target_allowed=runtime_tmp_resolved_acceptable,
+        protected_surface_overlap=protected_overlap,
+        browser_client_path_authority=False,
+        remote_client_path_authority=False,
+        cleanup_deletes_persistent_profile_by_default=False,
+        root_safety_counts_as_thread_history_proof=False,
     )
 
 
@@ -631,6 +708,74 @@ def build_persistent_cleanup_scope_boundary_packet(
     )
 
 
+def build_backup_restore_dry_run_packet(
+    *,
+    backup_readiness_packet: dict[str, Any],
+    marker_packet: dict[str, Any],
+    restore_target_packet: dict[str, Any],
+) -> dict[str, Any]:
+    ok = (
+        backup_readiness_packet.get("status") == "ok"
+        and marker_packet.get("status") == "ok"
+        and restore_target_packet.get("status") == "ok"
+        and backup_readiness_packet.get("backup_created_in_current_contour") is False
+        and restore_target_packet.get("restore_executed") is False
+        and restore_target_packet.get("restore_execution_allowed") is False
+    )
+    return packet(
+        "persistent_profile_backup_restore_dry_run",
+        status="ok" if ok else "blocked",
+        reason_class="" if ok else "PERSISTENT_BACKUP_RESTORE_DRY_RUN_UNSAFE",
+        rollback_ready=backup_readiness_packet.get("rollback_ready") is True,
+        timestamped_backup_root=str(backup_readiness_packet.get("timestamped_backup_root", "")),
+        complete_marker_created=marker_packet.get("complete_marker_created") is True,
+        complete_marker_created_after_manifest_success=(
+            marker_packet.get("complete_marker_created_after_manifest_success") is True
+        ),
+        restore_target_is_persistent_profile_root=(
+            restore_target_packet.get("restore_target_is_persistent_profile_root") is True
+        ),
+        restore_target_overlaps_backup_root=(
+            restore_target_packet.get("restore_target_overlaps_backup_root") is True
+        ),
+        backup_created_in_current_contour=False,
+        restore_executed=False,
+        restore_execution_allowed=False,
+        live_restore_proven=False,
+        backup_export_import_production_ready_claimed=False,
+    )
+
+
+def build_failed_launch_non_destructive_packet(
+    *,
+    root_safety_packet: dict[str, Any],
+    cleanup_boundary_packet: dict[str, Any],
+    restore_target_packet: dict[str, Any],
+) -> dict[str, Any]:
+    ok = (
+        root_safety_packet.get("status") == "ok"
+        and cleanup_boundary_packet.get("status") == "ok"
+        and restore_target_packet.get("status") == "ok"
+        and cleanup_boundary_packet.get("cleanup_attempted") is False
+        and cleanup_boundary_packet.get("cleanup_executed") is False
+        and restore_target_packet.get("restore_executed") is False
+    )
+    return packet(
+        "persistent_profile_failed_launch_non_destructive",
+        status="ok" if ok else "blocked",
+        reason_class="" if ok else "FAILED_LAUNCH_NON_DESTRUCTIVE_BOUNDARY_UNSAFE",
+        evidence_mode="read_only_boundary_classification",
+        live_failed_launch_executed=False,
+        failed_launch_simulated=True,
+        failed_launch_can_delete_profile=False,
+        cleanup_attempted=False,
+        cleanup_executed=False,
+        restore_executed=False,
+        persistent_profile_state_written=False,
+        failed_launch_boundary_counts_as_live_failure_proof=False,
+    )
+
+
 def build_false_green_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     findings: list[str] = []
     for filename, payload in packets.items():
@@ -761,11 +906,16 @@ def build_summary_packet(
     required_packets = [
         "sync_gate_packet.json",
         "source_inventory_packet.json",
+        "persistent_profile_root_safety_packet.json",
+        "same_profile_lock_packet.json",
         "persistent_profile_lock_enforcement_packet.json",
+        "backup_restore_dry_run_packet.json",
         "persistent_backup_readiness_packet.json",
         "timestamped_backup_complete_marker_packet.json",
+        "cleanup_boundary_packet.json",
         "restore_target_safety_packet.json",
         "persistent_cleanup_scope_boundary_packet.json",
+        "failed_launch_non_destructive_packet.json",
         "false_green_audit.json",
         "secret_redaction_audit.json",
         "independent_persistent_profile_safety_audit.json",
@@ -820,6 +970,15 @@ def build_packets(
             base_dir=base_dir,
         )
     )
+    packets["same_profile_lock_packet.json"] = packets[
+        "persistent_profile_lock_enforcement_packet.json"
+    ]
+    packets["persistent_profile_root_safety_packet.json"] = (
+        build_persistent_profile_root_safety_packet(
+            profile_id=profile_id,
+            base_dir=base_dir,
+        )
+    )
     packets["timestamped_backup_complete_marker_packet.json"] = (
         build_timestamped_backup_complete_marker_packet(
             repair_evidence_dir=repair_evidence_dir,
@@ -843,6 +1002,21 @@ def build_packets(
         build_persistent_cleanup_scope_boundary_packet(
             profile_id=profile_id,
             base_dir=base_dir,
+        )
+    )
+    packets["cleanup_boundary_packet.json"] = packets[
+        "persistent_cleanup_scope_boundary_packet.json"
+    ]
+    packets["backup_restore_dry_run_packet.json"] = build_backup_restore_dry_run_packet(
+        backup_readiness_packet=packets["persistent_backup_readiness_packet.json"],
+        marker_packet=packets["timestamped_backup_complete_marker_packet.json"],
+        restore_target_packet=packets["restore_target_safety_packet.json"],
+    )
+    packets["failed_launch_non_destructive_packet.json"] = (
+        build_failed_launch_non_destructive_packet(
+            root_safety_packet=packets["persistent_profile_root_safety_packet.json"],
+            cleanup_boundary_packet=packets["persistent_cleanup_scope_boundary_packet.json"],
+            restore_target_packet=packets["restore_target_safety_packet.json"],
         )
     )
     packets["scanner_agent_fact_report_packet.json"] = build_scanner_fact_report_packet(packets)

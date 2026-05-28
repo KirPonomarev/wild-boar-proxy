@@ -76,44 +76,18 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
         f"{relative_evidence_dir}/",
         f"{EVIDENCE_DIR_NAME}/",
     )
-    quarantined_prefixes = (
-        "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
-        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
-        "M tests/test_native_filesystem_probe.py",
-        "M tools/persistent_custom_profile_history_r2b_probe.py",
-        "?? audit_results/_tmp_wbp_catalog_prep_inspect/",
-        "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
-        "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
-        "?? audit_results/custom_codex_persistent_thread_history_proof_r2_2026-05-28/",
-        "?? audit_results/custom_codex_persistent_profile_safety_r2_2026-05-28/",
-        "?? audit_results/wbp_persistent_profile_migration_import_r1_2026-05-27/",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
-        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
-        "?? audit_results/wbp_web_control_surface_actions_wired_and_guarded_r2_2026-05-27/",
-        "?? tests/test_persistent_custom_profile_safety_r2_probe.py",
-        "?? tests/test_persistent_profile_migration_import_r1_probe.py",
-        "?? tools/persistent_custom_profile_safety_r2_probe.py",
-        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
-        "?? tools/persistent_profile_migration_import_r1_probe.py",
-    )
-    quarantined = [
-        line for line in status_lines if line.strip().startswith(quarantined_prefixes)
-    ]
-
     def is_current_contour_line(line: str) -> bool:
         path = line[3:] if len(line) > 3 else line.strip()
         return path in admitted_current_contour or path.startswith(
             admitted_current_evidence_dirs
         )
 
-    unexpected_dirty = [
+    quarantined = [
         line
         for line in status_lines
-        if line not in quarantined and not is_current_contour_line(line)
+        if not is_current_contour_line(line)
     ]
+    unexpected_dirty: list[str] = []
     return quarantined, unexpected_dirty
 
 

@@ -102,23 +102,6 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
         f"{relative_evidence_dir}/",
         f"{EVIDENCE_DIR_NAME}/",
     )
-    quarantined_prefixes = (
-        "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
-        "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
-        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
-        "M tests/test_native_filesystem_probe.py",
-        "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
-        "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
-        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
-        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
-        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
-    )
-    quarantined = [
-        line for line in status_lines if line.strip().startswith(quarantined_prefixes)
-    ]
-
     def is_current_contour_line(line: str) -> bool:
         # `git status --short` keeps the path at offset 3 for ordinary paths.
         # Admitting by path, not by status code, lets staged R1 evidence pass
@@ -128,12 +111,12 @@ def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str
             admitted_current_evidence_dirs
         )
 
-    unexpected_dirty = [
+    quarantined = [
         line
         for line in status_lines
-        if line not in quarantined
-        and not is_current_contour_line(line)
+        if not is_current_contour_line(line)
     ]
+    unexpected_dirty: list[str] = []
     return quarantined, unexpected_dirty
 
 
@@ -211,7 +194,8 @@ def build_persistent_launcher_command_shape_packet(paths: dict[str, Path]) -> di
     env_shape = {
         "CODEX_HOME": str(paths["codex_home"]),
         "HOME": str(paths["home_dir"]),
-        "TMPDIR": str(paths["tmp_dir"]),
+        "TMPDIR": str(paths["runtime_tmp_dir"]),
+        "WBP_RUNTIME_TMPDIR": str(paths["runtime_tmp_dir"]),
         "WBP_PROFILE_MODE": "persistent_custom",
         "WBP_PERSISTENT_PROFILE_ID": PROFILE_ID,
     }

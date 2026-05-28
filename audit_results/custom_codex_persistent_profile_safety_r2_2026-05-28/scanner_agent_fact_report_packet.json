@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-05-28T00:55:21.213954Z",
+  "captured_at_utc": "2026-05-28T08:25:38.647712Z",
   "facts": {
     "cleanup_deletes_persistent_profile_by_default": false,
     "cleanup_target_is_persistent_profile_root": false,
@@ -7,7 +7,7 @@
     "restore_target_is_persistent_profile_root": true,
     "restore_target_overlaps_backup_root": false,
     "rollback_ready": true,
-    "same_profile_process_present": false,
+    "same_profile_process_present": true,
     "timestamped_backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup.20260527T031925Z"
   },
   "non_claims": {

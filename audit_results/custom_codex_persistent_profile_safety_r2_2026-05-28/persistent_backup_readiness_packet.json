@@ -1,7 +1,7 @@
 {
   "backup_created_in_current_contour": false,
   "backup_policy": "timestamped_selective_state_backup",
-  "captured_at_utc": "2026-05-28T00:55:21.207617Z",
+  "captured_at_utc": "2026-05-28T08:25:38.642180Z",
   "complete_marker_created": true,
   "complete_marker_created_after_manifest_success": true,
   "copied_state_file_count": 993,

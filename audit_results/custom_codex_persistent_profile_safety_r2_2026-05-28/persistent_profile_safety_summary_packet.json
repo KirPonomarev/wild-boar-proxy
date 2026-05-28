@@ -2,7 +2,7 @@
   "auth_proof_claimed": false,
   "backup_created_in_current_contour": false,
   "blocked_packets": [],
-  "captured_at_utc": "2026-05-28T00:55:21.216282Z",
+  "captured_at_utc": "2026-05-28T08:25:38.650486Z",
   "cleanup_attempted": false,
   "final_e2e_claimed": false,
   "final_status": "CUSTOM_CODEX_PERSISTENT_PROFILE_SAFE_FROM_ORDINARY_CLEANUP",

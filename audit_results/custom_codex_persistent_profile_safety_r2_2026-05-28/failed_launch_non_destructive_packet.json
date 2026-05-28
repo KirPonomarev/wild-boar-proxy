@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-28T08:25:38.647704Z",
+  "cleanup_attempted": false,
+  "cleanup_executed": false,
+  "evidence_mode": "read_only_boundary_classification",
+  "failed_launch_boundary_counts_as_live_failure_proof": false,
+  "failed_launch_can_delete_profile": false,
+  "failed_launch_simulated": true,
+  "live_failed_launch_executed": false,
+  "packet_kind": "persistent_profile_failed_launch_non_destructive",
+  "persistent_profile_state_written": false,
+  "reason_class": "",
+  "restore_executed": false,
+  "status": "ok"
+}

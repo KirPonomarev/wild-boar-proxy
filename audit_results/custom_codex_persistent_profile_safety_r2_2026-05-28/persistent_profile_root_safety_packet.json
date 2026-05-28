@@ -1,0 +1,30 @@
+{
+  "browser_client_path_authority": false,
+  "captured_at_utc": "2026-05-28T08:25:38.632613Z",
+  "child_paths_under_profile_root": {
+    "home_dir": true,
+    "launcher_path": true,
+    "tmp_dir": true,
+    "user_data_dir": true
+  },
+  "cleanup_deletes_persistent_profile_by_default": false,
+  "codex_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "codex_home_equals_profile_root": true,
+  "home_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/home",
+  "launcher_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/codex-custom-launch.sh",
+  "packet_kind": "persistent_profile_root_safety",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "protected_surface_overlap": false,
+  "reason_class": "",
+  "remote_client_path_authority": false,
+  "root_safety_counts_as_thread_history_proof": false,
+  "runtime_tmp_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/tmp",
+  "runtime_tmp_dir_lexical": "/tmp/wbp-cdx-wbp-custom-main",
+  "runtime_tmp_dir_resolves_under_profile_tmp": true,
+  "runtime_tmp_dir_symlink_target_allowed": true,
+  "runtime_tmp_dir_under_tmp_root": true,
+  "status": "ok",
+  "tmp_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/tmp",
+  "user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+}
