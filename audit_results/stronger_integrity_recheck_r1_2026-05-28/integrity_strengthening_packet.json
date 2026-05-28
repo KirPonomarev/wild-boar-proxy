@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-28T15:02:21.843294Z",
+  "current_contour_non_mutation_observed": true,
+  "current_integrity_classification": "integrity_blocker_localized_as_ambient_external",
+  "final_status": "STRONGER_INTEGRITY_RECHECK_CLASSIFIED_WITH_LIMITS",
+  "full_integrity_claimed": false,
+  "imported_safety_reproven_here": false,
+  "known_blocker_localized": true,
+  "packet_kind": "integrity_strengthening",
+  "prior_integrity_classification": "inspection_only_boundary_plus_imported_safety_with_limits",
+  "prior_integrity_limiter_reduced": false,
+  "status": "ok",
+  "unknown_blocker_remains": false
+}

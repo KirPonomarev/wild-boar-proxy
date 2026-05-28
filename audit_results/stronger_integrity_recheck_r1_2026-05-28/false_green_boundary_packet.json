@@ -1,0 +1,11 @@
+{
+  "bundle_hash_treated_as_full_runtime_integrity": false,
+  "captured_at_utc": "2026-05-28T15:02:21.843305Z",
+  "clean_scan_treated_as_full_integrity": false,
+  "current_contour_non_mutation_treated_as_global_untouched": false,
+  "imported_safety_treated_as_reproven": false,
+  "packet_kind": "stronger_integrity_recheck_false_green_boundary",
+  "repo_dirt_treated_as_protected_codex_drift": false,
+  "status": "ok",
+  "unknown_attribution_upgraded_to_stronger_integrity": false
+}
