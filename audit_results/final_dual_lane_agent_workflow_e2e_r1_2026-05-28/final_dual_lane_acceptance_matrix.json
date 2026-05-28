@@ -1,0 +1,99 @@
+{
+  "bounded_final_flow_proven_here": true,
+  "captured_at_utc": "2026-05-28T14:37:17.610839Z",
+  "final_status": "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+  "global_product_acceptance_claimed": false,
+  "historical_item_0_counted_as_closed": false,
+  "packet_kind": "final_dual_lane_acceptance_matrix",
+  "rows": [
+    {
+      "acceptance_state": "proven_here",
+      "evidence": "final_dual_lane_selection_packet.json",
+      "id": "manual_provider_model_selection_works_for_both_lanes",
+      "satisfied": true,
+      "source": "current_contour",
+      "with_limits": false
+    },
+    {
+      "acceptance_state": "proven_here",
+      "evidence": "final_dual_lane_session_binding_packet.json",
+      "id": "role_slot_binding_is_session_truth",
+      "satisfied": true,
+      "source": "current_contour",
+      "with_limits": false
+    },
+    {
+      "acceptance_state": "imported_closed",
+      "evidence": "persistent_profile_and_thread_history_r1 imports",
+      "id": "role_slot_persistence_classified_separately_from_thread_history",
+      "satisfied": true,
+      "source": "audit_results/persistent_profile_and_thread_history_r1_2026-05-28/role_slot_persistence_packet.json",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "proven_here",
+      "evidence": "final_dual_lane_runtime_packet.json",
+      "id": "both_lanes_callable_from_one_custom_codex_environment",
+      "satisfied": true,
+      "source": "current_contour",
+      "with_limits": false
+    },
+    {
+      "acceptance_state": "classified_with_limits_here",
+      "evidence": "final_dual_lane_history_packet.json",
+      "id": "persistent_history_is_separately_classified",
+      "satisfied": true,
+      "source": "current_contour",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "imported_closed",
+      "evidence": "admitted_provider_list_packet.json",
+      "id": "generic_provider_auth_not_hardcoded_to_two_providers",
+      "satisfied": true,
+      "source": "audit_results/generic_provider_auth_and_secret_admission_r1_2026-05-28/admitted_provider_list_packet.json",
+      "with_limits": false
+    },
+    {
+      "acceptance_state": "imported_closed_with_limits",
+      "evidence": "provider_smoke_matrix_packet.json",
+      "id": "compatibility_claims_remain_honest",
+      "satisfied": true,
+      "source": "audit_results/api_provider_compatibility_and_smoke_matrix_r1_2026-05-28/provider_smoke_matrix_packet.json",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "imported_partial_classified",
+      "evidence": "acceleration_non_claims_packet.json",
+      "id": "acceleration_remains_proven_or_classified_only",
+      "satisfied": true,
+      "source": "audit_results/acceleration_and_throughput_classification_r1_2026-05-28/acceleration_non_claims_packet.json",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "imported_closed_with_limits",
+      "evidence": "metadata_source_and_proof_level_packet.json",
+      "id": "intelligence_labels_remain_honest",
+      "satisfied": true,
+      "source": "audit_results/model_intelligence_and_speed_metadata_fidelity_r1_2026-05-28/metadata_source_and_proof_level_packet.json",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "imported_closed_with_limits",
+      "evidence": "budget_boundary_packet.json + concurrency_boundary_packet.json",
+      "id": "paid_api_usage_remains_bounded_by_explicit_policy",
+      "satisfied": true,
+      "source": "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/budget_boundary_packet.json",
+      "with_limits": true
+    },
+    {
+      "acceptance_state": "classified_with_limits_here",
+      "evidence": "final_dual_lane_integrity_packet.json",
+      "id": "original_codex_remains_untouched_within_admitted_scope",
+      "satisfied": true,
+      "source": "current_contour_plus_imported_safety",
+      "with_limits": true
+    }
+  ],
+  "status": "ok"
+}

@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-28T14:37:17.610830Z",
+  "coding_provider": "external_route",
+  "coding_response_preview": "CODING_ARTIFACT:API_PATCH",
+  "coding_slot_id": "coding_agent_model_slot",
+  "coding_source_provenance": "route_proven",
+  "lane_specific_provenance_preserved": true,
+  "packet_kind": "final_dual_lane_runtime",
+  "primary_return_provider": "cliproxy",
+  "primary_return_response_preview": "PRIMARY_RETURN_CONFIRMED",
+  "primary_return_slot_id": "primary_model_slot",
+  "primary_return_source_provenance": "backend_proven",
+  "primary_start_provider": "cliproxy",
+  "primary_start_response_preview": "PRIMARY_HANDOFF_READY",
+  "primary_start_slot_id": "primary_model_slot",
+  "primary_start_source_provenance": "backend_proven",
+  "runner_call_count": 3,
+  "same_custom_codex_environment": true,
+  "session_id": "ccs-27e757f279e24f66b56a",
+  "silent_provider_substitution_observed": false,
+  "silent_slot_substitution_observed": false,
+  "status": "ok"
+}

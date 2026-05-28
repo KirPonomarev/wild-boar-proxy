@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-28T14:37:17.610846Z",
+  "final_acceptance_matrix_treated_as_global_product_acceptance": false,
+  "historical_item_0_treated_as_closed_here": false,
+  "history_evidence_collapsed_into_integrity_claim": false,
+  "imported_truth_treated_as_reproven_without_reexercise": false,
+  "integrity_evidence_collapsed_into_history_claim": false,
+  "one_api_row_treated_as_provider_family_compatibility": false,
+  "packet_kind": "false_green_boundary",
+  "selection_treated_as_execution_without_runtime": false,
+  "status": "ok",
+  "with_limits_truth_collapsed_into_unconditional_pass": false
+}
