@@ -16,7 +16,7 @@ quality, productivity, or concurrency claims.
 
 - goal: classify bounded timing/throughput surfaces, preserve failed-run measurement truth, and keep cross-surface acceleration comparison narrow and honestly limited
 - branch: `codex/external-agent-lab-isolated`
-- head: `e03ea571c697c85ef7e23630d2f84cb3a4c54062`
+- head: `e03ea571c697c85ef7e23630d2f84cb3a4c54062` before contour-local measurement evidence was added
 - touched files: `tools/acceleration_and_throughput_classification_r1_probe.py`, `tests/test_acceleration_and_throughput_classification_r1_probe.py`, `audit_results/acceleration_and_throughput_classification_r1_2026-05-28/*.json`, `audit_results/acceleration_and_throughput_classification_r1_2026-05-28/closeout.md`
 - tests run: `python3 -m py_compile tools/acceleration_and_throughput_classification_r1_probe.py tests/test_acceleration_and_throughput_classification_r1_probe.py`; `python3 -m pytest -q tests/test_acceleration_and_throughput_classification_r1_probe.py`; `python3 -m pytest -q tests/test_acceleration_and_throughput_classification_r1_probe.py tests/test_codex_custom_sessions.py`; `python3 tools/acceleration_and_throughput_classification_r1_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/acceleration_and_throughput_classification_r1_2026-05-28`; `python3 tools/check_closeout_resilience.py audit_results/acceleration_and_throughput_classification_r1_2026-05-28/closeout.md`; `git diff --check`
 - blocked risks: live-stack acceleration remains unproven beyond the contour-local runner harness; `codex_custom_sessions.py` latency truth still comes from runner-reported `duration_seconds` while `operator_surface.py` and `cli_runner.py` expose wall-clock `duration_seconds`, so clean cross-surface acceleration comparison remains inadmissible; user-visible productivity gain remains unproven; concurrent throughput remains unproven and non-claimed
@@ -38,8 +38,8 @@ quality, productivity, or concurrency claims.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `not_committed_yet`
-- pushed: `not_pushed_yet`
+- commit: final contour commit recorded in git on `codex/external-agent-lab-isolated`
+- pushed: yes, after contour closeout push
 
 ## Scope Check
 
