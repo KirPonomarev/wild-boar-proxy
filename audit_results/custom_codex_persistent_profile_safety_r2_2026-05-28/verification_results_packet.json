@@ -1,0 +1,22 @@
+{
+  "blocked_packet_count": 0,
+  "captured_at_utc": "2026-05-28T00:55:21.216267Z",
+  "ok_packet_count": 13,
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "top_level_packet_statuses": {
+    "false_green_audit.json": "ok",
+    "historical_quarantine_packet.json": "ok",
+    "independent_persistent_profile_safety_audit.json": "ok",
+    "persistent_backup_readiness_packet.json": "ok",
+    "persistent_cleanup_scope_boundary_packet.json": "ok",
+    "persistent_profile_lock_enforcement_packet.json": "ok",
+    "restore_target_safety_packet.json": "ok",
+    "scanner_agent_fact_report_packet.json": "ok",
+    "secret_redaction_audit.json": "ok",
+    "source_inventory_packet.json": "ok",
+    "sync_gate_packet.json": "ok",
+    "timestamped_backup_complete_marker_packet.json": "ok",
+    "version_pinning_packet.json": "ok"
+  }
+}

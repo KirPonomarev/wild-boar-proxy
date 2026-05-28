@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-28T00:55:21.213937Z",
+  "cleanup_attempted": false,
+  "cleanup_counts_as_live_deletion_proof": false,
+  "cleanup_deletes_persistent_profile_by_default": false,
+  "cleanup_executed": false,
+  "cleanup_target_is_persistent_profile_root": false,
+  "cleanup_target_overlaps_original_codex": false,
+  "cleanup_target_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/tmp",
+  "cleanup_target_under_persistent_profile_root": true,
+  "explicit_owner_delete_authorization_required": true,
+  "packet_kind": "persistent_cleanup_scope_boundary",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_exists_during_check": true,
+  "reason_class": "",
+  "status": "ok"
+}

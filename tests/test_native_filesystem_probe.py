@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
+import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -5285,12 +5286,26 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             ), mock.patch(
                 "tools.persistent_custom_profile_history_r2b_probe.materialize_probe_profile",
                 return_value={"status": "ok"},
-            ), mock.patch(
+            ) as materialize_mock, mock.patch(
                 "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate",
                 return_value={"custom_process_observed": True, "pid": 123},
             ), mock.patch(
                 "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
-                return_value={"status": "ok", "processes": []},
+                return_value={
+                    "status": "ok",
+                    "custom_process_count": 0,
+                    "custom_process_lines": [],
+                    "root_app_pids": [],
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.prepare_isolated_home_keychain",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                    "isolated_default_keychain_verified": True,
+                    "isolated_search_list_verified": True,
+                },
             ), mock.patch(
                 "tools.persistent_custom_profile_history_r2b_probe.scan_protected_surfaces",
                 side_effect=[
@@ -5327,6 +5342,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         stop = packets["r2b_owner_action_stop_packet.json"]
         nonce = packets["r2b_owner_nonce_prompt_packet.json"]
         admission = packets["r2b_admission_packet.json"]
+        keychain = packets["persistent_r2b_keychain_preflight_first_launch_packet.json"]
         self.assertEqual(summary["status"], "blocked")
         self.assertEqual(
             summary["final_status"],
@@ -5338,8 +5354,13 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(admission["original_drift_status"], "blocked")
         self.assertTrue(admission["original_drift_blocks_filesystem_pass_claim"])
         self.assertFalse(admission["protected_filesystem_pass_claimed"])
+        self.assertEqual(keychain["status"], "ok")
+        self.assertTrue(keychain["isolated_default_keychain_verified"])
+        self.assertTrue(keychain["isolated_search_list_verified"])
+        self.assertEqual(summary["keychain_preflight_status"], "ok")
         self.assertTrue(stop["stop_required_before_relaunch_classification"])
         self.assertNotIn("owner-nonce-value", json.dumps(nonce, sort_keys=True))
+        materialize_mock.assert_called_once()
 
     def test_persistent_r2b_relaunch_classify_enforces_owner_marker_before_side_effects(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5423,6 +5444,499 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(summary["relaunch_attempted"])
         terminate_mock.assert_not_called()
         launch_mock.assert_not_called()
+
+    def test_persistent_r2b_first_launch_blocks_when_keychain_preflight_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            (profile / "sessions").mkdir(parents=True)
+            (profile / "sessions" / "thread.jsonl").write_text("redacted\n", encoding="utf-8")
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.RuntimePaths.from_env",
+                return_value=mock.Mock(),
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.emit_local_token",
+                return_value="local-token",
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.materialize_probe_profile",
+                return_value={"status": "ok"},
+            ) as materialize_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={
+                    "status": "ok",
+                    "custom_process_count": 0,
+                    "custom_process_lines": [],
+                    "root_app_pids": [],
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.prepare_isolated_home_keychain",
+                return_value={
+                    "status": "blocked",
+                    "machine_error_code": "KEYCHAIN_PREFLIGHT_BLOCKED",
+                    "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                    "isolated_default_keychain_verified": False,
+                    "isolated_search_list_verified": False,
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.scan_protected_surfaces",
+                side_effect=[
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                ],
+            ):
+                packets = build_r2b_first_launch_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=root / "evidence",
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.4-mini",
+                    owner_nonce="owner-nonce-value",
+                    startup_wait_seconds=0,
+                    skip_git=True,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        keychain = packets["persistent_r2b_keychain_preflight_first_launch_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_KEYCHAIN_PREFLIGHT",
+        )
+        self.assertEqual(keychain["status"], "blocked")
+        self.assertEqual(summary["keychain_preflight_status"], "blocked")
+        materialize_mock.assert_not_called()
+        launch_mock.assert_not_called()
+
+    def test_persistent_r2b_first_launch_blocks_when_same_profile_process_is_already_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            (profile / "sessions").mkdir(parents=True)
+            (profile / "sessions" / "thread.jsonl").write_text("redacted\n", encoding="utf-8")
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={
+                    "status": "ok",
+                    "custom_process_count": 1,
+                    "custom_process_lines": ["123 Codex --user-data-dir=/profiles/wbp-custom-main/electron-user-data"],
+                    "root_app_pids": [123],
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.materialize_probe_profile"
+            ) as materialize_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.scan_protected_surfaces",
+                side_effect=[
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                ],
+            ):
+                packets = build_r2b_first_launch_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=root / "evidence",
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.4-mini",
+                    owner_nonce="owner-nonce-value",
+                    startup_wait_seconds=0,
+                    skip_git=True,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        gate = packets["persistent_r2b_same_profile_process_gate_before_first_launch_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_CONCURRENT_PROFILE_PROCESS",
+        )
+        self.assertEqual(gate["status"], "blocked")
+        materialize_mock.assert_not_called()
+        launch_mock.assert_not_called()
+
+    def test_persistent_r2b_first_launch_blocks_when_process_inventory_is_unusable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            (profile / "sessions").mkdir(parents=True)
+            (profile / "sessions" / "thread.jsonl").write_text("redacted\n", encoding="utf-8")
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={"status": "ok"},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.materialize_probe_profile"
+            ) as materialize_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock, mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.scan_protected_surfaces",
+                side_effect=[
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                    {
+                        "surfaces": {
+                            "codex_dir": {"root": "/protected", "exists": True, "entries": []}
+                        }
+                    },
+                ],
+            ):
+                packets = build_r2b_first_launch_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=root / "evidence",
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.4-mini",
+                    owner_nonce="owner-nonce-value",
+                    startup_wait_seconds=0,
+                    skip_git=True,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        gate = packets["persistent_r2b_same_profile_process_gate_before_first_launch_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_PROCESS_INVENTORY_UNUSABLE",
+        )
+        self.assertEqual(gate["reason_class"], "PROCESS_INVENTORY_UNUSABLE")
+        materialize_mock.assert_not_called()
+        launch_mock.assert_not_called()
+
+    def test_persistent_r2b_relaunch_blocks_when_same_profile_process_survives_termination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            profile.mkdir(parents=True)
+            (evidence / "persistent_custom_profile_before_bounded_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "entry_count": 1,
+                        "entries_sample": [],
+                        "profile_fingerprint_sha256": "before",
+                        "max_mtime_ns": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (evidence / "r2b_original_codex_before_snapshot.json").write_text(
+                json.dumps({"surfaces": {}}),
+                encoding="utf-8",
+            )
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.terminate_custom_processes",
+                return_value={"status": "ok"},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={
+                    "status": "ok",
+                    "custom_process_count": 1,
+                    "custom_process_lines": ["123 Codex --user-data-dir=/profiles/wbp-custom-main/electron-user-data"],
+                    "root_app_pids": [123],
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock:
+                packets = build_r2b_relaunch_classification_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=evidence,
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    owner_visible_prior_thread=True,
+                    owner_confirmation_collected=True,
+                    owner_ready_now=True,
+                    prompt_entered=True,
+                    nonce_used=True,
+                    evidence_dir_preserved=True,
+                    startup_wait_seconds=0,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        gate = packets["persistent_r2b_same_profile_process_gate_before_relaunch_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_CONCURRENT_PROFILE_PROCESS",
+        )
+        self.assertEqual(gate["status"], "blocked")
+        launch_mock.assert_not_called()
+
+    def test_persistent_r2b_relaunch_blocks_when_keychain_preflight_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            profile_base = root / "profiles"
+            profile = profile_base / "wbp-custom-main"
+            profile.mkdir(parents=True)
+            (evidence / "persistent_custom_profile_before_bounded_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "entry_count": 1,
+                        "entries_sample": [],
+                        "profile_fingerprint_sha256": "before",
+                        "max_mtime_ns": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (evidence / "r2b_original_codex_before_snapshot.json").write_text(
+                json.dumps({"surfaces": {}}),
+                encoding="utf-8",
+            )
+            repair = root / "repair"
+            backup_root = root / "wbp-custom-main.backup.20260527T031925Z"
+            backup_root.mkdir()
+            marker = backup_root / ".wbp_backup_complete"
+            marker.write_text('{"profile_id":"wbp-custom-main"}\n', encoding="utf-8")
+            repair.mkdir()
+            for name, payload in {
+                "backup_repair_summary_packet.json": {
+                    "status": "ok",
+                    "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_ROLLBACK_READY",
+                    "timestamped_backup_root": str(backup_root),
+                },
+                "rollback_readiness_packet.json": {"status": "ok", "rollback_ready": True},
+                "state_backup_manifest_packet.json": {
+                    "status": "ok",
+                    "copied_file_count": 1,
+                    "raw_content_recorded": False,
+                },
+                "cache_exclusion_manifest_packet.json": {
+                    "status": "ok",
+                    "excluded_count": 1,
+                },
+                "timestamped_backup_complete_marker_packet.json": {
+                    "status": "ok",
+                    "marker_path": str(marker),
+                },
+            }.items():
+                (repair / name).write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.terminate_custom_processes",
+                return_value={"status": "ok"},
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.collect_codex_process_inventory",
+                return_value={
+                    "status": "ok",
+                    "custom_process_count": 0,
+                    "custom_process_lines": [],
+                    "root_app_pids": [],
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.prepare_isolated_home_keychain",
+                return_value={
+                    "status": "blocked",
+                    "machine_error_code": "KEYCHAIN_PREFLIGHT_BLOCKED",
+                    "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                    "isolated_default_keychain_verified": False,
+                    "isolated_search_list_verified": False,
+                },
+            ), mock.patch(
+                "tools.persistent_custom_profile_history_r2b_probe.launch_native_candidate"
+            ) as launch_mock:
+                packets = build_r2b_relaunch_classification_packets(
+                    repo_root=Path("/repo"),
+                    evidence_dir=evidence,
+                    repair_evidence_dir=repair,
+                    profile_id="wbp-custom-main",
+                    base_dir=profile_base,
+                    owner_visible_prior_thread=True,
+                    owner_confirmation_collected=True,
+                    owner_ready_now=True,
+                    prompt_entered=True,
+                    nonce_used=True,
+                    evidence_dir_preserved=True,
+                    startup_wait_seconds=0,
+                )
+
+        summary = packets["persistent_custom_profile_history_r2b_summary_packet.json"]
+        keychain = packets["persistent_r2b_keychain_preflight_relaunch_packet.json"]
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["final_status"],
+            "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_KEYCHAIN_PREFLIGHT",
+        )
+        self.assertEqual(keychain["status"], "blocked")
+        self.assertEqual(summary["keychain_preflight_status"], "blocked")
+        launch_mock.assert_not_called()
+
+    def test_persistent_r2b_historical_quarantine_ignores_known_out_of_scope_dirty_entries(self) -> None:
+        repo_root = Path("/repo")
+        evidence_dir = repo_root / "audit_results" / "new-contour"
+        status_lines = "\n".join(
+            [
+                " M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
+                " M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
+                "?? audit_results/_tmp_wbp_catalog_prep_inspect/",
+                "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
+                "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
+                "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+                "?? audit_results/wbp_web_control_surface_actions_wired_and_guarded_r2_2026-05-27/",
+                "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
+            ]
+        )
+
+        with mock.patch(
+            "tools.persistent_custom_profile_history_r2b_probe._run",
+            return_value=status_lines,
+        ):
+            quarantined, unexpected = persistent_r2b_probe._historical_quarantine(
+                repo_root,
+                evidence_dir,
+            )
+
+        self.assertEqual(len(quarantined), 8)
+        self.assertEqual(unexpected, [])
 
     def test_persistent_r2c_nonce_prompt_is_hash_only(self) -> None:
         nonce = "wbp-r2c-secret-nonce"

@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T00:55:21.170090Z",
+  "codex_app_bundle_version": "3178",
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.81530",
+  "codex_cli_path": "/Users/kirillponomarev/.local/state/fnm_multishells/1186_1779924894645/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "packet_kind": "persistent_profile_safety_version_pinning",
+  "status": "ok",
+  "wbp_git_commit": "76b232f3b154dfed74e72eab26879bbece77eebc"
+}

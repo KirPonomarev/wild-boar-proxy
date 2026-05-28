@@ -1,0 +1,22 @@
+{
+  "backup_created_in_current_contour": false,
+  "backup_policy": "timestamped_selective_state_backup",
+  "captured_at_utc": "2026-05-28T00:55:21.207617Z",
+  "complete_marker_created": true,
+  "complete_marker_created_after_manifest_success": true,
+  "copied_state_file_count": 993,
+  "excluded_cache_entry_count": 26183,
+  "incomplete_backup_counted_as_rollback_proof": false,
+  "marker_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup.20260527T031925Z/.wbp_backup_complete",
+  "packet_kind": "persistent_profile_safety_backup_readiness",
+  "persistent_profile_deletion_allowed": false,
+  "reason_class": "",
+  "repair_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_backup_rollback_repair_r1_2026-05-27",
+  "restore_executed": false,
+  "rollback_ready": true,
+  "rollback_reference_status": "ok",
+  "source_false_green_status": "ok",
+  "status": "ok",
+  "thread_history_claimed": false,
+  "timestamped_backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup.20260527T031925Z"
+}

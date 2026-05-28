@@ -46,6 +46,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     scan_protected_surfaces,
     terminate_custom_processes,
 )
+from wild_boar_proxy.keychain_preflight import prepare_isolated_home_keychain
 from wild_boar_proxy.runtime import RuntimePaths
 from wild_boar_proxy.token_command import emit_local_token
 
@@ -111,8 +112,16 @@ def _historical_quarantine(
     quarantined_prefixes = (
         "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/",
         "M audit_results/wbp_persistent_custom_profile_history_r2_live_2026-05-27/persistent_r2_launcher.stdout.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stderr.log",
+        "M audit_results/wbp_persistent_custom_profile_history_r2b_live_2026-05-27/persistent_r2b_launcher.stdout.log",
+        "?? audit_results/_tmp_wbp_catalog_prep_inspect/",
         "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
         "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stderr.log",
+        "?? audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/persistent_r2c_launcher.stdout.log",
+        "?? audit_results/wbp_persistent_custom_profile_restoration_correlation_r5_2026-05-27/",
+        "?? audit_results/wbp_web_control_surface_actions_wired_and_guarded_r2_2026-05-27/",
+        "?? tools/persistent_custom_profile_restoration_correlation_r5_probe.py",
     )
     current_contour_prefixes = (f"?? {relative_evidence_dir}/",)
     quarantined = [
@@ -490,6 +499,88 @@ def build_owner_action_boundary_packet(
     }
 
 
+def build_same_profile_process_gate_packet(
+    *,
+    custom_user_data_dir: Path,
+    phase: str,
+) -> dict[str, Any]:
+    inventory = collect_codex_process_inventory(
+        custom_user_data_dir=str(custom_user_data_dir)
+    )
+    custom_process_count = inventory.get("custom_process_count")
+    custom_process_lines = inventory.get("custom_process_lines")
+    root_app_pids = inventory.get("root_app_pids")
+    inventory_usable = (
+        isinstance(custom_process_count, int)
+        and custom_process_count >= 0
+        and isinstance(custom_process_lines, list)
+        and isinstance(root_app_pids, list)
+    )
+    same_profile_process_present = (
+        inventory_usable and int(custom_process_count) > 0
+    )
+    blocked = (not inventory_usable) or same_profile_process_present
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "r2b_same_profile_process_gate",
+        "status": "blocked" if blocked else "ok",
+        "reason_class": (
+            "PROCESS_INVENTORY_UNUSABLE"
+            if not inventory_usable
+            else (
+            "SAME_PROFILE_PROCESS_ALREADY_RUNNING"
+            if same_profile_process_present
+            else ""
+            )
+        ),
+        "phase": phase,
+        "custom_user_data_dir": str(custom_user_data_dir),
+        "inventory_usable": inventory_usable,
+        "custom_process_count": int(custom_process_count)
+        if isinstance(custom_process_count, int)
+        else -1,
+        "custom_process_lines": custom_process_lines
+        if isinstance(custom_process_lines, list)
+        else [],
+        "same_profile_process_present": same_profile_process_present,
+        "root_app_pid_count": len(root_app_pids) if isinstance(root_app_pids, list) else 0,
+        "single_writer_only_counts_as_lock_acquired": False,
+    }
+
+
+def build_persistent_keychain_preflight_packet(
+    *,
+    isolated_home: Path,
+    phase: str,
+) -> dict[str, Any]:
+    preflight = prepare_isolated_home_keychain(isolated_home=isolated_home)
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "persistent_keychain_preflight",
+        "status": str(preflight.get("status") or ""),
+        "reason_class": str(preflight.get("machine_error_code") or ""),
+        "phase": phase,
+        "isolated_home": str(isolated_home),
+        "isolated_default_keychain_verified": preflight.get(
+            "isolated_default_keychain_verified"
+        )
+        is True,
+        "isolated_search_list_verified": preflight.get(
+            "isolated_search_list_verified"
+        )
+        is True,
+        "prompt_avoidance_claim_scope": str(
+            preflight.get("prompt_avoidance_claim_scope")
+            or "keychain_not_found_prompt_only"
+        ),
+        "real_user_keychain_modified": False,
+        "keychain_item_read": False,
+        "keychain_reset_performed": False,
+        "prompt_observation_collected": False,
+        "prompt_observed": False,
+    }
+
+
 def _layout(paths: dict[str, Any], evidence_dir: Path) -> NativeProbeLayout:
     profile_root = Path(paths["persistent_profile_root"])
     return NativeProbeLayout(
@@ -711,9 +802,80 @@ def build_first_launch_packets(
         )
         return packets
 
+    same_profile_gate = build_same_profile_process_gate_packet(
+        custom_user_data_dir=user_data_dir,
+        phase="before_first_launch",
+    )
+    packets["persistent_r2b_same_profile_process_gate_before_first_launch_packet.json"] = (
+        same_profile_gate
+    )
+    if same_profile_gate.get("status") != "ok":
+        reason_class = str(
+            same_profile_gate.get("reason_class")
+            or "SAME_PROFILE_PROCESS_ALREADY_RUNNING"
+        )
+        packets["persistent_r2b_first_launch_packet.json"] = {
+            "captured_at_utc": _utc_now(),
+            "packet_kind": "persistent_r2b_first_launch",
+            "status": "blocked",
+            "reason_class": reason_class,
+            "native_launch_attempted": False,
+        }
+        packets["persistent_custom_profile_history_r2b_summary_packet.json"].update(
+            {
+                "status": "blocked",
+                "final_status": (
+                    "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_PROCESS_INVENTORY_UNUSABLE"
+                    if reason_class == "PROCESS_INVENTORY_UNUSABLE"
+                    else "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_CONCURRENT_PROFILE_PROCESS"
+                ),
+                "execution_mode": "first-launch",
+            }
+        )
+        return packets
+
     runtime_paths = RuntimePaths.from_env()
     local_token = emit_local_token(runtime_paths)
     layout = _layout(paths, evidence_dir)
+    keychain_preflight = build_persistent_keychain_preflight_packet(
+        isolated_home=layout.custom_home_dir,
+        phase="first_launch",
+    )
+    packets["persistent_r2b_keychain_preflight_first_launch_packet.json"] = (
+        keychain_preflight
+    )
+    if keychain_preflight.get("status") == "blocked":
+        packets["persistent_r2b_first_launch_packet.json"] = {
+            "captured_at_utc": _utc_now(),
+            "packet_kind": "persistent_r2b_first_launch",
+            "status": "blocked",
+            "reason_class": str(
+                keychain_preflight.get("reason_class") or "KEYCHAIN_PREFLIGHT_BLOCKED"
+            ),
+            "native_launch_attempted": False,
+        }
+        packets["persistent_custom_profile_history_r2b_summary_packet.json"] = {
+            "captured_at_utc": _utc_now(),
+            "packet_kind": "persistent_custom_profile_history_r2b_summary",
+            "status": "blocked",
+            "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_KEYCHAIN_PREFLIGHT",
+            "execution_mode": "first-launch",
+            "profile_id": profile_id,
+            "profile_root": str(profile_root),
+            "native_launch_attempted": False,
+            "custom_process_observed": False,
+            "owner_action_required": False,
+            "owner_nonce_hash_recorded": owner_nonce_packet.get("nonce_sha256", "") != "",
+            "profile_state_preserved": False,
+            "thread_history_preserved": False,
+            "direct_egress_absence_claimed": False,
+            "model_availability_claimed": False,
+            "keychain_prompt_resolved_claimed": False,
+            "native_ux_acceptance_claimed": False,
+            "final_e2e_claimed": False,
+            "keychain_preflight_status": keychain_preflight.get("status"),
+        }
+        return packets
     materialized = materialize_probe_profile(
         layout=layout,
         endpoint=endpoint,
@@ -787,6 +949,7 @@ def build_first_launch_packets(
         "direct_egress_absence_claimed": False,
         "model_availability_claimed": False,
         "keychain_prompt_resolved_claimed": False,
+        "keychain_preflight_status": keychain_preflight.get("status"),
         "native_ux_acceptance_claimed": False,
         "final_e2e_claimed": False,
     }
@@ -865,7 +1028,93 @@ def build_relaunch_classification_packets(
         changed_since_ns=_max_manifest_mtime_ns(before_manifest),
     )
     termination = terminate_custom_processes(str(user_data_dir))
+    same_profile_gate = build_same_profile_process_gate_packet(
+        custom_user_data_dir=user_data_dir,
+        phase="before_relaunch",
+    )
+    if same_profile_gate.get("status") != "ok":
+        reason_class = str(
+            same_profile_gate.get("reason_class")
+            or "SAME_PROFILE_PROCESS_ALREADY_RUNNING"
+        )
+        return {
+            "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+                repair_evidence_dir=repair_evidence_dir
+            ),
+            "r2b_owner_action_boundary_packet.json": owner_boundary,
+            "persistent_custom_profile_after_owner_action_bounded_manifest.json": (
+                after_action_manifest
+            ),
+            "persistent_r2b_first_launch_termination_packet.json": termination,
+            "persistent_r2b_same_profile_process_gate_before_relaunch_packet.json": (
+                same_profile_gate
+            ),
+            "persistent_custom_profile_history_r2b_summary_packet.json": {
+                "captured_at_utc": _utc_now(),
+                "packet_kind": "persistent_custom_profile_history_r2b_summary",
+                "status": "blocked",
+                "final_status": (
+                    "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_PROCESS_INVENTORY_UNUSABLE"
+                    if reason_class == "PROCESS_INVENTORY_UNUSABLE"
+                    else "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_CONCURRENT_PROFILE_PROCESS"
+                ),
+                "execution_mode": "relaunch-classify",
+                "profile_id": profile_id,
+                "profile_root": str(profile_root),
+                "native_launch_attempted": False,
+                "relaunch_attempted": False,
+                "owner_action_required": False,
+                "profile_state_preserved": False,
+                "thread_history_preserved": False,
+                "direct_egress_absence_claimed": False,
+                "model_availability_claimed": False,
+                "keychain_prompt_resolved_claimed": False,
+                "native_ux_acceptance_claimed": False,
+                "final_e2e_claimed": False,
+            },
+        }
     runtime_paths = RuntimePaths.from_env()
+    keychain_preflight = build_persistent_keychain_preflight_packet(
+        isolated_home=Path(paths["home_dir"]),
+        phase="relaunch",
+    )
+    if keychain_preflight.get("status") == "blocked":
+        return {
+            "r2b_rollback_reference_reverified_packet.json": build_rollback_reference_packet(
+                repair_evidence_dir=repair_evidence_dir
+            ),
+            "r2b_owner_action_boundary_packet.json": owner_boundary,
+            "persistent_custom_profile_after_owner_action_bounded_manifest.json": (
+                after_action_manifest
+            ),
+            "persistent_r2b_first_launch_termination_packet.json": termination,
+            "persistent_r2b_same_profile_process_gate_before_relaunch_packet.json": (
+                same_profile_gate
+            ),
+            "persistent_r2b_keychain_preflight_relaunch_packet.json": (
+                keychain_preflight
+            ),
+            "persistent_custom_profile_history_r2b_summary_packet.json": {
+                "captured_at_utc": _utc_now(),
+                "packet_kind": "persistent_custom_profile_history_r2b_summary",
+                "status": "blocked",
+                "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_R2B_BLOCKED_KEYCHAIN_PREFLIGHT",
+                "execution_mode": "relaunch-classify",
+                "profile_id": profile_id,
+                "profile_root": str(profile_root),
+                "native_launch_attempted": False,
+                "relaunch_attempted": False,
+                "owner_action_required": False,
+                "profile_state_preserved": False,
+                "thread_history_preserved": False,
+                "direct_egress_absence_claimed": False,
+                "model_availability_claimed": False,
+                "keychain_prompt_resolved_claimed": False,
+                "keychain_preflight_status": keychain_preflight.get("status"),
+                "native_ux_acceptance_claimed": False,
+                "final_e2e_claimed": False,
+            },
+        }
     relaunch = launch_native_candidate(
         repo_root=repo_root,
         layout=_layout(paths, evidence_dir),
@@ -958,6 +1207,10 @@ def build_relaunch_classification_packets(
             after_action_manifest
         ),
         "persistent_r2b_first_launch_termination_packet.json": termination,
+        "persistent_r2b_same_profile_process_gate_before_relaunch_packet.json": (
+            same_profile_gate
+        ),
+        "persistent_r2b_keychain_preflight_relaunch_packet.json": keychain_preflight,
         "persistent_r2b_relaunch_packet.json": {
             **relaunch,
             "packet_kind": "persistent_r2b_relaunch",
@@ -996,6 +1249,7 @@ def build_relaunch_classification_packets(
             "direct_egress_absence_claimed": False,
             "model_availability_claimed": False,
             "keychain_prompt_resolved_claimed": False,
+            "keychain_preflight_status": keychain_preflight.get("status"),
             "native_ux_acceptance_claimed": False,
             "final_e2e_claimed": False,
         },
