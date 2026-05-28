@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T09:31:06.909203Z",
+  "command_executed": false,
+  "icon_shipped": false,
+  "launcher_path_kind": "default_owned_provisioning_target",
+  "launcher_path_status": "path_present",
+  "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+  "owner_controlled_activation_only": true,
+  "packet_kind": "launcher_contract",
+  "repo_managed_marker_present": true,
+  "repo_managed_marker_recognized": true,
+  "repo_managed_marker_valid": true,
+  "repo_owned_default_consumer_provisioned": true,
+  "standalone_app_identity_claimed": false,
+  "status": "ok"
+}

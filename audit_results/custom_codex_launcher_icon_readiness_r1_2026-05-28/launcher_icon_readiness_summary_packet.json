@@ -1,0 +1,11 @@
+{
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-28T09:31:06.915270Z",
+  "final_status": "NO_ICON_SHIPPED_YET",
+  "icon_shipped": false,
+  "missing_required_packets": [],
+  "packet_kind": "launcher_icon_readiness_summary",
+  "safe_wbp_managed_entrypoint_proven": false,
+  "standalone_app_identity_claimed": false,
+  "status": "ok"
+}

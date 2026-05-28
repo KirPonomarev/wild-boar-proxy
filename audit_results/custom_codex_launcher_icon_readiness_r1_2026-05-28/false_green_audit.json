@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-28T09:31:06.915032Z",
+  "findings": [],
+  "icon_shipped": false,
+  "no_icon_shipped_yet": true,
+  "packet_kind": "launcher_false_green_audit",
+  "standalone_app_identity_claimed": false,
+  "status": "ok"
+}

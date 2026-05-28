@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-28T09:31:06.910714Z",
+  "ephemeral_tmp_profile_target_forbidden": true,
+  "icon_shipped": false,
+  "launch_argv": [
+    "open",
+    "-n",
+    "/Applications/Codex.app",
+    "--args",
+    "--user-data-dir",
+    "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+  ],
+  "launcher_invocation_mode": "desktop",
+  "launcher_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/codex-custom-launch.sh",
+  "packet_kind": "launcher_target_resolution",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "raw_codex_app_direct_icon_allowed": false,
+  "status": "ok",
+  "target_is_wbp_managed_launcher": true
+}
