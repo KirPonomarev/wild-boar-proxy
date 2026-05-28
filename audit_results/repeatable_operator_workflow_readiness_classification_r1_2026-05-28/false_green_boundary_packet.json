@@ -1,0 +1,11 @@
+{
+  "baseline_only_preferred_classes_hidden_or_averaged_away": false,
+  "bounded_readiness_treated_as_rollout_readiness": false,
+  "captured_at_utc": "2026-05-28T13:58:15.624068Z",
+  "chain_ceremony_treated_as_workflow_value": false,
+  "cross_class_counts_treated_as_superiority_claim": false,
+  "one_useful_class_treated_as_general_workflow_readiness": false,
+  "operator_mediated_repeatability_treated_as_autonomous_intelligence": false,
+  "packet_kind": "false_green_boundary",
+  "status": "ok"
+}

@@ -1,0 +1,19 @@
+{
+  "autonomous_workflow_quality_proven": false,
+  "captured_at_utc": "2026-05-28T13:58:15.624060Z",
+  "final_status": "REPEATABLE_OPERATOR_WORKFLOW_READINESS_CLASSIFIED_WITH_LIMITS",
+  "operator_facing_bounded_readiness_classification": "repeatable_usefulness_observed_with_limits",
+  "packet_kind": "operator_workflow_readiness",
+  "preferred_by_default_proven": false,
+  "product_readiness_proven": false,
+  "readiness_scope_classification": "operator_facing_bounded_probe_only",
+  "repeatable_usefulness_observed": true,
+  "rollout_readiness_proven": false,
+  "status": "ok",
+  "task_class_ids": [
+    "route_selection",
+    "coding_artifact_skeleton",
+    "review_return_artifact"
+  ],
+  "user_wide_productivity_gain_proven": false
+}

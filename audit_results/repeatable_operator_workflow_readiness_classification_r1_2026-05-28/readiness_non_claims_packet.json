@@ -1,0 +1,15 @@
+{
+  "bounded_readiness_implies_product_wide_readiness": false,
+  "bounded_readiness_implies_rollout_readiness": false,
+  "captured_at_utc": "2026-05-28T13:58:15.624064Z",
+  "chain_preferred_class_eliminates_baseline_only_preferred_classes": false,
+  "class_count_summary_implies_readiness_by_itself": false,
+  "operator_mediated_repeatability_implies_autonomy": false,
+  "packet_kind": "readiness_non_claims",
+  "repeatability_implies_answer_quality_superiority": false,
+  "repeated_usefulness_implies_default_workflow_preference": false,
+  "status": "ok",
+  "task_class_summary_implies_concurrency_usefulness": false,
+  "usable_bounded_artifacts_imply_answer_quality_superiority": false,
+  "useful_classes_prove_general_multi_agent_productivity": false
+}
