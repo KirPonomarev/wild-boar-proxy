@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-28T13:19:22.302457Z",
+  "gaps": [
+    {
+      "id": "live_stack_acceleration_not_proven_beyond_contour_local_harness",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "mixed_timing_surfaces_block_clean_cross_surface_comparison",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "user_visible_productivity_gain_not_proven_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "concurrent_throughput_remains_unproven_here",
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "acceleration_gap_matrix",
+  "status": "ok"
+}

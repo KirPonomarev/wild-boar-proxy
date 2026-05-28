@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T13:19:22.302455Z",
+  "current_measurements_stable_over_time": false,
+  "measured_latency_implies_better_answers": false,
+  "measured_latency_implies_user_visible_productivity_gain": false,
+  "one_medium_task_generalizes_to_coding_workloads": false,
+  "packet_kind": "acceleration_non_claims",
+  "sequential_throughput_implies_safe_parallel_throughput": false,
+  "status": "ok",
+  "throughput_implies_cost_efficiency": false
+}
