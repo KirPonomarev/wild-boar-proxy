@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-28T10:49:59.054420Z",
+  "current_catalog_count": 3,
+  "current_catalog_model_ids": [
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "wbp-web-primary-openrouter"
+  ],
+  "packet_kind": "current_vs_seed_model_matrix",
+  "seed_only_count": 12,
+  "seed_only_model_ids": [
+    "direct-cerebras-gpt-oss-120b",
+    "direct-cerebras-llama3.1-8b",
+    "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+    "direct-gemini-2.5-flash",
+    "direct-groq-openai-gpt-oss-20b",
+    "direct-mistral-devstral-2512",
+    "direct-mistral-small-latest",
+    "glm-4.7-flash",
+    "or-gpt-oss-120b",
+    "or-gpt-oss-20b",
+    "or-qwen3-coder",
+    "or-qwen3-next"
+  ],
+  "seed_only_promoted_to_current_catalog": false,
+  "seed_only_server_issued_for_runtime_selection": false,
+  "status": "ok"
+}

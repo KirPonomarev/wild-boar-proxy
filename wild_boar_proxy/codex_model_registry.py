@@ -4,15 +4,19 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from wild_boar_proxy.external_models.credentials import provider_specs_inventory
 from wild_boar_proxy.model_availability import (
     AVAILABILITY_LEVELS,
     CATALOG_AVAILABILITY_CLAIM_LEVELS,
     CATALOG_AVAILABILITY_EVIDENCE_SCOPES,
 )
 from wild_boar_proxy.operator_surface import DEFAULT_ENDPOINT, DEFAULT_MODEL
+from wild_boar_proxy.runtime import REPO_ROOT
 
 
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
@@ -72,6 +76,8 @@ CATALOG_PROOF_LEVELS = {
     "blocked_by_host_environment",
 }
 MODEL_SELECTION_STATES = {"selectable", "disabled"}
+GENERIC_PROVIDER_REGISTRY_SCHEMA_VERSION = 1
+GENERIC_MODEL_REGISTRY_SCHEMA_VERSION = 1
 CATALOG_ALLOWED_CLAIMS = (
     "catalog_generated_from_server_owned_sources",
     "catalog_schema_validated",
@@ -92,6 +98,7 @@ CATALOG_FORBIDDEN_CLAIMS = (
     "direct_egress_absent",
     "final_e2e_proven",
 )
+SEED_ONLY_MODEL_AVAILABILITY_STATE = "seed_only_not_current_catalog"
 
 
 def utc_now() -> str:
@@ -454,6 +461,231 @@ def _runtime_binding_row(model: dict[str, Any]) -> dict[str, Any]:
         "upstream_accepts_proven": False,
         "response_accepted_by_codex_proven": False,
         "model_availability_proven": False,
+    }
+
+
+def _historical_seed_entries() -> list[dict[str, Any]]:
+    seed_path = REPO_ROOT / "external_agent_lab" / "model_registry_seed.json"
+    try:
+        payload = json.loads(seed_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        return []
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _provider_dashboard_by_name() -> dict[str, str]:
+    return {
+        str(entry.get("provider") or ""): str(entry.get("provider_dashboard_url") or "")
+        for entry in provider_specs_inventory()
+        if str(entry.get("provider") or "")
+    }
+
+
+def _seed_provider_rows() -> list[dict[str, Any]]:
+    auth_rows = {
+        str(entry.get("provider") or ""): entry
+        for entry in provider_specs_inventory()
+        if str(entry.get("provider") or "")
+    }
+    dashboard_by_name = _provider_dashboard_by_name()
+    seed_entries = _historical_seed_entries()
+    providers = sorted(
+        {
+            provider
+            for provider in auth_rows
+            if provider
+        }
+        | {
+            str(entry.get("provider") or "").strip()
+            for entry in seed_entries
+            if str(entry.get("provider") or "").strip()
+        }
+    )
+    rows: list[dict[str, Any]] = []
+    for provider in providers:
+        auth_row = auth_rows.get(provider)
+        rows.append(
+            {
+                "provider": provider,
+                "provider_family": str(
+                    (auth_row or {}).get("provider_family")
+                    or next(
+                        (
+                            str(entry.get("provider_type") or "").strip() or "historical_seed"
+                            for entry in seed_entries
+                            if str(entry.get("provider") or "").strip() == provider
+                        ),
+                        "historical_seed",
+                    )
+                ),
+                "auth_schema_admitted": auth_row is not None,
+                "runtime_admitted": False,
+                "runtime_compatibility_claimed": False,
+                "model_family_compatibility_claimed": False,
+                "credential_ref": str((auth_row or {}).get("credential_ref") or ""),
+                "owner_env_candidates": list((auth_row or {}).get("owner_env_candidates") or []),
+                "provider_dashboard_url": str(
+                    (auth_row or {}).get("provider_dashboard_url")
+                    or dashboard_by_name.get(provider)
+                    or ""
+                ),
+                "seed_source": str((auth_row or {}).get("seed_source") or "historical_seed"),
+                "current_status": "auth_schema_admitted" if auth_row is not None else "seed_only",
+                "classification_scope": "provider_registry_only",
+            }
+        )
+    return rows
+
+
+def _generic_provider_registry_rows() -> list[dict[str, Any]]:
+    rows = _seed_provider_rows()
+    return sorted(rows, key=lambda row: str(row.get("provider") or ""))
+
+
+def _current_catalog_model_rows(
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    catalog = build_wbp_model_catalog_contract_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    models = catalog.get("models")
+    if not isinstance(models, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+        rows.append(
+            {
+                "model_id": str(model.get("model_id") or ""),
+                "display_name": str(model.get("display_name") or model.get("model_id") or ""),
+                "provider": str(model.get("physical_provider") or ""),
+                "provider_label": str(model.get("provider_label") or ""),
+                "provider_model_id": str(model.get("provider_model_id") or ""),
+                "lane_kind": str(model.get("lane") or ""),
+                "cost_class": "unknown_unclassified",
+                "speed_tier": dict(model.get("speed_tier") or _tier_unknown()),
+                "intelligence_tier": dict(model.get("intelligence_tier") or _tier_unknown()),
+                "capability_tags": [],
+                "availability_state": str(model.get("availability_claim_level") or "listed_not_live_proven"),
+                "proof_level": "classified",
+                "seed_source": "current_runtime_catalog",
+                "current_status": "current_catalog",
+                "server_issued_for_runtime_selection": model.get("server_issued") is True,
+                "selection_enabled": model.get("selection_enabled") is True,
+                "runtime_compatibility_claimed": False,
+                "model_availability_claimed": False,
+                "display_metadata_only": False,
+            }
+        )
+    return rows
+
+
+def _seed_only_model_rows(current_catalog_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    current_ids = {
+        str(row.get("model_id") or "")
+        for row in current_catalog_rows
+        if str(row.get("model_id") or "")
+    }
+    rows: list[dict[str, Any]] = []
+    for entry in _historical_seed_entries():
+        model_id = str(entry.get("model_id") or "").strip()
+        provider = str(entry.get("provider") or "").strip()
+        if not model_id or model_id in current_ids:
+            continue
+        rows.append(
+            {
+                "model_id": model_id,
+                "display_name": model_id,
+                "provider": provider,
+                "provider_label": provider or "historical_seed",
+                "provider_model_id": model_id,
+                "lane_kind": "seed_only",
+                "cost_class": str(entry.get("cost_class") or "unknown_unclassified"),
+                "speed_tier": _tier_unknown(),
+                "intelligence_tier": _tier_unknown(),
+                "capability_tags": [str(tag) for tag in entry.get("capability_tags") or [] if str(tag)],
+                "availability_state": str(entry.get("availability_state") or SEED_ONLY_MODEL_AVAILABILITY_STATE),
+                "proof_level": "declared",
+                "seed_source": "historical_external_agent_lab",
+                "current_status": "seed_only",
+                "server_issued_for_runtime_selection": False,
+                "selection_enabled": False,
+                "runtime_compatibility_claimed": False,
+                "model_availability_claimed": False,
+                "display_metadata_only": True,
+            }
+        )
+    return sorted(rows, key=lambda row: str(row.get("model_id") or ""))
+
+
+def build_generic_provider_registry_packet() -> dict[str, Any]:
+    rows = _generic_provider_registry_rows()
+    current_auth_admitted = [
+        row["provider"] for row in rows if row.get("auth_schema_admitted") is True
+    ]
+    seed_only = [row["provider"] for row in rows if row.get("auth_schema_admitted") is not True]
+    return {
+        "schema_version": GENERIC_PROVIDER_REGISTRY_SCHEMA_VERSION,
+        "packet_kind": "generic_provider_registry",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if rows else "blocked",
+        "classification_scope": "provider_registry_only",
+        "rows": rows,
+        "provider_count": len(rows),
+        "current_auth_admitted_providers": current_auth_admitted,
+        "seed_only_providers": seed_only,
+        "auth_admission_is_runtime_admission": False,
+        "provider_family_compatibility_claimed": False,
+        "browser_authority_widened": False,
+    }
+
+
+def build_generic_model_registry_packet(
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    current_catalog_models = _current_catalog_model_rows(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    seed_only_models = _seed_only_model_rows(current_catalog_models)
+    return {
+        "schema_version": GENERIC_MODEL_REGISTRY_SCHEMA_VERSION,
+        "packet_kind": "generic_model_registry",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if current_catalog_models else "blocked",
+        "classification_scope": "model_registry_only",
+        "current_catalog_models": current_catalog_models,
+        "seed_only_models": seed_only_models,
+        "current_catalog_model_count": len(current_catalog_models),
+        "seed_only_model_count": len(seed_only_models),
+        "current_catalog_is_runtime_proof": False,
+        "seed_only_is_current_runtime_catalog": False,
+        "registry_export_implies_consumer_integration_complete": False,
+        "allowed_browser_fields": ["model_id"],
+        "browser_authority_widened": False,
     }
 
 

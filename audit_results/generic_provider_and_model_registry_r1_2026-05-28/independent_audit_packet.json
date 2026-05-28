@@ -1,0 +1,39 @@
+{
+  "captured_at_utc": "2026-05-28T10:49:59.054435Z",
+  "findings": [
+    {
+      "id": "current_catalog_and_seed_only_are_physically_separated",
+      "status": "ok"
+    },
+    {
+      "id": "runtime_truth_and_capability_proof_remain_separate",
+      "status": "ok"
+    },
+    {
+      "id": "provider_registry_does_not_claim_runtime_admission",
+      "status": "ok"
+    },
+    {
+      "id": "route_backed_model_without_explicit_route_selection_can_fall_back_to_account_truth",
+      "scope": "later_session_runtime_contours",
+      "status": "open_risk"
+    },
+    {
+      "id": "raw_registry_fresh_truth_semantics_need_runtime_boundary_interpretation",
+      "scope": "registry_consumer_boundary",
+      "status": "open_risk"
+    },
+    {
+      "id": "static_route_readiness_currently_bleeds_into_session_provenance_flags",
+      "scope": "later_session_runtime_contours",
+      "status": "open_risk"
+    },
+    {
+      "id": "raw_registry_support_booleans_still_read_broader_than_proven_runtime_compatibility",
+      "scope": "registry_wording_and_consumer_boundary",
+      "status": "open_risk"
+    }
+  ],
+  "packet_kind": "registry_independent_audit",
+  "status": "ok"
+}

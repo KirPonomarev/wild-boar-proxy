@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-28T10:49:59.054427Z",
+  "catalog_registry_is_runtime_truth": false,
+  "display_metadata_is_runtime_truth": false,
+  "packet_kind": "registry_truth_layers",
+  "runtime_truth_is_capability_proof": false,
+  "seed_only_entries_are_runtime_truth": false,
+  "status": "ok"
+}
