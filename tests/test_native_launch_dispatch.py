@@ -123,6 +123,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["keychain_preflight_status"], "")
         self.assertFalse(packet["isolated_default_keychain_verified"])
         self.assertFalse(packet["isolated_search_list_verified"])
+        self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
 
     def test_window_observation_uses_custom_pid_and_requires_real_window_count(self) -> None:
         process_inventory = {
@@ -255,6 +256,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["keychain_preflight_reason_code"], "OK")
         self.assertTrue(packet["isolated_default_keychain_verified"])
         self.assertTrue(packet["isolated_search_list_verified"])
+        self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
+        self.assertFalse(packet["real_user_keychain_modified"])
+        self.assertFalse(packet["keychain_item_read"])
+        self.assertFalse(packet["keychain_reset_performed"])
 
     def test_live_custom_native_launch_blocks_when_keychain_preflight_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -299,6 +304,8 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["next_action"], "stop_and_diagnose_keychain_preflight")
         self.assertTrue(packet["keychain_preflight_attempted"])
         self.assertEqual(packet["keychain_preflight_status"], "blocked")
+        self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
+        self.assertFalse(packet["real_user_keychain_modified"])
         self.assertFalse(packet["process_started"])
         launch_native_candidate.assert_not_called()
 
@@ -379,6 +386,93 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             "KEYCHAIN_PREFLIGHT_VERIFY_DEFAULT_FAILED",
         )
         self.assertFalse(packet["isolated_default_keychain_verified"])
+        self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
+        self.assertFalse(packet["real_user_keychain_modified"])
+        self.assertFalse(packet["keychain_item_read"])
+        self.assertFalse(packet["keychain_reset_performed"])
+
+    def test_live_custom_native_launch_keeps_skipped_preflight_as_quiet_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "skipped",
+                        "machine_error_code": "KEYCHAIN_PREFLIGHT_NO_DEFAULT_KEYCHAIN",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": False,
+                        "isolated_search_list_verified": False,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value={
+                        "custom_process_observed": True,
+                        "startup_inventory": {
+                            "root_app_pids": [222],
+                            "custom_process_lines": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                            "sample": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                        },
+                        "launcher_pid": 222,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    return_value={"window_observed": True, "observed_pid": 222, "blocked_reason_class": ""},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": False,
+                        "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["real_codex_app_launched"])
+        self.assertTrue(packet["keychain_preflight_attempted"])
+        self.assertEqual(packet["keychain_preflight_status"], "skipped")
+        self.assertEqual(
+            packet["keychain_preflight_reason_code"],
+            "KEYCHAIN_PREFLIGHT_NO_DEFAULT_KEYCHAIN",
+        )
+        self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
+        self.assertFalse(packet["isolated_default_keychain_verified"])
+        self.assertFalse(packet["isolated_search_list_verified"])
+        self.assertFalse(packet["real_user_keychain_modified"])
+        self.assertFalse(packet["keychain_item_read"])
+        self.assertFalse(packet["keychain_reset_performed"])
 
     def test_authorization_blocks_without_owner_authorization(self) -> None:
         packet = build_native_dispatch_authorization_packet(
