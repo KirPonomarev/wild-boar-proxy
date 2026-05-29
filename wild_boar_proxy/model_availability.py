@@ -36,6 +36,11 @@ ROUTE_FAMILIES = {
     "local_fixture_route",
     "unknown_unrouted",
 }
+ROUTE_FAMILY_SERVER_CLASSIFIED_SOURCES = {
+    "catalog",
+    "direct_models_endpoint",
+    "external_route",
+}
 AVAILABILITY_LEVELS = {
     "listed",
     "selectable",
@@ -300,21 +305,91 @@ def _route_model_rows(routes_packet: dict[str, Any] | None) -> dict[str, dict[st
     return rows
 
 
-def infer_route_family(*, model_id: str, source: str = "", row: dict[str, Any] | None = None) -> str:
+def infer_route_family_detail(
+    *,
+    model_id: str,
+    source: str = "",
+    row: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if isinstance(row, dict):
         family = str(row.get("route_family") or "").strip()
         if family in ROUTE_FAMILIES:
-            return family
+            return {
+                "route_family": family,
+                "route_family_classification_source": "server_row_route_family",
+                "route_family_fallback_used": False,
+                "route_family_proof_level": "server_classified",
+            }
+        lane = str(row.get("lane") or "").strip()
+        source_class = str(row.get("source_class") or "").strip()
+        if lane == "codex_native" or source_class == "current_build_catalog_visible":
+            return {
+                "route_family": "codex_native_account_route",
+                "route_family_classification_source": "server_model_catalog",
+                "route_family_fallback_used": False,
+                "route_family_proof_level": "server_classified",
+            }
+        if lane == "wbp_api" or source_class == "server_registry":
+            return {
+                "route_family": "wbp_api_external_route",
+                "route_family_classification_source": "server_api_route_snapshot",
+                "route_family_fallback_used": False,
+                "route_family_proof_level": "server_classified",
+            }
         if str(row.get("selection_source") or "") == "external_route":
-            return "wbp_api_external_route"
+            return {
+                "route_family": "wbp_api_external_route",
+                "route_family_classification_source": "server_api_route_snapshot",
+                "route_family_fallback_used": False,
+                "route_family_proof_level": "server_classified",
+            }
     source_text = str(source or "").lower()
     if "fixture" in source_text:
-        return "local_fixture_route"
-    if "external_route" in source_text or model_id.startswith("wbp:") or model_id.startswith("wbp-"):
-        return "wbp_api_external_route"
-    if model_id.startswith("gpt-"):
-        return "codex_native_account_route"
-    return "unknown_unrouted"
+        return {
+            "route_family": "local_fixture_route",
+            "route_family_classification_source": "local_fixture_source",
+            "route_family_fallback_used": False,
+            "route_family_proof_level": "server_classified",
+        }
+    if source_text in {"catalog", "direct_models_endpoint"}:
+        return {
+            "route_family": "codex_native_account_route",
+            "route_family_classification_source": "server_model_catalog",
+            "route_family_fallback_used": False,
+            "route_family_proof_level": "server_classified",
+        }
+    if "external_route" in source_text:
+        return {
+            "route_family": "wbp_api_external_route",
+            "route_family_classification_source": "server_api_route_snapshot",
+            "route_family_fallback_used": False,
+            "route_family_proof_level": "server_classified",
+        }
+    if (
+        model_id.startswith("gpt-")
+        or model_id.startswith("wbp:")
+        or model_id.startswith("wbp-")
+        or model_id.startswith("direct-")
+    ):
+        return {
+            "route_family": "unknown_unrouted",
+            "route_family_classification_source": "fallback_name_heuristic",
+            "route_family_fallback_used": True,
+            "route_family_proof_level": "heuristic_only_not_executable",
+        }
+    return {
+        "route_family": "unknown_unrouted",
+        "route_family_classification_source": "none",
+        "route_family_fallback_used": False,
+        "route_family_proof_level": "unclassified",
+    }
+
+
+def infer_route_family(*, model_id: str, source: str = "", row: dict[str, Any] | None = None) -> str:
+    return str(
+        infer_route_family_detail(model_id=model_id, source=source, row=row).get("route_family")
+        or "unknown_unrouted"
+    )
 
 
 def build_route_family_classification_packet(
@@ -339,17 +414,26 @@ def build_route_family_classification_packet(
     for raw_model_id in candidate_ids:
         model_id = str(raw_model_id)
         row = rows_by_id.get(model_id, {})
-        family = infer_route_family(
+        family_detail = infer_route_family_detail(
             model_id=model_id,
             source=str(row.get("selection_source") or ""),
             row=row,
         )
+        family = str(family_detail.get("route_family") or "unknown_unrouted")
         if family == "unknown_unrouted":
             missing.append(model_id)
         classifications.append(
             {
                 "model_id": model_id,
                 "route_family": family,
+                "route_family_classification_source": str(
+                    family_detail.get("route_family_classification_source") or "none"
+                ),
+                "route_family_fallback_used": family_detail.get("route_family_fallback_used")
+                is True,
+                "route_family_proof_level": str(
+                    family_detail.get("route_family_proof_level") or "unclassified"
+                ),
                 "route_family_required": True,
                 "route_id": str(row.get("route_id") or ""),
                 "provider_model_id": str(row.get("upstream_model") or model_id),
@@ -388,7 +472,7 @@ def build_candidate_partition_packet(
         row = by_id.get(model_id, {})
         family = str(row.get("route_family") or "unknown_unrouted")
         source = str(row.get("selection_source") or "")
-        if source in {"catalog", "direct_models_endpoint"} or model_id.startswith("gpt-"):
+        if source in {"catalog", "direct_models_endpoint"}:
             catalog_visible.append(model_id)
         if family != "unknown_unrouted":
             route_backed.append(model_id)

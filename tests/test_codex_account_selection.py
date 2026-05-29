@@ -138,6 +138,18 @@ def operator_status() -> dict[str, object]:
     }
 
 
+def operator_status_with_model_entries(entries: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "status": {"status": "ok", "machine_error_code": "OK"},
+        "claim_gate": {"status": "passed"},
+        "models": {
+            "ok": True,
+            "server_issued": True,
+            "model_entries": entries,
+        },
+    }
+
+
 class CodexAccountSelectionTests(unittest.TestCase):
     def test_accounts_truth_packet_redacts_auth_refs_and_counts_classes(self) -> None:
         packet = build_accounts_truth_packet(commands())
@@ -190,12 +202,19 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertTrue(packet["selected_backend_ref"])
         self.assertTrue(packet["selected_backend_id_redacted"])
         self.assertTrue(packet["selected_backend_server_issued"])
-        self.assertEqual(packet["selected_backend_source"], "server")
+        self.assertEqual(packet["selected_backend_source"], "server_ranked_candidate")
+        self.assertEqual(packet["account_candidate_source"], "server_ranked_candidate")
+        self.assertFalse(packet["account_selected_by_user"])
+        self.assertFalse(packet["account_execution_proven"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["live_compatibility_proven"])
         self.assertEqual(packet["selected_route_ref"], "")
         self.assertFalse(packet["selected_route_server_issued"])
         self.assertFalse(packet["route_provenance_required"])
         self.assertFalse(packet["route_provenance_proven"])
-        self.assertEqual(packet["source_provenance_status"], "backend_proven")
+        self.assertEqual(packet["source_provenance_status"], "backend_candidate_classified")
+        self.assertTrue(packet["source_candidate_classified"])
+        self.assertFalse(packet["source_provenance_proven"])
         self.assertFalse(packet["browser_selected_backend"])
         self.assertEqual(packet["selected_source_class"], "gpt_account")
         self.assertFalse(packet["runtime_meter_attached"])
@@ -219,6 +238,11 @@ class CodexAccountSelectionTests(unittest.TestCase):
                 "provider": "openai",
                 "openai_base_url": "http://127.0.0.1:8318/v1",
                 "wire_api": "responses",
+                "auth_path": "/tmp/auth.json",
+                "profile_path": "/tmp/profile",
+                "codex_home": "/tmp/codex-home",
+                "secret_ref": "BROWSER_SECRET",
+                "api_key": "browser-key",
                 "nested": {"auth": "secret"},
             },
             commands(),
@@ -236,6 +260,11 @@ class CodexAccountSelectionTests(unittest.TestCase):
                 "provider",
                 "openai_base_url",
                 "wire_api",
+                "auth_path",
+                "profile_path",
+                "codex_home",
+                "secret_ref",
+                "api_key",
                 "nested",
                 "nested.auth",
             ],
@@ -273,7 +302,14 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertFalse(packet["selected_route_server_issued"])
         self.assertFalse(packet["route_provenance_required"])
         self.assertFalse(packet["route_provenance_proven"])
-        self.assertEqual(packet["source_provenance_status"], "backend_proven")
+        self.assertEqual(packet["account_candidate_source"], "server_ranked_candidate")
+        self.assertFalse(packet["account_selected_by_user"])
+        self.assertFalse(packet["account_execution_proven"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["live_compatibility_proven"])
+        self.assertEqual(packet["source_provenance_status"], "backend_candidate_classified")
+        self.assertTrue(packet["source_candidate_classified"])
+        self.assertFalse(packet["source_provenance_proven"])
         self.assertEqual(packet["token_burn"], 0)
         self.assertEqual(
             packet["negative_claim_basis"],
@@ -303,6 +339,10 @@ class CodexAccountSelectionTests(unittest.TestCase):
                 "provider": "openai",
                 "base_url": "https://example.invalid/v1",
                 "token": "browser-token",
+                "auth_path": "/tmp/auth.json",
+                "codex_home": "/tmp/codex-home",
+                "secret_ref": "BROWSER_SECRET",
+                "profile_path": "/tmp/profile",
             },
             commands_for_selection_truth(),
             operator_status(),
@@ -312,7 +352,17 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(
             packet["forbidden_fields"],
-            ["route_id", "backend_id", "provider", "base_url", "token"],
+            [
+                "route_id",
+                "backend_id",
+                "provider",
+                "base_url",
+                "token",
+                "auth_path",
+                "codex_home",
+                "secret_ref",
+                "profile_path",
+            ],
         )
         self.assertTrue(all(value is False for value in packet["browser_authority"].values()))
         self.assertFalse(packet["browser_selected_backend"])
@@ -329,11 +379,22 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["account_pool_truth"]["pool_classes"]["active"], 2)
         self.assertEqual(packet["account_pool_truth"]["pool_classes"]["reserve"], 1)
         self.assertEqual(packet["account_pool_truth"]["eligibility_classes"]["live_capable"], 2)
-        self.assertEqual(packet["selection_policy_state"], "gpt_account_policy_classified")
+        self.assertEqual(packet["selection_policy_state"], "codex_account_lane_policy_classified")
+        self.assertEqual(packet["model_lane"], "codex_account_lane")
+        self.assertTrue(packet["model_lane_classified"])
+        self.assertEqual(packet["model_lane_classification_source"], "server_model_catalog")
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertEqual(packet["model_lane_proof_level"], "server_classified")
+        self.assertFalse(packet["runtime_lane_proven"])
         self.assertEqual(packet["selected_source_class"], "gpt_account")
         self.assertTrue(packet["selected_backend_server_issued"])
         self.assertTrue(packet["selected_backend_ref"])
-        self.assertEqual(packet["selected_backend_source"], "server")
+        self.assertEqual(packet["selected_backend_source"], "server_ranked_candidate")
+        self.assertEqual(packet["account_candidate_source"], "server_ranked_candidate")
+        self.assertFalse(packet["account_selected_by_user"])
+        self.assertFalse(packet["account_execution_proven"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["live_compatibility_proven"])
         self.assertNotIn("acct-a", json.dumps(packet))
 
     def test_model_selection_does_not_promote_reserve_without_authorization(self) -> None:
@@ -449,12 +510,126 @@ class CodexAccountSelectionTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["selected_source_class"], "route_backed")
+        self.assertEqual(packet["model_lane"], "api_route_lane")
+        self.assertTrue(packet["model_lane_classified"])
+        self.assertEqual(packet["model_lane_classification_source"], "server_api_route_snapshot")
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertEqual(packet["model_lane_proof_level"], "server_classified")
+        self.assertFalse(packet["runtime_lane_proven"])
         self.assertTrue(packet["selected_route_server_issued"])
         self.assertEqual(packet["selection_policy_state"], "route_ready_static")
+        self.assertTrue(packet["api_model_selected_by_user"])
+        self.assertFalse(packet["route_selected_by_user"])
+        self.assertFalse(packet["browser_selected_route"])
+        self.assertEqual(packet["route_candidate_source"], "server_issued_route_registry")
+        self.assertTrue(packet["route_candidate_classified"])
+        self.assertTrue(packet["route_static_readiness_classified"])
+        self.assertTrue(packet["route_provenance_required"])
+        self.assertFalse(packet["route_provenance_proven"])
+        self.assertFalse(packet["route_execution_proven"])
+        self.assertFalse(packet["provider_response_proven"])
+        self.assertFalse(packet["secret_validity_proven"])
+        self.assertFalse(packet["live_compatibility_proven"])
+        self.assertEqual(packet["source_provenance_status"], "route_static_candidate_classified")
         self.assertFalse(packet["route_selection_static"]["raw_route_id_exposed"])
         self.assertFalse(packet["route_selection_static"]["raw_secret_ref_exposed"])
         self.assertNotIn("ROUTE_SECRET_REF_FIXTURE", serialized)
         self.assertNotIn("wbp-web-primary-openrouter", packet["selected_route_ref"])
+
+    def test_model_selection_uses_server_lane_when_api_route_name_starts_with_gpt(self) -> None:
+        route_operator_status = {
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "claim_gate": {"status": "passed"},
+            "models": {"ok": True, "server_issued": True, "model_ids": []},
+        }
+        api_snapshot = {
+            "routes": [
+                {
+                    "route_id": "gpt-external-route",
+                    "enabled": True,
+                    "secret_ref": "ROUTE_SECRET_REF_FIXTURE",
+                    "upstream_model": "openrouter/gpt-upstream",
+                }
+            ]
+        }
+
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-external-route"},
+            commands_for_selection_truth(),
+            route_operator_status,
+            api_snapshot=api_snapshot,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["model_lane"], "api_route_lane")
+        self.assertEqual(packet["model_lane_classification_source"], "server_api_route_snapshot")
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertEqual(packet["selected_source_class"], "route_backed")
+        self.assertTrue(packet["api_model_selected_by_user"])
+        self.assertFalse(packet["selected_backend_server_issued"])
+        self.assertTrue(packet["selected_route_server_issued"])
+
+    def test_model_selection_uses_server_lane_for_codex_account_name_without_gpt_prefix(self) -> None:
+        native_operator_status = {
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "claim_gate": {"status": "passed"},
+            "models": {"ok": True, "server_issued": True, "model_ids": ["codex-native-pro"]},
+        }
+
+        packet = build_model_selection_truth_packet(
+            {"model_id": "codex-native-pro"},
+            commands_for_selection_truth(),
+            native_operator_status,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["model_lane"], "codex_account_lane")
+        self.assertEqual(packet["model_lane_classification_source"], "server_model_catalog")
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertEqual(packet["selected_source_class"], "gpt_account")
+        self.assertFalse(packet["api_model_selected_by_user"])
+        self.assertTrue(packet["selected_backend_server_issued"])
+
+    def test_model_selection_uses_server_lane_for_non_gpt_native_model(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "orion-native"},
+            commands_for_selection_truth(),
+            operator_status_with_model_entries(
+                [{"model_id": "orion-native", "lane": "codex_native"}]
+            ),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["model_lane"], "codex_account_lane")
+        self.assertEqual(packet["model_lane_classification_source"], "server_model_catalog")
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertEqual(packet["selected_source_class"], "gpt_account")
+        self.assertFalse(packet["api_model_selected_by_user"])
+        self.assertTrue(packet["selected_backend_server_issued"])
+
+    def test_model_selection_rejects_gpt_name_without_server_lane_classification(self) -> None:
+        packet = build_model_selection_truth_packet(
+            {"model_id": "gpt-unknown-local"},
+            commands_for_selection_truth(),
+            {
+                "status": {"status": "ok", "machine_error_code": "OK"},
+                "claim_gate": {"status": "passed"},
+                "models": {
+                    "ok": True,
+                    "server_issued": True,
+                    "model_ids": ["gpt-unknown-local"],
+                },
+            },
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "HEURISTIC_ONLY_NOT_EXECUTABLE")
+        self.assertEqual(packet["model_lane"], "unknown_lane")
+        self.assertFalse(packet["model_lane_classified"])
+        self.assertEqual(packet["model_lane_classification_source"], "fallback_name_heuristic")
+        self.assertTrue(packet["model_lane_fallback_used"])
+        self.assertTrue(packet["heuristic_only_not_executable"])
+        self.assertFalse(packet["selection_policy_proven"])
 
     def test_forbidden_account_smoke_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_account_smoke_fields({"model_id": "gpt-5.3-codex"}), [])

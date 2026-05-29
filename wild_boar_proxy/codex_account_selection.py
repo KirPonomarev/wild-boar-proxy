@@ -9,7 +9,12 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from wild_boar_proxy.codex_model_registry import build_custom_model_registry_packet
+from wild_boar_proxy.codex_model_registry import (
+    API_ROUTE_MODEL_LANE,
+    CODEX_ACCOUNT_MODEL_LANE,
+    build_custom_model_registry_packet,
+    model_lane_classification_from_registry,
+)
 from wild_boar_proxy.operator_surface import DEFAULT_MODEL
 from wild_boar_proxy.runtime import (
     backend_runtime_ranking_key,
@@ -33,10 +38,12 @@ ACCOUNT_SMOKE_DRY_RUN_FORBIDDEN_FIELDS = {
     "openai_base_url",
     "path",
     "profile",
+    "profile_path",
     "provider",
     "route_id",
     "runtime_config",
     "secret",
+    "secret_ref",
     "token",
     "wire_api",
 }
@@ -62,6 +69,10 @@ MODEL_SELECTION_FORBIDDEN_CLAIMS = (
     "direct_egress_absent",
     "final_e2e_proven",
 )
+ACCOUNT_CANDIDATE_SOURCE = "server_ranked_candidate"
+ACCOUNT_CANDIDATE_PROVENANCE_STATUS = "backend_candidate_classified"
+ROUTE_CANDIDATE_SOURCE = "server_issued_route_registry"
+ROUTE_CANDIDATE_PROVENANCE_STATUS = "route_static_candidate_classified"
 
 
 def utc_now() -> str:
@@ -291,6 +302,17 @@ def _route_selection_for_model(model_id: str, api_snapshot: dict[str, Any] | Non
             "route_policy_state": "not_visible",
             "route_provenance_required": False,
             "route_provenance_proven": False,
+            "api_model_selected_by_user": True,
+            "route_selected_by_user": False,
+            "browser_selected_route": False,
+            "route_candidate_source": "none",
+            "route_candidate_classified": False,
+            "route_static_readiness_classified": False,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
         }
     route_id = str(route.get("route_id") or "").strip()
     secret_ref = str(route.get("secret_ref") or "").strip()
@@ -302,9 +324,19 @@ def _route_selection_for_model(model_id: str, api_snapshot: dict[str, Any] | Non
         "selected_route_server_issued": route_ready,
         "route_policy_state": "route_ready_static" if route_ready else "route_degraded_static",
         "route_provenance_required": route_ready,
-        "route_provenance_proven": route_ready,
+        "route_provenance_proven": False,
+        "api_model_selected_by_user": True,
+        "route_selected_by_user": False,
+        "browser_selected_route": False,
+        "route_candidate_source": ROUTE_CANDIDATE_SOURCE if route_id else "none",
+        "route_candidate_classified": bool(route_id),
+        "route_static_readiness_classified": route_ready,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
         "route_enabled": enabled,
         "route_secret_ref_present": bool(secret_ref),
+        "raw_route_exposed": False,
         "raw_route_id_exposed": False,
         "raw_secret_ref_exposed": False,
     }
@@ -435,6 +467,20 @@ def build_model_selection_truth_packet(
         },
         "browser_selected_backend": False,
         "browser_selected_route": False,
+        "api_model_selected_by_user": False,
+        "route_selected_by_user": False,
+        "route_candidate_source": "none",
+        "route_candidate_classified": False,
+        "route_static_readiness_classified": False,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "model_selected_by_user": False,
+        "account_selected_by_user": False,
+        "account_candidate_source": "none",
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
         "raw_backend_id_exposed": False,
         "raw_route_id_exposed": False,
         "raw_auth_refs_exposed": False,
@@ -483,17 +529,43 @@ def build_model_selection_truth_packet(
             "server_issued_model_ids": model_ids,
         }
 
-    if model_id.startswith("gpt-"):
+    lane_classification = model_lane_classification_from_registry(model_id, model_registry)
+    if (
+        lane_classification.get("model_lane_classified") is not True
+        or lane_classification.get("model_lane_fallback_used") is True
+    ):
+        heuristic_only = lane_classification.get("heuristic_only_not_executable") is True
+        return base | {
+            "status": "rejected",
+            "machine_error_code": (
+                "HEURISTIC_ONLY_NOT_EXECUTABLE"
+                if heuristic_only
+                else "UNCLASSIFIED_MODEL_ID"
+            ),
+            "human_message": "Model id was server-issued but its lane was not server-classified for execution.",
+            "selected_model": model_id,
+            "model_server_issued": True,
+            "selection_policy_proven": False,
+            **lane_classification,
+        }
+    model_lane = str(lane_classification.get("model_lane") or "")
+    if model_lane == CODEX_ACCOUNT_MODEL_LANE:
         selection = build_account_selection_packet(commands, operator_status)
         selection_status = str(selection.get("status") or "degraded")
         selection_machine_error = str(selection.get("machine_error_code") or "SELECTION_DEGRADED")
-        policy_state = "gpt_account_policy_classified"
+        policy_state = "codex_account_lane_policy_classified"
         route_selection: dict[str, Any] = {
             "selected_route_ref": "",
             "selected_route_server_issued": False,
             "route_policy_state": "not_applicable_for_gpt_account",
+            "route_candidate_source": "none",
+            "route_candidate_classified": False,
+            "route_static_readiness_classified": False,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
         }
-    else:
+    elif model_lane == API_ROUTE_MODEL_LANE:
         route_selection = _route_selection_for_model(model_id, api_snapshot)
         selection_status = "ok" if route_selection["selected_route_server_issued"] else "degraded"
         selection_machine_error = "OK" if selection_status == "ok" else "ROUTE_POLICY_NOT_READY_STATIC"
@@ -507,8 +579,34 @@ def build_model_selection_truth_packet(
             "selected_route_server_issued": route_selection["selected_route_server_issued"],
             "route_provenance_required": route_selection["route_provenance_required"],
             "route_provenance_proven": route_selection["route_provenance_proven"],
-            "source_provenance_status": policy_state,
+            "source_provenance_status": (
+                ROUTE_CANDIDATE_PROVENANCE_STATUS
+                if route_selection["route_static_readiness_classified"]
+                else "route_static_candidate_missing"
+            ),
             "selection_dry_run_proven": route_selection["selected_route_server_issued"],
+            "api_model_selected_by_user": True,
+            "route_selected_by_user": False,
+            "browser_selected_route": False,
+            "route_candidate_source": route_selection["route_candidate_source"],
+            "route_candidate_classified": route_selection["route_candidate_classified"],
+            "route_static_readiness_classified": route_selection["route_static_readiness_classified"],
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "live_compatibility_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
+        }
+    else:
+        return base | {
+            "status": "rejected",
+            "machine_error_code": "MODEL_LANE_NOT_CLASSIFIED",
+            "human_message": "Model id was server-issued but its lane was not classified.",
+            "selected_model": model_id,
+            "model_server_issued": True,
+            "selection_policy_proven": False,
+            **lane_classification,
         }
 
     not_green_reasons: list[str] = []
@@ -529,17 +627,37 @@ def build_model_selection_truth_packet(
         "machine_error_code": selection_machine_error,
         "human_message": "Model selection account/route policy was classified without live validation.",
         "selected_model": model_id,
+        "api_model_selected_by_user": model_lane == API_ROUTE_MODEL_LANE,
+        "model_selected_by_user": True,
         "model_server_issued": True,
+        **lane_classification,
         "selection_policy_proven": bool(selection.get("selection_dry_run_proven")),
         "selection_policy_state": policy_state,
         "selected_source_class": selection["selected_source_class"],
         "selected_backend_ref": selection.get("selected_backend_ref", ""),
         "selected_backend_server_issued": bool(selection.get("selected_backend_server_issued")),
         "selected_backend_source": str(selection.get("selected_backend_source") or "none"),
+        "account_selected_by_user": selection.get("account_selected_by_user") is True,
+        "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+        "source_candidate_classified": selection.get("source_candidate_classified") is True,
+        "source_provenance_proven": False,
+        "account_execution_proven": selection.get("account_execution_proven") is True,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
         "selected_route_ref": selection.get("selected_route_ref", ""),
         "selected_route_server_issued": bool(selection.get("selected_route_server_issued")),
         "route_provenance_required": bool(selection.get("route_provenance_required")),
         "route_provenance_proven": bool(selection.get("route_provenance_proven")),
+        "route_selected_by_user": selection.get("route_selected_by_user") is True,
+        "browser_selected_route": selection.get("browser_selected_route") is True,
+        "route_candidate_source": str(selection.get("route_candidate_source") or "none"),
+        "route_candidate_classified": selection.get("route_candidate_classified") is True,
+        "route_static_readiness_classified": selection.get("route_static_readiness_classified") is True,
+        "route_execution_proven": selection.get("route_execution_proven") is True,
+        "provider_response_proven": selection.get("provider_response_proven") is True,
+        "secret_validity_proven": selection.get("secret_validity_proven") is True,
+        "raw_route_exposed": selection.get("raw_route_exposed") is True,
+        "raw_secret_ref_exposed": selection.get("raw_secret_ref_exposed") is True,
         "source_provenance_status": str(selection.get("source_provenance_status") or policy_state),
         "server_issued_model_ids": model_ids,
         "static_not_green_reasons": not_green_reasons,
@@ -592,16 +710,24 @@ def build_account_selection_packet(
         "selection_proven": selection_proven,
         "inference_proven": False,
         "selected_source_class": "gpt_account" if selection_proven else "none",
+        "model_selected_by_user": False,
+        "account_selected_by_user": False,
+        "account_candidate_source": ACCOUNT_CANDIDATE_SOURCE if selection_proven else "none",
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
         "selected_backend_id": "",
         "selected_backend_ref": _backend_ref(selected_backend_id) if selected_backend_id else "",
         "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection_proven,
-        "selected_backend_source": "server" if selection_proven else "none",
+        "selected_backend_source": ACCOUNT_CANDIDATE_SOURCE if selection_proven else "none",
         "selected_route_ref": "",
         "selected_route_server_issued": False,
         "route_provenance_required": False,
         "route_provenance_proven": False,
-        "source_provenance_status": "backend_proven" if selection_proven else "not_proven",
+        "source_provenance_status": ACCOUNT_CANDIDATE_PROVENANCE_STATUS if selection_proven else "not_proven",
+        "source_candidate_classified": selection_proven,
+        "source_provenance_proven": False,
         "browser_selected_backend": False,
         "selection_reason": (
             "dry-run first live_capable active backend by runtime ranking policy"
@@ -667,6 +793,14 @@ def build_account_smoke_dry_run_packet(
             "live_selection_proven": False,
             "selection_proven": False,
             "inference_proven": False,
+            "model_selected_by_user": False,
+            "account_selected_by_user": False,
+            "account_candidate_source": "none",
+            "source_candidate_classified": False,
+            "source_provenance_proven": False,
+            "account_execution_proven": False,
+            "runtime_execution_proven": False,
+            "live_compatibility_proven": False,
             "smoke_admitted": False,
             "runtime_meter_attached": False,
             "responses_called": False,
@@ -697,6 +831,14 @@ def build_account_smoke_dry_run_packet(
             "live_selection_proven": False,
             "selection_proven": selection["selection_proven"],
             "inference_proven": False,
+            "model_selected_by_user": False,
+            "account_selected_by_user": False,
+            "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+            "source_candidate_classified": selection.get("source_candidate_classified") is True,
+            "source_provenance_proven": False,
+            "account_execution_proven": False,
+            "runtime_execution_proven": False,
+            "live_compatibility_proven": False,
             "smoke_admitted": False,
             "runtime_meter_attached": False,
             "responses_called": False,
@@ -718,6 +860,7 @@ def build_account_smoke_dry_run_packet(
         "mode_id": "codex_custom",
         "dry_run": True,
         "selected_model": model_id or DEFAULT_MODEL,
+        "model_selected_by_user": True,
         "model_server_issued": True,
         "selection_dry_run_proven": selection["selection_dry_run_proven"],
         "live_selection_proven": False,
@@ -729,6 +872,13 @@ def build_account_smoke_dry_run_packet(
         "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection["selected_backend_server_issued"],
         "selected_backend_source": selection["selected_backend_source"],
+        "account_selected_by_user": selection.get("account_selected_by_user") is True,
+        "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+        "source_candidate_classified": selection.get("source_candidate_classified") is True,
+        "source_provenance_proven": False,
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
         "selected_route_ref": selection["selected_route_ref"],
         "selected_route_server_issued": selection["selected_route_server_issued"],
         "route_provenance_required": selection["route_provenance_required"],

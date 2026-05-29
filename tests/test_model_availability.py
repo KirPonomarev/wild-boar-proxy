@@ -595,7 +595,30 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(by_model["gpt-5.4-mini"]["route_family"], "codex_native_account_route")
+        self.assertEqual(
+            by_model["gpt-5.4-mini"]["route_family_classification_source"],
+            "server_model_catalog",
+        )
+        self.assertFalse(by_model["gpt-5.4-mini"]["route_family_fallback_used"])
         self.assertEqual(by_model["wbp-web-primary-openrouter"]["route_family"], "wbp_api_external_route")
+        self.assertEqual(
+            by_model["wbp-web-primary-openrouter"]["route_family_classification_source"],
+            "server_row_route_family",
+        )
+
+    def test_route_family_marks_name_heuristic_as_fallback_when_no_server_row_exists(self) -> None:
+        packet = build_route_family_classification_packet(
+            candidate_packet={"candidate_model_ids": ["gpt-unknown-local"]},
+            normalization_packet={"rows": []},
+        )
+        row = packet["classifications"][0]
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(row["route_family"], "unknown_unrouted")
+        self.assertEqual(row["route_family_classification_source"], "fallback_name_heuristic")
+        self.assertTrue(row["route_family_fallback_used"])
+        self.assertEqual(row["route_family_proof_level"], "heuristic_only_not_executable")
+        self.assertIn("gpt-unknown-local", packet["unknown_unrouted_candidates"])
 
     def test_unknown_unrouted_candidate_not_smoked(self) -> None:
         model = build_model_direct_preflight_packet(

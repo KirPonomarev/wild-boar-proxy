@@ -18,11 +18,17 @@ from typing import Any, Callable
 from wild_boar_proxy.operator_surface import redact_text
 
 from wild_boar_proxy.codex_account_selection import (
+    ACCOUNT_CANDIDATE_PROVENANCE_STATUS,
+    ROUTE_CANDIDATE_PROVENANCE_STATUS,
+    ROUTE_CANDIDATE_SOURCE,
     build_account_selection_packet,
 )
 from wild_boar_proxy.codex_model_registry import (
+    API_ROUTE_MODEL_LANE,
+    CODEX_ACCOUNT_MODEL_LANE,
     build_custom_model_registry_packet,
     build_dual_lane_model_selection_ui_packet,
+    model_lane_classification_from_registry,
 )
 
 PRIMARY_MODEL_SLOT = "primary_model_slot"
@@ -38,7 +44,7 @@ ROLE_SLOT_PAYLOAD_FIELDS = {
     DEEP_REASONING_MODEL_SLOT: "deep_reasoning_model_id",
 }
 ROLE_SLOT_IDS = tuple(ROLE_SLOT_PAYLOAD_FIELDS)
-SESSION_CREATE_ALLOWED_FIELDS = {"model_id", *ROLE_SLOT_PAYLOAD_FIELDS.values()}
+SESSION_CREATE_ALLOWED_FIELDS = set(ROLE_SLOT_PAYLOAD_FIELDS.values())
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
 PROMPT_RUN_ALLOWED_FIELDS = {"prompt", "slot_id"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
@@ -57,6 +63,7 @@ SESSION_CREATE_FORBIDDEN_FIELDS = {
     "token",
     "auth",
     "auth_path",
+    "profile_path",
     "path",
     "backend_id",
     "route_id",
@@ -65,6 +72,8 @@ SESSION_CREATE_FORBIDDEN_FIELDS = {
     "base_url",
     "openai_base_url",
     "model_provider",
+    "model_lane",
+    "model_lane_classification_source",
     "wire_api",
     "proxy",
     "http_proxy",
@@ -74,6 +83,7 @@ SESSION_CREATE_FORBIDDEN_FIELDS = {
     "codex_home",
     "runtime_config",
     "account_id",
+    "secret_ref",
 }
 
 
@@ -177,6 +187,13 @@ def _unbound_slot(slot_id: str) -> dict[str, Any]:
         "slot_id": slot_id,
         "model_id": "",
         "lane_kind": "unbound",
+        "model_catalog_entry_server_issued": False,
+        "model_lane": "unknown_lane",
+        "model_lane_classified": False,
+        "model_lane_classification_source": "none",
+        "model_lane_fallback_used": False,
+        "model_lane_proof_level": "unclassified",
+        "runtime_lane_proven": False,
         "server_issued": False,
         "binding_status": "unbound",
         "binding_source": "none",
@@ -192,6 +209,27 @@ def _unbound_slot(slot_id: str) -> dict[str, Any]:
         "route_provenance_required": False,
         "route_provenance_proven": False,
         "source_provenance_status": "not_proven",
+        "api_model_selected_by_user": False,
+        "route_selected_by_user": False,
+        "browser_selected_route": False,
+        "route_candidate_source": "none",
+        "route_candidate_classified": False,
+        "route_static_readiness_classified": False,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "raw_route_exposed": False,
+        "raw_secret_ref_exposed": False,
+        "model_selected_by_user": False,
+        "role_slot_selected_by_user": False,
+        "account_selected_by_user": False,
+        "browser_selected_backend": False,
+        "account_candidate_source": "none",
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
+        "raw_backend_exposed": False,
+        "raw_backend_id_exposed": False,
         "selection_proven": False,
         "selection_dry_run_proven": False,
         "live_selection_proven": False,
@@ -210,6 +248,17 @@ def _bound_slot(
         "slot_id": slot_id,
         "model_id": model_id,
         "lane_kind": lane_kind,
+        "model_catalog_entry_server_issued": (
+            selection.get("model_catalog_entry_server_issued") is True
+        ),
+        "model_lane": str(selection.get("model_lane") or "unknown_lane"),
+        "model_lane_classified": selection.get("model_lane_classified") is True,
+        "model_lane_classification_source": str(
+            selection.get("model_lane_classification_source") or "none"
+        ),
+        "model_lane_fallback_used": selection.get("model_lane_fallback_used") is True,
+        "model_lane_proof_level": str(selection.get("model_lane_proof_level") or "unclassified"),
+        "runtime_lane_proven": selection.get("runtime_lane_proven") is True,
         "server_issued": True,
         "binding_status": "bound",
         "binding_source": binding_source,
@@ -227,6 +276,33 @@ def _bound_slot(
         "source_provenance_status": str(
             selection.get("source_provenance_status") or "not_proven"
         ),
+        "api_model_selected_by_user": selection.get("api_model_selected_by_user") is True,
+        "route_selected_by_user": selection.get("route_selected_by_user") is True,
+        "browser_selected_route": selection.get("browser_selected_route") is True,
+        "route_candidate_source": str(selection.get("route_candidate_source") or "none"),
+        "route_candidate_classified": selection.get("route_candidate_classified") is True,
+        "route_static_readiness_classified": (
+            selection.get("route_static_readiness_classified") is True
+            or (
+                selection.get("selected_route_server_issued") is True
+                and selection.get("route_provenance_required") is True
+            )
+        ),
+        "route_execution_proven": selection.get("route_execution_proven") is True,
+        "provider_response_proven": selection.get("provider_response_proven") is True,
+        "secret_validity_proven": selection.get("secret_validity_proven") is True,
+        "raw_route_exposed": selection.get("raw_route_exposed") is True,
+        "raw_secret_ref_exposed": selection.get("raw_secret_ref_exposed") is True,
+        "model_selected_by_user": True,
+        "role_slot_selected_by_user": True,
+        "account_selected_by_user": selection.get("account_selected_by_user") is True,
+        "browser_selected_backend": selection.get("browser_selected_backend") is True,
+        "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+        "account_execution_proven": selection.get("account_execution_proven") is True,
+        "runtime_execution_proven": selection.get("runtime_execution_proven") is True,
+        "live_compatibility_proven": selection.get("live_compatibility_proven") is True,
+        "raw_backend_exposed": selection.get("raw_backend_exposed") is True,
+        "raw_backend_id_exposed": selection.get("raw_backend_id_exposed") is True,
         "selection_proven": selection.get("selection_proven") is True,
         "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
         "live_selection_proven": selection.get("live_selection_proven") is True,
@@ -235,12 +311,9 @@ def _bound_slot(
 
 def _slot_model_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
     slot_model_ids: dict[str, str] = {}
-    legacy_model_id = payload.get("model_id")
     primary_model_id = payload.get(ROLE_SLOT_PAYLOAD_FIELDS[PRIMARY_MODEL_SLOT])
     if isinstance(primary_model_id, str) and primary_model_id:
         slot_model_ids[PRIMARY_MODEL_SLOT] = primary_model_id
-    elif isinstance(legacy_model_id, str) and legacy_model_id:
-        slot_model_ids[PRIMARY_MODEL_SLOT] = legacy_model_id
     for slot_id, field in ROLE_SLOT_PAYLOAD_FIELDS.items():
         if slot_id == PRIMARY_MODEL_SLOT:
             continue
@@ -248,6 +321,12 @@ def _slot_model_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
         if isinstance(value, str) and value:
             slot_model_ids[slot_id] = value
     return slot_model_ids
+
+
+def _required_choice_fields() -> list[str]:
+    return [
+        ROLE_SLOT_PAYLOAD_FIELDS[PRIMARY_MODEL_SLOT],
+    ]
 
 
 def _canonical_role_slots(
@@ -357,14 +436,24 @@ def _source_provenance_status(session: dict[str, Any]) -> str:
             and session.get("route_provenance_proven") is True
         ):
             return "route_proven"
+        if session.get("route_static_readiness_classified") is True:
+            return ROUTE_CANDIDATE_PROVENANCE_STATUS
         return "route_provenance_missing"
     if session.get("selected_backend_server_issued") is True:
-        return "backend_proven"
+        return ACCOUNT_CANDIDATE_PROVENANCE_STATUS
     return "not_proven"
 
 
 def _source_provenance_satisfied(session: dict[str, Any]) -> bool:
-    return _source_provenance_status(session) in {"backend_proven", "route_proven"}
+    return _source_provenance_status(session) in {
+        ACCOUNT_CANDIDATE_PROVENANCE_STATUS,
+        ROUTE_CANDIDATE_PROVENANCE_STATUS,
+        "route_proven",
+    }
+
+
+def _source_candidate_classified(session: dict[str, Any]) -> bool:
+    return _source_provenance_satisfied(session)
 
 
 def _slot_source_provenance_status(slot: dict[str, Any], session: dict[str, Any]) -> str:
@@ -376,16 +465,115 @@ def _slot_source_provenance_status(slot: dict[str, Any], session: dict[str, Any]
             and slot.get("route_provenance_proven") is True
         ):
             return "route_proven"
+        if slot.get("route_static_readiness_classified") is True:
+            return ROUTE_CANDIDATE_PROVENANCE_STATUS
         return "route_provenance_missing"
     if slot.get("selected_backend_server_issued") is True:
-        return "backend_proven"
+        return ACCOUNT_CANDIDATE_PROVENANCE_STATUS
     if slot.get("slot_id") == PRIMARY_MODEL_SLOT:
         return _source_provenance_status(session)
     return "not_proven"
 
 
 def _slot_source_provenance_satisfied(slot: dict[str, Any], session: dict[str, Any]) -> bool:
-    return _slot_source_provenance_status(slot, session) in {"backend_proven", "route_proven"}
+    return _slot_source_provenance_status(slot, session) in {
+        ACCOUNT_CANDIDATE_PROVENANCE_STATUS,
+        ROUTE_CANDIDATE_PROVENANCE_STATUS,
+        "route_proven",
+    }
+
+
+def _slot_source_candidate_classified(slot: dict[str, Any], session: dict[str, Any]) -> bool:
+    return _slot_source_provenance_satisfied(slot, session)
+
+
+def _slot_dispatch_admission_packet(
+    *,
+    session: dict[str, Any],
+    slot: dict[str, Any],
+    requested_slot_id: str,
+) -> dict[str, Any]:
+    requested_slot_bound = slot.get("binding_status") == "bound"
+    slot_catalog_revalidated = session.get("slot_catalog_revalidated") is True
+    slot_model_server_issued = slot.get("server_issued") is True
+    slot_lane_revalidated = (
+        slot_catalog_revalidated and slot.get("model_lane_classified") is True
+    )
+    slot_source_revalidated = (
+        slot_catalog_revalidated and _slot_source_candidate_classified(slot, session)
+    )
+    return {
+        "requested_slot_bound": requested_slot_bound,
+        "slot_catalog_revalidated": slot_catalog_revalidated,
+        "slot_model_server_issued": slot_model_server_issued,
+        "slot_lane_revalidated": slot_lane_revalidated,
+        "slot_source_revalidated": slot_source_revalidated,
+        "slot_admission_passed": bool(
+            requested_slot_id in ROLE_SLOT_IDS
+            and requested_slot_bound
+            and slot_model_server_issued
+            and slot_lane_revalidated
+            and slot_source_revalidated
+        ),
+    }
+
+
+def _runner_slot_echo(result: dict[str, Any]) -> str:
+    for key in ("requested_slot_id", "slot_id"):
+        value = result.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _selection_packet_from_bound_slot(slot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "selection_dry_run_proven": slot.get("selection_dry_run_proven") is True,
+        "live_selection_proven": slot.get("live_selection_proven") is True,
+        "selection_proven": slot.get("selection_proven") is True,
+        "model_catalog_entry_server_issued": slot.get("model_catalog_entry_server_issued")
+        is True,
+        "model_lane": str(slot.get("model_lane") or "unknown_lane"),
+        "model_lane_classified": slot.get("model_lane_classified") is True,
+        "model_lane_classification_source": str(
+            slot.get("model_lane_classification_source") or "none"
+        ),
+        "model_lane_fallback_used": slot.get("model_lane_fallback_used") is True,
+        "model_lane_proof_level": str(slot.get("model_lane_proof_level") or "unclassified"),
+        "runtime_lane_proven": slot.get("runtime_lane_proven") is True,
+        "selected_source_class": str(slot.get("selected_source_class") or "none"),
+        "selected_backend_ref": str(slot.get("selected_backend_ref") or ""),
+        "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
+        "selected_route_ref": str(slot.get("selected_route_ref") or ""),
+        "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
+        "route_provenance_required": slot.get("route_provenance_required") is True,
+        "route_provenance_proven": slot.get("route_provenance_proven") is True,
+        "source_provenance_status": str(slot.get("source_provenance_status") or "not_proven"),
+        "source_candidate_classified": slot.get("selection_proven") is True,
+        "source_provenance_proven": False,
+        "api_model_selected_by_user": slot.get("api_model_selected_by_user") is True,
+        "route_selected_by_user": slot.get("route_selected_by_user") is True,
+        "browser_selected_route": slot.get("browser_selected_route") is True,
+        "route_candidate_source": str(slot.get("route_candidate_source") or "none"),
+        "route_candidate_classified": slot.get("route_candidate_classified") is True,
+        "route_static_readiness_classified": slot.get("route_static_readiness_classified") is True,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "raw_route_exposed": False,
+        "raw_secret_ref_exposed": False,
+        "browser_selected_backend": False,
+        "model_selected_by_user": slot.get("model_selected_by_user") is True,
+        "role_slot_selected_by_user": slot.get("role_slot_selected_by_user") is True,
+        "account_selected_by_user": slot.get("account_selected_by_user") is True,
+        "account_candidate_source": str(slot.get("account_candidate_source") or "none"),
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
+        "raw_backend_exposed": False,
+        "raw_backend_id_exposed": False,
+        "machine_error_code": "OK" if slot.get("selection_proven") is True else "SELECTION_NOT_PROVEN",
+    }
 
 
 def _external_route_selection_packet(model_id: str, api_snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -409,25 +597,69 @@ def _external_route_selection_packet(model_id: str, api_snapshot: dict[str, Any]
             "route_provenance_required": False,
             "route_provenance_proven": False,
             "source_provenance_status": "not_proven",
+            "api_model_selected_by_user": True,
+            "route_selected_by_user": False,
+            "browser_selected_route": False,
+            "route_candidate_source": "none",
+            "route_candidate_classified": False,
+            "route_static_readiness_classified": False,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
+            "model_selected_by_user": True,
+            "role_slot_selected_by_user": True,
+            "account_selected_by_user": False,
+            "browser_selected_backend": False,
+            "account_candidate_source": "none",
+            "account_execution_proven": False,
+            "runtime_execution_proven": False,
+            "live_compatibility_proven": False,
+            "raw_backend_exposed": False,
+            "raw_backend_id_exposed": False,
             "machine_error_code": "EXTERNAL_API_ROUTE_NOT_VISIBLE",
         }
     route_id = str(route.get("route_id") or "").strip()
     secret_ref = str(route.get("secret_ref") or "").strip()
     enabled = route.get("enabled") is True
-    proven = enabled and bool(secret_ref)
+    ready = enabled and bool(secret_ref)
     return {
-        "selection_dry_run_proven": proven,
+        "selection_dry_run_proven": ready,
         "live_selection_proven": False,
-        "selection_proven": proven,
-        "selected_source_class": "route_backed" if proven else "none",
+        "selection_proven": ready,
+        "selected_source_class": "route_backed" if ready else "none",
         "selected_backend_ref": "",
         "selected_backend_server_issued": False,
         "selected_route_ref": _digest(route_id) if route_id else "",
-        "selected_route_server_issued": proven,
-        "route_provenance_required": proven,
-        "route_provenance_proven": proven,
-        "source_provenance_status": "route_proven" if proven else "route_provenance_missing",
-        "machine_error_code": "OK" if proven else "EXTERNAL_API_ROUTE_NOT_READY",
+        "selected_route_server_issued": ready,
+        "route_provenance_required": ready,
+        "route_provenance_proven": False,
+        "source_provenance_status": (
+            ROUTE_CANDIDATE_PROVENANCE_STATUS if ready else "route_static_candidate_missing"
+        ),
+        "api_model_selected_by_user": True,
+        "route_selected_by_user": False,
+        "browser_selected_route": False,
+        "route_candidate_source": ROUTE_CANDIDATE_SOURCE if route_id else "none",
+        "route_candidate_classified": bool(route_id),
+        "route_static_readiness_classified": ready,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "raw_route_exposed": False,
+        "raw_secret_ref_exposed": False,
+        "model_selected_by_user": True,
+        "role_slot_selected_by_user": True,
+        "account_selected_by_user": False,
+        "browser_selected_backend": False,
+        "account_candidate_source": "none",
+        "account_execution_proven": False,
+        "runtime_execution_proven": False,
+        "live_compatibility_proven": False,
+        "raw_backend_exposed": False,
+        "raw_backend_id_exposed": False,
+        "machine_error_code": "OK" if ready else "EXTERNAL_API_ROUTE_NOT_READY",
     }
 
 
@@ -437,9 +669,44 @@ def _selection_packet_for_slot(
     operator_status: dict[str, Any] | None,
     api_snapshot: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    if model_id.startswith("gpt-"):
-        return build_account_selection_packet(commands, operator_status)
-    return _external_route_selection_packet(model_id, api_snapshot)
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    lane_classification = model_lane_classification_from_registry(model_id, registry)
+    if (
+        lane_classification.get("model_lane_classified") is not True
+        or lane_classification.get("model_lane_fallback_used") is True
+    ):
+        heuristic_only = lane_classification.get("heuristic_only_not_executable") is True
+        return {
+            "schema_version": 1,
+            "status": "rejected",
+            "machine_error_code": (
+                "HEURISTIC_ONLY_NOT_EXECUTABLE"
+                if heuristic_only
+                else "UNCLASSIFIED_MODEL_ID"
+            ),
+            "selection_proven": False,
+            "selection_dry_run_proven": False,
+            "live_selection_proven": False,
+            "selected_source_class": "none",
+            "source_provenance_status": "not_proven",
+            **lane_classification,
+        }
+    model_lane = str(lane_classification.get("model_lane") or "")
+    if model_lane == CODEX_ACCOUNT_MODEL_LANE:
+        return build_account_selection_packet(commands, operator_status) | lane_classification
+    if model_lane == API_ROUTE_MODEL_LANE:
+        return _external_route_selection_packet(model_id, api_snapshot) | lane_classification
+    return {
+        "schema_version": 1,
+        "status": "rejected",
+        "machine_error_code": "MODEL_LANE_NOT_CLASSIFIED",
+        "selection_proven": False,
+        "selection_dry_run_proven": False,
+        "live_selection_proven": False,
+        "selected_source_class": "none",
+        "source_provenance_status": "not_proven",
+        **lane_classification,
+    }
 
 
 class CodexCustomSessionManager:
@@ -482,17 +749,16 @@ class CodexCustomSessionManager:
             return self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden)
         slot_model_ids = _slot_model_ids_from_payload(payload)
         primary_model_id = slot_model_ids.get(PRIMARY_MODEL_SLOT, "")
-        legacy_model_id = payload.get("model_id")
-        if (
-            isinstance(legacy_model_id, str)
-            and legacy_model_id
-            and primary_model_id
-            and legacy_model_id != primary_model_id
-        ):
+        if not primary_model_id:
             return {
-                **self._base_packet("rejected", "PRIMARY_MODEL_CONFLICT"),
-                "human_message": "Session create received conflicting primary model fields.",
-                "next_action": "align_primary_model_fields",
+                **self._base_packet("rejected", "MANUAL_MODEL_SELECTION_REQUIRED"),
+                "human_message": "Codex Custom session creation requires an explicit server-issued model selection.",
+                "session_created": False,
+                "model_auto_selected": False,
+                "fallback_used": False,
+                "external_route_selected": False,
+                "required_choice_fields": _required_choice_fields(),
+                "next_action": "select_model_from_server_registry",
             }
         model_ids = _model_ids(operator_status, api_snapshot)
         if not primary_model_id or primary_model_id not in model_ids:
@@ -500,6 +766,10 @@ class CodexCustomSessionManager:
                 **self._base_packet("rejected", "MODEL_NOT_SERVER_ISSUED"),
                 "human_message": "Session create accepts only server-issued model_id.",
                 "model_server_issued": False,
+                "session_created": False,
+                "model_auto_selected": False,
+                "fallback_used": False,
+                "external_route_selected": False,
                 "next_action": "select_model_from_server_registry",
             }
         slot_bindings, slot_error = self._slot_bindings_from_payload(
@@ -510,7 +780,8 @@ class CodexCustomSessionManager:
         )
         if slot_error is not None:
             return slot_error
-        selection = selection or build_account_selection_packet(commands, operator_status)
+        primary_slot = slot_bindings[PRIMARY_MODEL_SLOT]
+        selection = _selection_packet_from_bound_slot(primary_slot)
         if selection.get("selection_proven") is not True:
             return {
                 **self._base_packet(
@@ -550,6 +821,16 @@ class CodexCustomSessionManager:
             "current_execution_path_source": "session_primary_model_slot",
             "model_id": primary_model_id,
             "model_server_issued": True,
+            "model_catalog_entry_server_issued": selection.get("model_catalog_entry_server_issued")
+            is True,
+            "model_lane": str(selection.get("model_lane") or "unknown_lane"),
+            "model_lane_classified": selection.get("model_lane_classified") is True,
+            "model_lane_classification_source": str(
+                selection.get("model_lane_classification_source") or "none"
+            ),
+            "model_lane_fallback_used": selection.get("model_lane_fallback_used") is True,
+            "model_lane_proof_level": str(selection.get("model_lane_proof_level") or "unclassified"),
+            "runtime_lane_proven": False,
             "role_slot_binding_proven": True,
             "slot_catalog_revalidated": True,
             "slot_binding_runtime_dispatch_claimed": False,
@@ -560,7 +841,29 @@ class CodexCustomSessionManager:
             "selected_route_server_issued": selection.get("selected_route_server_issued") is True,
             "route_provenance_required": selection.get("route_provenance_required") is True,
             "route_provenance_proven": selection.get("route_provenance_proven") is True,
+            "api_model_selected_by_user": selection.get("api_model_selected_by_user") is True,
+            "route_selected_by_user": selection.get("route_selected_by_user") is True,
+            "browser_selected_route": selection.get("browser_selected_route") is True,
+            "route_candidate_source": str(selection.get("route_candidate_source") or "none"),
+            "route_candidate_classified": selection.get("route_candidate_classified") is True,
+            "route_static_readiness_classified": selection.get("route_static_readiness_classified")
+            is True,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
             "source_provenance_status": str(selection.get("source_provenance_status") or "not_proven"),
+            "model_selected_by_user": selection.get("model_selected_by_user") is True,
+            "role_slot_selected_by_user": selection.get("role_slot_selected_by_user") is True,
+            "account_selected_by_user": selection.get("account_selected_by_user") is True,
+            "browser_selected_backend": selection.get("browser_selected_backend") is True,
+            "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+            "account_execution_proven": False,
+            "runtime_execution_proven": False,
+            "live_compatibility_proven": False,
+            "raw_backend_exposed": False,
+            "raw_backend_id_exposed": False,
             "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
             "live_selection_proven": selection.get("live_selection_proven") is True,
             "selection_proven": selection.get("selection_proven") is True,
@@ -696,6 +999,9 @@ class CodexCustomSessionManager:
                 is True,
                 "route_provenance_required": selection.get("route_provenance_required") is True,
                 "route_provenance_proven": selection.get("route_provenance_proven") is True,
+                "route_candidate_classified": selection.get("route_candidate_classified") is True,
+                "route_static_readiness_classified": selection.get("route_static_readiness_classified")
+                is True,
                 "machine_error_code": str(selection.get("machine_error_code") or "OK"),
             }
             slot_rows.append(slot_row)
@@ -738,12 +1044,12 @@ class CodexCustomSessionManager:
                         }
                     )
                     continue
-                if selection.get("route_provenance_proven") is not True:
+                if selection.get("route_static_readiness_classified") is not True:
                     failures.append(
                         {
                             "slot_id": slot_id,
                             "model_id": model_id,
-                            "machine_error_code": "ROUTE_PROVENANCE_MISSING",
+                            "machine_error_code": "ROUTE_STATIC_READINESS_MISSING",
                         }
                     )
                     continue
@@ -970,15 +1276,54 @@ class CodexCustomSessionManager:
         requested_slot_defaulted_to_primary = (
             not requested_slot_explicit and requested_slot_id == PRIMARY_MODEL_SLOT
         )
-        runner_payload = {"prompt": prompt, "model_id": model_id}
-        if requested_slot_explicit:
-            runner_payload["slot_id"] = requested_slot_id
+        slot_dispatch_admission = _slot_dispatch_admission_packet(
+            session=session,
+            slot=slot,
+            requested_slot_id=requested_slot_id,
+        )
+        runner_payload = {
+            "prompt": prompt,
+            "model_id": model_id,
+            "slot_id": requested_slot_id,
+        }
+        if not requested_slot_explicit:
+            runner_payload["slot_id_explicit"] = False
+        wbp_runner_payload_slot_id = str(runner_payload.get("slot_id") or "")
+        wbp_runner_payload_model_id = str(runner_payload.get("model_id") or "")
+        wbp_runner_payload_slot_matches_requested = (
+            wbp_runner_payload_slot_id == requested_slot_id
+        )
+        wbp_runner_payload_model_matches_slot = wbp_runner_payload_model_id == model_id
+        wbp_session_manager_slot_dispatch_proven = bool(
+            slot_dispatch_admission["slot_admission_passed"]
+            and wbp_runner_payload_slot_matches_requested
+            and wbp_runner_payload_model_matches_slot
+        )
         with self._active_prompt_lock:
             if session_id in self._active_prompt_sessions:
                 return {
                     **self._base_packet("blocked", "CONCURRENT_PROMPT_EXECUTION_NOT_ALLOWED"),
                     "session_id": session_id,
                     "current_execution_slot_id": requested_slot_id,
+                    "requested_slot_id": requested_slot_id,
+                    "requested_slot_explicit": requested_slot_explicit,
+                    "requested_slot_defaulted_to_primary": requested_slot_defaulted_to_primary,
+                    **slot_dispatch_admission,
+                    "wbp_runner_payload_slot_id": "",
+                    "wbp_runner_payload_model_id": "",
+                    "wbp_runner_payload_slot_matches_requested": False,
+                    "wbp_runner_payload_model_matches_slot": False,
+                    "wbp_session_manager_slot_dispatch_proven": False,
+                    "runtime_slot_dispatch_proof_scope": "not_attempted_concurrent_session_lock",
+                    "downstream_runner_slot_echo_present": False,
+                    "downstream_runner_slot_echo": "",
+                    "downstream_runner_slot_echo_matches_requested": False,
+                    "executed_slot_id": "",
+                    "executed_slot_model_id": "",
+                    "runtime_slot_dispatch_proven": False,
+                    "slot_binding_runtime_dispatch_claimed": False,
+                    "parallel_slot_execution_proven": False,
+                    "fanout_execution_proven": False,
                     "authorization_status": "authorized_by_owner_gate",
                     "owner_authorization_phrase_present": True,
                     "prompt_runner_called": False,
@@ -1003,8 +1348,15 @@ class CodexCustomSessionManager:
             with self._active_prompt_lock:
                 self._active_prompt_sessions.discard(session_id)
         response_text = str(result.get("final_message") or result.get("response_text") or "")
-        runner_slot_id = result.get("requested_slot_id")
-        runner_slot_id_text = str(runner_slot_id) if isinstance(runner_slot_id, str) else ""
+        runner_slot_id_text = _runner_slot_echo(result)
+        downstream_runner_slot_echo_present = bool(runner_slot_id_text)
+        downstream_runner_slot_echo_matches_requested = (
+            downstream_runner_slot_echo_present and runner_slot_id_text == requested_slot_id
+        )
+        runtime_slot_dispatch_proven = bool(
+            wbp_session_manager_slot_dispatch_proven
+            and downstream_runner_slot_echo_matches_requested
+        )
         response_digest = _digest(response_text) if response_text else ""
         token_usage_present, token_usage, token_burn = _token_usage(result)
         secret_value_recorded = result.get("secret_value_recorded") is True
@@ -1047,7 +1399,7 @@ class CodexCustomSessionManager:
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
         source_provenance_status = _slot_source_provenance_status(slot, session)
-        source_provenance_proven = _slot_source_provenance_satisfied(slot, session)
+        source_candidate_classified = _slot_source_candidate_classified(slot, session)
         cli_proxy_api_path_configured = (
             wbp_path_configured and result.get("configured_provider") == "cliproxy"
         )
@@ -1068,7 +1420,23 @@ class CodexCustomSessionManager:
         runtime_model_mismatch_after_response = (
             status_ok and runtime_selected_model_recorded and not runtime_selected_model_matches_bound_model
         )
-        route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
+        route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_candidate_classified
+        source_provenance_proven = status_ok and wbp_path_proven and source_candidate_classified
+        live_source_provenance_status = (
+            "backend_proven"
+            if (
+                source_provenance_proven
+                and source_provenance_status == ACCOUNT_CANDIDATE_PROVENANCE_STATUS
+            )
+            else (
+                "route_proven"
+                if (
+                    source_provenance_proven
+                    and source_provenance_status == ROUTE_CANDIDATE_PROVENANCE_STATUS
+                )
+                else source_provenance_status
+            )
+        )
         current_codex_touched_after_response = status_ok and result.get("current_codex_home_used") is True
         isolation_missing_after_response = (
             status_ok and not current_codex_touched_after_response and not isolated_engine_home_proven
@@ -1144,28 +1512,93 @@ class CodexCustomSessionManager:
             "requested_slot_id": requested_slot_id,
             "requested_slot_explicit": requested_slot_explicit,
             "requested_slot_defaulted_to_primary": requested_slot_defaulted_to_primary,
-            "runner_slot_id_echo": runner_slot_id_text,
-            "runner_slot_id_matches_requested": bool(
-                runner_slot_id_text and runner_slot_id_text == requested_slot_id
+            **slot_dispatch_admission,
+            "wbp_runner_payload_slot_id": wbp_runner_payload_slot_id,
+            "wbp_runner_payload_model_id": wbp_runner_payload_model_id,
+            "wbp_runner_payload_slot_matches_requested": (
+                wbp_runner_payload_slot_matches_requested
             ),
+            "wbp_runner_payload_model_matches_slot": (
+                wbp_runner_payload_model_matches_slot
+            ),
+            "wbp_session_manager_slot_dispatch_proven": (
+                wbp_session_manager_slot_dispatch_proven
+            ),
+            "runtime_slot_dispatch_proof_scope": "wbp_session_manager_payload_plus_downstream_echo",
+            "downstream_runner_slot_echo_present": downstream_runner_slot_echo_present,
+            "downstream_runner_slot_echo": runner_slot_id_text,
+            "downstream_runner_slot_echo_matches_requested": (
+                downstream_runner_slot_echo_matches_requested
+            ),
+            "executed_slot_id": requested_slot_id,
+            "executed_slot_model_id": model_id,
+            "runtime_slot_dispatch_proven": runtime_slot_dispatch_proven,
+            "runner_slot_id_echo": runner_slot_id_text,
+            "runner_slot_id_matches_requested": downstream_runner_slot_echo_matches_requested,
             "current_execution_path_source": "session_bound_slot_runtime",
             "model_id": model_id,
             "model_server_issued": True,
+            "model_catalog_entry_server_issued": slot.get("model_catalog_entry_server_issued")
+            is True,
+            "model_lane": str(slot.get("model_lane") or "unknown_lane"),
+            "model_lane_classified": slot.get("model_lane_classified") is True,
+            "model_lane_classification_source": str(
+                slot.get("model_lane_classification_source") or "none"
+            ),
+            "model_lane_fallback_used": slot.get("model_lane_fallback_used") is True,
+            "model_lane_proof_level": str(slot.get("model_lane_proof_level") or "unclassified"),
+            "runtime_lane_proven": bool(
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and not runtime_model_mismatch_after_response
+            ),
             "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
-            "slot_binding_runtime_dispatch_claimed": False,
+            "slot_binding_runtime_dispatch_claimed": runtime_slot_dispatch_proven,
+            "parallel_slot_execution_proven": False,
+            "fanout_execution_proven": False,
             "selected_source_class": slot.get("selected_source_class"),
             "selected_backend_digest": str(slot.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
             "selected_route_digest": str(slot.get("selected_route_ref") or ""),
             "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
             "route_provenance_required": slot.get("route_provenance_required") is True,
-            "route_provenance_proven": slot.get("route_provenance_proven") is True,
-            "source_provenance_status": source_provenance_status,
+            "route_provenance_proven": bool(
+                source_provenance_proven and slot.get("route_provenance_required") is True
+            ),
+            "api_model_selected_by_user": slot.get("api_model_selected_by_user") is True,
+            "route_selected_by_user": slot.get("route_selected_by_user") is True,
+            "browser_selected_route": slot.get("browser_selected_route") is True,
+            "route_candidate_source": str(slot.get("route_candidate_source") or "none"),
+            "route_candidate_classified": slot.get("route_candidate_classified") is True,
+            "route_static_readiness_classified": slot.get("route_static_readiness_classified") is True,
+            "route_execution_proven": bool(
+                source_provenance_proven and slot.get("route_provenance_required") is True
+            ),
+            "provider_response_proven": bool(
+                status_ok and slot.get("route_provenance_required") is True
+            ),
+            "secret_validity_proven": False,
+            "source_provenance_status": live_source_provenance_status,
+            "source_candidate_classified": source_candidate_classified,
             "source_provenance_proven": source_provenance_proven,
-            "selected_source_provenance": source_provenance_status,
+            "selected_source_provenance": live_source_provenance_status,
             "selection_dry_run_proven": slot.get("selection_dry_run_proven") is True,
             "live_selection_proven": slot.get("live_selection_proven") is True,
             "browser_selected_backend": False,
+            "model_selected_by_user": slot.get("model_selected_by_user") is True,
+            "role_slot_selected_by_user": slot.get("role_slot_selected_by_user") is True,
+            "account_selected_by_user": slot.get("account_selected_by_user") is True,
+            "account_candidate_source": str(slot.get("account_candidate_source") or "none"),
+            "account_execution_proven": False,
+            "runtime_execution_proven": status_ok,
+            "live_compatibility_proven": bool(
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and isolated_engine_home_proven
+                and not runtime_model_mismatch_after_response
+            ),
             "authorization_status": "authorized_by_owner_gate",
             "owner_authorization_phrase_present": True,
             "live_prompt_admitted": True,
@@ -1231,6 +1664,7 @@ class CodexCustomSessionManager:
             "fallback_attempted": False,
             "auth_command_invoked": result.get("auth_command_invoked") is True,
             "raw_backend_id_exposed": False,
+            "raw_backend_exposed": False,
             "raw_auth_ref_exposed": False,
             "secret_value_recorded": secret_value_recorded,
             "session": self._public_session(session),
@@ -1283,6 +1717,31 @@ class CodexCustomSessionManager:
         session["token_burn"] = token_burn
         session["current_execution_slot_id"] = requested_slot_id
         session["current_execution_path_source"] = "session_bound_slot_runtime"
+        session["runtime_lane_proven"] = packet.get("runtime_lane_proven") is True
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        if requested_slot_id in role_slots:
+            role_slots[requested_slot_id]["runtime_lane_proven"] = (
+                packet.get("runtime_lane_proven") is True
+            )
+            role_slots[requested_slot_id]["runtime_dispatch_state"] = (
+                "wbp_session_manager_payload_proven"
+                if runtime_slot_dispatch_proven
+                else "not_proven"
+            )
+            session["role_slots"] = role_slots
+        if persisted_success and slot.get("route_provenance_required") is True:
+            session["route_provenance_proven"] = True
+            session["route_execution_proven"] = True
+            session["provider_response_proven"] = True
+            session["source_provenance_status"] = "route_proven"
+            session["live_compatibility_proven"] = True
+            if requested_slot_id in role_slots:
+                role_slots[requested_slot_id]["route_provenance_proven"] = True
+                role_slots[requested_slot_id]["route_execution_proven"] = True
+                role_slots[requested_slot_id]["provider_response_proven"] = True
+                role_slots[requested_slot_id]["source_provenance_status"] = "route_proven"
+                role_slots[requested_slot_id]["live_compatibility_proven"] = True
+                session["role_slots"] = role_slots
         session["updated_at_utc"] = utc_now()
         self._append_ledger(
             session,
@@ -1292,12 +1751,33 @@ class CodexCustomSessionManager:
                 "requested_slot_id": requested_slot_id,
                 "requested_slot_explicit": requested_slot_explicit,
                 "requested_slot_defaulted_to_primary": requested_slot_defaulted_to_primary,
-                "runner_slot_id_echo": runner_slot_id_text,
-                "runner_slot_id_matches_requested": bool(
-                    runner_slot_id_text and runner_slot_id_text == requested_slot_id
+                **slot_dispatch_admission,
+                "wbp_runner_payload_slot_id": wbp_runner_payload_slot_id,
+                "wbp_runner_payload_model_id": wbp_runner_payload_model_id,
+                "wbp_runner_payload_slot_matches_requested": (
+                    wbp_runner_payload_slot_matches_requested
                 ),
-                "current_execution_path_source": "session_bound_slot_runtime",
+                "wbp_runner_payload_model_matches_slot": (
+                    wbp_runner_payload_model_matches_slot
+                ),
+                "wbp_session_manager_slot_dispatch_proven": (
+                    wbp_session_manager_slot_dispatch_proven
+                ),
+                "runtime_slot_dispatch_proof_scope": "wbp_session_manager_payload_plus_downstream_echo",
+                "downstream_runner_slot_echo_present": downstream_runner_slot_echo_present,
+                "downstream_runner_slot_echo": runner_slot_id_text,
+                "downstream_runner_slot_echo_matches_requested": (
+                    downstream_runner_slot_echo_matches_requested
+                ),
+                "executed_slot_id": requested_slot_id,
                 "executed_slot_model_id": model_id,
+                "runtime_slot_dispatch_proven": runtime_slot_dispatch_proven,
+                "slot_binding_runtime_dispatch_claimed": runtime_slot_dispatch_proven,
+                "parallel_slot_execution_proven": False,
+                "fanout_execution_proven": False,
+                "runner_slot_id_echo": runner_slot_id_text,
+                "runner_slot_id_matches_requested": downstream_runner_slot_echo_matches_requested,
+                "current_execution_path_source": "session_bound_slot_runtime",
                 "prompt_present": True,
                 "prompt_length": len(prompt),
                 "prompt_sha256": prompt_hash,
@@ -1310,8 +1790,21 @@ class CodexCustomSessionManager:
                 "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
                 "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
                 "route_provenance_required": slot.get("route_provenance_required") is True,
-                "route_provenance_proven": slot.get("route_provenance_proven") is True,
-                "source_provenance_status": source_provenance_status,
+                "route_provenance_proven": bool(
+                    source_provenance_proven and slot.get("route_provenance_required") is True
+                ),
+                "route_candidate_classified": slot.get("route_candidate_classified") is True,
+                "route_static_readiness_classified": slot.get("route_static_readiness_classified")
+                is True,
+                "route_execution_proven": bool(
+                    source_provenance_proven and slot.get("route_provenance_required") is True
+                ),
+                "provider_response_proven": bool(
+                    status_ok and slot.get("route_provenance_required") is True
+                ),
+                "secret_validity_proven": False,
+                "source_provenance_status": live_source_provenance_status,
+                "source_candidate_classified": source_candidate_classified,
                 "source_provenance_proven": source_provenance_proven,
                 "token_usage_present": token_usage_present,
                 "token_usage": token_usage,
@@ -1458,15 +1951,24 @@ class CodexCustomSessionManager:
                     "human_message": "Session slot binding accepts only server-issued current-catalog model ids.",
                     "slot_id": slot_id,
                     "model_id": model_id,
+                    "session_created": False,
                     "next_action": "choose_server_issued_slot_model",
                 }
             if entry.get("selection_enabled") is not True:
+                disabled_reason_code = str(entry.get("selection_disabled_reason_code") or "")
                 return {}, {
-                    **self._base_packet("rejected", "MODEL_NOT_SELECTABLE"),
+                    **self._base_packet(
+                        "rejected",
+                        "HEURISTIC_ONLY_NOT_EXECUTABLE"
+                        if disabled_reason_code == "HEURISTIC_ONLY_NOT_EXECUTABLE"
+                        else "MODEL_NOT_SELECTABLE",
+                    ),
                     "human_message": "Session slot binding accepts only selectable current-catalog model ids.",
                     "slot_id": slot_id,
                     "model_id": model_id,
-                    "selection_disabled_reason_code": entry.get("selection_disabled_reason_code") or "",
+                    "selection_disabled_reason_code": disabled_reason_code,
+                    "selection_packet": entry,
+                    "session_created": False,
                     "next_action": "choose_selectable_slot_model",
                 }
             selection = _selection_packet_for_slot(
@@ -1478,7 +1980,7 @@ class CodexCustomSessionManager:
             if selection.get("selection_proven") is not True:
                 next_action = (
                     "repair_account_selection_truth"
-                    if model_id.startswith("gpt-")
+                    if selection.get("model_lane") == CODEX_ACCOUNT_MODEL_LANE
                     else "repair_slot_selection_truth"
                 )
                 return {}, {
@@ -1599,7 +2101,34 @@ class CodexCustomSessionManager:
             "selected_route_server_issued": public_session.get("selected_route_server_issued") is True,
             "route_provenance_required": public_session.get("route_provenance_required") is True,
             "route_provenance_proven": public_session.get("route_provenance_proven") is True,
+            "api_model_selected_by_user": public_session.get("api_model_selected_by_user") is True,
+            "route_selected_by_user": public_session.get("route_selected_by_user") is True,
+            "browser_selected_route": public_session.get("browser_selected_route") is True,
+            "route_candidate_source": str(public_session.get("route_candidate_source") or "none"),
+            "route_candidate_classified": public_session.get("route_candidate_classified") is True,
+            "route_static_readiness_classified": (
+                public_session.get("route_static_readiness_classified") is True
+                or (
+                    public_session.get("selected_route_server_issued") is True
+                    and public_session.get("route_provenance_required") is True
+                )
+            ),
+            "route_execution_proven": public_session.get("route_execution_proven") is True,
+            "provider_response_proven": public_session.get("provider_response_proven") is True,
+            "secret_validity_proven": public_session.get("secret_validity_proven") is True,
+            "raw_route_exposed": public_session.get("raw_route_exposed") is True,
+            "raw_secret_ref_exposed": public_session.get("raw_secret_ref_exposed") is True,
             "source_provenance_status": str(public_session.get("source_provenance_status") or "not_proven"),
+            "model_selected_by_user": public_session.get("model_selected_by_user") is True,
+            "role_slot_selected_by_user": public_session.get("role_slot_selected_by_user") is True,
+            "account_selected_by_user": public_session.get("account_selected_by_user") is True,
+            "browser_selected_backend": public_session.get("browser_selected_backend") is True,
+            "account_candidate_source": str(public_session.get("account_candidate_source") or "none"),
+            "account_execution_proven": public_session.get("account_execution_proven") is True,
+            "runtime_execution_proven": public_session.get("runtime_execution_proven") is True,
+            "live_compatibility_proven": public_session.get("live_compatibility_proven") is True,
+            "raw_backend_exposed": public_session.get("raw_backend_exposed") is True,
+            "raw_backend_id_exposed": public_session.get("raw_backend_id_exposed") is True,
             "selection_dry_run_proven": public_session.get("selection_dry_run_proven") is True,
             "live_selection_proven": public_session.get("live_selection_proven") is True,
             "selection_proven": public_session.get("selection_proven") is True,
@@ -1700,6 +2229,16 @@ class CodexCustomSessionManager:
             ),
             "model_id": primary_model_id,
             "model_server_issued": session.get("model_server_issued") is True,
+            "model_catalog_entry_server_issued": session.get("model_catalog_entry_server_issued")
+            is True,
+            "model_lane": str(session.get("model_lane") or "unknown_lane"),
+            "model_lane_classified": session.get("model_lane_classified") is True,
+            "model_lane_classification_source": str(
+                session.get("model_lane_classification_source") or "none"
+            ),
+            "model_lane_fallback_used": session.get("model_lane_fallback_used") is True,
+            "model_lane_proof_level": str(session.get("model_lane_proof_level") or "unclassified"),
+            "runtime_lane_proven": session.get("runtime_lane_proven") is True,
             "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
             "slot_catalog_revalidated": session.get("slot_catalog_revalidated") is True,
             "slot_binding_runtime_dispatch_claimed": False,
@@ -1713,8 +2252,31 @@ class CodexCustomSessionManager:
             "selected_route_server_issued": session.get("selected_route_server_issued") is True,
             "route_provenance_required": session.get("route_provenance_required") is True,
             "route_provenance_proven": session.get("route_provenance_proven") is True,
+            "api_model_selected_by_user": session.get("api_model_selected_by_user") is True,
+            "route_selected_by_user": session.get("route_selected_by_user") is True,
+            "browser_selected_route": session.get("browser_selected_route") is True,
+            "route_candidate_source": str(session.get("route_candidate_source") or "none"),
+            "route_candidate_classified": session.get("route_candidate_classified") is True,
+            "route_static_readiness_classified": session.get("route_static_readiness_classified")
+            is True,
+            "route_execution_proven": session.get("route_execution_proven") is True,
+            "provider_response_proven": session.get("provider_response_proven") is True,
+            "secret_validity_proven": session.get("secret_validity_proven") is True,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
             "source_provenance_status": _source_provenance_status(session),
-            "source_provenance_proven": _source_provenance_satisfied(session),
+            "source_candidate_classified": _source_candidate_classified(session),
+            "source_provenance_proven": session.get("inference_proven") is True,
+            "model_selected_by_user": session.get("model_selected_by_user") is True,
+            "role_slot_selected_by_user": session.get("role_slot_selected_by_user") is True,
+            "account_selected_by_user": session.get("account_selected_by_user") is True,
+            "browser_selected_backend": session.get("browser_selected_backend") is True,
+            "account_candidate_source": str(session.get("account_candidate_source") or "none"),
+            "account_execution_proven": session.get("account_execution_proven") is True,
+            "runtime_execution_proven": session.get("runtime_execution_proven") is True,
+            "live_compatibility_proven": session.get("live_compatibility_proven") is True,
+            "raw_backend_exposed": False,
+            "raw_backend_id_exposed": False,
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
             "selection_proven": session.get("selection_proven") is True,
@@ -1743,7 +2305,12 @@ class CodexCustomSessionManager:
         session_id = str(session.get("session_id") or "")
         failures: list[str] = []
         role_slots = _canonical_role_slots(session.get("role_slots"))
-        target_slot = role_slots.get(requested_slot_id) or {}
+        target_slot = dict(role_slots.get(requested_slot_id) or _unbound_slot(requested_slot_id))
+        slot_dispatch_admission = _slot_dispatch_admission_packet(
+            session=session,
+            slot=target_slot,
+            requested_slot_id=requested_slot_id,
+        )
         if session.get("cleanup_state") == "cleaned":
             failures.append("SESSION_ALREADY_CLEANED")
         if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
@@ -1760,8 +2327,8 @@ class CodexCustomSessionManager:
         if route_required:
             if target_slot.get("selected_route_server_issued") is not True:
                 failures.append("ROUTE_NOT_SERVER_ISSUED")
-            if target_slot.get("route_provenance_proven") is not True:
-                failures.append("ROUTE_PROVENANCE_MISSING")
+            if target_slot.get("route_static_readiness_classified") is not True:
+                failures.append("ROUTE_STATIC_READINESS_MISSING")
         elif target_slot.get("selected_backend_server_issued") is not True:
             failures.append("BACKEND_NOT_SERVER_ISSUED")
         if not failures:
@@ -1777,10 +2344,27 @@ class CodexCustomSessionManager:
                 session.get("current_execution_path_source") or "session_primary_model_slot"
             ),
             "precondition_failures": failures,
+            **slot_dispatch_admission,
+            "wbp_runner_payload_slot_id": "",
+            "wbp_runner_payload_model_id": "",
+            "wbp_runner_payload_slot_matches_requested": False,
+            "wbp_runner_payload_model_matches_slot": False,
+            "wbp_session_manager_slot_dispatch_proven": False,
+            "runtime_slot_dispatch_proof_scope": "not_attempted_precondition_failed",
+            "downstream_runner_slot_echo_present": False,
+            "downstream_runner_slot_echo": "",
+            "downstream_runner_slot_echo_matches_requested": False,
+            "executed_slot_id": "",
+            "executed_slot_model_id": "",
+            "runtime_slot_dispatch_proven": False,
+            "slot_binding_runtime_dispatch_claimed": False,
+            "parallel_slot_execution_proven": False,
+            "fanout_execution_proven": False,
             "model_response_present": False,
             "token_usage_present": False,
             "fallback_attempted": False,
             "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
             "next_action": "repair_session_preconditions",
         }
 
@@ -1789,6 +2373,16 @@ class CodexCustomSessionManager:
             "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
             "live_selection_proven": selection.get("live_selection_proven") is True,
             "selection_proven": selection.get("selection_proven") is True,
+            "model_catalog_entry_server_issued": selection.get("model_catalog_entry_server_issued")
+            is True,
+            "model_lane": str(selection.get("model_lane") or "unknown_lane"),
+            "model_lane_classified": selection.get("model_lane_classified") is True,
+            "model_lane_classification_source": str(
+                selection.get("model_lane_classification_source") or "none"
+            ),
+            "model_lane_fallback_used": selection.get("model_lane_fallback_used") is True,
+            "model_lane_proof_level": str(selection.get("model_lane_proof_level") or "unclassified"),
+            "runtime_lane_proven": selection.get("runtime_lane_proven") is True,
             "selected_source_class": selection.get("selected_source_class"),
             "selected_backend_digest": str(selection.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
@@ -1796,8 +2390,31 @@ class CodexCustomSessionManager:
             "selected_route_server_issued": selection.get("selected_route_server_issued") is True,
             "route_provenance_required": selection.get("route_provenance_required") is True,
             "route_provenance_proven": selection.get("route_provenance_proven") is True,
+            "api_model_selected_by_user": selection.get("api_model_selected_by_user") is True,
+            "route_selected_by_user": selection.get("route_selected_by_user") is True,
+            "browser_selected_route": selection.get("browser_selected_route") is True,
+            "route_candidate_source": str(selection.get("route_candidate_source") or "none"),
+            "route_candidate_classified": selection.get("route_candidate_classified") is True,
+            "route_static_readiness_classified": selection.get("route_static_readiness_classified")
+            is True,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
             "source_provenance_status": str(selection.get("source_provenance_status") or "not_proven"),
+            "source_candidate_classified": selection.get("selection_proven") is True,
+            "source_provenance_proven": False,
             "browser_selected_backend": selection.get("browser_selected_backend") is True,
+            "model_selected_by_user": selection.get("model_selected_by_user") is True,
+            "role_slot_selected_by_user": selection.get("role_slot_selected_by_user") is True,
+            "account_selected_by_user": selection.get("account_selected_by_user") is True,
+            "account_candidate_source": str(selection.get("account_candidate_source") or "none"),
+            "account_execution_proven": False,
+            "runtime_execution_proven": False,
+            "live_compatibility_proven": False,
+            "raw_backend_exposed": False,
+            "raw_backend_id_exposed": False,
             "machine_error_code": selection.get("machine_error_code"),
             "inference_proven": False,
             "runtime_meter_attached": False,
@@ -1833,6 +2450,10 @@ class CodexCustomSessionManager:
             **self._base_packet("rejected", machine_error_code),
             "human_message": "Codex Custom session payload contains forbidden browser fields.",
             "forbidden_fields": forbidden,
+            "session_created": False,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "external_route_selected": False,
             "next_action": "remove_forbidden_browser_fields",
         }
 

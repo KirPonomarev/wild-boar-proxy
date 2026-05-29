@@ -100,6 +100,16 @@ CATALOG_FORBIDDEN_CLAIMS = (
     "final_e2e_proven",
 )
 SEED_ONLY_MODEL_AVAILABILITY_STATE = "seed_only_not_current_catalog"
+CODEX_ACCOUNT_MODEL_LANE = "codex_account_lane"
+API_ROUTE_MODEL_LANE = "api_route_lane"
+UNKNOWN_MODEL_LANE = "unknown_lane"
+SERVER_MODEL_CATALOG_CLASSIFICATION_SOURCE = "server_model_catalog"
+SERVER_API_ROUTE_SNAPSHOT_CLASSIFICATION_SOURCE = "server_api_route_snapshot"
+FALLBACK_NAME_HEURISTIC_CLASSIFICATION_SOURCE = "fallback_name_heuristic"
+SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL = "server_classified"
+FALLBACK_NAME_HEURISTIC_MODEL_LANE_PROOF_LEVEL = "fallback_name_heuristic"
+HEURISTIC_ONLY_NOT_EXECUTABLE_MODEL_LANE_PROOF_LEVEL = "heuristic_only_not_executable"
+UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL = "unclassified"
 
 
 def utc_now() -> str:
@@ -176,22 +186,31 @@ def _reported_configured_model(operator_status: dict[str, Any] | None) -> str:
     return DEFAULT_MODEL
 
 
-def _model_source_hint(model_id: str) -> str:
-    if _is_native_model_id(model_id):
+def _model_source_hint(model_id: str, *, lane: str = "") -> str:
+    lane_text = str(lane or _model_lane(model_id))
+    if lane_text == "codex_native":
         return "cliproxy_gpt_account_or_alias"
     return "cliproxy_external_alias"
 
 
-def _provider_class(model_id: str) -> str:
-    if _is_native_model_id(model_id):
+def _provider_class(model_id: str, *, lane: str = "") -> str:
+    lane_text = str(lane or _model_lane(model_id))
+    if lane_text == "codex_native":
         return "gpt_account_or_alias"
     return "external_alias"
 
 
-def _provider_label(model_id: str, *, provider: str = "", source_class: str = "") -> str:
+def _provider_label(
+    model_id: str,
+    *,
+    provider: str = "",
+    source_class: str = "",
+    lane: str = "",
+) -> str:
     provider_text = str(provider or "").strip()
     source_class_text = str(source_class or "").strip()
-    if _is_native_model_id(model_id):
+    lane_text = str(lane or _model_lane(model_id))
+    if lane_text == "codex_native":
         return "Codex native"
     if source_class_text == "server_registry":
         if provider_text:
@@ -202,6 +221,174 @@ def _provider_label(model_id: str, *, provider: str = "", source_class: str = ""
     return "External route"
 
 
+def _canonical_model_lane_from_legacy_lane(lane: str) -> str:
+    lane_text = str(lane or "").strip()
+    if lane_text == "codex_native":
+        return CODEX_ACCOUNT_MODEL_LANE
+    if lane_text == "wbp_api":
+        return API_ROUTE_MODEL_LANE
+    return UNKNOWN_MODEL_LANE
+
+
+def _classification_source_from_entry(entry: dict[str, Any]) -> str:
+    lane = str(entry.get("lane") or "").strip()
+    source = str(entry.get("source") or entry.get("model_source_hint") or "").strip()
+    source_class = str(entry.get("source_class") or "").strip()
+    if lane == "wbp_api" or source == "server_owned_external_route" or source_class == "server_registry":
+        return SERVER_API_ROUTE_SNAPSHOT_CLASSIFICATION_SOURCE
+    if lane == "codex_native":
+        return SERVER_MODEL_CATALOG_CLASSIFICATION_SOURCE
+    return "none"
+
+
+def model_lane_classification_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    model_id = str(entry.get("model_id") or "")
+    explicit_model_lane = str(entry.get("model_lane") or "").strip()
+    explicit_proof_level = str(entry.get("model_lane_proof_level") or "").strip()
+    explicit_source = str(entry.get("model_lane_classification_source") or "").strip()
+    if explicit_model_lane in {
+        CODEX_ACCOUNT_MODEL_LANE,
+        API_ROUTE_MODEL_LANE,
+        UNKNOWN_MODEL_LANE,
+    }:
+        fallback_used = entry.get("model_lane_fallback_used") is True
+        classified = (
+            explicit_model_lane != UNKNOWN_MODEL_LANE
+            and entry.get("model_lane_classified") is True
+            and entry.get("server_issued") is True
+        )
+        return {
+            "model_catalog_entry_server_issued": entry.get("server_issued") is True,
+            "model_lane": explicit_model_lane,
+            "model_lane_classified": classified,
+            "model_lane_classification_source": (
+                explicit_source if classified or fallback_used or explicit_source else "none"
+            ),
+            "model_lane_fallback_used": fallback_used,
+            "model_lane_proof_level": (
+                explicit_proof_level
+                if explicit_proof_level
+                else (
+                    SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL
+                    if classified
+                    else UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL
+                )
+            ),
+            "heuristic_model_lane": str(entry.get("heuristic_model_lane") or UNKNOWN_MODEL_LANE),
+            "heuristic_only_not_executable": entry.get("heuristic_only_not_executable") is True,
+            "runtime_lane_proven": entry.get("runtime_lane_proven") is True,
+            "legacy_catalog_lane": str(entry.get("legacy_catalog_lane") or entry.get("lane") or ""),
+        }
+    legacy_lane = str(entry.get("lane") or _model_lane(model_id))
+    model_lane = _canonical_model_lane_from_legacy_lane(legacy_lane)
+    classified = model_lane != UNKNOWN_MODEL_LANE and entry.get("server_issued") is True
+    return {
+        "model_catalog_entry_server_issued": entry.get("server_issued") is True,
+        "model_lane": model_lane,
+        "model_lane_classified": classified,
+        "model_lane_classification_source": (
+            _classification_source_from_entry(entry) if classified else "none"
+        ),
+        "model_lane_fallback_used": False,
+        "model_lane_proof_level": (
+            SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL
+            if classified
+            else UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL
+        ),
+        "runtime_lane_proven": False,
+        "legacy_catalog_lane": legacy_lane,
+    }
+
+
+def fallback_model_lane_classification(model_id: str) -> dict[str, Any]:
+    model_id_text = str(model_id or "")
+    if model_id_text.startswith("gpt-") or _is_native_model_id(model_id_text):
+        heuristic_model_lane = CODEX_ACCOUNT_MODEL_LANE
+    elif (
+        model_id_text.startswith("wbp:")
+        or model_id_text.startswith("wbp-")
+        or model_id_text.startswith("direct-")
+    ):
+        heuristic_model_lane = API_ROUTE_MODEL_LANE
+    else:
+        heuristic_model_lane = UNKNOWN_MODEL_LANE
+    heuristic_present = heuristic_model_lane != UNKNOWN_MODEL_LANE
+    return {
+        "model_catalog_entry_server_issued": False,
+        "model_lane": UNKNOWN_MODEL_LANE,
+        "model_lane_classified": False,
+        "model_lane_classification_source": (
+            FALLBACK_NAME_HEURISTIC_CLASSIFICATION_SOURCE if heuristic_present else "none"
+        ),
+        "model_lane_fallback_used": heuristic_present,
+        "model_lane_proof_level": HEURISTIC_ONLY_NOT_EXECUTABLE_MODEL_LANE_PROOF_LEVEL
+        if heuristic_present
+        else UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL,
+        "heuristic_model_lane": heuristic_model_lane,
+        "heuristic_only_not_executable": heuristic_present,
+        "runtime_lane_proven": False,
+        "legacy_catalog_lane": "",
+    }
+
+
+def _model_entry_lane_classification(
+    model_id: str,
+    lane: str,
+    *,
+    server_lane_explicit: bool = False,
+) -> dict[str, Any]:
+    model_id_text = str(model_id or "")
+    model_lane = _canonical_model_lane_from_legacy_lane(lane)
+    if server_lane_explicit and model_lane != UNKNOWN_MODEL_LANE:
+        return {
+            "model_catalog_entry_server_issued": True,
+            "model_lane": model_lane,
+            "model_lane_classified": True,
+            "model_lane_classification_source": (
+                SERVER_MODEL_CATALOG_CLASSIFICATION_SOURCE
+                if model_lane == CODEX_ACCOUNT_MODEL_LANE
+                else SERVER_API_ROUTE_SNAPSHOT_CLASSIFICATION_SOURCE
+            ),
+            "model_lane_fallback_used": False,
+            "model_lane_proof_level": SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL,
+            "heuristic_model_lane": UNKNOWN_MODEL_LANE,
+            "heuristic_only_not_executable": False,
+            "runtime_lane_proven": False,
+            "legacy_catalog_lane": lane,
+        }
+    if model_lane == CODEX_ACCOUNT_MODEL_LANE and (
+        model_id_text in CANONICAL_INTERNAL_MODEL_IDS or model_id_text.startswith("codex-")
+    ):
+        return {
+            "model_catalog_entry_server_issued": True,
+            "model_lane": CODEX_ACCOUNT_MODEL_LANE,
+            "model_lane_classified": True,
+            "model_lane_classification_source": SERVER_MODEL_CATALOG_CLASSIFICATION_SOURCE,
+            "model_lane_fallback_used": False,
+            "model_lane_proof_level": SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL,
+            "heuristic_model_lane": UNKNOWN_MODEL_LANE,
+            "heuristic_only_not_executable": False,
+            "runtime_lane_proven": False,
+            "legacy_catalog_lane": lane,
+        }
+    fallback = fallback_model_lane_classification(model_id_text)
+    fallback["model_catalog_entry_server_issued"] = True
+    fallback["legacy_catalog_lane"] = lane
+    return fallback
+
+
+def model_lane_classification_from_registry(
+    model_id: str,
+    registry: dict[str, Any] | None,
+) -> dict[str, Any]:
+    entries = registry.get("available_models") if isinstance(registry, dict) else []
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, dict) and str(entry.get("model_id") or "") == model_id:
+                return model_lane_classification_from_entry(entry)
+    return fallback_model_lane_classification(model_id)
+
+
 def _model_lane(model_id: str) -> str:
     if _is_native_model_id(model_id):
         return "codex_native"
@@ -209,20 +396,22 @@ def _model_lane(model_id: str) -> str:
 
 
 def _is_native_model_id(model_id: str) -> bool:
-    return model_id.startswith("gpt-") or model_id.startswith("codex-")
+    return model_id in CANONICAL_INTERNAL_MODEL_IDS or model_id.startswith("codex-")
 
 
-def _display_name(model_id: str, label: str | None = None) -> str:
+def _display_name(model_id: str, label: str | None = None, *, lane: str = "") -> str:
     visible = str(label or model_id).strip() or model_id
-    if _model_lane(model_id) == "codex_native":
+    lane_text = str(lane or _model_lane(model_id))
+    if lane_text == "codex_native":
         return visible
     if visible.lower().startswith(("wbp ", "wbp:", "wild boar ")):
         return visible
     return f"WBP {visible}"
 
 
-def _source_class(model_id: str) -> str:
-    if _model_lane(model_id) == "codex_native":
+def _source_class(model_id: str, *, lane: str = "") -> str:
+    lane_text = str(lane or _model_lane(model_id))
+    if lane_text == "codex_native":
         return "current_build_catalog_visible"
     return "server_registry"
 
@@ -282,19 +471,34 @@ def _tier_unknown() -> dict[str, str]:
     }
 
 
-def _model_entry(model_id: str) -> dict[str, Any]:
-    source = _model_source_hint(model_id)
-    lane = _model_lane(model_id)
-    source_class = _source_class(model_id)
+def _model_entry(
+    model_id: str,
+    *,
+    lane: str = "",
+    server_lane_explicit: bool = False,
+) -> dict[str, Any]:
+    lane = lane if lane in {"codex_native", "wbp_api"} else _model_lane(model_id)
+    source = _model_source_hint(model_id, lane=lane)
+    source_class = _source_class(model_id, lane=lane)
+    lane_classification = _model_entry_lane_classification(
+        model_id,
+        lane,
+        server_lane_explicit=server_lane_explicit,
+    )
+    lane_executable = (
+        lane_classification.get("model_lane_classified") is True
+        and lane_classification.get("model_lane_fallback_used") is not True
+    )
     return {
         "model_id": model_id,
         "label": model_id,
-        "display_name": _display_name(model_id),
+        "display_name": _display_name(model_id, lane=lane),
         "lane": lane,
+        **lane_classification,
         "source": source,
         "source_class": source_class,
-        "provider_class": _provider_class(model_id),
-        "provider_label": _provider_label(model_id, source_class=source_class),
+        "provider_class": _provider_class(model_id, lane=lane),
+        "provider_label": _provider_label(model_id, source_class=source_class, lane=lane),
         "physical_provider": "",
         "physical_provider_proven": False,
         "provider_model_id": "" if lane == "codex_native" else model_id,
@@ -311,10 +515,10 @@ def _model_entry(model_id: str) -> dict[str, Any]:
         "chat_completions_live_acceptance_proven": False,
         "server_issued": True,
         "model_source_hint": source,
-        "selection_enabled": True,
-        "selection_state": "selectable",
-        "selection_disabled_reason_code": "",
-        "selection_disabled_reasons": [],
+        "selection_enabled": lane_executable,
+        "selection_state": "selectable" if lane_executable else "disabled",
+        "selection_disabled_reason_code": "" if lane_executable else "HEURISTIC_ONLY_NOT_EXECUTABLE",
+        "selection_disabled_reasons": [] if lane_executable else ["model_lane_not_server_classified"],
         "availability_claim_level": "listed_not_live_proven",
         "live_availability_proven": False,
         "account_health_proven": False,
@@ -330,6 +534,47 @@ def _status_for_models(model_ids: list[str], claim_gate_status: str, models_ok: 
     if "blocked" in claim_gate_status:
         return "degraded", "CLAIM_GATE_BLOCKED"
     return "ok", "OK"
+
+
+def _server_catalog_model_specs(models: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_model_ids = models.get("model_ids", [])
+    specs: list[dict[str, Any]] = [
+        {
+            "model_id": str(model_id),
+            "lane": "",
+            "server_lane_explicit": False,
+        }
+        for model_id in raw_model_ids
+        if isinstance(model_id, str) and model_id
+    ]
+    raw_entries = models.get("model_entries")
+    if isinstance(raw_entries, list):
+        for entry in raw_entries:
+            if not isinstance(entry, dict):
+                continue
+            model_id = str(entry.get("model_id") or "").strip()
+            lane = str(entry.get("lane") or entry.get("legacy_catalog_lane") or "").strip()
+            if not model_id:
+                continue
+            specs.append(
+                {
+                    "model_id": model_id,
+                    "lane": lane if lane in {"codex_native", "wbp_api"} else "",
+                    "server_lane_explicit": lane in {"codex_native", "wbp_api"},
+                }
+            )
+    deduped: dict[str, dict[str, Any]] = {}
+    for spec in specs:
+        model_id = str(spec.get("model_id") or "")
+        if not model_id:
+            continue
+        existing = deduped.get(model_id)
+        if existing is None or (
+            spec.get("server_lane_explicit") is True
+            and existing.get("server_lane_explicit") is not True
+        ):
+            deduped[model_id] = spec
+    return list(deduped.values())[:100]
 
 
 def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -359,7 +604,7 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
         entry.update(
             {
                 "label": label or route_id,
-                "display_name": _display_name(route_id, label or route_id),
+                "display_name": _display_name(route_id, label or route_id, lane="wbp_api"),
                 "lane": "wbp_api",
                 "source": "server_owned_external_route",
                 "source_class": "server_registry",
@@ -381,6 +626,18 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
                     else "_AND_".join(reason.upper() for reason in disabled_reasons)
                 ),
                 "selection_disabled_reasons": disabled_reasons,
+            }
+        )
+        entry.update(
+            {
+                "model_catalog_entry_server_issued": True,
+                "model_lane": API_ROUTE_MODEL_LANE,
+                "model_lane_classified": True,
+                "model_lane_classification_source": SERVER_API_ROUTE_SNAPSHOT_CLASSIFICATION_SOURCE,
+                "model_lane_fallback_used": False,
+                "model_lane_proof_level": SERVER_CLASSIFIED_MODEL_LANE_PROOF_LEVEL,
+                "runtime_lane_proven": False,
+                "legacy_catalog_lane": "wbp_api",
             }
         )
         entries.append(entry)
@@ -444,6 +701,7 @@ def _catalog_model_entry(
     availability_row: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     model_id = str(entry.get("model_id") or "")
+    lane_classification = model_lane_classification_from_entry(entry)
     availability_row = availability_row if isinstance(availability_row, dict) else {}
     availability_levels = availability_row.get("availability_levels")
     if not isinstance(availability_levels, list) or not availability_levels:
@@ -453,9 +711,17 @@ def _catalog_model_entry(
         bounded_limitations = []
     return {
         "lane": str(entry.get("lane") or _model_lane(model_id)),
+        **lane_classification,
         "model_id": model_id,
         "label": str(entry.get("label") or model_id),
-        "display_name": str(entry.get("display_name") or _display_name(model_id, str(entry.get("label") or model_id))),
+        "display_name": str(
+            entry.get("display_name")
+            or _display_name(
+                model_id,
+                str(entry.get("label") or model_id),
+                lane=str(entry.get("lane") or ""),
+            )
+        ),
         "source": str(entry.get("source") or entry.get("model_source_hint") or "unknown"),
         "source_class": str(entry.get("source_class") or _source_class(model_id)),
         "provider_class": str(entry.get("provider_class") or "unknown"),
@@ -464,6 +730,7 @@ def _catalog_model_entry(
             or _provider_label(
                 model_id,
                 source_class=str(entry.get("source_class") or _source_class(model_id)),
+                lane=str(entry.get("lane") or ""),
             )
         ),
         "physical_provider": str(entry.get("physical_provider") or ""),
@@ -658,6 +925,18 @@ def _current_catalog_model_rows(
                 "provider_label": str(model.get("provider_label") or ""),
                 "provider_model_id": str(model.get("provider_model_id") or ""),
                 "lane_kind": str(model.get("lane") or ""),
+                "model_lane": str(model.get("model_lane") or UNKNOWN_MODEL_LANE),
+                "model_lane_classified": model.get("model_lane_classified") is True,
+                "model_lane_classification_source": str(
+                    model.get("model_lane_classification_source") or "none"
+                ),
+                "model_lane_fallback_used": model.get("model_lane_fallback_used") is True,
+                "model_lane_proof_level": str(
+                    model.get("model_lane_proof_level") or UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL
+                ),
+                "heuristic_model_lane": str(model.get("heuristic_model_lane") or UNKNOWN_MODEL_LANE),
+                "heuristic_only_not_executable": model.get("heuristic_only_not_executable") is True,
+                "runtime_lane_proven": False,
                 "cost_class": "unknown_unclassified",
                 "speed_tier": dict(model.get("speed_tier") or _tier_unknown()),
                 "intelligence_tier": dict(model.get("intelligence_tier") or _tier_unknown()),
@@ -824,6 +1103,18 @@ def _selector_entry_from_row(
         "provider_label": str(row.get("provider_label") or ""),
         "provider_model_id": str(row.get("provider_model_id") or ""),
         "lane_kind": str(row.get("lane_kind") or ""),
+        "model_lane": str(row.get("model_lane") or UNKNOWN_MODEL_LANE),
+        "model_lane_classified": row.get("model_lane_classified") is True,
+        "model_lane_classification_source": str(
+            row.get("model_lane_classification_source") or "none"
+        ),
+        "model_lane_fallback_used": row.get("model_lane_fallback_used") is True,
+        "model_lane_proof_level": str(
+            row.get("model_lane_proof_level") or UNCLASSIFIED_MODEL_LANE_PROOF_LEVEL
+        ),
+        "heuristic_model_lane": str(row.get("heuristic_model_lane") or UNKNOWN_MODEL_LANE),
+        "heuristic_only_not_executable": row.get("heuristic_only_not_executable") is True,
+        "runtime_lane_proven": False,
         "lane_display": lane_display,
         "selection_enabled": selection_enabled,
         "selection_state": str(
@@ -1016,8 +1307,14 @@ def build_dual_lane_selection_intent_packet(
     api_rows = list(api_lane.get("models") or [])
     chatgpt_index = _selector_entry_index(chatgpt_rows)
     api_index = _selector_entry_index(api_rows)
-    chatgpt_model_id = str(payload.get("chatgpt_model_id") or chatgpt_lane.get("default_model_id") or "")
-    api_model_id = str(payload.get("api_model_id") or api_lane.get("default_model_id") or "")
+    chatgpt_model_selected_by_user = isinstance(payload.get("chatgpt_model_id"), str) and bool(
+        str(payload.get("chatgpt_model_id") or "").strip()
+    )
+    api_model_selected_by_user = isinstance(payload.get("api_model_id"), str) and bool(
+        str(payload.get("api_model_id") or "").strip()
+    )
+    chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
+    api_model_id = str(payload.get("api_model_id") or "").strip()
     chatgpt_selected = chatgpt_index.get(chatgpt_model_id)
     api_selected = api_index.get(api_model_id)
 
@@ -1106,6 +1403,9 @@ def build_dual_lane_selection_intent_packet(
         "api_lane_scope": "selection_intent_only_until_role_slot_session_contour",
         "chatgpt_selection": chatgpt_selected,
         "api_selection": api_selected,
+        "chatgpt_model_selected_by_user": chatgpt_model_selected_by_user,
+        "api_model_selected_by_user": api_model_selected_by_user,
+        "catalog_defaults_used_as_selection": False,
         "selection_intent_proven": bool(chatgpt_selected and api_selected),
         "selected_models_are_server_issued": bool(
             (chatgpt_selected or {}).get("server_issued")
@@ -1641,9 +1941,8 @@ def build_custom_model_registry_packet(
     availability_lattice_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     models = _models_payload(operator_status)
-    raw_model_ids = models.get("model_ids", [])
-    model_ids = [str(model_id) for model_id in raw_model_ids if isinstance(model_id, str) and model_id]
-    model_ids = list(dict.fromkeys(model_ids))[:100]
+    model_specs = _server_catalog_model_specs(models)
+    model_ids = [str(spec["model_id"]) for spec in model_specs]
     claim_gate_status = claim_gate_status_from_operator_status(operator_status)
     status, machine_error_code = _status_for_models(
         model_ids,
@@ -1653,8 +1952,13 @@ def build_custom_model_registry_packet(
     reported_configured_model = _reported_configured_model(operator_status)
     availability_rows = _availability_rows_by_model_id(availability_lattice_packet)
     available_models = []
-    for model_id in model_ids:
-        entry = _model_entry(model_id)
+    for spec in model_specs:
+        model_id = str(spec["model_id"])
+        entry = _model_entry(
+            model_id,
+            lane=str(spec.get("lane") or ""),
+            server_lane_explicit=spec.get("server_lane_explicit") is True,
+        )
         availability_row = availability_rows.get(model_id)
         if isinstance(availability_row, dict):
             entry["availability_claim_level"] = str(
@@ -1898,6 +2202,7 @@ def build_custom_model_dry_run_packet(
             "next_action": "select_model_from_server_registry",
         }
     selected_entry = next(entry for entry in registry["available_models"] if entry["model_id"] == model_id)
+    lane_classification = model_lane_classification_from_entry(selected_entry)
     if selected_entry.get("selection_enabled") is not True:
         return {
             "schema_version": 1,
@@ -1910,6 +2215,7 @@ def build_custom_model_dry_run_packet(
             "selected_model": model_id,
             "model_server_issued": True,
             "selected_model_server_issued": True,
+            **lane_classification,
             "selected_model_selectable": False,
             "selection_state": selected_entry.get("selection_state", "disabled"),
             "selection_disabled_reason_code": selected_entry.get("selection_disabled_reason_code", ""),
@@ -1948,6 +2254,7 @@ def build_custom_model_dry_run_packet(
         "selected_model": model_id,
         "model_server_issued": True,
         "selected_model_server_issued": True,
+        **lane_classification,
         "selected_model_selectable": True,
         "selection_state": selected_entry.get("selection_state", "selectable"),
         "selection_disabled_reason_code": "",

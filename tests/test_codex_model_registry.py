@@ -302,7 +302,12 @@ class CodexModelRegistryTests(unittest.TestCase):
         rows = {entry["model_id"]: entry for entry in registry["available_models"]}
         self.assertIn("wbp-disabled-openrouter", rows)
         self.assertIn("wbp-missing-secret", rows)
-        self.assertEqual(registry["disabled_model_count"], 2)
+        self.assertEqual(registry["disabled_model_count"], 3)
+        self.assertFalse(rows["direct-mistral-devstral-2512"]["selection_enabled"])
+        self.assertEqual(
+            rows["direct-mistral-devstral-2512"]["selection_disabled_reason_code"],
+            "HEURISTIC_ONLY_NOT_EXECUTABLE",
+        )
         self.assertFalse(rows["wbp-disabled-openrouter"]["selection_enabled"])
         self.assertEqual(rows["wbp-disabled-openrouter"]["selection_state"], "disabled")
         self.assertEqual(
@@ -375,7 +380,88 @@ class CodexModelRegistryTests(unittest.TestCase):
 
         row = registry["available_models"][0]
         self.assertEqual(row["lane"], "codex_native")
+        self.assertEqual(row["model_lane"], "codex_account_lane")
+        self.assertTrue(row["model_lane_classified"])
+        self.assertEqual(row["model_lane_classification_source"], "server_model_catalog")
+        self.assertFalse(row["model_lane_fallback_used"])
+        self.assertFalse(row["runtime_lane_proven"])
         self.assertEqual(row["provider_label"], "Codex native")
+
+    def test_server_issued_non_gpt_model_can_be_native_lane_from_catalog_metadata(self) -> None:
+        registry = build_custom_model_registry_packet(
+            {
+                "status": {"configured_model": "orion-native"},
+                "claim_gate": {"status": "passed"},
+                "models": {
+                    "ok": True,
+                    "server_issued": True,
+                    "model_entries": [
+                        {"model_id": "orion-native", "lane": "codex_native"},
+                    ],
+                },
+            }
+        )
+
+        row = registry["available_models"][0]
+        self.assertEqual(row["model_id"], "orion-native")
+        self.assertEqual(row["lane"], "codex_native")
+        self.assertEqual(row["model_lane"], "codex_account_lane")
+        self.assertTrue(row["model_lane_classified"])
+        self.assertEqual(row["model_lane_classification_source"], "server_model_catalog")
+        self.assertFalse(row["model_lane_fallback_used"])
+        self.assertFalse(row["heuristic_only_not_executable"])
+        self.assertTrue(row["selection_enabled"])
+        self.assertEqual(row["provider_label"], "Codex native")
+
+    def test_gpt_prefixed_unknown_catalog_model_is_heuristic_only_not_executable(self) -> None:
+        registry = build_custom_model_registry_packet(
+            {
+                "status": {"configured_model": "gpt-unknown-local"},
+                "claim_gate": {"status": "passed"},
+                "models": {
+                    "ok": True,
+                    "server_issued": True,
+                    "model_ids": ["gpt-unknown-local"],
+                },
+            }
+        )
+
+        row = registry["available_models"][0]
+        self.assertEqual(row["model_id"], "gpt-unknown-local")
+        self.assertEqual(row["model_lane"], "unknown_lane")
+        self.assertFalse(row["model_lane_classified"])
+        self.assertEqual(row["model_lane_classification_source"], "fallback_name_heuristic")
+        self.assertTrue(row["model_lane_fallback_used"])
+        self.assertEqual(row["heuristic_model_lane"], "codex_account_lane")
+        self.assertTrue(row["heuristic_only_not_executable"])
+        self.assertEqual(row["model_lane_proof_level"], "heuristic_only_not_executable")
+        self.assertFalse(row["selection_enabled"])
+        self.assertEqual(row["selection_disabled_reason_code"], "HEURISTIC_ONLY_NOT_EXECUTABLE")
+
+    def test_gpt_prefixed_external_route_uses_api_lane_from_server_snapshot(self) -> None:
+        registry = build_custom_model_registry_packet(
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "gpt-external-route",
+                        "provider": "openrouter",
+                        "upstream_model": "openrouter/gpt-upstream",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    }
+                ]
+            },
+        )
+
+        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-external-route")
+        self.assertEqual(row["lane"], "wbp_api")
+        self.assertEqual(row["model_lane"], "api_route_lane")
+        self.assertTrue(row["model_lane_classified"])
+        self.assertEqual(row["model_lane_classification_source"], "server_api_route_snapshot")
+        self.assertFalse(row["model_lane_fallback_used"])
+        self.assertEqual(row["model_lane_proof_level"], "server_classified")
+        self.assertFalse(row["runtime_lane_proven"])
 
     def test_forbidden_custom_model_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_custom_model_fields({"model_id": "gpt-5.3-codex"}), [])

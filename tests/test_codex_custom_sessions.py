@@ -75,6 +75,18 @@ def operator_status() -> dict[str, object]:
     }
 
 
+def operator_status_with_model_entries(entries: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "status": {"status": "ok", "machine_error_code": "OK"},
+        "claim_gate": {"status": "blocked_by_policy_drift"},
+        "models": {
+            "ok": True,
+            "server_issued": True,
+            "model_entries": entries,
+        },
+    }
+
+
 def api_snapshot(route_id: str = "wbp-web-primary-openrouter") -> dict[str, object]:
     return {
         "status": "ok",
@@ -163,8 +175,19 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(session["selected_route_server_issued"])
             self.assertFalse(session["route_provenance_required"])
             self.assertFalse(session["route_provenance_proven"])
-            self.assertEqual(session["source_provenance_status"], "backend_proven")
-            self.assertTrue(session["source_provenance_proven"])
+            self.assertEqual(session["source_provenance_status"], "backend_candidate_classified")
+            self.assertTrue(session["source_candidate_classified"])
+            self.assertFalse(session["source_provenance_proven"])
+            self.assertTrue(session["model_selected_by_user"])
+            self.assertTrue(session["role_slot_selected_by_user"])
+            self.assertEqual(session["account_candidate_source"], "server_ranked_candidate")
+            self.assertFalse(session["account_selected_by_user"])
+            self.assertFalse(session["browser_selected_backend"])
+            self.assertFalse(session["account_execution_proven"])
+            self.assertFalse(session["runtime_execution_proven"])
+            self.assertFalse(session["live_compatibility_proven"])
+            self.assertFalse(session["raw_backend_exposed"])
+            self.assertFalse(session["raw_backend_id_exposed"])
             self.assertFalse(session["current_codex_home_used"])
             self.assertEqual(session["session_root_scope"], "owned_temp_session_root")
             self.assertNotIn(temp_dir, json.dumps(packet))
@@ -255,13 +278,23 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_create_session_rejects_free_form_model_and_browser_backend_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            bad_model = manager.create_packet({"model_id": "free-form"}, commands(), operator_status())
+            bad_model = manager.create_packet(
+                {"primary_model_id": "free-form"},
+                commands(),
+                operator_status(),
+            )
             bad_fields = manager.create_packet(
                 {
-                    "model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.3-codex",
                     "account_id": "acct-a",
                     "backend_id": "acct-a",
                     "route_id": "route",
+                    "auth_path": "/tmp/auth.json",
+                    "profile_path": "/tmp/profile",
+                    "codex_home": "/tmp/codex-home",
+                    "secret_ref": "BROWSER_SECRET",
+                    "base_url": "https://example.invalid/v1",
+                    "api_key": "browser-key",
                     "path": "/tmp/outside",
                 },
                 commands(),
@@ -274,14 +307,45 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(bad_fields["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
             self.assertIn("account_id", bad_fields["forbidden_fields"])
             self.assertIn("backend_id", bad_fields["forbidden_fields"])
+            self.assertIn("auth_path", bad_fields["forbidden_fields"])
+            self.assertIn("profile_path", bad_fields["forbidden_fields"])
+            self.assertIn("codex_home", bad_fields["forbidden_fields"])
+            self.assertIn("secret_ref", bad_fields["forbidden_fields"])
+            self.assertIn("base_url", bad_fields["forbidden_fields"])
+            self.assertIn("api_key", bad_fields["forbidden_fields"])
             self.assertIn("route_id", bad_fields["forbidden_fields"])
             self.assertIn("path", bad_fields["forbidden_fields"])
+
+    def test_create_session_requires_manual_server_model_selection_without_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet({}, commands(), operator_status(), api_snapshot=api_snapshot())
+            legacy_alias = manager.create_packet(
+                {"model_id": "gpt-5.3-codex"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "MANUAL_MODEL_SELECTION_REQUIRED")
+            self.assertFalse(packet["session_created"])
+            self.assertFalse(packet["model_auto_selected"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["external_route_selected"])
+            self.assertIn("primary_model_id", packet["required_choice_fields"])
+            self.assertEqual(legacy_alias["status"], "rejected")
+            self.assertEqual(legacy_alias["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertEqual(legacy_alias["forbidden_fields"], ["model_id"])
+            self.assertFalse(legacy_alias["session_created"])
+            self.assertFalse(legacy_alias["model_auto_selected"])
+            self.assertEqual(manager.list_packet()["session_count"], 0)
 
     def test_create_session_accepts_server_owned_route_model_when_api_snapshot_visible(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"model_id": "wbp-web-primary-openrouter"},
+                {"primary_model_id": "wbp-web-primary-openrouter"},
                 commands(),
                 operator_status(),
                 selection={
@@ -296,8 +360,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "selected_route_ref": "route-digest",
                     "selected_route_server_issued": True,
                     "route_provenance_required": True,
-                    "route_provenance_proven": True,
-                    "source_provenance_status": "route_proven",
+                    "route_provenance_proven": False,
+                    "source_provenance_status": "route_static_candidate_classified",
                 },
                 api_snapshot=api_snapshot(),
             )
@@ -305,9 +369,124 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertTrue(packet["session_created"])
             self.assertTrue(packet["session"]["model_server_issued"])
+            self.assertEqual(packet["session"]["model_lane"], "api_route_lane")
+            self.assertTrue(packet["session"]["model_lane_classified"])
+            self.assertEqual(
+                packet["session"]["model_lane_classification_source"],
+                "server_api_route_snapshot",
+            )
+            self.assertFalse(packet["session"]["model_lane_fallback_used"])
+            self.assertFalse(packet["session"]["runtime_lane_proven"])
             self.assertEqual(packet["session"]["selected_source_class"], "route_backed")
             self.assertTrue(packet["session"]["selected_route_server_issued"])
-            self.assertTrue(packet["session"]["route_provenance_proven"])
+            self.assertTrue(packet["session"]["route_static_readiness_classified"])
+            self.assertFalse(packet["session"]["route_provenance_proven"])
+            self.assertEqual(
+                packet["session"]["source_provenance_status"],
+                "route_static_candidate_classified",
+            )
+
+    def test_create_session_uses_server_lane_when_api_route_name_starts_with_gpt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {"primary_model_id": "gpt-external-route"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("gpt-external-route"),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["session_created"])
+            self.assertEqual(packet["session"]["model_lane"], "api_route_lane")
+            self.assertEqual(
+                packet["session"]["model_lane_classification_source"],
+                "server_api_route_snapshot",
+            )
+            self.assertEqual(packet["session"]["selected_source_class"], "route_backed")
+            self.assertFalse(packet["session"]["selected_backend_server_issued"])
+            self.assertTrue(packet["session"]["selected_route_server_issued"])
+            self.assertFalse(packet["session"]["runtime_lane_proven"])
+
+    def test_create_session_uses_server_lane_for_non_gpt_native_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {"primary_model_id": "orion-native"},
+                commands(),
+                operator_status_with_model_entries(
+                    [{"model_id": "orion-native", "lane": "codex_native"}]
+                ),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["session_created"])
+            self.assertEqual(packet["session"]["model_lane"], "codex_account_lane")
+            self.assertEqual(
+                packet["session"]["model_lane_classification_source"],
+                "server_model_catalog",
+            )
+            self.assertFalse(packet["session"]["model_lane_fallback_used"])
+            self.assertEqual(packet["session"]["selected_source_class"], "gpt_account")
+
+    def test_create_session_rejects_heuristic_only_gpt_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {"primary_model_id": "gpt-unknown-local"},
+                commands(),
+                {
+                    "status": {"status": "ok", "machine_error_code": "OK"},
+                    "claim_gate": {"status": "blocked_by_policy_drift"},
+                    "models": {
+                        "ok": True,
+                        "server_issued": True,
+                        "model_ids": ["gpt-unknown-local"],
+                    },
+                },
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "HEURISTIC_ONLY_NOT_EXECUTABLE")
+            self.assertFalse(packet["session_created"])
+            self.assertEqual(packet["model_id"], "gpt-unknown-local")
+            self.assertEqual(packet["selection_packet"]["model_lane"], "unknown_lane")
+            self.assertTrue(packet["selection_packet"]["model_lane_fallback_used"])
+            self.assertTrue(packet["selection_packet"]["heuristic_only_not_executable"])
+
+    def test_create_session_derives_session_selection_truth_from_primary_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {"primary_model_id": "gpt-5.3-codex"},
+                commands(),
+                operator_status(),
+                selection={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "selection_proven": True,
+                    "selection_dry_run_proven": True,
+                    "live_selection_proven": False,
+                    "selected_source_class": "route_backed",
+                    "selected_backend_ref": "",
+                    "selected_backend_server_issued": False,
+                    "selected_route_ref": "wrong-route-digest",
+                    "selected_route_server_issued": True,
+                    "route_provenance_required": True,
+                    "route_provenance_proven": False,
+                    "route_static_readiness_classified": True,
+                    "source_provenance_status": "route_static_candidate_classified",
+                },
+                api_snapshot=api_snapshot(),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["session"]["selected_source_class"], "gpt_account")
+            self.assertTrue(packet["session"]["selected_backend_server_issued"])
+            self.assertFalse(packet["session"]["selected_route_server_issued"])
+            self.assertFalse(packet["session"]["route_provenance_required"])
+            self.assertEqual(packet["selection_packet"]["selected_source_class"], "gpt_account")
+            self.assertFalse(packet["selection_packet"]["selected_route_server_issued"])
 
     def test_create_session_accepts_all_declared_role_slots_when_server_issued(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -346,7 +525,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.3-codex"},
                 weak_commands,
                 operator_status(),
             )
@@ -535,7 +714,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_hashes_prompt_and_does_not_claim_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
             transcript = manager.transcript_packet(session_id)
@@ -633,6 +812,30 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(primary["requested_slot_defaulted_to_primary"])
             self.assertEqual(primary["runner_slot_id_echo"], "primary_model_slot")
             self.assertTrue(primary["runner_slot_id_matches_requested"])
+            self.assertTrue(primary["requested_slot_bound"])
+            self.assertTrue(primary["slot_catalog_revalidated"])
+            self.assertTrue(primary["slot_model_server_issued"])
+            self.assertTrue(primary["slot_lane_revalidated"])
+            self.assertTrue(primary["slot_source_revalidated"])
+            self.assertTrue(primary["slot_admission_passed"])
+            self.assertEqual(primary["wbp_runner_payload_slot_id"], "primary_model_slot")
+            self.assertEqual(primary["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertTrue(primary["wbp_runner_payload_slot_matches_requested"])
+            self.assertTrue(primary["wbp_runner_payload_model_matches_slot"])
+            self.assertTrue(primary["wbp_session_manager_slot_dispatch_proven"])
+            self.assertEqual(
+                primary["runtime_slot_dispatch_proof_scope"],
+                "wbp_session_manager_payload_plus_downstream_echo",
+            )
+            self.assertTrue(primary["downstream_runner_slot_echo_present"])
+            self.assertEqual(primary["downstream_runner_slot_echo"], "primary_model_slot")
+            self.assertTrue(primary["downstream_runner_slot_echo_matches_requested"])
+            self.assertEqual(primary["executed_slot_id"], "primary_model_slot")
+            self.assertEqual(primary["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertTrue(primary["runtime_slot_dispatch_proven"])
+            self.assertTrue(primary["slot_binding_runtime_dispatch_claimed"])
+            self.assertFalse(primary["parallel_slot_execution_proven"])
+            self.assertFalse(primary["fanout_execution_proven"])
             self.assertEqual(primary["current_execution_path_source"], "session_bound_slot_runtime")
             self.assertEqual(primary["model_id"], "gpt-5.3-codex")
             self.assertEqual(primary["selected_source_class"], "gpt_account")
@@ -649,6 +852,30 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(coding["requested_slot_defaulted_to_primary"])
             self.assertEqual(coding["runner_slot_id_echo"], "coding_agent_model_slot")
             self.assertTrue(coding["runner_slot_id_matches_requested"])
+            self.assertTrue(coding["requested_slot_bound"])
+            self.assertTrue(coding["slot_catalog_revalidated"])
+            self.assertTrue(coding["slot_model_server_issued"])
+            self.assertTrue(coding["slot_lane_revalidated"])
+            self.assertTrue(coding["slot_source_revalidated"])
+            self.assertTrue(coding["slot_admission_passed"])
+            self.assertEqual(coding["wbp_runner_payload_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(coding["wbp_runner_payload_model_id"], "wbp-web-primary-openrouter")
+            self.assertTrue(coding["wbp_runner_payload_slot_matches_requested"])
+            self.assertTrue(coding["wbp_runner_payload_model_matches_slot"])
+            self.assertTrue(coding["wbp_session_manager_slot_dispatch_proven"])
+            self.assertEqual(
+                coding["runtime_slot_dispatch_proof_scope"],
+                "wbp_session_manager_payload_plus_downstream_echo",
+            )
+            self.assertTrue(coding["downstream_runner_slot_echo_present"])
+            self.assertEqual(coding["downstream_runner_slot_echo"], "coding_agent_model_slot")
+            self.assertTrue(coding["downstream_runner_slot_echo_matches_requested"])
+            self.assertEqual(coding["executed_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(coding["executed_slot_model_id"], "wbp-web-primary-openrouter")
+            self.assertTrue(coding["runtime_slot_dispatch_proven"])
+            self.assertTrue(coding["slot_binding_runtime_dispatch_claimed"])
+            self.assertFalse(coding["parallel_slot_execution_proven"])
+            self.assertFalse(coding["fanout_execution_proven"])
             self.assertEqual(coding["current_execution_path_source"], "session_bound_slot_runtime")
             self.assertEqual(coding["model_id"], "wbp-web-primary-openrouter")
             self.assertEqual(coding["selected_source_class"], "route_backed")
@@ -683,6 +910,85 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 "coding_agent_model_slot",
             )
 
+    def test_prompt_run_can_dispatch_bound_reviewer_slot_without_primary_swap(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "REVIEWER_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "reviewer_model_id": "gpt-5.4",
+                },
+                commands(),
+                operator_status(),
+            )
+            packet = manager.prompt_packet(
+                created["session"]["session_id"],
+                {"prompt": "Review this.", "slot_id": "reviewer_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["current_execution_slot_id"], "reviewer_model_slot")
+            self.assertEqual(packet["requested_slot_id"], "reviewer_model_slot")
+            self.assertEqual(packet["model_id"], "gpt-5.4")
+            self.assertEqual(packet["executed_slot_id"], "reviewer_model_slot")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.4")
+            self.assertEqual(packet["wbp_runner_payload_slot_id"], "reviewer_model_slot")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.4")
+            self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
+            self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
+            self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
+            self.assertTrue(packet["runtime_slot_dispatch_proven"])
+            self.assertTrue(packet["slot_binding_runtime_dispatch_claimed"])
+            self.assertFalse(packet["parallel_slot_execution_proven"])
+            self.assertFalse(packet["fanout_execution_proven"])
+            self.assertEqual(
+                calls,
+                [
+                    {
+                        "prompt": "Review this.",
+                        "model_id": "gpt-5.4",
+                        "slot_id": "reviewer_model_slot",
+                    }
+                ],
+            )
+
     def test_prompt_run_blocks_unbound_reviewer_slot_without_primary_fallback(self) -> None:
         calls: list[dict[str, object]] = []
 
@@ -709,6 +1015,17 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["requested_slot_id"], "reviewer_model_slot")
             self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
             self.assertIn("SLOT_NOT_BOUND", packet["precondition_failures"])
+            self.assertFalse(packet["requested_slot_bound"])
+            self.assertTrue(packet["slot_catalog_revalidated"])
+            self.assertFalse(packet["slot_model_server_issued"])
+            self.assertFalse(packet["slot_lane_revalidated"])
+            self.assertFalse(packet["slot_source_revalidated"])
+            self.assertFalse(packet["slot_admission_passed"])
+            self.assertEqual(packet["runtime_slot_dispatch_proof_scope"], "not_attempted_precondition_failed")
+            self.assertFalse(packet["runtime_slot_dispatch_proven"])
+            self.assertFalse(packet["slot_binding_runtime_dispatch_claimed"])
+            self.assertFalse(packet["parallel_slot_execution_proven"])
+            self.assertFalse(packet["fanout_execution_proven"])
             self.assertFalse(packet["model_response_present"])
             self.assertFalse(packet["fallback_attempted"])
             self.assertEqual(calls, [])
@@ -739,7 +1056,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_rejects_forbidden_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(
                 session_id,
@@ -754,7 +1071,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_live_prompt_not_admitted_packet_never_calls_runner_or_claims_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_not_admitted_packet(
                 session_id,
@@ -812,7 +1129,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -823,7 +1140,17 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             detail = manager.get_packet(session_id)
             transcript = manager.transcript_packet(session_id)
 
-            self.assertEqual(calls, [{"prompt": "Reply real OK.", "model_id": "gpt-5.3-codex"}])
+            self.assertEqual(
+                calls,
+                [
+                    {
+                        "prompt": "Reply real OK.",
+                        "model_id": "gpt-5.3-codex",
+                        "slot_id": "primary_model_slot",
+                        "slot_id_explicit": False,
+                    }
+                ],
+            )
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(packet["machine_error_code"], "WBP_TRACE_PROOF_MISSING")
             self.assertTrue(packet["inference_proven"])
@@ -837,9 +1164,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["selected_route_server_issued"])
             self.assertFalse(packet["route_provenance_required"])
             self.assertFalse(packet["route_provenance_proven"])
-            self.assertEqual(packet["source_provenance_status"], "backend_proven")
-            self.assertTrue(packet["source_provenance_proven"])
+            self.assertEqual(packet["source_provenance_status"], "backend_candidate_classified")
+            self.assertTrue(packet["source_candidate_classified"])
+            self.assertFalse(packet["source_provenance_proven"])
             self.assertFalse(packet["browser_selected_backend"])
+            self.assertEqual(packet["account_candidate_source"], "server_ranked_candidate")
+            self.assertFalse(packet["account_selected_by_user"])
+            self.assertFalse(packet["account_execution_proven"])
             self.assertTrue(packet["wbp_path_configured"])
             self.assertTrue(packet["cli_proxy_api_path_configured"])
             self.assertFalse(packet["wbp_path_observed"])
@@ -858,6 +1189,24 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertIsNone(packet["token_burn"])
             self.assertEqual(packet["latency_ms"], 125)
             self.assertTrue(packet["requested_slot_defaulted_to_primary"])
+            self.assertEqual(packet["wbp_runner_payload_slot_id"], "primary_model_slot")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
+            self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
+            self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
+            self.assertEqual(
+                packet["runtime_slot_dispatch_proof_scope"],
+                "wbp_session_manager_payload_plus_downstream_echo",
+            )
+            self.assertFalse(packet["downstream_runner_slot_echo_present"])
+            self.assertEqual(packet["downstream_runner_slot_echo"], "")
+            self.assertFalse(packet["downstream_runner_slot_echo_matches_requested"])
+            self.assertEqual(packet["executed_slot_id"], "primary_model_slot")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertFalse(packet["runtime_slot_dispatch_proven"])
+            self.assertFalse(packet["slot_binding_runtime_dispatch_claimed"])
+            self.assertFalse(packet["parallel_slot_execution_proven"])
+            self.assertFalse(packet["fanout_execution_proven"])
             self.assertNotIn("Reply real OK.", json.dumps(packet))
             self.assertNotIn("acct-a", json.dumps(packet))
             self.assertEqual(detail["session"]["status"], "prompt_blocked_after_response_e2e")
@@ -871,7 +1220,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         calls: list[dict[str, object]] = []
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -890,7 +1239,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_forbidden_fields_and_failed_runner_does_not_overclaim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_packet(
                 session_id,
@@ -956,7 +1305,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -980,8 +1329,12 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["route_provenance_required"])
             self.assertFalse(packet["route_provenance_proven"])
             self.assertEqual(packet["source_provenance_status"], "backend_proven")
+            self.assertTrue(packet["source_candidate_classified"])
             self.assertTrue(packet["source_provenance_proven"])
             self.assertEqual(packet["selected_source_provenance"], "backend_proven")
+            self.assertEqual(packet["account_candidate_source"], "server_ranked_candidate")
+            self.assertFalse(packet["account_selected_by_user"])
+            self.assertFalse(packet["account_execution_proven"])
             self.assertFalse(packet["current_codex_touched"])
             self.assertEqual(packet["path_proof_status"], "independently_observed")
             self.assertTrue(packet["runtime_selected_model_recorded"])
@@ -1075,7 +1428,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -1098,7 +1451,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -1135,8 +1488,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
 
             self.assertEqual(packet["status"], "rejected")
-            self.assertEqual(packet["machine_error_code"], "ROUTE_PROVENANCE_MISSING")
-            self.assertIn("ROUTE_PROVENANCE_MISSING", packet["precondition_failures"])
+            self.assertEqual(packet["machine_error_code"], "ROUTE_STATIC_READINESS_MISSING")
+            self.assertIn("ROUTE_STATIC_READINESS_MISSING", packet["precondition_failures"])
             self.assertFalse(packet["model_response_present"])
             self.assertFalse(packet["fallback_attempted"])
             self.assertEqual(calls, [])
@@ -1167,7 +1520,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -1178,8 +1531,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "selected_route_ref": "route-digest",
                     "selected_route_server_issued": True,
                     "route_provenance_required": True,
-                    "route_provenance_proven": True,
-                    "source_provenance_status": "route_proven",
+                    "route_provenance_proven": False,
+                    "route_static_readiness_classified": True,
+                    "source_provenance_status": "route_static_candidate_classified",
                 }
             )
             session["role_slots"]["primary_model_slot"].update(
@@ -1190,8 +1544,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "selected_route_ref": "route-digest",
                     "selected_route_server_issued": True,
                     "route_provenance_required": True,
-                    "route_provenance_proven": True,
-                    "source_provenance_status": "route_proven",
+                    "route_provenance_proven": False,
+                    "route_static_readiness_classified": True,
+                    "source_provenance_status": "route_static_candidate_classified",
                     "selection_proven": True,
                 }
             )
@@ -1211,6 +1566,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["selected_route_server_issued"])
             self.assertTrue(packet["route_provenance_required"])
             self.assertTrue(packet["route_provenance_proven"])
+            self.assertTrue(packet["route_static_readiness_classified"])
+            self.assertTrue(packet["route_execution_proven"])
+            self.assertTrue(packet["provider_response_proven"])
             self.assertEqual(packet["source_provenance_status"], "route_proven")
             self.assertTrue(packet["source_provenance_proven"])
             self.assertTrue(packet["live_prompt_full_success"])
@@ -1265,7 +1623,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(packet["machine_error_code"], "RUNTIME_SOURCE_PROVENANCE_MISMATCH")
-            self.assertEqual(packet["selected_source_provenance"], "route_proven")
+            self.assertEqual(packet["selected_source_provenance"], "route_static_candidate_classified")
             self.assertEqual(packet["configured_provider"], "cliproxy")
             self.assertFalse(packet["live_prompt_full_success"])
             self.assertEqual(detail["session"]["status"], "prompt_blocked_after_response_e2e")
@@ -1274,7 +1632,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             manager.cleanup_packet(session_id)
             packet = manager.prompt_packet(
@@ -1292,7 +1650,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_cancel_and_cleanup_are_session_owned_without_process_kill_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             before_cleanup = list(Path(temp_dir).iterdir())
 
@@ -1317,7 +1675,14 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(list(Path(temp_dir).iterdir()), [])
 
     def test_forbidden_helpers_allow_only_declared_top_level_fields(self) -> None:
-        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.3-codex"}), [])
+        self.assertEqual(forbidden_session_create_fields({"primary_model_id": "gpt-5.3-codex"}), [])
+        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.3-codex"}), ["model_id"])
+        self.assertEqual(
+            forbidden_session_create_fields(
+                {"primary_model_id": "gpt-5.3-codex", "model_lane": "api_route_lane"}
+            ),
+            ["model_lane"],
+        )
         self.assertEqual(forbidden_prompt_dry_run_fields({"prompt": "OK"}), [])
         self.assertEqual(forbidden_prompt_run_fields({"prompt": "OK"}), [])
         self.assertEqual(
