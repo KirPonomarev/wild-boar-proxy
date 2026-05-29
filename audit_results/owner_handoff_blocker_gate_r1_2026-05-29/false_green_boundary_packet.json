@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-29T12:15:41.569776Z",
+  "gate_treated_as_roadmap": false,
+  "operator_observed_context_treated_as_durable_storage": false,
+  "owner_blockers_closed_without_owner": false,
+  "packet_kind": "owner_handoff_false_green_boundary",
+  "readiness_treated_as_proof": false,
+  "recording_runner_treated_as_live_upstream": false,
+  "route_snapshot_treated_as_provider_response": false,
+  "selection_intent_treated_as_execution": false,
+  "selection_intent_treated_as_provider_response": false,
+  "status": "ok",
+  "synthetic_storage_treated_as_live_history_restore": false,
+  "with_limits_treated_as_full_green": false
+}

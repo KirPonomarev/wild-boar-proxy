@@ -1,0 +1,104 @@
+{
+  "automatic_checks_complete": true,
+  "captured_at_utc": "2026-05-29T12:15:41.569554Z",
+  "final_status": "OWNER_HANDOFF_BLOCKER_GATE_CLASSIFIED_WITH_LIMITS",
+  "final_status_with_limits": true,
+  "gate_is_repo_resident_roadmap": false,
+  "global_product_acceptance_claimed": false,
+  "live_actions_attempted_here": false,
+  "original_codex_touched_here": false,
+  "owner_required_blocker_count": 4,
+  "owner_required_blockers": [
+    {
+      "counts_as_closed_without_owner": false,
+      "guards": {
+        "operator_visible_context_counted_as_storage_proof": false,
+        "role_slot_persistence_counted_as_thread_history": false,
+        "synthetic_storage_counted_as_live_history_restore": false,
+        "thread_history_files_counted_as_native_visible_restore": false
+      },
+      "id": "live_native_relaunch_history_restore",
+      "owner_required": true,
+      "proof_present": false,
+      "readiness_counts_as_proof": false,
+      "required_owner_action": "owner_runs_live_native_relaunch_and_visible_history_restore_check",
+      "status": "blocked_owner_required",
+      "supporting_packets": [
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-29/final_dual_lane_history_packet.json",
+        "audit_results/persistent_profile_and_thread_history_r1_2026-05-28/thread_history_classification_packet.json",
+        "audit_results/persistent_profile_and_thread_history_r1_2026-05-28/role_slot_persistence_packet.json"
+      ]
+    },
+    {
+      "counts_as_closed_without_owner": false,
+      "guards": {
+        "provider_matrix_claimed_live_acceptance": false,
+        "recording_runner_counted_as_live_upstream": false,
+        "route_snapshot_counted_as_provider_response": false,
+        "selection_intent_counted_as_execution": false,
+        "selection_intent_counted_as_provider_response": false
+      },
+      "id": "live_provider_response_smoke",
+      "owner_required": true,
+      "proof_present": false,
+      "readiness_counts_as_proof": false,
+      "required_owner_action": "owner_authorizes_live_provider_response_smoke_or_keeps_blocked",
+      "status": "blocked_owner_required",
+      "supporting_packets": [
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-29/final_dual_lane_selection_packet.json",
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-29/final_dual_lane_runtime_packet.json",
+        "audit_results/api_provider_compatibility_and_smoke_matrix_r1_2026-05-28/provider_smoke_matrix_packet.json"
+      ]
+    },
+    {
+      "counts_as_closed_without_owner": false,
+      "guards": {
+        "concurrency_classification_counted_as_throughput_gain": false,
+        "paid_parallel_fanout_counted_as_proven": false,
+        "same_session_counted_as_parallel_execution": false,
+        "sequential_chain_counted_as_concurrency": false
+      },
+      "id": "live_concurrent_dual_lane_execution",
+      "owner_required": true,
+      "proof_present": false,
+      "readiness_counts_as_proof": false,
+      "required_owner_action": "owner_authorizes_live_dual_lane_concurrency_check_or_keeps_non_claim",
+      "status": "blocked_owner_required",
+      "supporting_packets": [
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-29/final_dual_lane_workflow_packet.json",
+        "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/concurrency_boundary_packet.json"
+      ]
+    },
+    {
+      "counts_as_closed_without_owner": false,
+      "guards": {
+        "declared_policy_counted_as_hard_spend_gate": false,
+        "fallback_policy_settled_without_owner": false,
+        "hard_spend_gate_claimed_without_proof": false,
+        "paid_route_executed_without_owner_policy": false
+      },
+      "id": "owner_authorized_paid_budget_policy",
+      "owner_required": true,
+      "proof_present": false,
+      "readiness_counts_as_proof": false,
+      "required_owner_action": "owner_supplies_explicit_paid_budget_quota_retry_fallback_policy",
+      "status": "blocked_owner_required",
+      "supporting_packets": [
+        "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/budget_boundary_packet.json",
+        "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/concurrency_boundary_packet.json"
+      ]
+    }
+  ],
+  "owner_required_blockers_counted_as_closed": false,
+  "packet_kind": "owner_handoff_blocker_gate",
+  "paid_calls_attempted_here": false,
+  "readiness_counts_as_proof": false,
+  "status": "ok",
+  "validation": {
+    "duplicate_owner_blockers": [],
+    "missing_owner_blockers": [],
+    "status": "ok",
+    "violation_count": 0,
+    "violations": []
+  }
+}

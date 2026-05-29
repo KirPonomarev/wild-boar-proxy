@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-29T12:15:41.569780Z",
+  "findings": [
+    {
+      "id": "owner_blockers_remain_blocked_or_limited_until_owner_action",
+      "severity": "high",
+      "status": "confirmed"
+    },
+    {
+      "id": "final_dual_lane_status_remains_with_limits",
+      "severity": "high",
+      "status": "confirmed"
+    },
+    {
+      "id": "live_provider_response_history_restore_and_concurrency_unproven_here",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "paid_budget_policy_requires_owner_authorization",
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "owner_handoff_independent_audit",
+  "status": "ok"
+}
