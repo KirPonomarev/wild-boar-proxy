@@ -1,0 +1,11 @@
+{
+  "adapter_can_shape_more_than_consumer_accepts": true,
+  "captured_at_utc": "2026-05-29T04:43:04.124740Z",
+  "counts_as_policy_completeness": false,
+  "counts_as_provider_family_compatibility": false,
+  "packet_kind": "consumer_acceptance_boundary",
+  "plain_text_consumer_accepted": true,
+  "status": "ok",
+  "streaming_consumer_accepted": false,
+  "tool_semantics_consumer_accepted": false
+}

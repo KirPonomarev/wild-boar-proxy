@@ -1,0 +1,16 @@
+{
+  "adapter_function_tool_request_admitted": true,
+  "adapter_tool_call_shape_observed": true,
+  "adapter_tool_output_shape_observed": true,
+  "captured_at_utc": "2026-05-29T04:43:04.124735Z",
+  "classification": "history_shaped_text_only_with_limits",
+  "consumer_tool_execution_proven": false,
+  "consumer_tool_semantics_accepted": false,
+  "model_driven_function_tool_protocol_supported": false,
+  "packet_kind": "tool_call_semantics",
+  "status": "ok",
+  "supported_function_tool_response_text_only": true,
+  "unsupported_tool_type_code": "unsupported_tool_type",
+  "unsupported_tool_type_rejected": true,
+  "upstream_tool_declaration_forwarded": false
+}
