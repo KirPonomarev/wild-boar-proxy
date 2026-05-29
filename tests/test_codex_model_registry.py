@@ -463,6 +463,42 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(row["model_lane_proof_level"], "server_classified")
         self.assertFalse(row["runtime_lane_proven"])
 
+    def test_api_route_snapshot_replaces_heuristic_catalog_duplicate(self) -> None:
+        registry = build_custom_model_registry_packet(
+            {
+                "status": {"configured_model": "gpt-5.3-codex"},
+                "claim_gate": {"status": "passed"},
+                "models": {
+                    "ok": True,
+                    "model_ids": ["gpt-5.3-codex", "wbp-deepseek-v3"],
+                    "server_issued": True,
+                },
+            },
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-deepseek-v3",
+                        "provider": "openrouter",
+                        "upstream_model": "deepseek/deepseek-chat",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    }
+                ]
+            },
+        )
+
+        rows = [
+            entry
+            for entry in registry["available_models"]
+            if entry["model_id"] == "wbp-deepseek-v3"
+        ]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["source"], "server_owned_external_route")
+        self.assertEqual(rows[0]["model_lane"], "api_route_lane")
+        self.assertTrue(rows[0]["model_lane_classified"])
+        self.assertFalse(rows[0]["model_lane_fallback_used"])
+        self.assertTrue(rows[0]["selection_enabled"])
+
     def test_forbidden_custom_model_fields_allows_only_top_level_model_id(self) -> None:
         self.assertEqual(forbidden_custom_model_fields({"model_id": "gpt-5.3-codex"}), [])
         self.assertEqual(forbidden_custom_model_fields({"dry_run": True}), ["dry_run"])

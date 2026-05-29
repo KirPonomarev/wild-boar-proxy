@@ -5616,7 +5616,9 @@ class FakeOperatorSurfaceSession:
             "human_message": "Codex Operator prompt completed.",
             "selected_model": payload.get("model_id"),
             "requested_slot_id": payload.get("slot_id", ""),
-            "requested_slot_explicit": "slot_id" in payload,
+            "requested_slot_explicit": payload.get("slot_id_explicit")
+            if isinstance(payload.get("slot_id_explicit"), bool)
+            else "slot_id" in payload,
             "configured_provider": "cliproxy",
             "configured_wire_api": "responses",
             "wbp_endpoint_configured": True,
@@ -5707,7 +5709,9 @@ class DualLaneFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession
             "human_message": "Codex Operator prompt completed.",
             "selected_model": payload.get("model_id"),
             "requested_slot_id": payload.get("slot_id", ""),
-            "requested_slot_explicit": "slot_id" in payload,
+            "requested_slot_explicit": payload.get("slot_id_explicit")
+            if isinstance(payload.get("slot_id_explicit"), bool)
+            else "slot_id" in payload,
             "configured_provider": "external_route" if route_backed else "cliproxy",
             "configured_wire_api": "responses",
             "wbp_endpoint_configured": True,
@@ -5946,6 +5950,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         review_apply_context = live_server.default_review_apply_context(ROOT)
 
         with tempfile.TemporaryDirectory() as temp_dir:
+            custom_sessions_root = Path(temp_dir) / "custom-sessions"
             app_bundle = Path(temp_dir) / "Codex.app"
             (app_bundle / "Contents" / "Resources").mkdir(parents=True)
             fake_binary = app_bundle / "Contents" / "Resources" / "codex"
@@ -5959,6 +5964,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 mock.patch.object(live_server, "compare_snapshots", return_value={"codex_config": {"exists_unchanged": True, "mtime_ns_unchanged": True, "size_unchanged": True, "sha256_unchanged": True}}),
                 mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=True),
                 mock.patch.object(live_server.subprocess, "run", return_value=live_server.subprocess.CompletedProcess(args=["open"], returncode=0, stdout="", stderr="")),
+                mock.patch.object(
+                    live_server,
+                    "CodexCustomSessionManager",
+                    side_effect=lambda root=None: REAL_CODEX_CUSTOM_SESSION_MANAGER(
+                        custom_sessions_root if root is None else root
+                    ),
+                ),
             ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
@@ -6009,6 +6021,60 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(sessions["session_count"], 1)
         self.assertEqual(created_sessions[0].run_payloads, [])
 
+    def test_custom_launch_requires_manual_model_selection_without_recommended_fallback(self) -> None:
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession),
+                mock.patch.object(
+                    live_server,
+                    "CodexCustomSessionManager",
+                    side_effect=lambda root=None: REAL_CODEX_CUSTOM_SESSION_MANAGER(
+                        Path(temp_dir) if root is None else root
+                    ),
+                ),
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=MappingRunner(payloads),
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    rejected = json.loads(post_json(f"{base}/api/codex/custom/launch", {}))
+                    sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "MANUAL_MODEL_SELECTION_REQUIRED")
+        self.assertFalse(rejected["session_created"])
+        self.assertFalse(rejected["model_auto_selected"])
+        self.assertFalse(rejected["fallback_used"])
+        self.assertFalse(rejected["external_route_selected"])
+        self.assertFalse(rejected["running_status"])
+        self.assertFalse(rejected["workbench_ready"])
+        self.assertEqual(sessions["session_count"], 0)
+
     def test_custom_native_launch_endpoint_requires_owner_authorization(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
@@ -6056,7 +6122,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 return_value={
                     "status": {"configured_model": "gpt-5.3-codex"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                    "models": {
+                        "model_ids": ["gpt-5.3-codex"],
+                        "server_issued": True,
+                    },
                 },
             ),
             mock.patch.object(
@@ -6097,7 +6166,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], ["route_id"])
 
-    def test_custom_native_launch_endpoint_and_ui_action_return_native_proof_only(self) -> None:
+    def test_custom_native_launch_endpoint_returns_native_proof_only_and_action_requires_selection(self) -> None:
         native_packet = {
             "schema_version": 1,
             "captured_at_utc": "2026-05-27T00:00:00Z",
@@ -6153,7 +6222,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 return_value={
                     "status": {"configured_model": "gpt-5.3-codex"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                    "models": {
+                        "model_ids": ["gpt-5.3-codex"],
+                        "server_issued": True,
+                    },
                 },
             ),
             mock.patch.object(
@@ -6201,26 +6273,109 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             endpoint_packet["selection_packet"]["refresh_packet"]["managed_total"],
             1,
         )
-        self.assertEqual(ui_action["status"], "ok")
-        self.assertEqual(ui_action["result"]["status"], "ok")
+        self.assertEqual(ui_action["status"], "command_error")
+        self.assertEqual(ui_action["result"]["status"], "failed")
+        self.assertEqual(
+            ui_action["result"]["machine_error_code"],
+            "MANUAL_MODEL_SELECTION_REQUIRED",
+        )
         self.assertEqual(
             ui_action["action_claim_scope"],
             "только Custom native app/window launch proof; это не prompt, route trace или egress truth",
         )
-        self.assertTrue(ui_action["result"]["data"]["real_codex_app_launched"])
-        self.assertFalse(ui_action["result"]["data"]["native_launch_complete"])
-        self.assertEqual(ui_action["result"]["data"]["selection_packet"]["status"], "ok")
-        self.assertEqual(
-            ui_action["result"]["data"]["selection_packet"]["ranking_inputs"]["launch_capable_count"],
-            1,
-        )
-        self.assertEqual(
-            ui_action["result"]["data"]["selection_packet"]["refresh_packet"]["managed_total"],
-            1,
-        )
+        self.assertFalse(ui_action["result"]["data"]["model_auto_selected"])
+        self.assertFalse(ui_action["result"]["data"]["fallback_used"])
+        self.assertFalse(ui_action["result"]["data"]["external_route_selected"])
         self.assertTrue(metadata["actions"]["launch_custom_client_native"]["available"])
 
-    def test_custom_native_launch_uses_bridge_endpoint_and_api_route_when_codex_auth_unavailable(self) -> None:
+    def test_custom_native_launch_requires_manual_selection_before_fallback_or_native_launch(self) -> None:
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            machine_error_code="AUTH_UNAVAILABLE",
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(
+            "wbp-web-primary-openrouter",
+            enabled=True,
+        )
+        runner = MappingRunner(payloads)
+
+        with (
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {
+                        "configured_model": "gpt-5.3-codex",
+                        "machine_error_code": "AUTH_UNAVAILABLE",
+                    },
+                    "claim_gate": {"status": "ok"},
+                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                },
+            ) as status_payload,
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": "wbp-web-primary-openrouter",
+                            "enabled": True,
+                            "primary": True,
+                            "secret_ref": "OPENROUTER_API_KEY",
+                        }
+                    ],
+                },
+            ),
+            mock.patch.object(live_server, "_build_live_native_availability_lattice_packet") as availability_lattice,
+            mock.patch.object(live_server._CustomNativeBridgeLease, "ensure") as ensure_bridge,
+            mock.patch.object(live_server, "launch_custom_native_app_packet") as launch_native,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                endpoint_packet = json.loads(
+                    post_json(f"{base}/api/codex/custom/native-launch", {})
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(endpoint_packet["status"], "rejected")
+        self.assertEqual(endpoint_packet["machine_error_code"], "MANUAL_MODEL_SELECTION_REQUIRED")
+        self.assertFalse(endpoint_packet["model_auto_selected"])
+        self.assertFalse(endpoint_packet["fallback_used"])
+        self.assertFalse(endpoint_packet["external_route_selected"])
+        self.assertFalse(endpoint_packet["recommended_model_used"])
+        self.assertFalse(endpoint_packet["route_fallback_used"])
+        self.assertEqual(runner.calls, [])
+        status_payload.assert_not_called()
+        availability_lattice.assert_not_called()
+        ensure_bridge.assert_not_called()
+        launch_native.assert_not_called()
+
+    def test_custom_native_launch_uses_explicit_api_route_when_codex_auth_unavailable(self) -> None:
         native_packet = {
             "schema_version": 1,
             "captured_at_utc": "2026-05-29T00:00:00Z",
@@ -6309,7 +6464,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             base = f"http://127.0.0.1:{server.server_port}"
             try:
                 endpoint_packet = json.loads(
-                    post_json(f"{base}/api/codex/custom/native-launch", {})
+                    post_json(
+                        f"{base}/api/codex/custom/native-launch",
+                        {"model_id": "wbp-web-primary-openrouter"},
+                    )
                 )
             finally:
                 server.shutdown()
@@ -6742,6 +6900,40 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertEqual(created_sessions[0].run_payloads, [])
         self.assertGreaterEqual(created_sessions[0].status_payload_calls, 1)
 
+    def test_codex_custom_model_registry_timeout_returns_bounded_error_packet(self) -> None:
+        class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+        with mock.patch.object(
+            live_server,
+            "OperatorSurfaceSession",
+            return_value=SlowOperatorSurfaceSession(),
+        ):
+            with mock.patch.object(live_server, "CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS", 0.01):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=MappingRunner(live_payloads())),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    registry = json.loads(fetch(f"{base}/api/codex/custom/models"))
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertNotEqual(registry["status"], "ok")
+        self.assertEqual(registry["status"], "integration_failure")
+        self.assertEqual(registry["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
+        self.assertEqual(registry["endpoint"], "/api/codex/custom/models")
+        self.assertEqual(registry["timeout_scope"], "custom_models_readonly_snapshot")
+        self.assertFalse(registry["fallback_used"])
+        self.assertFalse(registry["model_auto_selected"])
+
     def test_codex_custom_model_registry_includes_server_owned_external_route_models(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
@@ -6899,6 +7091,40 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
         )
 
+    def test_codex_custom_dual_lane_selector_timeout_returns_bounded_error_packet(self) -> None:
+        class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+        with mock.patch.object(
+            live_server,
+            "OperatorSurfaceSession",
+            return_value=SlowOperatorSurfaceSession(),
+        ):
+            with mock.patch.object(live_server, "CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS", 0.01):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=MappingRunner(live_payloads())),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    selector = json.loads(fetch(f"{base}/api/codex/custom/model-selector"))
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertNotEqual(selector["status"], "ok")
+        self.assertEqual(selector["status"], "integration_failure")
+        self.assertEqual(selector["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
+        self.assertEqual(selector["endpoint"], "/api/codex/custom/model-selector")
+        self.assertEqual(selector["timeout_scope"], "custom_model_selector_readonly_snapshot")
+        self.assertFalse(selector["fallback_used"])
+        self.assertFalse(selector["model_auto_selected"])
+
     def test_codex_custom_dual_lane_selector_disables_blocked_native_models(self) -> None:
         lattice = build_catalog_availability_lattice_packet(
             catalog_packet={"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]},
@@ -6949,6 +7175,9 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
             try:
+                empty = json.loads(
+                    post_json(f"{base}/api/codex/custom/model-selector-dry-run", {})
+                )
                 packet = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/model-selector-dry-run",
@@ -6971,6 +7200,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                             "auth_path": "/tmp/browser-auth.json",
                             "secret_ref": "BROWSER_SECRET_REF",
                             "codex_home": "/tmp/browser-codex-home",
+                            "profile_path": "/tmp/browser-profile",
+                            "api_key": "browser-key",
                         },
                     )
                 )
@@ -6979,6 +7210,16 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 thread.join(timeout=2)
                 server.server_close()
 
+        self.assertEqual(empty["status"], "degraded")
+        self.assertEqual(empty["machine_error_code"], "CHATGPT_LANE_SELECTION_UNRESOLVED")
+        self.assertTrue(empty["selection_intent_only"])
+        self.assertFalse(empty["selection_intent_proven"])
+        self.assertFalse(empty["selected_models_are_server_issued"])
+        self.assertFalse(empty["chatgpt_model_selected_by_user"])
+        self.assertFalse(empty["api_model_selected_by_user"])
+        self.assertFalse(empty["catalog_defaults_used_as_selection"])
+        self.assertIsNone(empty["chatgpt_selection"])
+        self.assertIsNone(empty["api_selection"])
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["selection_intent_only"])
         self.assertFalse(packet["selector_runtime_readiness_claimed"])
@@ -6990,6 +7231,9 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["api_lane_scope"], "selection_intent_only_until_role_slot_session_contour")
         self.assertEqual(packet["chatgpt_selection"]["model_id"], "gpt-5.3-codex")
         self.assertEqual(packet["api_selection"]["model_id"], "wbp-deepseek-v3")
+        self.assertTrue(packet["chatgpt_model_selected_by_user"])
+        self.assertTrue(packet["api_model_selected_by_user"])
+        self.assertFalse(packet["catalog_defaults_used_as_selection"])
         self.assertFalse(packet["seed_only_selected"])
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
@@ -7000,6 +7244,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertIn("auth_path", rejected["forbidden_fields"])
         self.assertIn("secret_ref", rejected["forbidden_fields"])
         self.assertIn("codex_home", rejected["forbidden_fields"])
+        self.assertIn("profile_path", rejected["forbidden_fields"])
+        self.assertIn("api_key", rejected["forbidden_fields"])
 
 
 class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
@@ -7096,7 +7342,14 @@ class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
         self.assertTrue(selection["selected_backend_ref"])
         self.assertTrue(selection["selected_backend_id_redacted"])
         self.assertTrue(selection["selected_backend_server_issued"])
-        self.assertEqual(selection["selected_backend_source"], "server")
+        self.assertEqual(selection["selected_backend_source"], "server_ranked_candidate")
+        self.assertEqual(selection["account_candidate_source"], "server_ranked_candidate")
+        self.assertTrue(selection["source_candidate_classified"])
+        self.assertFalse(selection["source_provenance_proven"])
+        self.assertFalse(selection["account_selected_by_user"])
+        self.assertFalse(selection["account_execution_proven"])
+        self.assertFalse(selection["runtime_execution_proven"])
+        self.assertFalse(selection["live_compatibility_proven"])
         self.assertFalse(selection["browser_selected_backend"])
         self.assertFalse(selection["runtime_meter_attached"])
         self.assertFalse(selection["smoke_admitted"])
@@ -7149,6 +7402,70 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self._codex_custom_session_manager_patcher.stop()
         self._codex_custom_session_tempdir.cleanup()
         super().tearDown()
+
+    def test_codex_custom_sessions_endpoint_is_local_readonly(self) -> None:
+        class ExplodingOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                raise AssertionError("sessions endpoint must not call operator status")
+
+        with mock.patch.object(
+            live_server,
+            "OperatorSurfaceSession",
+            return_value=ExplodingOperatorSurfaceSession(),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(live_payloads())),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(sessions["status"], "ok")
+        self.assertEqual(sessions["session_count"], 0)
+
+    def test_codex_custom_session_create_requires_manual_model_selection(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(live_payloads())),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                rejected = json.loads(post_json(f"{base}/api/codex/custom/sessions", {}))
+                legacy_alias = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                listed = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "MANUAL_MODEL_SELECTION_REQUIRED")
+        self.assertFalse(rejected["session_created"])
+        self.assertFalse(rejected["model_auto_selected"])
+        self.assertFalse(rejected["fallback_used"])
+        self.assertFalse(rejected["external_route_selected"])
+        self.assertIn("primary_model_id", rejected["required_choice_fields"])
+        self.assertEqual(legacy_alias["status"], "rejected")
+        self.assertEqual(legacy_alias["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(legacy_alias["forbidden_fields"], ["model_id"])
+        self.assertFalse(legacy_alias["session_created"])
+        self.assertFalse(legacy_alias["model_auto_selected"])
+        self.assertEqual(listed["session_count"], 0)
 
     def test_codex_custom_session_lifecycle_is_dry_run_and_server_owned(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []
@@ -7468,7 +7785,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 ready = json.loads(
@@ -7647,7 +7964,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 rejected = json.loads(
@@ -7772,7 +8089,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 admitted = json.loads(
@@ -7867,7 +8184,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 no_candidate = json.loads(
@@ -8793,13 +9110,13 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             base = f"http://127.0.0.1:{server.server_port}"
             try:
                 bad_model = json.loads(
-                    post_json(f"{base}/api/codex/custom/sessions", {"model_id": "free-form"})
+                    post_json(f"{base}/api/codex/custom/sessions", {"primary_model_id": "free-form"})
                 )
                 bad_backend = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.3-codex",
                             "account_id": "acct-active",
                             "backend_id": "acct-active",
                             "route_id": "route",
@@ -8861,7 +9178,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 session_id = created["session"]["session_id"]
@@ -8947,7 +9264,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 session_id = created["session"]["session_id"]
@@ -8979,13 +9296,35 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(proof["wbp_path_proven"])
         self.assertTrue(proof["cli_proxy_api_path_proven"])
         self.assertEqual(proof["selected_source_provenance"], "backend_proven")
+        self.assertEqual(proof["account_candidate_source"], "server_ranked_candidate")
+        self.assertFalse(proof["account_selected_by_user"])
+        self.assertFalse(proof["account_execution_proven"])
         self.assertEqual(proof["configured_provider"], "cliproxy")
         self.assertFalse(proof["current_codex_touched"])
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["browser_selected_backend"])
+        self.assertFalse(proof["requested_slot_explicit"])
+        self.assertTrue(proof["requested_slot_defaulted_to_primary"])
+        self.assertEqual(proof["wbp_runner_payload_slot_id"], "primary_model_slot")
+        self.assertEqual(proof["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+        self.assertTrue(proof["wbp_runner_payload_slot_matches_requested"])
+        self.assertTrue(proof["wbp_runner_payload_model_matches_slot"])
+        self.assertTrue(proof["wbp_session_manager_slot_dispatch_proven"])
+        self.assertEqual(proof["runtime_slot_dispatch_proof_scope"], "wbp_session_manager_payload_plus_downstream_echo")
+        self.assertTrue(proof["runtime_slot_dispatch_proven"])
+        self.assertTrue(proof["slot_binding_runtime_dispatch_claimed"])
+        self.assertFalse(proof["parallel_slot_execution_proven"])
+        self.assertFalse(proof["fanout_execution_proven"])
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply with exactly WBP_LIVE_OK.", "model_id": "gpt-5.3-codex"}],
+            [
+                {
+                    "prompt": "Reply with exactly WBP_LIVE_OK.",
+                    "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
+                    "slot_id_explicit": False,
+                }
+            ],
         )
 
     def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:
@@ -9061,6 +9400,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(primary["requested_slot_explicit"])
         self.assertEqual(primary["model_id"], "gpt-5.3-codex")
         self.assertEqual(primary["selected_source_provenance"], "backend_proven")
+        self.assertEqual(primary["account_candidate_source"], "server_ranked_candidate")
+        self.assertFalse(primary["account_selected_by_user"])
+        self.assertFalse(primary["account_execution_proven"])
         self.assertEqual(primary["configured_provider"], "cliproxy")
         self.assertTrue(primary["live_prompt_full_success"])
         self.assertEqual(api_lane["status"], "ok")
@@ -9154,17 +9496,45 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(launched["selection_packet"]["selected_source_class"], "route_backed")
         self.assertTrue(launched["selection_packet"]["selected_route_server_issued"])
         self.assertTrue(launched["selection_packet"]["route_provenance_required"])
-        self.assertTrue(launched["selection_packet"]["route_provenance_proven"])
-        self.assertEqual(launched["selection_packet"]["source_provenance_status"], "route_proven")
+        self.assertFalse(launched["selection_packet"]["route_provenance_proven"])
+        self.assertTrue(launched["selection_packet"]["route_candidate_classified"])
+        self.assertTrue(launched["selection_packet"]["route_static_readiness_classified"])
+        self.assertFalse(launched["selection_packet"]["route_execution_proven"])
+        self.assertFalse(launched["selection_packet"]["provider_response_proven"])
+        self.assertFalse(launched["selection_packet"]["secret_validity_proven"])
+        self.assertFalse(launched["selection_packet"]["live_compatibility_proven"])
+        self.assertEqual(
+            launched["selection_packet"]["source_provenance_status"],
+            "route_static_candidate_classified",
+        )
         self.assertEqual(proof["status"], "ok")
         self.assertEqual(proof["machine_error_code"], "OK")
         self.assertEqual(proof["selected_source_provenance"], "route_proven")
         self.assertEqual(proof["configured_provider"], "external_route")
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["current_codex_touched"])
+        self.assertFalse(proof["requested_slot_explicit"])
+        self.assertTrue(proof["requested_slot_defaulted_to_primary"])
+        self.assertEqual(proof["wbp_runner_payload_slot_id"], "primary_model_slot")
+        self.assertEqual(proof["wbp_runner_payload_model_id"], "wbp-deepseek-v3")
+        self.assertTrue(proof["wbp_runner_payload_slot_matches_requested"])
+        self.assertTrue(proof["wbp_runner_payload_model_matches_slot"])
+        self.assertTrue(proof["wbp_session_manager_slot_dispatch_proven"])
+        self.assertEqual(proof["runtime_slot_dispatch_proof_scope"], "wbp_session_manager_payload_plus_downstream_echo")
+        self.assertTrue(proof["runtime_slot_dispatch_proven"])
+        self.assertTrue(proof["slot_binding_runtime_dispatch_claimed"])
+        self.assertFalse(proof["parallel_slot_execution_proven"])
+        self.assertFalse(proof["fanout_execution_proven"])
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply with exactly WBP_CUSTOM_EXTERNAL_API_OK.", "model_id": "wbp-deepseek-v3"}],
+            [
+                {
+                    "prompt": "Reply with exactly WBP_CUSTOM_EXTERNAL_API_OK.",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "primary_model_slot",
+                    "slot_id_explicit": False,
+                }
+            ],
         )
 
     def test_codex_custom_prompt_endpoint_rejects_near_miss_authorization_phrase(self) -> None:
@@ -9202,7 +9572,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.3-codex"},
                     )
                 )
                 session_id = created["session"]["session_id"]

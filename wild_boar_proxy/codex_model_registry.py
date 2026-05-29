@@ -1980,13 +1980,20 @@ def build_custom_model_registry_packet(
                 entry["selection_disabled_reason_code"] = reason_code
                 entry["selection_disabled_reasons"] = reasons
         available_models.append(entry)
-    seen_model_ids = {str(entry["model_id"]) for entry in available_models}
+    available_model_index = {str(entry["model_id"]): index for index, entry in enumerate(available_models)}
     for route_entry in _external_route_model_entries(api_snapshot):
         route_model_id = str(route_entry["model_id"])
-        if route_model_id in seen_model_ids:
+        existing_index = available_model_index.get(route_model_id)
+        if existing_index is not None:
+            existing_entry = available_models[existing_index]
+            if (
+                existing_entry.get("model_lane_classified") is not True
+                or existing_entry.get("model_lane_fallback_used") is True
+            ):
+                available_models[existing_index] = route_entry
             continue
         available_models.append(route_entry)
-        seen_model_ids.add(route_model_id)
+        available_model_index[route_model_id] = len(available_models) - 1
 
     available_model_ids = [str(entry["model_id"]) for entry in available_models]
     live_probe_imported = any(

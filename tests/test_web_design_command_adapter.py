@@ -823,7 +823,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         html = (WEB_DESIGN_UI / "index.html").read_text()
 
         self.assertIn("Запустить клиент", html)
-        self.assertIn('data-ui-action="launch_client_dispatch"', html)
+        self.assertIn('data-ui-action="launch_custom_client_native"', html)
         self.assertIn("disabled", html)
         self.assertNotIn("execute_command", html)
 

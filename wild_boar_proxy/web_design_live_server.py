@@ -15,9 +15,10 @@ import json
 import mimetypes
 import os
 from pathlib import Path
+from queue import Empty, Queue
 import subprocess
-from threading import RLock
-from typing import Any
+from threading import RLock, Thread
+from typing import Any, Callable
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlparse
@@ -50,11 +51,14 @@ from wild_boar_proxy.codex_account_selection import (
 )
 from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.codex_model_registry import (
+    API_ROUTE_MODEL_LANE,
+    CODEX_ACCOUNT_MODEL_LANE,
     build_custom_api_compat_packet,
     build_dual_lane_model_selection_ui_packet,
     build_dual_lane_selection_intent_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
+    model_lane_classification_from_registry,
 )
 from wild_boar_proxy.model_availability import (
     build_catalog_availability_lattice_packet,
@@ -193,6 +197,8 @@ SESSION_ID_UI_ACTIONS = frozenset(
     }
 )
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
+CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS = 2.0
+CUSTOM_CODEX_READONLY_TIMEOUT_CODE = "CUSTOM_CODEX_READONLY_TIMEOUT"
 
 
 def owner_authorization_phrase_present(value: str | None) -> bool:
@@ -201,6 +207,67 @@ def owner_authorization_phrase_present(value: str | None) -> bool:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _custom_codex_readonly_timeout_packet(
+    *,
+    endpoint: str,
+    timeout_scope: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "machine_error_code": CUSTOM_CODEX_READONLY_TIMEOUT_CODE,
+        "human_message": "Custom Codex readonly snapshot timed out.",
+        "next_action": "retry_readonly_snapshot_or_inspect_operator_surface",
+        "source": "custom_codex_readonly_timeout",
+        "endpoint": endpoint,
+        "timeout_scope": timeout_scope,
+        "fallback_used": False,
+        "model_auto_selected": False,
+    }
+
+
+def _run_custom_codex_readonly_snapshot(
+    *,
+    endpoint: str,
+    timeout_scope: str,
+    build_snapshot: Callable[[], dict[str, Any]],
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    if timeout_seconds is None:
+        timeout_seconds = CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS
+
+    results: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            results.put(("ok", build_snapshot()), block=False)
+        except Exception as exc:
+            results.put(("error", exc), block=False)
+
+    thread = Thread(
+        target=worker,
+        name=f"custom-codex-readonly-{timeout_scope}",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        return _custom_codex_readonly_timeout_packet(
+            endpoint=endpoint,
+            timeout_scope=timeout_scope,
+        )
+    try:
+        status, value = results.get_nowait()
+    except Empty:
+        return _custom_codex_readonly_timeout_packet(
+            endpoint=endpoint,
+            timeout_scope=timeout_scope,
+        )
+    if status == "error":
+        raise value
+    return value
 
 
 UI_ACTION_ALLOWLIST = {
@@ -2252,6 +2319,18 @@ def _selection_packet_for_external_route(
             "route_provenance_required": False,
             "route_provenance_proven": False,
             "source_provenance_status": "not_proven",
+            "api_model_selected_by_user": True,
+            "route_selected_by_user": False,
+            "browser_selected_route": False,
+            "route_candidate_source": "none",
+            "route_candidate_classified": False,
+            "route_static_readiness_classified": False,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "live_compatibility_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
             "browser_selected_backend": False,
             "selection_reason": "selected external model is not visible in current server-owned API route snapshot",
             "claim_gate_status": claim_gate_status,
@@ -2263,14 +2342,14 @@ def _selection_packet_for_external_route(
     route_id = str(route.get("route_id") or "")
     secret_ref = str(route.get("secret_ref") or "")
     enabled = route.get("enabled") is True
-    proven = enabled and bool(secret_ref)
-    status = "ok" if proven and "blocked" not in claim_gate_status else "degraded"
+    ready = enabled and bool(secret_ref)
+    status = "ok" if ready and "blocked" not in claim_gate_status else "degraded"
     machine_error_code = (
         "OK"
-        if proven and "blocked" not in claim_gate_status
+        if ready and "blocked" not in claim_gate_status
         else (
             "CLAIM_GATE_BLOCKED"
-            if proven
+            if ready
             else ("EXTERNAL_API_ROUTE_SECRET_REF_MISSING" if not secret_ref else "EXTERNAL_API_ROUTE_DISABLED")
         )
     )
@@ -2281,21 +2360,35 @@ def _selection_packet_for_external_route(
         "machine_error_code": machine_error_code,
         "captured_at_utc": utc_now(),
         "mode_id": "codex_custom",
-        "selection_dry_run_proven": proven,
+        "selection_dry_run_proven": ready,
         "live_selection_proven": False,
-        "selection_proven": proven,
+        "selection_proven": ready,
         "inference_proven": False,
-        "selected_source_class": "route_backed" if proven else "none",
+        "selected_source_class": "route_backed" if ready else "none",
         "selected_backend_id": "",
         "selected_backend_ref": "",
         "selected_backend_id_redacted": True,
         "selected_backend_server_issued": False,
         "selected_backend_source": "none",
         "selected_route_ref": route_ref,
-        "selected_route_server_issued": proven,
-        "route_provenance_required": proven,
-        "route_provenance_proven": proven,
-        "source_provenance_status": "route_proven" if proven else "route_provenance_missing",
+        "selected_route_server_issued": ready,
+        "route_provenance_required": ready,
+        "route_provenance_proven": False,
+        "source_provenance_status": (
+            "route_static_candidate_classified" if ready else "route_static_candidate_missing"
+        ),
+        "api_model_selected_by_user": True,
+        "route_selected_by_user": False,
+        "browser_selected_route": False,
+        "route_candidate_source": "server_issued_route_registry" if route_id else "none",
+        "route_candidate_classified": bool(route_id),
+        "route_static_readiness_classified": ready,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "live_compatibility_proven": False,
+        "raw_route_exposed": False,
+        "raw_secret_ref_exposed": False,
         "browser_selected_backend": False,
         "selection_reason": "server-owned external route matched selected model_id",
         "claim_gate_status": claim_gate_status,
@@ -2316,13 +2409,25 @@ def _codex_custom_selection_packet(
     operator_status: dict[str, Any] | None,
     api_snapshot: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    if model_id.startswith("gpt-"):
-        return build_account_selection_packet(commands, operator_status)
-    return _selection_packet_for_external_route(
-        model_id=model_id,
-        operator_status=operator_status,
-        api_snapshot=api_snapshot,
-    )
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    lane_classification = model_lane_classification_from_registry(model_id, registry)
+    model_lane = str(lane_classification.get("model_lane") or "")
+    if model_lane == CODEX_ACCOUNT_MODEL_LANE:
+        return build_account_selection_packet(commands, operator_status) | lane_classification
+    if model_lane == API_ROUTE_MODEL_LANE:
+        return _selection_packet_for_external_route(
+            model_id=model_id,
+            operator_status=operator_status,
+            api_snapshot=api_snapshot,
+        ) | lane_classification
+    return {
+        "schema_version": 1,
+        "status": "rejected",
+        "machine_error_code": "MODEL_LANE_NOT_CLASSIFIED",
+        "selection_proven": False,
+        "selected_source_class": "none",
+        **lane_classification,
+    }
 
 
 def _owner_authorization_required_packet(*, mode_id: str, next_action: str) -> dict[str, Any]:
@@ -2335,6 +2440,36 @@ def _owner_authorization_required_packet(*, mode_id: str, next_action: str) -> d
         "owner_authorization_phrase_present": False,
         "human_message": "Live launch requires exact owner authorization in the active thread.",
         "next_action": next_action,
+    }
+
+
+def _manual_custom_model_selection_required_packet(
+    *,
+    owner_authorized: bool,
+    launch_claim_scope: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "status": "rejected",
+        "machine_error_code": "MANUAL_MODEL_SELECTION_REQUIRED",
+        "human_message": "Custom Codex native launch requires an explicit server-issued model selection.",
+        "owner_authorization_phrase_present": owner_authorized,
+        "launch_claim_scope": launch_claim_scope,
+        "selected_model": "",
+        "model_server_issued": False,
+        "selected_model_server_issued": False,
+        "model_auto_selected": False,
+        "fallback_used": False,
+        "external_route_selected": False,
+        "recommended_model_used": False,
+        "route_fallback_used": False,
+        "process_started": False,
+        "native_window_observed": False,
+        "native_app_usable": False,
+        "current_codex_touched": False,
+        "next_action": "select_model_from_server_registry",
     }
 
 
@@ -2506,22 +2641,41 @@ def _launch_custom_codex_packet(
                 next_action="provide_exact_owner_authorization_phrase",
             ),
         }
+    model_id = payload.get("model_id")
+    if not isinstance(model_id, str) or not model_id:
+        created = session_manager.create_packet(
+            payload,
+            commands,
+            operator_status,
+            api_snapshot=api_snapshot,
+        )
+        return {
+            **created,
+            **base,
+            "status": created.get("status"),
+            "machine_error_code": created.get("machine_error_code"),
+            "human_message": created.get("human_message", "Codex Custom launch evaluated."),
+            "owner_authorization_phrase_present": True,
+            "session_created": False,
+            "running_status": False,
+            "isolated_home": False,
+            "isolated_codex_home": False,
+            "isolated_workdir": False,
+            "server_issued_model_list": False,
+            "wbp_endpoint_configured": False,
+            "browser_route_injection": False,
+            "browser_backend_injection": False,
+            "current_codex_touched": False,
+            "workbench_ready": False,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "external_route_selected": False,
+            "next_action": created.get("next_action", "select_model_from_server_registry"),
+        }
     availability_lattice_packet = _build_live_native_availability_lattice_packet(
         operator_status,
         api_snapshot=api_snapshot,
     )
-    model_id = payload.get("model_id")
-    if not isinstance(model_id, str) or not model_id:
-        registry = build_custom_model_registry_packet(
-            operator_status,
-            api_snapshot=api_snapshot,
-            availability_lattice_packet=availability_lattice_packet,
-        )
-        model_id = str(
-            registry.get("recommended_default_model")
-            or registry.get("recommended_model")
-            or ""
-        )
     selection = _codex_custom_selection_packet(
         model_id=model_id,
         commands=commands,
@@ -2529,7 +2683,7 @@ def _launch_custom_codex_packet(
         api_snapshot=api_snapshot,
     )
     created = session_manager.create_packet(
-        {"model_id": model_id},
+        {"primary_model_id": model_id},
         commands,
         operator_status,
         selection=selection,
@@ -2613,27 +2767,16 @@ def _launch_custom_native_codex_packet(
                 next_action="provide_exact_owner_authorization_phrase",
             ),
         }
+    model_id = payload.get("model_id")
+    if not isinstance(model_id, str) or not model_id:
+        return _manual_custom_model_selection_required_packet(
+            owner_authorized=owner_authorized,
+            launch_claim_scope="custom_native_app_window_launch_only",
+        )
     availability_lattice_packet = _build_live_native_availability_lattice_packet(
         operator_status,
         api_snapshot=api_snapshot,
     )
-    model_id = payload.get("model_id")
-    if not isinstance(model_id, str) or not model_id:
-        registry = build_custom_model_registry_packet(
-            operator_status,
-            api_snapshot=api_snapshot,
-            availability_lattice_packet=availability_lattice_packet,
-        )
-        route_fallback_id = ""
-        status_packet = operator_status.get("status") if isinstance(operator_status, dict) else {}
-        machine_error_code = str(status_packet.get("machine_error_code") or "")
-        if machine_error_code == "AUTH_UNAVAILABLE":
-            route_fallback_id = _primary_external_route_id(external_routes_packet)
-        model_id = route_fallback_id or str(
-            registry.get("recommended_default_model")
-            or registry.get("recommended_model")
-            or ""
-        )
     registry = build_custom_model_registry_packet(
         operator_status,
         api_snapshot=api_snapshot,
@@ -3679,34 +3822,50 @@ def build_handler(
                 self._send_json(build_custom_status_packet(operator_surface_session.status_payload()))
                 return
             if parsed.path == "/api/codex/custom/models":
-                api_snapshot = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                    operator_surface_session.status_payload(),
-                    api_snapshot=api_snapshot,
-                )
-                self._send_json(
-                    build_custom_model_registry_packet(
-                        operator_surface_session.status_payload(),
+                def build_models_snapshot() -> dict[str, Any]:
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    operator_status = operator_surface_session.status_payload()
+                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                    return build_custom_model_registry_packet(
+                        operator_status,
                         api_snapshot=api_snapshot,
                         availability_lattice_packet=availability_lattice_packet,
+                    )
+
+                self._send_json(
+                    _run_custom_codex_readonly_snapshot(
+                        endpoint=parsed.path,
+                        timeout_scope="custom_models_readonly_snapshot",
+                        build_snapshot=build_models_snapshot,
                     )
                 )
                 return
             if parsed.path == "/api/codex/custom/model-selector":
-                api_snapshot = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                    operator_surface_session.status_payload(),
-                    api_snapshot=api_snapshot,
-                )
-                self._send_json(
-                    build_dual_lane_model_selection_ui_packet(
-                        operator_surface_session.status_payload(),
+                def build_selector_snapshot() -> dict[str, Any]:
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    operator_status = operator_surface_session.status_payload()
+                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                    return build_dual_lane_model_selection_ui_packet(
+                        operator_status,
                         api_snapshot=api_snapshot,
                         availability_lattice_packet=availability_lattice_packet,
+                    )
+
+                self._send_json(
+                    _run_custom_codex_readonly_snapshot(
+                        endpoint=parsed.path,
+                        timeout_scope="custom_model_selector_readonly_snapshot",
+                        build_snapshot=build_selector_snapshot,
                     )
                 )
                 return
@@ -3964,6 +4123,22 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/custom/native-launch":
+                payload = self._read_json_body()
+                if codex_custom_live_prompt_authorized:
+                    model_id = payload.get("model_id")
+                    if _forbidden_custom_live_launch_fields(payload) or not isinstance(model_id, str) or not model_id:
+                        self._send_json(
+                            _launch_custom_native_codex_packet(
+                                payload,
+                                owner_authorized=True,
+                                commands={},
+                                operator_status=None,
+                                api_snapshot=None,
+                                external_routes_packet=None,
+                                native_bridge_lease=custom_native_bridge_lease,
+                            )
+                        )
+                        return
                 operator_status = (
                     operator_surface_session.status_payload()
                     if codex_custom_live_prompt_authorized
@@ -3984,7 +4159,7 @@ def build_handler(
                 )
                 self._send_json(
                     _launch_custom_native_codex_packet(
-                        self._read_json_body(),
+                        payload,
                         owner_authorized=codex_custom_live_prompt_authorized,
                         commands=account_commands,
                         operator_status=operator_status,
@@ -4064,8 +4239,6 @@ def build_handler(
                 operator_status = operator_surface_session.status_payload()
                 payload = self._read_json_body()
                 model_id = payload.get("primary_model_id")
-                if not isinstance(model_id, str) or not model_id:
-                    model_id = payload.get("model_id")
                 if not isinstance(model_id, str):
                     model_id = ""
                 account_commands = self._codex_account_commands()

@@ -201,6 +201,7 @@ def build_web_control_surface_matrix_packet(live_server: Any, command_adapter: A
         "account_login_cancel",
         "api_route_credential_check",
         "api_route_connect",
+        "launch_custom_client_native",
         "quick_start_check_all",
     }
     rows: list[dict[str, Any]] = []

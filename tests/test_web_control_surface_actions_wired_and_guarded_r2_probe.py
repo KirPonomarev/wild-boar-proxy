@@ -11,9 +11,15 @@ from tools.web_control_surface_actions_wired_and_guarded_r2_probe import (
     build_false_green_audit,
     build_packets,
 )
+from wild_boar_proxy import web_design_live_server as live_server
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+class FailingRunner:
+    def run(self, *args: str) -> object:
+        raise AssertionError(f"runner must not be called for blocked action: {args}")
 
 
 class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
@@ -43,7 +49,7 @@ class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
         readonly = packets["readonly_live_action_boundary_packet.json"]
 
         rows = {row["ui_action"]: row for row in matrix["rows"]}
-        self.assertEqual(matrix["required_action_count"], 33)
+        self.assertEqual(matrix["required_action_count"], 34)
         self.assertEqual(matrix["unwired_actions"], [])
         self.assertEqual(
             rows["api_route_credential_check"]["wiring"],
@@ -53,9 +59,20 @@ class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
             rows["account_login_status"]["wiring"],
             "wired_to_adapter_command_surface",
         )
+        self.assertEqual(
+            rows["launch_custom_client_native"]["wiring"],
+            "wired_to_server_owned_packet_surface",
+        )
+        self.assertEqual(
+            rows["launch_custom_client_native"]["adapter_command_id"],
+            "codex_custom_native_launch",
+        )
+        self.assertFalse(rows["launch_custom_client_native"]["adapter_command_known"])
+        self.assertTrue(rows["launch_custom_client_native"]["confirmation_required"])
         self.assertTrue(readonly["parked_actions_blocked_with_packet_reason"])
         self.assertIn("account_login_status", readonly["parked_actions"])
         self.assertIn("api_route_credential_check", readonly["parked_actions"])
+        self.assertIn("launch_custom_client_native", readonly["parked_actions"])
         self.assertEqual(readonly["unexpected_live_available_actions"], [])
 
     def test_action_verification_and_false_green_audit_capture_current_truth(self) -> None:
@@ -107,6 +124,25 @@ class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
             sandbox_rows["api_route_credential_check"]["disabled_reason_code"],
             "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
         )
+        self.assertEqual(
+            sandbox_rows["launch_custom_client_native"]["disabled_reason_code"],
+            "UI_ACTION_PHASE_NOT_ADMITTED",
+        )
+
+    def test_custom_native_action_requires_owner_authorization_without_runner_call(self) -> None:
+        result = live_server.run_ui_action(
+            FailingRunner(),
+            {"ui_action": "launch_custom_client_native"},
+            action_phase=live_server.FULL_ACTION_PHASE,
+            owner_authorized=False,
+        )
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(result["disabled_reason_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(result["availability_state"], "owner_authorization_required")
+        self.assertEqual(result["disabled_reasons"], ["owner_authorization_required"])
+        self.assertEqual(result["result"]["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertIn("exact owner authorization", result["result"]["human_message"])
 
     def test_false_green_audit_blocks_when_required_packets_block(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
