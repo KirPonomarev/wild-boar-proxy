@@ -91,6 +91,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_disable",
             "external_models_routes_remove",
             "external_models_check",
+            "external_models_live_format_check",
             "external_models_profile_codex_desktop",
             "external_models_evidence_capture",
             "launch_client",
@@ -217,6 +218,28 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 "required_args": ["route_id"],
                 "allowed_args": ["route_id"],
                 "argv": ["external-models", "check", "--route", "{route_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_live_format_check",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id", "prompt", "expected_text"],
+                "allowed_args": ["route_id", "prompt", "expected_text"],
+                "argv": [
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "{route_id}",
+                    "--prompt",
+                    "{prompt}",
+                    "--expected-text",
+                    "{expected_text}",
+                    "--json",
+                ],
             },
             allowlist_metadata(),
         )
@@ -501,6 +524,15 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_check",
             structured_args={"route_id": "wbp-deepseek-v3"},
         )
+        live_format = execute_command(
+            runner,
+            "external_models_live_format_check",
+            structured_args={
+                "route_id": "wbp-deepseek-v3",
+                "prompt": "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+            },
+        )
         enable = execute_command(
             runner,
             "external_models_routes_enable",
@@ -532,6 +564,17 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             [
                 ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                (
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--prompt",
+                    "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                    "--expected-text",
+                    "API_ONLY_DEEPSEEK_READY",
+                    "--json",
+                ),
                 ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "remove", "--route", "wbp-deepseek-v3", "--json"),
@@ -541,6 +584,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         )
         self.assertEqual(validate["status"], "ok")
         self.assertEqual(check["status"], "ok")
+        self.assertEqual(live_format["status"], "ok")
         self.assertEqual(enable["status"], "ok")
         self.assertEqual(disable["status"], "ok")
         self.assertEqual(remove["status"], "ok")
@@ -639,6 +683,16 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_check",
             structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes disable"},
         )
+        live_format_extra = execute_command(
+            runner,
+            "external_models_live_format_check",
+            structured_args={
+                "route_id": "wbp-deepseek-v3",
+                "prompt": "API_ONLY_DEEPSEEK_READY",
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+                "base_url": "https://browser.invalid/v1",
+            },
+        )
         enable_extra = execute_command(
             runner,
             "external_models_routes_enable",
@@ -670,6 +724,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("missing required args", missing["human_message"])
         self.assertEqual(extra["status"], "integration_failure")
         self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(live_format_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", live_format_extra["human_message"])
         self.assertEqual(enable_extra["status"], "integration_failure")
         self.assertIn("unsupported args", enable_extra["human_message"])
         self.assertEqual(profile_extra["status"], "integration_failure")

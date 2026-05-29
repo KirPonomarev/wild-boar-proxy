@@ -15,7 +15,11 @@ from .credentials import (
 from .lifecycle import start_synthetic_adapter, stop_synthetic_adapter, synthetic_status_payload
 from .paths import ExternalModelsPaths
 from .state import capture_local_evidence, ensure_secrets_permissions
-from .validate import check_route_provider, validate_route_provider
+from .validate import (
+    check_route_provider,
+    check_route_provider_once_no_write,
+    validate_route_provider,
+)
 
 
 def run_external_models_command(args: Any) -> dict[str, Any]:
@@ -99,6 +103,20 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                 human_message="External-models route smoke check captured provider evidence without claiming runtime readiness.",
                 machine_error_code=errors.OK,
                 changed_files=changed_files,
+                data=data,
+            )
+        if args.external_models_command == "live-format-check":
+            data = check_route_provider_once_no_write(
+                paths,
+                args.route,
+                user_prompt=args.prompt,
+                expected_text=args.expected_text,
+            )
+            return contracts.build_external_models_payload(
+                ok=True,
+                human_message="External-models route live format check captured one provider response without writing state or evidence.",
+                machine_error_code=errors.OK,
+                changed_files=[],
                 data=data,
             )
         if args.external_models_command == "routes":

@@ -482,3 +482,75 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
         }
         error.data.update(transform_metadata)
         raise error from exc
+
+
+def check_route_provider_once_no_write(
+    paths: ExternalModelsPaths,
+    route_id: str,
+    *,
+    user_prompt: str,
+    expected_text: str,
+) -> dict[str, Any]:
+    route = find_route(load_routes_file(paths.routes_file), route_id)
+    transforms.validate_route_transform_profiles(route)
+    transform_metadata = transforms.route_transform_metadata(route)
+    if str(route["cost_class"]) == "paid_direct":
+        raise RuntimeErrorInfo(
+            "Paid route live format check is blocked by policy.",
+            machine_error_code=errors.PAID_ROUTE_BLOCKED,
+            operator_action="user_action",
+        )
+    _require_enabled_route(route, action_label="live-format-check")
+    headers = _provider_headers(route, paths)
+    request_payload, request_metadata = transforms.build_check_request(
+        route, user_prompt=user_prompt
+    )
+    response = request_json(
+        url=_completion_url(route),
+        method="POST",
+        headers=headers,
+        payload=request_payload,
+    )
+    if response.status_code in (401, 403):
+        raise RuntimeErrorInfo(
+            "Provider rejected route credentials.",
+            machine_error_code=errors.PROVIDER_AUTH_FAILED,
+            operator_action="user_action",
+        )
+    if response.status_code != 200:
+        raise RuntimeErrorInfo(
+            "Provider returned an invalid live-format response.",
+            machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
+            operator_action="retry",
+        )
+    response_text, response_metadata = transforms.extract_check_response(route, response.payload)
+    return {
+        "check_kind": "api_only_live_route_format",
+        "network_dependent": True,
+        "verification_scope": "route_provider_only_no_write",
+        "route_state": "live_response_observed_no_write",
+        "requested_model": route["route_id"],
+        "effective_model": route["upstream_model"],
+        "provider": route["provider"],
+        "fallback_used": False,
+        "fallback_chain": [route["route_id"]],
+        "cost_class": route["cost_class"],
+        "latency_ms": response.latency_ms,
+        "request_count": 1,
+        "retry_count": 0,
+        "parallel_fanout_attempted": False,
+        "expected_text": expected_text,
+        "expected_text_observed": expected_text in response_text,
+        "response_preview_bounded": response_text[:160],
+        "response_text_length": len(response_text),
+        "changed_files": [],
+        "state_written": False,
+        "evidence_written": False,
+        "file_mutation_attempted": False,
+        "commands_started_by_provider": False,
+        "codex_history_sent": False,
+        "repo_context_sent": False,
+        **request_metadata,
+        "response_profile": response_metadata["response_profile"],
+        "response_shape": response_metadata["response_shape"],
+    }

@@ -5350,6 +5350,56 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 "provider": "openrouter",
             },
         ),
+        (
+            "external-models",
+            "live-format-check",
+            "--route",
+            "wbp-deepseek-v3",
+            "--prompt",
+            "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+            "--expected-text",
+            "API_ONLY_DEEPSEEK_READY",
+            "--json",
+        ): command_packet(
+            human_message=(
+                "External-models route live format check captured one provider response "
+                "without writing state or evidence."
+            ),
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            data={
+                "check_kind": "api_only_live_route_format",
+                "network_dependent": True,
+                "verification_scope": "route_provider_only_no_write",
+                "route_state": "live_response_observed_no_write",
+                "requested_model": "wbp-deepseek-v3",
+                "effective_model": "deepseek/deepseek-chat",
+                "provider": "openrouter",
+                "fallback_used": False,
+                "fallback_chain": ["wbp-deepseek-v3"],
+                "cost_class": "paid_or_free_limited",
+                "latency_ms": 19,
+                "request_count": 1,
+                "retry_count": 0,
+                "parallel_fanout_attempted": False,
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+                "expected_text_observed": True,
+                "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+                "response_text_length": 23,
+                "changed_files": [],
+                "state_written": False,
+                "evidence_written": False,
+                "file_mutation_attempted": False,
+                "commands_started_by_provider": False,
+                "codex_history_sent": False,
+                "repo_context_sent": False,
+                "request_shape": "messages",
+                "response_profile": "openai_chat_choices",
+                "response_shape": "choices_message",
+            },
+        ),
         ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"): command_packet(
             human_message="Codex Desktop profile contract generated without mutating config.",
             liveness="not_applicable",
@@ -7366,6 +7416,183 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
         )
         self.assertFalse(unknown["live_call_attempted"])
+
+    def test_codex_custom_api_only_deepseek_live_format_requires_owner_auth(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "API_ONLY_DEEPSEEK_OWNER_AUTH_REQUIRED",
+        )
+        self.assertTrue(packet["deepseek_selected_from_server_catalog"])
+        self.assertTrue(packet["api_line_selected_as_executor"])
+        self.assertFalse(packet["api_line_used_as_executor"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertEqual(packet["request_count"], 0)
+        self.assertNotIn(
+            (
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+                "--json",
+            ),
+            runner.calls,
+        )
+
+    def test_codex_custom_api_only_deepseek_live_format_calls_provider_once_with_owner_auth(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "API_ONLY_DEEPSEEK_LIVE_ROUTE_AND_FORMAT_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["deepseek_selected_from_server_catalog"])
+        self.assertTrue(packet["owner_authorization_phrase_present"])
+        self.assertFalse(packet["chatgpt_line_used_as_executor"])
+        self.assertTrue(packet["api_line_selected_as_executor"])
+        self.assertTrue(packet["api_line_used_as_executor"])
+        self.assertTrue(packet["provider_called"])
+        self.assertTrue(packet["live_call_attempted"])
+        self.assertTrue(packet["upstream_response_observed"])
+        self.assertTrue(packet["expected_text_observed"])
+        self.assertTrue(packet["codex_compatible_response_shape"])
+        self.assertEqual(packet["request_count"], 1)
+        self.assertEqual(packet["retry_count"], 0)
+        self.assertFalse(packet["parallel_fanout_attempted"])
+        self.assertFalse(packet["fallback_attempted"])
+        self.assertFalse(packet["file_mutation_attempted"])
+        self.assertFalse(packet["state_written"])
+        self.assertFalse(packet["evidence_written"])
+        self.assertFalse(packet["wbp_patch_applier_used"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["asar_touched"])
+        self.assertIn(
+            (
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+                "--json",
+            ),
+            runner.calls,
+        )
+        self.assertNotIn(
+            ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+            runner.calls,
+        )
+
+    def test_codex_custom_api_only_deepseek_live_format_rejects_raw_browser_fields(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "base_url": "https://browser.invalid/v1",
+                            "route_config": {"secret_ref": "BROWSER_SECRET_REF"},
+                            "CODEX_HOME": "/tmp/browser-codex-home",
+                            "api_key": "browser-key",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("base_url", packet["forbidden_fields"])
+        self.assertIn("route_config.secret_ref", packet["forbidden_fields"])
+        self.assertIn("CODEX_HOME", packet["forbidden_fields"])
+        self.assertIn("api_key", packet["forbidden_fields"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertEqual(runner.calls.count(
+            (
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+                "--json",
+            )
+        ), 0)
 
     def test_codex_custom_api_action_gate_blocks_live_api_without_owner_auth(self) -> None:
         runner = MappingRunner(live_payloads())

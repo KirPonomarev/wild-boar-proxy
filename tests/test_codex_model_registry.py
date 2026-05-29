@@ -7,6 +7,7 @@ import json
 import unittest
 
 from wild_boar_proxy.codex_model_registry import (
+    build_api_only_deepseek_live_route_format_packet,
     build_model_catalog_fidelity_packets,
     build_custom_api_compat_packet,
     build_custom_codex_execution_mode_selector_packet,
@@ -384,6 +385,100 @@ class CodexModelRegistryTests(unittest.TestCase):
             "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
         )
         self.assertFalse(unknown["live_call_attempted"])
+
+    def test_api_only_deepseek_live_route_format_packet_requires_owner_and_live_proof(self) -> None:
+        pending = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "api_only", "api_model_id": "wbp-deepseek-v3"},
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+            owner_authorized=False,
+        )
+        proven = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "api_only", "api_model_id": "wbp-deepseek-v3"},
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+            owner_authorized=True,
+            live_result={
+                "request_count": 1,
+                "retry_count": 0,
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+                "expected_text_observed": True,
+                "response_shape": "choices_message",
+                "response_profile": "openai_chat_choices",
+                "request_shape": "messages",
+                "latency_ms": 12,
+                "parallel_fanout_attempted": False,
+                "fallback_used": False,
+                "fallback_chain": ["wbp-deepseek-v3"],
+                "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+                "response_text_length": 23,
+                "state_written": False,
+                "evidence_written": False,
+                "file_mutation_attempted": False,
+                "commands_started_by_provider": False,
+                "codex_history_sent": False,
+                "repo_context_sent": False,
+            },
+        )
+
+        self.assertEqual(pending["status"], "blocked")
+        self.assertEqual(pending["machine_error_code"], "API_ONLY_DEEPSEEK_OWNER_AUTH_REQUIRED")
+        self.assertTrue(pending["api_line_selected_as_executor"])
+        self.assertFalse(pending["api_line_used_as_executor"])
+        self.assertFalse(pending["provider_called"])
+        self.assertFalse(pending["live_call_attempted"])
+
+        self.assertEqual(proven["status"], "ok")
+        self.assertEqual(
+            proven["final_status"],
+            "API_ONLY_DEEPSEEK_LIVE_ROUTE_AND_FORMAT_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(proven["deepseek_selected_from_server_catalog"])
+        self.assertTrue(proven["api_line_selected_as_executor"])
+        self.assertTrue(proven["api_line_used_as_executor"])
+        self.assertFalse(proven["chatgpt_line_used_as_executor"])
+        self.assertTrue(proven["provider_called"])
+        self.assertTrue(proven["live_call_attempted"])
+        self.assertEqual(proven["request_count"], 1)
+        self.assertEqual(proven["retry_count"], 0)
+        self.assertFalse(proven["parallel_fanout_attempted"])
+        self.assertFalse(proven["fallback_attempted"])
+        self.assertFalse(proven["file_mutation_attempted"])
+        self.assertFalse(proven["state_written"])
+        self.assertFalse(proven["evidence_written"])
+        self.assertFalse(proven["wbp_patch_applier_used"])
+        self.assertFalse(proven["original_codex_touched"])
+        self.assertFalse(proven["asar_touched"])
+        self.assertTrue(proven["codex_compatible_response_shape"])
+
+    def test_api_only_deepseek_live_route_format_rejects_browser_backend_fields(self) -> None:
+        packet = build_api_only_deepseek_live_route_format_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v3",
+                "base_url": "https://browser.invalid/v1",
+                "route_config": {"secret_ref": "BROWSER_SECRET_REF"},
+                "CODEX_HOME": "/tmp/browser-codex-home",
+                "api_key": "browser-key",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+            owner_authorized=True,
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("base_url", packet["forbidden_fields"])
+        self.assertIn("route_config", packet["forbidden_fields"])
+        self.assertIn("route_config.secret_ref", packet["forbidden_fields"])
+        self.assertIn("CODEX_HOME", packet["forbidden_fields"])
+        self.assertIn("api_key", packet["forbidden_fields"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["api_line_used_as_executor"])
 
     def test_external_route_entries_can_be_visible_but_disabled(self) -> None:
         registry = build_custom_model_registry_packet(

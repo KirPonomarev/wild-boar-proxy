@@ -51,8 +51,11 @@ from wild_boar_proxy.codex_account_selection import (
 )
 from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.codex_model_registry import (
+    API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
+    API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
+    build_api_only_deepseek_live_route_format_packet,
     build_custom_api_action_gate_packet,
     build_custom_api_compat_packet,
     build_custom_codex_execution_mode_selector_packet,
@@ -4286,6 +4289,62 @@ def build_handler(
                         operator_status,
                         api_snapshot=api_snapshot,
                         availability_lattice_packet=availability_lattice_packet,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/api-only-deepseek/live-format":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                preflight = build_api_only_deepseek_live_route_format_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+                live_result = None
+                live_error = None
+                if (
+                    preflight.get("status") != "rejected"
+                    and preflight.get("execution_mode") == "api_only"
+                    and preflight.get("deepseek_selected_from_server_catalog") is True
+                    and codex_custom_live_prompt_authorized
+                ):
+                    live_command = execute_command(
+                        action_runner,
+                        "external_models_live_format_check",
+                        structured_args={
+                            "route_id": str(payload.get("api_model_id") or ""),
+                            "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
+                            "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
+                        },
+                    )
+                    packet = live_command.get("packet")
+                    packet_data = packet.get("data") if isinstance(packet, dict) else None
+                    if live_command.get("status") == "ok" and isinstance(packet_data, dict):
+                        live_result = packet_data
+                    else:
+                        live_error = {
+                            "status": live_command.get("status"),
+                            "machine_error_code": live_command.get("machine_error_code"),
+                            "human_message": live_command.get("human_message"),
+                            "next_action": live_command.get("next_action"),
+                            "changed_files": live_command.get("changed_files") or [],
+                        }
+                self._send_json(
+                    build_api_only_deepseek_live_route_format_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        live_result=live_result,
+                        live_error=live_error,
                     )
                 )
                 return

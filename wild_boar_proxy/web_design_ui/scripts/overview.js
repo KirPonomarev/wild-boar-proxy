@@ -1731,6 +1731,55 @@ function renderCodexCustomExecutionMode(packet) {
   }
 }
 
+function renderCodexCustomDeepSeekLiveFormat(packet) {
+  const response = document.getElementById("codexCustomDeepSeekLiveFormatResponse");
+  const ok = packet?.final_status === "API_ONLY_DEEPSEEK_LIVE_ROUTE_AND_FORMAT_PROVEN_WITH_LIMITS";
+  codexCustomModelsSetChip(
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "deepseek live ok" : (packet?.status || "failed")
+  );
+  codexCustomModelsSetText(
+    "codexCustomExecutionModeState",
+    packet?.final_status || packet?.machine_error_code || "unknown"
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: packet?.execution_mode || "",
+      api_provider_id: packet?.api_provider_id || "",
+      api_model_id: packet?.api_model_id || "",
+      deepseek_selected_from_server_catalog:
+        packet?.deepseek_selected_from_server_catalog === true,
+      owner_authorization_phrase_present:
+        packet?.owner_authorization_phrase_present === true,
+      provider_called: packet?.provider_called === true,
+      live_call_attempted: packet?.live_call_attempted === true,
+      upstream_response_observed: packet?.upstream_response_observed === true,
+      expected_text_observed: packet?.expected_text_observed === true,
+      codex_compatible_response_shape:
+        packet?.codex_compatible_response_shape === true,
+      request_count: packet?.request_count ?? 0,
+      retry_count: packet?.retry_count ?? 0,
+      parallel_fanout_attempted: packet?.parallel_fanout_attempted === true,
+      fallback_attempted: packet?.fallback_attempted === true,
+      file_mutation_attempted: packet?.file_mutation_attempted === true,
+      wbp_patch_applier_used: packet?.wbp_patch_applier_used === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      asar_touched: packet?.asar_touched === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      secret_value_exposed: packet?.secret_value_exposed === true,
+      state_written: packet?.state_written === true,
+      evidence_written: packet?.evidence_written === true,
+      live_result_packet: packet?.live_result_packet || {},
+      live_error_packet: packet?.live_error_packet || {},
+      forbidden_fields: packet?.forbidden_fields || [],
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
+}
+
 async function refreshCodexCustomApiActionGate() {
   const apiNode = document.getElementById("codexCustomApiModelSelect");
   const apiModelId = apiNode ? apiNode.value : "";
@@ -1821,6 +1870,52 @@ async function runCodexCustomExecutionModeDryRun() {
     });
   } finally {
     document.getElementById("codexCustomExecutionModeDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runCodexCustomDeepSeekLiveFormat() {
+  const modeNode = document.getElementById("codexCustomExecutionModeSelect");
+  const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const executionMode = modeNode ? modeNode.value : "";
+  const apiModelId = apiNode ? apiNode.value : "";
+  document.getElementById("codexCustomDeepSeekLiveFormatAction")?.setAttribute("disabled", "disabled");
+  codexCustomModelsSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/custom/api-only-deepseek/live-format", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })
+    });
+    if (!response.ok) {
+      throw new Error(`deepseek live format http ${response.status}`);
+    }
+    renderCodexCustomDeepSeekLiveFormat(await response.json());
+  } catch (error) {
+    renderCodexCustomDeepSeekLiveFormat({
+      status: "failed",
+      machine_error_code: "API_ONLY_DEEPSEEK_LIVE_FORMAT_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE",
+      execution_mode: executionMode,
+      api_model_id: apiModelId,
+      owner_authorization_phrase_present: false,
+      provider_called: false,
+      live_call_attempted: false,
+      request_count: 0,
+      retry_count: 0,
+      parallel_fanout_attempted: false,
+      file_mutation_attempted: false,
+      wbp_patch_applier_used: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      state_written: false,
+      evidence_written: false,
+      next_action: error.message
+    });
+  } finally {
+    document.getElementById("codexCustomDeepSeekLiveFormatAction")?.removeAttribute("disabled");
   }
 }
 
@@ -11163,6 +11258,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
   document.getElementById("codexCustomSelectorIntentDryRunAction")?.addEventListener("click", () => runCodexCustomSelectorIntentDryRun());
   document.getElementById("codexCustomExecutionModeDryRunAction")?.addEventListener("click", () => runCodexCustomExecutionModeDryRun());
+  document.getElementById("codexCustomDeepSeekLiveFormatAction")?.addEventListener("click", () => runCodexCustomDeepSeekLiveFormat());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());
   document.getElementById("codexCustomAccountSmokeDryRunAction")?.addEventListener("click", () => runCodexCustomAccountSmokeDryRun());

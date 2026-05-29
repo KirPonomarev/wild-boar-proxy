@@ -23,9 +23,14 @@ CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
 DUAL_LANE_SELECTOR_ALLOWED_FIELDS = {"chatgpt_model_id", "api_model_id"}
 CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS = {"api_model_id"}
 CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
+API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_api"
 CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = "api_only"
+API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT = "API_ONLY_DEEPSEEK_READY"
+API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT = (
+    "Верни короткий ответ: API_ONLY_DEEPSEEK_READY"
+)
 CUSTOM_CODEX_EXECUTION_MODES = {
     CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
     CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
@@ -219,6 +224,16 @@ def forbidden_custom_codex_execution_mode_fields(payload: Any, prefix: str = "")
     return _forbidden_payload_fields(
         payload,
         allowed_fields=CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS,
+        prefix=prefix,
+    )
+
+
+def forbidden_api_only_deepseek_live_route_format_fields(
+    payload: Any, prefix: str = ""
+) -> list[str]:
+    return _forbidden_payload_fields(
+        payload,
+        allowed_fields=API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS,
         prefix=prefix,
     )
 
@@ -1708,6 +1723,252 @@ def build_custom_codex_execution_mode_selector_packet(
             "simultaneous_execution_proven": False,
             "codex_bottom_panel_modified": False,
             "history_persistence_proven": False,
+        },
+        "next_action": next_action,
+    }
+
+
+def _selection_targets_deepseek(api_selection: dict[str, Any] | None) -> bool:
+    if not isinstance(api_selection, dict):
+        return False
+    fields = (
+        api_selection.get("model_id"),
+        api_selection.get("provider"),
+        api_selection.get("provider_label"),
+        api_selection.get("provider_model_id"),
+        api_selection.get("display_name"),
+    )
+    return any("deepseek" in str(value or "").lower() for value in fields)
+
+
+def _live_format_result_packet(live_result: dict[str, Any] | None) -> dict[str, Any]:
+    result = dict(live_result or {})
+    request_count = int(result.get("request_count") or 0)
+    retry_count = int(result.get("retry_count") or 0)
+    expected_text_observed = result.get("expected_text_observed") is True
+    response_shape = str(result.get("response_shape") or "")
+    return {
+        "packet_kind": "api_only_deepseek_live_route_format_result",
+        "status": "ok" if request_count == 1 and expected_text_observed else "blocked",
+        "provider_called": request_count == 1,
+        "live_call_attempted": request_count == 1,
+        "upstream_response_observed": bool(result.get("response_preview_bounded")),
+        "expected_text": str(
+            result.get("expected_text") or API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT
+        ),
+        "expected_text_observed": expected_text_observed,
+        "codex_compatible_response_shape": response_shape
+        in {"choices_message", "output_text", "content_blocks"},
+        "response_shape": response_shape,
+        "response_profile": str(result.get("response_profile") or ""),
+        "request_shape": str(result.get("request_shape") or ""),
+        "latency_ms": result.get("latency_ms"),
+        "request_count": request_count,
+        "retry_count": retry_count,
+        "parallel_fanout_attempted": result.get("parallel_fanout_attempted") is True,
+        "fallback_used": result.get("fallback_used") is True,
+        "fallback_chain": [str(item) for item in result.get("fallback_chain") or []],
+        "response_preview_bounded": str(result.get("response_preview_bounded") or ""),
+        "response_text_length": int(result.get("response_text_length") or 0),
+        "state_written": result.get("state_written") is True,
+        "evidence_written": result.get("evidence_written") is True,
+        "file_mutation_attempted": result.get("file_mutation_attempted") is True,
+        "commands_started_by_provider": result.get("commands_started_by_provider") is True,
+        "codex_history_sent": result.get("codex_history_sent") is True,
+        "repo_context_sent": result.get("repo_context_sent") is True,
+    }
+
+
+def build_api_only_deepseek_live_route_format_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+    owner_authorized: bool = False,
+    live_result: dict[str, Any] | None = None,
+    live_error: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_api_only_deepseek_live_route_format_fields(payload)
+    if forbidden:
+        selector_packet = build_custom_codex_execution_mode_selector_packet(
+            payload,
+            operator_status,
+            endpoint=endpoint,
+            recommended_default_model=recommended_default_model,
+            api_snapshot=api_snapshot,
+            availability_lattice_packet=availability_lattice_packet,
+        )
+        return {
+            "schema_version": 1,
+            "packet_kind": "api_only_deepseek_live_route_and_format",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
+            "final_status": "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
+            "execution_mode": str(
+                payload.get("execution_mode") if isinstance(payload, dict) else ""
+            ),
+            "api_provider_id": "",
+            "api_model_id": (
+                str(payload.get("api_model_id") or "") if isinstance(payload, dict) else ""
+            ),
+            "allowed_browser_fields": sorted(
+                API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS
+            ),
+            "forbidden_browser_fields": sorted(CUSTOM_API_ACTION_GATE_FORBIDDEN_FIELDS),
+            "forbidden_fields": forbidden,
+            "browser_raw_backend_authority_widened": True,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "chatgpt_line_used_as_executor": False,
+            "api_line_used_as_executor": False,
+            "provider_called": False,
+            "live_call_attempted": False,
+            "request_count": 0,
+            "retry_count": 0,
+            "parallel_fanout_attempted": False,
+            "fallback_attempted": False,
+            "file_mutation_attempted": False,
+            "wbp_patch_applier_used": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "state_written": False,
+            "evidence_written": False,
+            "selector_packet": selector_packet,
+            "live_result_packet": _live_format_result_packet(None),
+            "live_error_packet": {},
+            "next_action": "remove_browser_payload_fields",
+        }
+    selector_packet = build_custom_codex_execution_mode_selector_packet(
+        payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    payload = payload if isinstance(payload, dict) else {}
+    api_model_id = str(payload.get("api_model_id") or "").strip()
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    api_index = _selector_entry_index(
+        [row for row in dict(selector.get("api_lane") or {}).get("models") or [] if isinstance(row, dict)]
+    )
+    api_selection = api_index.get(api_model_id) if api_model_id else None
+    live_error = dict(live_error or {})
+    live_result_packet = _live_format_result_packet(live_result)
+    mode_ok = selector_packet.get("status") == "ok" and selector_packet.get(
+        "execution_mode"
+    ) == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY
+    deepseek_selected = _selection_targets_deepseek(api_selection)
+    live_ok = (
+        live_result_packet["provider_called"] is True
+        and live_result_packet["expected_text_observed"] is True
+        and live_result_packet["codex_compatible_response_shape"] is True
+        and live_result_packet["request_count"] == 1
+        and live_result_packet["retry_count"] == 0
+        and live_result_packet["parallel_fanout_attempted"] is False
+        and live_result_packet["file_mutation_attempted"] is False
+        and live_result_packet["state_written"] is False
+        and live_result_packet["evidence_written"] is False
+    )
+
+    status = "ok" if mode_ok and deepseek_selected and owner_authorized and live_ok else "blocked"
+    machine_error_code = "OK"
+    next_action = "none"
+    if selector_packet.get("execution_mode") != CUSTOM_CODEX_EXECUTION_MODE_API_ONLY:
+        machine_error_code = "API_ONLY_DEEPSEEK_REQUIRES_API_ONLY_MODE"
+        next_action = "choose_api_only_execution_mode"
+    elif selector_packet.get("status") != "ok":
+        machine_error_code = str(selector_packet.get("machine_error_code") or "API_ONLY_SELECTION_BLOCKED")
+        next_action = str(selector_packet.get("next_action") or "fix_api_only_selection")
+    elif not deepseek_selected:
+        machine_error_code = "API_ONLY_DEEPSEEK_MODEL_REQUIRED"
+        next_action = "choose_server_issued_deepseek_model"
+    elif not owner_authorized:
+        machine_error_code = "API_ONLY_DEEPSEEK_OWNER_AUTH_REQUIRED"
+        next_action = "provide_exact_owner_authorization_phrase"
+    elif live_error:
+        machine_error_code = str(
+            live_error.get("machine_error_code")
+            or "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE"
+        )
+        next_action = str(live_error.get("next_action") or "fix_deepseek_route_or_format")
+    elif not live_ok:
+        machine_error_code = "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE"
+        next_action = "fix_deepseek_route_or_response_format"
+
+    final_status = (
+        "API_ONLY_DEEPSEEK_LIVE_ROUTE_AND_FORMAT_PROVEN_WITH_LIMITS"
+        if status == "ok"
+        else "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE"
+        if status == "blocked"
+        else machine_error_code
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "api_only_deepseek_live_route_and_format",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "execution_mode": str(selector_packet.get("execution_mode") or ""),
+        "api_provider_id": str((api_selection or {}).get("provider") or ""),
+        "api_model_id": api_model_id,
+        "api_model_family": "deepseek" if deepseek_selected else "unknown",
+        "server_issued_catalog_used": selector_packet.get("server_issued_catalog_used") is True,
+        "deepseek_selected_from_server_catalog": deepseek_selected
+        and (api_selection or {}).get("server_issued") is True,
+        "owner_authorization_phrase_present": owner_authorized,
+        "allowed_browser_fields": sorted(API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS),
+        "forbidden_browser_fields": selector_packet.get("forbidden_browser_fields") or [],
+        "forbidden_fields": selector_packet.get("forbidden_fields") or [],
+        "browser_raw_backend_authority_widened": selector_packet.get(
+            "browser_raw_backend_authority_widened"
+        )
+        is True,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "chatgpt_line_used_as_executor": False,
+        "api_line_selected_as_executor": mode_ok,
+        "api_line_used_as_executor": live_ok,
+        "provider_called": live_result_packet["provider_called"],
+        "live_call_attempted": live_result_packet["live_call_attempted"],
+        "upstream_response_observed": live_result_packet["upstream_response_observed"],
+        "expected_text_observed": live_result_packet["expected_text_observed"],
+        "codex_compatible_response_shape": live_result_packet[
+            "codex_compatible_response_shape"
+        ],
+        "request_count": live_result_packet["request_count"],
+        "retry_count": live_result_packet["retry_count"],
+        "parallel_fanout_attempted": live_result_packet["parallel_fanout_attempted"],
+        "fallback_attempted": live_result_packet["fallback_used"],
+        "file_mutation_attempted": live_result_packet["file_mutation_attempted"],
+        "wbp_patch_applier_used": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "commands_started_by_provider": live_result_packet["commands_started_by_provider"],
+        "codex_history_sent": live_result_packet["codex_history_sent"],
+        "repo_context_sent": live_result_packet["repo_context_sent"],
+        "state_written": live_result_packet["state_written"],
+        "evidence_written": live_result_packet["evidence_written"],
+        "selector_packet": selector_packet,
+        "live_result_packet": live_result_packet,
+        "live_error_packet": live_error,
+        "non_claims": {
+            "deepseek_code_mutation_proven": False,
+            "file_mutation_proven": False,
+            "chatgpt_api_simultaneous_execution_proven": False,
+            "history_persistence_proven": False,
+            "model_quality_or_speed_proven": False,
         },
         "next_action": next_action,
     }

@@ -279,6 +279,13 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_check = external_models_subparsers.add_parser("check")
     external_models_check.add_argument("--route", required=True)
     external_models_check.add_argument("--json", action="store_true", required=True)
+    external_models_live_format_check = external_models_subparsers.add_parser(
+        "live-format-check"
+    )
+    external_models_live_format_check.add_argument("--route", required=True)
+    external_models_live_format_check.add_argument("--prompt", required=True)
+    external_models_live_format_check.add_argument("--expected-text", required=True)
+    external_models_live_format_check.add_argument("--json", action="store_true", required=True)
     external_models_credentials = external_models_subparsers.add_parser("credentials")
     external_models_credentials_subparsers = external_models_credentials.add_subparsers(
         dest="credentials_command", required=True

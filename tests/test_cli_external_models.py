@@ -980,6 +980,76 @@ class ExternalModelsCliTests(unittest.TestCase):
             evidence_payload["result"]["effective_model"], "deepseek/deepseek-chat"
         )
 
+    def test_live_format_check_calls_provider_once_without_state_or_evidence_writes(self) -> None:
+        with mocked_provider(
+            smoke_payload={
+                "id": "chatcmpl-live-format-test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "API_ONLY_DEEPSEEK_READY",
+                        },
+                    }
+                ],
+            },
+        ) as (base_url, server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            state_before = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            evidence_before = sorted((self.external_dir / "evidence").glob("*"))
+            result = self.run_cli(
+                "external-models",
+                "live-format-check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+            request_payload = server.last_request_payload  # type: ignore[attr-defined]
+            state_after = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            evidence_after = sorted((self.external_dir / "evidence").glob("*"))
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["data"]["check_kind"], "api_only_live_route_format")
+        self.assertEqual(payload["data"]["verification_scope"], "route_provider_only_no_write")
+        self.assertEqual(payload["data"]["request_count"], 1)
+        self.assertEqual(payload["data"]["retry_count"], 0)
+        self.assertFalse(payload["data"]["parallel_fanout_attempted"])
+        self.assertTrue(payload["data"]["expected_text_observed"])
+        self.assertEqual(payload["data"]["response_shape"], "choices_message")
+        self.assertFalse(payload["data"]["state_written"])
+        self.assertFalse(payload["data"]["evidence_written"])
+        self.assertFalse(payload["data"]["file_mutation_attempted"])
+        self.assertFalse(payload["data"]["commands_started_by_provider"])
+        self.assertFalse(payload["data"]["codex_history_sent"])
+        self.assertFalse(payload["data"]["repo_context_sent"])
+        self.assertEqual(request_count, 1)
+        self.assertEqual(request_payload["max_tokens"], 96)
+        self.assertEqual(state_after, state_before)
+        self.assertEqual(evidence_after, evidence_before)
+
     def test_check_transform_profile_records_request_and_response_metadata(self) -> None:
         route = sample_route(base_url="https://placeholder.invalid") | {
             "transform_profile": "openai_chat_input_text",
