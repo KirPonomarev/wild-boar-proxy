@@ -1849,6 +1849,19 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(118px, 1fr));
 }
 
+.action-row.codex-custom-api-action-row {
+  align-items: center;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.action-row.codex-custom-api-action-row .button {
+  white-space: nowrap;
+}
+
+.action-row.codex-custom-api-action-row .secondary {
+  overflow-wrap: anywhere;
+}
+
 .overview-utility-strip {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
   display: grid;
