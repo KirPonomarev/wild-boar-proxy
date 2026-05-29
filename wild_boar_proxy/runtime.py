@@ -14701,21 +14701,9 @@ def run_onboard(
     )
     before_active_backend_ids = routing_eligible_active_backend_ids(before_registry)
     after_active_backend_ids = routing_eligible_active_backend_ids(after_registry)
-    before_selected_backend_ids = sorted(
-        str(item) for item in before_state.get("selected_backend_ids", []) or []
-    )
-    after_selected_backend_ids = sorted(
-        str(item) for item in after_state.get("selected_backend_ids", []) or []
-    )
     active_routing_changed = (
         before_active_backend_ids != after_active_backend_ids
         or selected_backend_pool == "active"
-        or before_selected_backend_ids != after_selected_backend_ids
-        or (
-            selected_backend_id
-            and selected_backend_id in set(after_selected_backend_ids)
-            and selected_backend_id not in set(before_selected_backend_ids)
-        )
     )
     reserve_first_enforced = bool(selected_backend) and selected_backend_pool == "reserve"
     onboarding_result: dict[str, Any] = {

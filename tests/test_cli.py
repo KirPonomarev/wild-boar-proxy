@@ -9308,6 +9308,50 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
         self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
 
+    def test_accounts_onboard_ignores_selected_backend_state_drift_for_reserve_first_gate(
+        self,
+    ) -> None:
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-state-drift",
+                                auth_ref="/tmp/codex-detected-state-drift.json",
+                            )
+                        ]
+                    ),
+                    "WBP_TEST_ONBOARD_STATE_PATCH_JSON": json.dumps(
+                        {"selected_backend_ids": []}
+                    ),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+                "--no-sync",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected-state-drift")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
+
     def test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success(
         self,
     ) -> None:
