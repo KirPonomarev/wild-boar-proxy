@@ -434,6 +434,70 @@ def build_packets(
             session_result=session_result,
         )
         packets["native_post_login_materialization_gap_packet.json"] = gap_packet
+        packets["native_existing_auth_refresh_contract_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "existing_auth_refresh_emitted": (
+                int(
+                    gap_packet.get(
+                        "matching_auth_entries_changed_since_session_created_count", 0
+                    )
+                    or 0
+                )
+                > 0
+            ),
+            "existing_auth_refresh_adopted": bool(session_result.get("auth_materialized")),
+            "auth_inventory_added_count": int(gap_packet.get("auth_inventory_added_count", 0) or 0),
+            "matching_auth_entry_count": int(gap_packet.get("matching_auth_entry_count", 0) or 0),
+            "matching_auth_entries_changed_since_session_created_count": int(
+                gap_packet.get("matching_auth_entries_changed_since_session_created_count", 0)
+                or 0
+            ),
+            "refresh_contract_classification": (
+                "existing_auth_refresh_emitted_and_adopted"
+                if bool(session_result.get("auth_materialized"))
+                and int(
+                    gap_packet.get(
+                        "matching_auth_entries_changed_since_session_created_count", 0
+                    )
+                    or 0
+                )
+                > 0
+                else "existing_auth_refresh_not_emitted_or_not_adopted"
+            ),
+        }
+        packets["native_session_bound_refresh_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "session_bound_refresh_proven": (
+                int(
+                    gap_packet.get(
+                        "matching_auth_entries_changed_since_session_created_count", 0
+                    )
+                    or 0
+                )
+                > 0
+            ),
+            "matching_auth_entry_count": int(gap_packet.get("matching_auth_entry_count", 0) or 0),
+            "matching_auth_entries_changed_since_session_created_count": int(
+                gap_packet.get("matching_auth_entries_changed_since_session_created_count", 0)
+                or 0
+            ),
+            "auth_inventory_added_count": int(gap_packet.get("auth_inventory_added_count", 0) or 0),
+            "classification": (
+                "session_bound_refresh_observed"
+                if int(
+                    gap_packet.get(
+                        "matching_auth_entries_changed_since_session_created_count", 0
+                    )
+                    or 0
+                )
+                > 0
+                else "session_bound_refresh_unproven"
+            ),
+        }
         packets["native_materialization_repair_packet.json"] = {
             "captured_at_utc": utc_now(),
             "session_id": session_id,

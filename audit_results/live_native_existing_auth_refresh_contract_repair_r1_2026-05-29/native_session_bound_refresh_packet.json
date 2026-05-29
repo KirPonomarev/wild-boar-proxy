@@ -1,0 +1,10 @@
+{
+  "auth_inventory_added_count": 0,
+  "captured_at_utc": "2026-05-29T03:44:15.115363Z",
+  "classification": "session_bound_refresh_unproven",
+  "matching_auth_entries_changed_since_session_created_count": 0,
+  "matching_auth_entry_count": 1,
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "session_bound_refresh_proven": false,
+  "session_id": "codex-409b804206e7455d82de668e000be920"
+}

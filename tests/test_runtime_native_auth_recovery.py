@@ -290,6 +290,33 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         )
         self.assertTrue(any(item.endswith("codex-test-session.json") for item in changed))
 
+    def test_classify_onboarded_backend_selection_accepts_existing_matching_backend_for_explicit_auth_ref(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-existing-auth.json"
+        backend = {
+            "id": "backend-existing",
+            "auth_ref": auth_ref,
+            "pool": "reserve",
+            "status": "healthy",
+            "enabled": True,
+        }
+
+        added_ids, selected_backend, selection_status = (
+            runtime.classify_onboarded_backend_selection(
+                before_registry={"backends": [backend]},
+                after_registry={
+                    "backends": [dict(backend, updated_at="2026-05-29T00:00:00Z")]
+                },
+                explicit_auth_ref=auth_ref,
+            )
+        )
+
+        self.assertEqual(added_ids, [])
+        self.assertEqual(selection_status, "selected_existing_backend")
+        self.assertIsNotNone(selected_backend)
+        self.assertEqual(selected_backend["id"], "backend-existing")
+
 
 if __name__ == "__main__":
     unittest.main()

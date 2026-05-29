@@ -330,10 +330,16 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
 
         repair = packets["native_materialization_repair_packet.json"]
         taxonomy = packets["native_materialization_failure_taxonomy_packet.json"]
+        refresh_contract = packets["native_existing_auth_refresh_contract_packet.json"]
+        session_bound = packets["native_session_bound_refresh_packet.json"]
         self.assertEqual(repair["repair_result"], "materialization_not_observed")
         self.assertFalse(repair["repair_effective_for_materialization"])
         self.assertTrue(taxonomy["browser_success_without_local_materialization"])
         self.assertTrue(taxonomy["refresh_token_reused_prevents_materialization"])
+        self.assertFalse(refresh_contract["existing_auth_refresh_emitted"])
+        self.assertFalse(refresh_contract["existing_auth_refresh_adopted"])
+        self.assertFalse(session_bound["session_bound_refresh_proven"])
+        self.assertEqual(session_bound["classification"], "session_bound_refresh_unproven")
 
 
 if __name__ == "__main__":

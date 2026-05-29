@@ -9043,6 +9043,52 @@ class CliTests(unittest.TestCase):
         self.assertEqual(added[0]["pool"], "reserve")
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
 
+    def test_accounts_onboard_explicit_auth_adopts_existing_matching_backend_without_new_backend(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-existing-auth.json"
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["backends"] = [
+            self.build_backend(
+                backend_id="backend-existing",
+                auth_ref=auth_ref,
+            )
+        ]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-existing",
+                            "label": "existing-auth-refresh-observed",
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-existing")
+        self.assertEqual(onboarding["selection_status"], "selected_existing_backend")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_existing_auth_adopted_to_reserve"
+        )
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
+
     def test_accounts_onboard_passes_derived_runtime_paths_to_owner_helpers(
         self,
     ) -> None:

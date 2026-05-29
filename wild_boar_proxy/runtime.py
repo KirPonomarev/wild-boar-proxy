@@ -14551,6 +14551,10 @@ def classify_onboarded_backend_selection(
             for item in after_registry.get("backends", [])
             if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
         ]
+        if len(before_matching_backends) == 1 and len(after_matching_backends) == 1:
+            return added_backend_ids, after_matching_backends[0], "selected_existing_backend"
+        if len(before_matching_backends) > 1 and len(after_matching_backends) > 1:
+            return added_backend_ids, None, "ambiguous_existing_backend_selection"
         if not before_matching_backends and len(after_matching_backends) == 1:
             selected_backend = after_matching_backends[0]
             selected_backend_id = str(selected_backend.get("id"))
@@ -14748,7 +14752,7 @@ def run_onboard(
             exit_code=result.returncode if result.returncode != 0 else None,
         )
 
-    if selection_status != "selected_unique_backend":
+    if selection_status not in {"selected_unique_backend", "selected_existing_backend"}:
         onboarding_result["final_outcome"] = "ambiguous_new_auth_detection"
         return build_onboard_payload(
             ok=False,
@@ -14863,7 +14867,11 @@ def run_onboard(
         )
 
     onboarding_result["final_outcome"] = (
-        "explicit_auth_imported_to_reserve"
+        (
+            "explicit_existing_auth_adopted_to_reserve"
+            if selection_status == "selected_existing_backend"
+            else "explicit_auth_imported_to_reserve"
+        )
         if auth_ref
         else "reserve_only_success"
     )
