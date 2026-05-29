@@ -21,6 +21,7 @@ from wild_boar_proxy.runtime import REPO_ROOT
 
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
 DUAL_LANE_SELECTOR_ALLOWED_FIELDS = {"chatgpt_model_id", "api_model_id"}
+CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS = {"api_model_id"}
 CANONICAL_INTERNAL_MODEL_IDS = (
     "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
@@ -51,6 +52,19 @@ CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS = {
     "home",
     "codex_home",
     "runtime_config",
+}
+CUSTOM_API_ACTION_GATE_FORBIDDEN_FIELDS = {
+    *CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS,
+    "account_id",
+    "api_key",
+    "auth_ref",
+    "base_url",
+    "codex_home",
+    "code_home",
+    "codehome",
+    "codeX_HOME".lower(),
+    "route_config",
+    "secret_ref",
 }
 FORBIDDEN_INFERENCE_SURFACES = (
     "/v1/responses",
@@ -170,6 +184,26 @@ def forbidden_dual_lane_selector_fields(payload: Any, prefix: str = "") -> list[
         allowed_fields=DUAL_LANE_SELECTOR_ALLOWED_FIELDS,
         prefix=prefix,
     )
+
+
+def forbidden_custom_api_action_gate_fields(payload: Any, prefix: str = "") -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            key_lower = key_text.lower()
+            if key_lower in CUSTOM_API_ACTION_GATE_FORBIDDEN_FIELDS:
+                findings.append(key_path)
+            elif prefix or key_text not in CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS:
+                findings.append(key_path)
+            findings.extend(forbidden_custom_api_action_gate_fields(value, prefix=key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                forbidden_custom_api_action_gate_fields(value, prefix=f"{prefix}[{index}]")
+            )
+    return findings
 
 
 def _models_payload(operator_status: dict[str, Any] | None) -> dict[str, Any]:
@@ -1424,6 +1458,234 @@ def build_dual_lane_selection_intent_packet(
             "dual_lane_selection_is_simultaneous_execution": False,
         },
         "next_action": "none" if chatgpt_selected and api_selected else "choose_visible_lane_models",
+    }
+
+
+def _api_route_row_by_model_id(api_snapshot: dict[str, Any] | None, model_id: str) -> dict[str, Any]:
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else []
+    if not isinstance(routes, list):
+        return {}
+    for route in routes:
+        if isinstance(route, dict) and str(route.get("route_id") or "") == model_id:
+            return dict(route)
+    return {}
+
+
+def _api_action_final_status(
+    *,
+    forbidden: list[str],
+    api_model_id: str,
+    api_selection: dict[str, Any] | None,
+    owner_authorized: bool,
+    budget_policy_present: bool,
+) -> tuple[str, str, str]:
+    if forbidden:
+        return (
+            "rejected",
+            "CUSTOM_CODEX_API_ACTION_GATE_BROWSER_AUTHORITY_REJECTED",
+            "CUSTOM_CODEX_API_ACTION_GATE_BROWSER_AUTHORITY_REJECTED",
+        )
+    if not api_model_id:
+        return (
+            "blocked",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_REQUIRED",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_REQUIRED",
+        )
+    if api_selection is None:
+        return (
+            "rejected",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_NOT_SERVER_ISSUED",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_NOT_SERVER_ISSUED",
+        )
+    if api_selection.get("selection_enabled") is not True:
+        return (
+            "blocked",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_NOT_SELECTABLE",
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_NOT_SELECTABLE",
+        )
+    if not owner_authorized:
+        return (
+            "blocked",
+            "CUSTOM_CODEX_API_ACTION_GATE_OWNER_AUTH_REQUIRED",
+            "CUSTOM_CODEX_API_ACTION_GATE_OWNER_AUTH_REQUIRED",
+        )
+    if not budget_policy_present:
+        return (
+            "blocked",
+            "CUSTOM_CODEX_API_ACTION_GATE_BUDGET_POLICY_REQUIRED",
+            "CUSTOM_CODEX_API_ACTION_GATE_BUDGET_POLICY_REQUIRED",
+        )
+    return (
+        "blocked",
+        "CUSTOM_CODEX_API_ACTION_GATE_LIVE_REQUEST_NOT_IMPLEMENTED_IN_THIS_CONTOUR",
+        "CUSTOM_CODEX_API_ACTION_GATE_LIVE_REQUEST_NOT_ATTEMPTED",
+    )
+
+
+def build_custom_api_action_gate_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+    owner_authorized: bool = False,
+    budget_policy_present: bool = False,
+    request_limit: int = 0,
+    retry_limit: int = 0,
+    cost_ceiling: str = "",
+    credential_ref_allowed: bool = False,
+) -> dict[str, Any]:
+    forbidden = forbidden_custom_api_action_gate_fields(payload)
+    payload = payload if isinstance(payload, dict) else {}
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    api_lane = dict(selector.get("api_lane") or {})
+    api_rows = [row for row in api_lane.get("models") or [] if isinstance(row, dict)]
+    api_index = _selector_entry_index(api_rows)
+    api_model_id = str(payload.get("api_model_id") or "").strip()
+    api_selection = api_index.get(api_model_id) if api_model_id else None
+    route_row = _api_route_row_by_model_id(api_snapshot, api_model_id)
+    status, machine_error_code, final_status = _api_action_final_status(
+        forbidden=forbidden,
+        api_model_id=api_model_id,
+        api_selection=api_selection,
+        owner_authorized=owner_authorized,
+        budget_policy_present=budget_policy_present,
+    )
+    route_id = str((api_selection or {}).get("model_id") or api_model_id)
+    provider = str(
+        route_row.get("provider")
+        or (api_selection or {}).get("provider")
+        or (api_selection or {}).get("provider_label")
+        or ""
+    )
+    provider_model_id = str(
+        route_row.get("upstream_model") or (api_selection or {}).get("provider_model_id") or ""
+    )
+    cost_class = str(route_row.get("cost_class") or (api_selection or {}).get("cost_class") or "unknown")
+    credential_status = str(route_row.get("secret_status_label") or "unknown")
+    manual_api_choice_packet = {
+        "packet_kind": "manual_api_choice",
+        "status": "ok" if api_selection is not None and not forbidden else status,
+        "api_model_id": api_model_id,
+        "server_issued_model_selected": api_selection is not None,
+        "selection_enabled": (api_selection or {}).get("selection_enabled") is True,
+        "selection_intent_only": True,
+        "execution_proven": False,
+        "provider_response_observed": False,
+        "route_snapshot_counted_as_provider_response": False,
+        "route_id": route_id,
+        "provider": provider,
+        "provider_model_id": provider_model_id,
+        "cost_class": cost_class,
+        "credential_ref_status": credential_status,
+        "secret_value_exposed": False,
+        "api_selection": api_selection,
+    }
+    browser_authority_guard_packet = {
+        "packet_kind": "browser_authority_guard",
+        "status": "ok" if not forbidden else "rejected",
+        "allowed_browser_fields": sorted(CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS),
+        "forbidden_fields": forbidden,
+        "forbidden_browser_fields": sorted(CUSTOM_API_ACTION_GATE_FORBIDDEN_FIELDS),
+        "browser_raw_backend_authority_widened": bool(forbidden),
+        "browser_may_send_base_url": False,
+        "browser_may_send_api_key": False,
+        "browser_may_send_secret_ref": False,
+        "browser_may_send_route_config": False,
+        "browser_may_send_codex_home": False,
+    }
+    owner_authorization_packet = {
+        "packet_kind": "owner_authorization",
+        "status": "ok" if owner_authorized else "blocked",
+        "owner_live_authorization_present": owner_authorized,
+        "credential_ref_permission_present": credential_ref_allowed,
+        "raw_secret_authorized": False,
+        "raw_secret_recorded": False,
+    }
+    budget_policy_packet = {
+        "packet_kind": "budget_policy",
+        "status": "ok" if budget_policy_present else "blocked",
+        "budget_policy_present": budget_policy_present,
+        "request_limit": int(request_limit or 0),
+        "retry_limit": int(retry_limit or 0),
+        "cost_ceiling": str(cost_ceiling or ""),
+        "cost_class": cost_class,
+        "fallback_policy": "forbidden",
+        "parallel_fanout_policy": "forbidden",
+        "paid_call_without_budget_forbidden": True,
+    }
+    live_provider_request_boundary_packet = {
+        "packet_kind": "live_provider_request_boundary",
+        "status": "blocked",
+        "live_provider_request_allowed": False,
+        "live_call_attempted": False,
+        "paid_route_used": False,
+        "upstream_response_observed": False,
+        "fallback_attempted": False,
+        "parallel_fanout_attempted": False,
+        "retry_count": 0,
+        "original_codex_touched": False,
+        "raw_secret_recorded": False,
+        "secret_value_recorded": False,
+    }
+    false_green_boundary_packet = {
+        "packet_kind": "false_green_boundary",
+        "status": "ok",
+        "selection_intent_treated_as_execution": False,
+        "route_snapshot_treated_as_provider_response": False,
+        "credential_ref_presence_treated_as_auth_works": False,
+        "dry_run_treated_as_live_call": False,
+        "one_route_treated_as_provider_family_compatibility": False,
+        "blocked_status_promoted_to_success": False,
+    }
+    summary_packet = {
+        "packet_kind": "summary",
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "api_action_visible": True,
+        "api_action_enabled": False,
+        "api_action_gate_state": status,
+        "live_provider_request_allowed": False,
+        "live_request_attempted": False,
+        "upstream_response_observed": False,
+        "manual_choice_status": manual_api_choice_packet["status"],
+        "browser_authority_status": browser_authority_guard_packet["status"],
+        "owner_authorization_status": owner_authorization_packet["status"],
+        "budget_policy_status": budget_policy_packet["status"],
+        "route_presence_counts_as_provider_response": False,
+        "selection_counts_as_execution": False,
+        "next_action": (
+            "remove_forbidden_browser_fields"
+            if forbidden
+            else "provide_owner_live_authorization_and_budget"
+            if not owner_authorized or not budget_policy_present
+            else "live_request_separate_authorized_contour"
+        ),
+    }
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_api_action_gate",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "mode_id": "codex_custom",
+        "manual_api_choice_packet": manual_api_choice_packet,
+        "browser_authority_guard_packet": browser_authority_guard_packet,
+        "owner_authorization_packet": owner_authorization_packet,
+        "budget_policy_packet": budget_policy_packet,
+        "live_provider_request_boundary_packet": live_provider_request_boundary_packet,
+        "false_green_boundary_packet": false_green_boundary_packet,
+        "summary_packet": summary_packet,
     }
 
 

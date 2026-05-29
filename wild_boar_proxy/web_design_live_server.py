@@ -53,6 +53,7 @@ from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.codex_model_registry import (
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
+    build_custom_api_action_gate_packet,
     build_custom_api_compat_packet,
     build_dual_lane_model_selection_ui_packet,
     build_dual_lane_selection_intent_packet,
@@ -3874,6 +3875,32 @@ def build_handler(
                     build_custom_api_compat_packet(operator_surface_session.status_payload())
                 )
                 return
+            if parsed.path == "/api/codex/custom/api-action-gate":
+                def build_api_action_gate_snapshot() -> dict[str, Any]:
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    operator_status = operator_surface_session.status_payload()
+                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                    return build_custom_api_action_gate_packet(
+                        {},
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                    )
+
+                self._send_json(
+                    _run_custom_codex_readonly_snapshot(
+                        endpoint=parsed.path,
+                        timeout_scope="custom_api_action_gate_readonly_snapshot",
+                        build_snapshot=build_api_action_gate_snapshot,
+                    )
+                )
+                return
             if parsed.path == "/api/codex/custom/accounts":
                 self._send_json(build_accounts_truth_packet(self._codex_account_commands()))
                 return
@@ -4223,6 +4250,24 @@ def build_handler(
                         operator_surface_session.status_payload(),
                         api_snapshot=api_snapshot,
                         availability_lattice_packet=availability_lattice_packet,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/api-action-gate":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                self._send_json(
+                    build_custom_api_action_gate_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
+                        owner_authorized=codex_custom_live_prompt_authorized,
                     )
                 )
                 return
@@ -6301,6 +6346,7 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
                 "display_name": _safe_short_text(model.display_name, max_length=72),
                 "provider": _safe_short_text(model.provider, max_length=32),
                 "upstream_model": _safe_short_text(model.upstream_model, max_length=72),
+                "cost_class": _safe_short_text(getattr(model, "cost_class", ""), max_length=48),
                 "enabled": model.enabled,
                 "status_code": status_code,
                 "status_label": status_label,

@@ -446,8 +446,20 @@
             <div>
               <select id="codexCustomApiModelSelect" aria-label="Codex Custom API lane model"></select>
             </div>
+            <div>API action</div>
+            <div class="action-row">
+              <button id="codexCustomApiActionGateAction" class="button disabled" type="button" disabled>
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Проверить API</span>
+              </button>
+              <span id="codexCustomApiActionGateState" class="secondary">blocked until server packet loads</span>
+            </div>
             <div>ChatGPT default</div><div id="codexCustomRecommendedModel">-</div>
             <div>API default</div><div id="codexCustomRecommendedApiModel">-</div>
+            <div>API provider</div><div id="codexCustomApiActionProvider">-</div>
+            <div>API route</div><div id="codexCustomApiActionRoute">-</div>
+            <div>API cost</div><div id="codexCustomApiActionCost">-</div>
+            <div>API credential</div><div id="codexCustomApiActionCredential">-</div>
             <div>Compatibility</div><div id="codexCustomApiCompat">not checked</div>
             <div>Execution boundary</div><div id="codexCustomExecutionBoundary">ChatGPT lane only in this contour</div>
             <div>Claim gate</div><div id="codexCustomModelsClaimGate">not loaded</div>
@@ -507,6 +519,7 @@
             </div>
           </div>
           <p class="secondary model-selector-boundary-note">Selecting both lanes does not prove simultaneous execution semantics. Session and role-slot behavior remain separate contours.</p>
+          <pre id="codexCustomApiActionGateResponse" class="mono-value">api action gate packet pending</pre>
           <pre id="codexCustomSelectorIntentResponse" class="mono-value">selector intent packet pending</pre>
           <pre id="codexCustomModelDryRunResponse" class="mono-value">model dry-run packet pending</pre>
         </section>

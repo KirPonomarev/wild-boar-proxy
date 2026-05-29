@@ -7247,6 +7247,133 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertIn("profile_path", rejected["forbidden_fields"])
         self.assertIn("api_key", rejected["forbidden_fields"])
 
+    def test_codex_custom_api_action_gate_blocks_live_api_without_owner_auth(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-action-gate",
+                        {"api_model_id": "wbp-deepseek-v3"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_API_ACTION_GATE_OWNER_AUTH_REQUIRED",
+        )
+        self.assertEqual(packet["manual_api_choice_packet"]["status"], "ok")
+        self.assertEqual(packet["manual_api_choice_packet"]["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(packet["manual_api_choice_packet"]["provider"], "openrouter")
+        self.assertEqual(packet["manual_api_choice_packet"]["cost_class"], "paid_or_free_limited")
+        self.assertTrue(packet["manual_api_choice_packet"]["selection_intent_only"])
+        self.assertFalse(packet["manual_api_choice_packet"]["execution_proven"])
+        self.assertFalse(packet["manual_api_choice_packet"]["provider_response_observed"])
+        self.assertFalse(
+            packet["manual_api_choice_packet"]["route_snapshot_counted_as_provider_response"]
+        )
+        self.assertEqual(packet["owner_authorization_packet"]["status"], "blocked")
+        self.assertFalse(packet["owner_authorization_packet"]["owner_live_authorization_present"])
+        self.assertEqual(packet["budget_policy_packet"]["status"], "blocked")
+        boundary = packet["live_provider_request_boundary_packet"]
+        self.assertFalse(boundary["live_provider_request_allowed"])
+        self.assertFalse(boundary["live_call_attempted"])
+        self.assertFalse(boundary["paid_route_used"])
+        self.assertFalse(boundary["upstream_response_observed"])
+        self.assertFalse(boundary["fallback_attempted"])
+        self.assertFalse(boundary["parallel_fanout_attempted"])
+        self.assertFalse(boundary["original_codex_touched"])
+        self.assertFalse(boundary["raw_secret_recorded"])
+        self.assertFalse(boundary["secret_value_recorded"])
+        self.assertNotIn(
+            ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+            runner.calls,
+        )
+
+    def test_codex_custom_api_action_gate_rejects_raw_browser_backend_fields(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-action-gate",
+                        {
+                            "api_model_id": "wbp-deepseek-v3",
+                            "base_url": "https://browser.invalid/v1",
+                            "route_config": {"secret_ref": "BROWSER_SECRET_REF"},
+                            "CODEX_HOME": "/tmp/browser-codex-home",
+                            "api_key": "browser-key",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_API_ACTION_GATE_BROWSER_AUTHORITY_REJECTED",
+        )
+        guard = packet["browser_authority_guard_packet"]
+        self.assertEqual(guard["status"], "rejected")
+        self.assertTrue(guard["browser_raw_backend_authority_widened"])
+        self.assertIn("base_url", guard["forbidden_fields"])
+        self.assertIn("route_config", guard["forbidden_fields"])
+        self.assertIn("route_config.secret_ref", guard["forbidden_fields"])
+        self.assertIn("CODEX_HOME", guard["forbidden_fields"])
+        self.assertIn("api_key", guard["forbidden_fields"])
+        self.assertFalse(packet["live_provider_request_boundary_packet"]["live_call_attempted"])
+
+    def test_codex_custom_api_action_gate_owner_auth_still_requires_budget(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(live_payloads()),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-action-gate",
+                        {"api_model_id": "wbp-deepseek-v3"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_API_ACTION_GATE_BUDGET_POLICY_REQUIRED",
+        )
+        self.assertEqual(packet["owner_authorization_packet"]["status"], "ok")
+        self.assertTrue(packet["owner_authorization_packet"]["owner_live_authorization_present"])
+        self.assertEqual(packet["budget_policy_packet"]["status"], "blocked")
+        self.assertFalse(
+            packet["live_provider_request_boundary_packet"]["live_provider_request_allowed"]
+        )
+
 
 class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
     def test_codex_custom_account_selection_endpoints_are_readonly_and_no_inference(self) -> None:

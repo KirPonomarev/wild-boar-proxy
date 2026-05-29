@@ -1626,6 +1626,117 @@ function renderCodexCustomModelDryRun(packet) {
   }
 }
 
+function renderCodexCustomApiActionGate(packet) {
+  const response = document.getElementById("codexCustomApiActionGateResponse");
+  const button = document.getElementById("codexCustomApiActionGateAction");
+  const summary = packet?.summary_packet || {};
+  const choice = packet?.manual_api_choice_packet || {};
+  const budget = packet?.budget_policy_packet || {};
+  const owner = packet?.owner_authorization_packet || {};
+  const boundary = packet?.live_provider_request_boundary_packet || {};
+  const enabled = summary?.live_provider_request_allowed === true;
+  if (button) {
+    button.disabled = !enabled;
+    button.classList.toggle("disabled", !enabled);
+    button.title = enabled
+      ? "Server gate admitted one bounded API check."
+      : (summary?.final_status || packet?.final_status || "API action blocked by server packet.");
+  }
+  codexCustomModelsSetText(
+    "codexCustomApiActionGateState",
+    summary?.final_status || packet?.final_status || packet?.machine_error_code || "unknown"
+  );
+  codexCustomModelsSetText("codexCustomApiActionProvider", choice?.provider || "-");
+  codexCustomModelsSetText("codexCustomApiActionRoute", choice?.route_id || "-");
+  codexCustomModelsSetText("codexCustomApiActionCost", choice?.cost_class || budget?.cost_class || "-");
+  codexCustomModelsSetText(
+    "codexCustomApiActionCredential",
+    `${choice?.credential_ref_status || "unknown"} · secret value exposed: ${choice?.secret_value_exposed === true ? "yes" : "no"}`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      api_action_visible: summary?.api_action_visible === true,
+      api_action_enabled: summary?.api_action_enabled === true,
+      selected_api_model_id: choice?.api_model_id || "",
+      server_issued_model_selected: choice?.server_issued_model_selected === true,
+      selection_intent_only: choice?.selection_intent_only === true,
+      execution_proven: choice?.execution_proven === true,
+      provider_response_observed: choice?.provider_response_observed === true,
+      route_snapshot_counted_as_provider_response:
+        choice?.route_snapshot_counted_as_provider_response === true,
+      browser_raw_backend_authority_widened:
+        packet?.browser_authority_guard_packet?.browser_raw_backend_authority_widened === true,
+      forbidden_fields: packet?.browser_authority_guard_packet?.forbidden_fields || [],
+      owner_live_authorization_present: owner?.owner_live_authorization_present === true,
+      budget_policy_present: budget?.budget_policy_present === true,
+      live_provider_request_allowed: boundary?.live_provider_request_allowed === true,
+      live_call_attempted: boundary?.live_call_attempted === true,
+      paid_route_used: boundary?.paid_route_used === true,
+      upstream_response_observed: boundary?.upstream_response_observed === true,
+      fallback_attempted: boundary?.fallback_attempted === true,
+      parallel_fanout_attempted: boundary?.parallel_fanout_attempted === true,
+      original_codex_touched: boundary?.original_codex_touched === true,
+      raw_secret_recorded: boundary?.raw_secret_recorded === true,
+      secret_value_recorded: boundary?.secret_value_recorded === true,
+      next_action: summary?.next_action || ""
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomApiActionGate() {
+  const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const apiModelId = apiNode ? apiNode.value : "";
+  try {
+    const response = await fetch("api/codex/custom/api-action-gate", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_model_id: apiModelId })
+    });
+    if (!response.ok) {
+      throw new Error(`custom api action gate http ${response.status}`);
+    }
+    renderCodexCustomApiActionGate(await response.json());
+  } catch (error) {
+    renderCodexCustomApiActionGate({
+      status: "failed",
+      machine_error_code: "CUSTOM_API_ACTION_GATE_FETCH_FAILED",
+      final_status: "CUSTOM_CODEX_API_ACTION_GATE_FETCH_FAILED",
+      manual_api_choice_packet: {
+        api_model_id: apiModelId,
+        selection_intent_only: true,
+        execution_proven: false,
+        provider_response_observed: false,
+        route_snapshot_counted_as_provider_response: false,
+        secret_value_exposed: false,
+      },
+      browser_authority_guard_packet: { browser_raw_backend_authority_widened: false },
+      owner_authorization_packet: { owner_live_authorization_present: false },
+      budget_policy_packet: { budget_policy_present: false },
+      live_provider_request_boundary_packet: {
+        live_provider_request_allowed: false,
+        live_call_attempted: false,
+        paid_route_used: false,
+        upstream_response_observed: false,
+        fallback_attempted: false,
+        parallel_fanout_attempted: false,
+        original_codex_touched: false,
+        raw_secret_recorded: false,
+        secret_value_recorded: false,
+      },
+      summary_packet: {
+        api_action_visible: true,
+        api_action_enabled: false,
+        live_provider_request_allowed: false,
+        next_action: error.message,
+      },
+    });
+  }
+}
+
 async function refreshCodexCustomModelsPanel() {
   try {
     const [registry, compat] = await Promise.all([
@@ -1633,6 +1744,7 @@ async function refreshCodexCustomModelsPanel() {
       fetchCodexLaunchJson("api/codex/custom/api-compat")
     ]);
     renderCodexCustomModels(registry, compat);
+    await refreshCodexCustomApiActionGate();
   } catch (error) {
     codexCustomModelsSetChip("red", "failed");
     codexCustomModelsSetText("codexCustomModelsSummary", `Dual-lane selector fetch failed: ${error.message}`);
@@ -10960,6 +11072,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => refreshCodexCustomApiActionGate());
+  document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
   document.getElementById("codexCustomSelectorIntentDryRunAction")?.addEventListener("click", () => runCodexCustomSelectorIntentDryRun());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());
