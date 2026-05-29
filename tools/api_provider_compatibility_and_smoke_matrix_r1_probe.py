@@ -191,7 +191,7 @@ def _row_failure_category(create_packet: dict[str, Any]) -> str:
     code = str(create_packet.get("machine_error_code") or "")
     if code == "MODEL_NOT_SELECTABLE":
         return "route_disabled_or_not_selectable"
-    if code == "EXTERNAL_API_ROUTE_NOT_VISIBLE":
+    if code in {"EXTERNAL_API_ROUTE_NOT_VISIBLE", "HEURISTIC_ONLY_NOT_EXECUTABLE"}:
         return "catalog_runtime_route_visibility_mismatch"
     if code == "EXTERNAL_API_ROUTE_NOT_READY":
         return "route_visible_but_not_ready"
@@ -204,7 +204,7 @@ def _row_auth_status(create_packet: dict[str, Any]) -> str:
     code = str(create_packet.get("machine_error_code") or "")
     if code == "MODEL_NOT_SELECTABLE":
         return "route_visible_but_disabled"
-    if code == "EXTERNAL_API_ROUTE_NOT_VISIBLE":
+    if code in {"EXTERNAL_API_ROUTE_NOT_VISIBLE", "HEURISTIC_ONLY_NOT_EXECUTABLE"}:
         return "not_proven_by_current_route_snapshot"
     if code == "EXTERNAL_API_ROUTE_NOT_READY":
         return "route_visible_but_not_ready"
@@ -463,6 +463,11 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
                 "status": "confirmed",
             },
             {
+                "id": "no_material_overclaim_found_in_updated_evidence_scope",
+                "severity": "info",
+                "status": "confirmed",
+            },
+            {
                 "id": "live_provider_acceptance_remains_unproven_here",
                 "severity": "high",
                 "status": "open",
@@ -474,6 +479,21 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             },
             {
                 "id": "disabled_route_row_remains_blocked_and_non_selectable",
+                "severity": "medium",
+                "status": "open",
+            },
+            {
+                "id": "matrix_size_remains_narrower_than_target_current_snapshot",
+                "severity": "medium",
+                "status": "open",
+            },
+            {
+                "id": "streaming_and_tool_semantics_remain_inherited_not_row_proven",
+                "severity": "medium",
+                "status": "open",
+            },
+            {
+                "id": "provider_identity_remains_unresolved_where_snapshot_omits_provider",
                 "severity": "medium",
                 "status": "open",
             },

@@ -287,6 +287,8 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertFalse(selection["browser_authority_widened"])
         self.assertEqual(selection["allowed_browser_fields"], ["chatgpt_model_id", "api_model_id"])
         self.assertTrue(selection["selected_models_are_server_issued"])
+        self.assertFalse(selection["selection_intent_counts_as_execution_proof"])
+        self.assertFalse(selection["selection_intent_counts_as_provider_response"])
 
         binding = packets["final_dual_lane_session_binding_packet.json"]
         self.assertEqual(binding["status"], "ok")
@@ -318,7 +320,13 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertTrue(runtime["lane_specific_provenance_preserved"])
         self.assertFalse(runtime["silent_slot_substitution_observed"])
         self.assertFalse(runtime["silent_provider_substitution_observed"])
+        self.assertEqual(runtime["runner_kind"], "recording_prompt_runner")
         self.assertEqual(runtime["runner_call_count"], 3)
+        self.assertFalse(runtime["live_upstream_request_attempted"])
+        self.assertFalse(runtime["live_provider_response_proven"])
+        self.assertFalse(runtime["provider_response_proven"])
+        self.assertFalse(runtime["route_snapshot_counted_as_provider_response"])
+        self.assertFalse(runtime["synthetic_adapter_counted_as_live_listener"])
 
         workflow = packets["final_dual_lane_workflow_packet.json"]
         self.assertEqual(workflow["status"], "ok")
@@ -396,6 +404,16 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             acceptance["acceptance_provenance_binding"]["violation_count"],
             0,
         )
+        self.assertFalse(acceptance["owner_required_leftovers_counted_as_closed"])
+        self.assertEqual(
+            acceptance["owner_required_to_close_global_product_acceptance"],
+            [
+                "live_native_relaunch_history_restore",
+                "live_provider_response_smoke",
+                "live_concurrent_dual_lane_execution_or_explicit_non_claim",
+                "owner_authorized_paid_budget_policy_packet",
+            ],
+        )
         self.assertFalse(acceptance["historical_item_0_counted_as_closed"])
         self.assertTrue(acceptance["historical_item_0_inventory_closed"])
         self.assertFalse(acceptance["historical_item_0_runtime_acceptance_closed"])
@@ -455,6 +473,17 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         )
         self.assertTrue(row_index["manual_provider_model_selection_works_for_both_lanes"]["satisfied"])
         self.assertTrue(
+            row_index["manual_provider_model_selection_works_for_both_lanes"][
+                "with_limits"
+            ]
+        )
+        self.assertEqual(
+            row_index["manual_provider_model_selection_works_for_both_lanes"][
+                "limits_reason"
+            ],
+            "selection_plus_bounded_dispatch_not_live_provider_response",
+        )
+        self.assertTrue(
             row_index["both_lanes_callable_from_one_custom_codex_environment"][
                 "with_limits"
             ]
@@ -489,6 +518,11 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertFalse(non_claims["imported_prior_truth_reproven_without_reexercise"])
         self.assertFalse(non_claims["history_continuity_strengthens_integrity"])
         self.assertFalse(non_claims["integrity_strengthens_workflow_usefulness"])
+        self.assertFalse(non_claims["selection_intent_counts_as_execution_proof"])
+        self.assertFalse(non_claims["route_snapshot_counts_as_provider_response"])
+        self.assertFalse(non_claims["synthetic_adapter_counts_as_live_listener"])
+        self.assertFalse(non_claims["recording_runner_counts_as_live_upstream_response"])
+        self.assertFalse(non_claims["owner_required_leftovers_resolved_here"])
 
         false_green = packets["false_green_boundary_packet.json"]
         self.assertFalse(false_green["selection_treated_as_execution_without_runtime"])
@@ -503,6 +537,11 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             false_green["historical_item_0_final_acceptance_counted_without_runtime_proof"]
         )
         self.assertFalse(false_green["with_limits_truth_collapsed_into_unconditional_pass"])
+        self.assertFalse(false_green["selection_intent_treated_as_provider_response"])
+        self.assertFalse(false_green["route_snapshot_treated_as_provider_response"])
+        self.assertFalse(false_green["synthetic_adapter_treated_as_live_listener"])
+        self.assertFalse(false_green["recording_runner_treated_as_live_upstream_response"])
+        self.assertFalse(false_green["owner_required_leftovers_treated_as_closed"])
 
         provenance = packets["final_dual_lane_provenance_matrix.json"]
         self.assertEqual(provenance["status"], "ok")
@@ -534,9 +573,26 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
                 "counted_in_bounded_final_flow"
             ]
         )
+        self.assertTrue(provenance_rows["manual_provider_model_selection"]["with_limits"])
         self.assertFalse(
             provenance_rows["manual_provider_model_selection"][
                 "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertEqual(
+            provenance_rows["external_api_route_provider_response_boundary"][
+                "proof_level"
+            ],
+            "non_claim_guard",
+        )
+        self.assertFalse(
+            provenance_rows["external_api_route_provider_response_boundary"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["external_api_route_provider_response_boundary"][
+                "counts_as_capability_proof"
             ]
         )
         self.assertEqual(

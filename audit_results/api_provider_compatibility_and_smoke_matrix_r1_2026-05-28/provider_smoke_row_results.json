@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-05-28T12:58:56.796705Z",
+  "captured_at_utc": "2026-05-29T12:05:51.454166Z",
   "packet_kind": "provider_smoke_row_results",
   "row_count": 4,
   "rows": [
@@ -7,7 +7,7 @@
       "auth_admission_status": "not_proven_by_current_route_snapshot",
       "display_name": "WBP direct-mistral-devstral-2512",
       "failure_category": "catalog_runtime_route_visibility_mismatch",
-      "failure_code": "EXTERNAL_API_ROUTE_NOT_VISIBLE",
+      "failure_code": "HEURISTIC_ONLY_NOT_EXECUTABLE",
       "live_provider_call_attempted": false,
       "model_id": "direct-mistral-devstral-2512",
       "plain_response_smoke_passed": false,
@@ -17,9 +17,9 @@
       "provider_truth_status": "unresolved_in_current_snapshot",
       "row_pass_basis": "not_applicable_blocked_before_prompt",
       "row_result": "blocked_by_runtime_path",
-      "selection_disabled_reason_code": "",
-      "selection_enabled": true,
-      "selection_state": "selectable",
+      "selection_disabled_reason_code": "HEURISTIC_ONLY_NOT_EXECUTABLE",
+      "selection_enabled": false,
+      "selection_state": "disabled",
       "semantic_limits_inherited": {
         "consumer_streaming_accepted": false,
         "consumer_tool_semantics_accepted": false,

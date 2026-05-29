@@ -513,8 +513,25 @@ def _build_provenance_matrix(
             counted_in_bounded_final_flow=True,
             counts_as_live_runtime_proof=False,
             counts_as_capability_proof=False,
-            with_limits=False,
-            classification_reason="server_issued_ids_and_selection_intent_only",
+            with_limits=True,
+            classification_reason=(
+                "server_issued_ids_and_selection_intent_only_not_live_provider_response"
+            ),
+        ),
+        _provenance_row(
+            claim_id="external_api_route_provider_response_boundary",
+            source_packet="final_dual_lane_runtime_packet.json",
+            evidence_surface="server_api_route_snapshot_and_recording_runner",
+            proof_level="non_claim_guard",
+            freshness="current",
+            acceptance_role="provider_response_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason=(
+                "route_snapshot_and_recording_runner_do_not_prove_live_provider_response"
+            ),
         ),
         _provenance_row(
             claim_id="role_slot_session_binding",
@@ -690,6 +707,7 @@ def _build_provenance_matrix(
     claim_ids = [str(row["claim_id"]) for row in rows]
     mandatory_claims = {
         "manual_provider_model_selection",
+        "external_api_route_provider_response_boundary",
         "role_slot_session_binding",
         "dual_lane_runtime_dispatch",
         "bounded_workflow_chain",
@@ -1048,9 +1066,10 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             acceptance_state="proven_here",
             satisfied=final_selection_status_ok and final_runtime_ok,
             source="current_contour",
-            with_limits=False,
+            with_limits=True,
             evidence="final_dual_lane_selection_packet.json",
             provenance_claim_id="manual_provider_model_selection",
+            limits_reason="selection_plus_bounded_dispatch_not_live_provider_response",
         ),
         _acceptance_row(
             row_id="role_slot_binding_is_session_truth",
@@ -1176,6 +1195,8 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         is True,
         "api_selection_enabled": selection_intent.get("api_selection", {}).get("selection_enabled") is True,
         "selection_packet": selection_intent,
+        "selection_intent_counts_as_execution_proof": False,
+        "selection_intent_counts_as_provider_response": False,
     }
     packets["final_dual_lane_session_binding_packet.json"] = {
         "captured_at_utc": utc_now(),
@@ -1216,7 +1237,13 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "lane_specific_provenance_preserved": final_runtime_ok,
         "silent_slot_substitution_observed": False,
         "silent_provider_substitution_observed": False,
+        "runner_kind": "recording_prompt_runner",
         "runner_call_count": len(runner.calls),
+        "live_upstream_request_attempted": False,
+        "live_provider_response_proven": False,
+        "provider_response_proven": False,
+        "route_snapshot_counted_as_provider_response": False,
+        "synthetic_adapter_counted_as_live_listener": False,
     }
     packets["final_dual_lane_workflow_packet.json"] = {
         "captured_at_utc": utc_now(),
@@ -1297,6 +1324,13 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             "historical_item_0_reconciliation_r1"
         ),
         "global_product_acceptance_claimed": global_product_acceptance_claimed,
+        "owner_required_leftovers_counted_as_closed": False,
+        "owner_required_to_close_global_product_acceptance": [
+            "live_native_relaunch_history_restore",
+            "live_provider_response_smoke",
+            "live_concurrent_dual_lane_execution_or_explicit_non_claim",
+            "owner_authorized_paid_budget_policy_packet",
+        ],
         "rows": acceptance_rows,
     }
     packets["final_dual_lane_non_claims_packet.json"] = {
@@ -1314,6 +1348,11 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "imported_prior_truth_reproven_without_reexercise": False,
         "history_continuity_strengthens_integrity": False,
         "integrity_strengthens_workflow_usefulness": False,
+        "selection_intent_counts_as_execution_proof": False,
+        "route_snapshot_counts_as_provider_response": False,
+        "synthetic_adapter_counts_as_live_listener": False,
+        "recording_runner_counts_as_live_upstream_response": False,
+        "owner_required_leftovers_resolved_here": False,
     }
     packets["false_green_boundary_packet.json"] = {
         "captured_at_utc": utc_now(),
@@ -1329,6 +1368,11 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "historical_item_0_inventory_treated_as_runtime_acceptance": False,
         "historical_item_0_final_acceptance_counted_without_runtime_proof": False,
         "with_limits_truth_collapsed_into_unconditional_pass": False,
+        "selection_intent_treated_as_provider_response": False,
+        "route_snapshot_treated_as_provider_response": False,
+        "synthetic_adapter_treated_as_live_listener": False,
+        "recording_runner_treated_as_live_upstream_response": False,
+        "owner_required_leftovers_treated_as_closed": False,
     }
     packets["final_dual_lane_provenance_matrix.json"] = provenance_matrix
     packets["independent_audit_packet.json"] = {

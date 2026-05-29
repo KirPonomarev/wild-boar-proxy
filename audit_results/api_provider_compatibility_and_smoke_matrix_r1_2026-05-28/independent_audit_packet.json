@@ -1,6 +1,11 @@
 {
-  "captured_at_utc": "2026-05-28T13:00:00Z",
+  "captured_at_utc": "2026-05-29T12:05:51.454187Z",
   "findings": [
+    {
+      "id": "passing_rows_are_limited_to_bounded_plain_response_smoke",
+      "severity": "info",
+      "status": "confirmed"
+    },
     {
       "id": "no_material_overclaim_found_in_updated_evidence_scope",
       "severity": "info",

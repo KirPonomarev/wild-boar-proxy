@@ -1,6 +1,6 @@
 {
   "blocked_auth_or_runtime_row_treated_as_permanent_family_failure": false,
-  "captured_at_utc": "2026-05-28T12:58:56.796725Z",
+  "captured_at_utc": "2026-05-29T12:05:51.454186Z",
   "historical_seed_rows_promoted_into_current_smoke_claims": false,
   "packet_kind": "false_green_boundary",
   "row_pass_treated_as_provider_family_support": false,
