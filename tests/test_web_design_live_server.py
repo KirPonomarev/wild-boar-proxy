@@ -7247,6 +7247,126 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertIn("profile_path", rejected["forbidden_fields"])
         self.assertIn("api_key", rejected["forbidden_fields"])
 
+    def test_codex_custom_execution_mode_dry_run_binds_three_modes_without_live_claims(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                chatgpt_only = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {"execution_mode": "chatgpt_only"},
+                    )
+                )
+                chatgpt_api = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "chatgpt_api",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                api_only = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(chatgpt_only["status"], "ok")
+        self.assertEqual(chatgpt_only["allowed_browser_fields"], ["api_model_id", "execution_mode"])
+        self.assertEqual(chatgpt_only["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(chatgpt_only["api_model_id"], "")
+        self.assertEqual(chatgpt_only["coding_agent_model_slot"]["status"], "not_bound_for_mode")
+        self.assertFalse(chatgpt_only["api_line_used_as_executor"])
+        self.assertFalse(chatgpt_only["chatgpt_only_calls_api"])
+
+        self.assertEqual(chatgpt_api["status"], "ok")
+        self.assertEqual(chatgpt_api["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(chatgpt_api["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(chatgpt_api["coding_agent_model_slot"]["model_id"], "wbp-deepseek-v3")
+        self.assertTrue(chatgpt_api["dual_lane_slots_preserved"])
+
+        self.assertEqual(api_only["status"], "ok")
+        self.assertEqual(api_only["primary_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(api_only["primary_model_slot"]["model_id"], "wbp-deepseek-v3")
+        self.assertEqual(
+            api_only["coding_agent_model_slot"]["reason"],
+            "api_only_uses_primary_model_slot",
+        )
+        self.assertFalse(api_only["chatgpt_line_used_as_executor"])
+        self.assertFalse(api_only["api_only_calls_chatgpt"])
+        self.assertFalse(api_only["live_call_attempted"])
+        self.assertFalse(api_only["provider_called"])
+        self.assertFalse(api_only["original_codex_touched"])
+        self.assertFalse(api_only["asar_touched"])
+        self.assertFalse(api_only["wbp_patch_applier_used"])
+        self.assertTrue(api_only["selector_packet_truth_only"])
+
+    def test_codex_custom_execution_mode_dry_run_rejects_raw_backend_fields(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "base_url": "https://browser.invalid/v1",
+                            "route_config": {"secret_ref": "BROWSER_SECRET_REF"},
+                            "CODEX_HOME": "/tmp/browser-codex-home",
+                            "api_key": "browser-key",
+                        },
+                    )
+                )
+                unknown = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "browser-invented-model",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(
+            rejected["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("base_url", rejected["forbidden_fields"])
+        self.assertIn("route_config", rejected["forbidden_fields"])
+        self.assertIn("route_config.secret_ref", rejected["forbidden_fields"])
+        self.assertIn("CODEX_HOME", rejected["forbidden_fields"])
+        self.assertIn("api_key", rejected["forbidden_fields"])
+        self.assertTrue(rejected["browser_raw_backend_authority_widened"])
+        self.assertFalse(rejected["live_call_attempted"])
+
+        self.assertEqual(unknown["status"], "rejected")
+        self.assertEqual(
+            unknown["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
+        )
+        self.assertFalse(unknown["live_call_attempted"])
+
     def test_codex_custom_api_action_gate_blocks_live_api_without_owner_auth(self) -> None:
         runner = MappingRunner(live_payloads())
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):

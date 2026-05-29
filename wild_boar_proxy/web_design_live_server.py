@@ -55,6 +55,7 @@ from wild_boar_proxy.codex_model_registry import (
     CODEX_ACCOUNT_MODEL_LANE,
     build_custom_api_action_gate_packet,
     build_custom_api_compat_packet,
+    build_custom_codex_execution_mode_selector_packet,
     build_dual_lane_model_selection_ui_packet,
     build_dual_lane_selection_intent_packet,
     build_custom_model_dry_run_packet,
@@ -4268,6 +4269,23 @@ def build_handler(
                         api_snapshot=api_snapshot,
                         availability_lattice_packet=availability_lattice_packet,
                         owner_authorized=codex_custom_live_prompt_authorized,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/execution-mode-dry-run":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                self._send_json(
+                    build_custom_codex_execution_mode_selector_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return

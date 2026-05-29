@@ -22,6 +22,15 @@ from wild_boar_proxy.runtime import REPO_ROOT
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
 DUAL_LANE_SELECTOR_ALLOWED_FIELDS = {"chatgpt_model_id", "api_model_id"}
 CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS = {"api_model_id"}
+CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
+CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
+CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_api"
+CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = "api_only"
+CUSTOM_CODEX_EXECUTION_MODES = {
+    CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+    CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+    CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+}
 CANONICAL_INTERNAL_MODEL_IDS = (
     "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
@@ -204,6 +213,14 @@ def forbidden_custom_api_action_gate_fields(payload: Any, prefix: str = "") -> l
                 forbidden_custom_api_action_gate_fields(value, prefix=f"{prefix}[{index}]")
             )
     return findings
+
+
+def forbidden_custom_codex_execution_mode_fields(payload: Any, prefix: str = "") -> list[str]:
+    return _forbidden_payload_fields(
+        payload,
+        allowed_fields=CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS,
+        prefix=prefix,
+    )
 
 
 def _models_payload(operator_status: dict[str, Any] | None) -> dict[str, Any]:
@@ -1469,6 +1486,231 @@ def _api_route_row_by_model_id(api_snapshot: dict[str, Any] | None, model_id: st
         if isinstance(route, dict) and str(route.get("route_id") or "") == model_id:
             return dict(route)
     return {}
+
+
+def _execution_mode_slot_binding(
+    *,
+    slot_id: str,
+    selection: dict[str, Any] | None,
+    lane: str,
+    binding_source: str,
+) -> dict[str, Any]:
+    selection = dict(selection or {})
+    model_id = str(selection.get("model_id") or "")
+    return {
+        "slot_id": slot_id,
+        "status": "bound" if model_id else "not_bound",
+        "model_id": model_id,
+        "lane": lane,
+        "source": "server_catalog",
+        "binding_source": binding_source,
+        "server_issued": selection.get("server_issued") is True,
+        "selection_enabled": selection.get("selection_enabled") is True,
+        "provider": str(selection.get("provider") or ""),
+        "provider_label": str(selection.get("provider_label") or ""),
+        "provider_model_id": str(selection.get("provider_model_id") or ""),
+        "runtime_execution_proven": False,
+        "live_call_attempted": False,
+    }
+
+
+def _execution_mode_not_bound_slot(*, slot_id: str, reason: str) -> dict[str, Any]:
+    return {
+        "slot_id": slot_id,
+        "status": "not_bound_for_mode",
+        "reason": reason,
+        "model_id": "",
+        "runtime_execution_proven": False,
+        "live_call_attempted": False,
+    }
+
+
+def build_custom_codex_execution_mode_selector_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_custom_codex_execution_mode_fields(payload)
+    payload = payload if isinstance(payload, dict) else {}
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    chatgpt_lane = dict(selector.get("chatgpt_lane") or {})
+    api_lane = dict(selector.get("api_lane") or {})
+    chatgpt_rows = [row for row in chatgpt_lane.get("models") or [] if isinstance(row, dict)]
+    api_rows = [row for row in api_lane.get("models") or [] if isinstance(row, dict)]
+    chatgpt_index = _selector_entry_index(chatgpt_rows)
+    api_index = _selector_entry_index(api_rows)
+    execution_mode = str(payload.get("execution_mode") or "").strip()
+    raw_api_model_id = str(payload.get("api_model_id") or "").strip()
+    chatgpt_model_id = str(chatgpt_lane.get("default_model_id") or "").strip()
+    chatgpt_selection = chatgpt_index.get(chatgpt_model_id) if chatgpt_model_id else None
+    api_required = execution_mode in {
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+        CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+    }
+    api_model_id = raw_api_model_id if api_required else ""
+    api_selection = api_index.get(api_model_id) if api_model_id else None
+
+    status = "ok"
+    machine_error_code = "OK"
+    next_action = "none"
+    if forbidden:
+        status = "rejected"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_BROWSER_AUTHORITY_REJECTED"
+        next_action = "remove_browser_payload_fields"
+    elif execution_mode not in CUSTOM_CODEX_EXECUTION_MODES:
+        status = "rejected"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_NOT_ADMITTED"
+        next_action = "choose_admitted_execution_mode"
+    elif execution_mode in {
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+    } and not chatgpt_selection:
+        status = "blocked"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_MODEL_UNRESOLVED"
+        next_action = "restore_server_issued_chatgpt_catalog"
+    elif api_required and not api_model_id:
+        status = "blocked"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_REQUIRED"
+        next_action = "choose_server_issued_api_model"
+    elif api_model_id and api_selection is None:
+        status = "rejected"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED"
+        next_action = "choose_server_issued_api_model"
+    elif api_required and (api_selection or {}).get("selection_enabled") is not True:
+        status = "blocked"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SELECTABLE"
+        next_action = "choose_selectable_api_model"
+
+    primary_slot: dict[str, Any]
+    coding_slot: dict[str, Any]
+    chatgpt_executor_selected = False
+    api_executor_selected = False
+    dual_lane_slots_preserved = False
+    if execution_mode == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY and api_selection:
+        primary_slot = _execution_mode_slot_binding(
+            slot_id="primary_model_slot",
+            selection=api_selection,
+            lane=API_ROUTE_MODEL_LANE,
+            binding_source="execution_mode_api_only_primary",
+        )
+        coding_slot = _execution_mode_not_bound_slot(
+            slot_id="coding_agent_model_slot",
+            reason="api_only_uses_primary_model_slot",
+        )
+        api_executor_selected = True
+    elif execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API:
+        primary_slot = _execution_mode_slot_binding(
+            slot_id="primary_model_slot",
+            selection=chatgpt_selection,
+            lane=CODEX_ACCOUNT_MODEL_LANE,
+            binding_source="execution_mode_chatgpt_api_primary",
+        )
+        coding_slot = _execution_mode_slot_binding(
+            slot_id="coding_agent_model_slot",
+            selection=api_selection,
+            lane=API_ROUTE_MODEL_LANE,
+            binding_source="execution_mode_chatgpt_api_coding_agent",
+        )
+        chatgpt_executor_selected = bool(chatgpt_selection)
+        api_executor_selected = bool(api_selection)
+        dual_lane_slots_preserved = bool(chatgpt_selection and api_selection)
+    else:
+        primary_slot = _execution_mode_slot_binding(
+            slot_id="primary_model_slot",
+            selection=chatgpt_selection,
+            lane=CODEX_ACCOUNT_MODEL_LANE,
+            binding_source="execution_mode_chatgpt_only_primary",
+        )
+        coding_slot = _execution_mode_not_bound_slot(
+            slot_id="coding_agent_model_slot",
+            reason="chatgpt_only_disables_api_execution",
+        )
+        chatgpt_executor_selected = bool(chatgpt_selection)
+
+    final_status = (
+        "CUSTOM_CODEX_EXECUTION_MODE_SELECTOR_PACKET_PROVEN_NO_LIVE_EXECUTION"
+        if status == "ok"
+        else machine_error_code
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_execution_mode_selector",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "execution_mode": execution_mode,
+        "allowed_execution_modes": [
+            CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+            CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+            CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+        ],
+        "allowed_browser_fields": sorted(CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS),
+        "forbidden_browser_fields": sorted(CUSTOM_API_ACTION_GATE_FORBIDDEN_FIELDS),
+        "forbidden_fields": forbidden,
+        "browser_authority": {
+            "execution_mode": True,
+            "api_model_id": True,
+            "provider": False,
+            "route_id": False,
+            "account_id": False,
+            "base_url": False,
+            "api_key": False,
+            "secret_ref": False,
+            "auth_path": False,
+            "codex_home": False,
+            "raw_config": False,
+        },
+        "browser_raw_backend_authority_widened": bool(forbidden),
+        "server_issued_catalog_used": True,
+        "raw_backend_details_exposed": False,
+        "route_or_backend_exposed": False,
+        "secret_value_exposed": False,
+        "live_call_attempted": False,
+        "network_calls_made": False,
+        "provider_called": False,
+        "responses_called": False,
+        "chat_completions_called": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "wbp_patch_applier_used": False,
+        "runtime_execution_proven": False,
+        "selector_packet_truth_only": True,
+        "ui_text_counts_as_runtime_truth": False,
+        "deepseek_special_case": False,
+        "first_admitted_api_provider": "deepseek",
+        "api_provider_id": str((api_selection or {}).get("provider") or ""),
+        "api_model_id": api_model_id,
+        "api_model_selected_by_user": bool(raw_api_model_id),
+        "api_model_ignored_for_mode": bool(raw_api_model_id and not api_required),
+        "primary_model_slot": primary_slot,
+        "coding_agent_model_slot": coding_slot,
+        "chatgpt_executor_selected": chatgpt_executor_selected,
+        "api_executor_selected": api_executor_selected,
+        "dual_lane_slots_preserved": dual_lane_slots_preserved,
+        "chatgpt_line_used_as_executor": chatgpt_executor_selected,
+        "api_line_used_as_executor": api_executor_selected,
+        "api_only_calls_chatgpt": False,
+        "chatgpt_only_calls_api": False,
+        "non_claims": {
+            "live_deepseek_execution_proven": False,
+            "file_mutation_proven": False,
+            "simultaneous_execution_proven": False,
+            "codex_bottom_panel_modified": False,
+            "history_persistence_proven": False,
+        },
+        "next_action": next_action,
+    }
 
 
 def _api_action_final_status(

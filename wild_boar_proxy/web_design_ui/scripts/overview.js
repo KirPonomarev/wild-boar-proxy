@@ -1686,6 +1686,51 @@ function renderCodexCustomApiActionGate(packet) {
   }
 }
 
+function renderCodexCustomExecutionMode(packet) {
+  const response = document.getElementById("codexCustomExecutionModeResponse");
+  const ok = packet?.status === "ok" && packet?.live_call_attempted === false;
+  codexCustomModelsSetChip(
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "mode packet ok" : (packet?.status || "failed")
+  );
+  codexCustomModelsSetText(
+    "codexCustomExecutionModeState",
+    packet?.final_status || packet?.machine_error_code || "unknown"
+  );
+  codexCustomModelsSetText(
+    "codexCustomExecutionBoundary",
+    `${packet?.execution_mode || "unknown"} · live call ${packet?.live_call_attempted === true ? "attempted" : "not attempted"}`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: packet?.execution_mode || "",
+      api_model_id: packet?.api_model_id || "",
+      primary_model_slot: packet?.primary_model_slot || {},
+      coding_agent_model_slot: packet?.coding_agent_model_slot || {},
+      chatgpt_executor_selected: packet?.chatgpt_executor_selected === true,
+      api_executor_selected: packet?.api_executor_selected === true,
+      dual_lane_slots_preserved: packet?.dual_lane_slots_preserved === true,
+      server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      browser_raw_backend_authority_widened:
+        packet?.browser_raw_backend_authority_widened === true,
+      forbidden_fields: packet?.forbidden_fields || [],
+      live_call_attempted: packet?.live_call_attempted === true,
+      network_calls_made: packet?.network_calls_made === true,
+      provider_called: packet?.provider_called === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      asar_touched: packet?.asar_touched === true,
+      wbp_patch_applier_used: packet?.wbp_patch_applier_used === true,
+      selector_packet_truth_only: packet?.selector_packet_truth_only === true,
+      ui_text_counts_as_runtime_truth: packet?.ui_text_counts_as_runtime_truth === true,
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
+}
+
 async function refreshCodexCustomApiActionGate() {
   const apiNode = document.getElementById("codexCustomApiModelSelect");
   const apiModelId = apiNode ? apiNode.value : "";
@@ -1734,6 +1779,48 @@ async function refreshCodexCustomApiActionGate() {
         next_action: error.message,
       },
     });
+  }
+}
+
+async function runCodexCustomExecutionModeDryRun() {
+  const modeNode = document.getElementById("codexCustomExecutionModeSelect");
+  const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const executionMode = modeNode ? modeNode.value : "";
+  const apiModelId = executionMode === "chatgpt_only" ? "" : (apiNode ? apiNode.value : "");
+  document.getElementById("codexCustomExecutionModeDryRunAction")?.setAttribute("disabled", "disabled");
+  codexCustomModelsSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/custom/execution-mode-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })
+    });
+    if (!response.ok) {
+      throw new Error(`execution mode dry-run http ${response.status}`);
+    }
+    renderCodexCustomExecutionMode(await response.json());
+  } catch (error) {
+    renderCodexCustomExecutionMode({
+      status: "failed",
+      machine_error_code: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
+      final_status: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
+      execution_mode: executionMode,
+      api_model_id: apiModelId,
+      raw_backend_details_exposed: false,
+      browser_raw_backend_authority_widened: false,
+      live_call_attempted: false,
+      network_calls_made: false,
+      provider_called: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      wbp_patch_applier_used: false,
+      selector_packet_truth_only: true,
+      ui_text_counts_as_runtime_truth: false,
+      next_action: error.message
+    });
+  } finally {
+    document.getElementById("codexCustomExecutionModeDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -11075,6 +11162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => refreshCodexCustomApiActionGate());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
   document.getElementById("codexCustomSelectorIntentDryRunAction")?.addEventListener("click", () => runCodexCustomSelectorIntentDryRun());
+  document.getElementById("codexCustomExecutionModeDryRunAction")?.addEventListener("click", () => runCodexCustomExecutionModeDryRun());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());
   document.getElementById("codexCustomAccountSmokeDryRunAction")?.addEventListener("click", () => runCodexCustomAccountSmokeDryRun());
