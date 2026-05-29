@@ -390,6 +390,148 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(blocked["machine_error_code"], "SLOT_CATALOG_REVALIDATION_REQUIRED")
             self.assertIn("SLOT_CATALOG_REVALIDATION_REQUIRED", blocked["precondition_failures"])
 
+    def test_reloaded_multi_slot_session_can_revalidate_and_run_with_exact_identity(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            route_backed = payload.get("model_id") == "wbp-web-primary-openrouter"
+            model_id = str(payload.get("model_id") or "")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "runtime_model": model_id,
+                "selected_model": model_id,
+                "final_message": "ROUTE_OK" if route_backed else "PRIMARY_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manager = CodexCustomSessionManager(root)
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-web-primary-openrouter",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
+
+            reloaded = CodexCustomSessionManager(root)
+            revalidated = reloaded.revalidate_packet(
+                session_id,
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+            primary = reloaded.prompt_packet(
+                session_id,
+                {"prompt": "PRIMARY", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+            coding = reloaded.prompt_packet(
+                session_id,
+                {"prompt": "CODING", "slot_id": "coding_agent_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+
+            self.assertEqual(revalidated["status"], "ok")
+            self.assertTrue(revalidated["slot_catalog_revalidated"])
+            self.assertTrue(revalidated["provider_model_identity_persistence_proven"])
+            self.assertTrue(
+                revalidated[
+                    "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven"
+                ]
+            )
+            self.assertTrue(revalidated["same_provider_account_selection_proven"])
+            self.assertEqual(revalidated["revalidated_bound_slot_count"], 2)
+            self.assertEqual(primary["status"], "ok")
+            self.assertEqual(primary["runtime_selected_model"], "gpt-5.3-codex")
+            self.assertTrue(primary["runtime_selected_model_matches_bound_model"])
+            self.assertEqual(primary["selected_source_provenance"], "backend_proven")
+            self.assertEqual(primary["configured_provider"], "cliproxy")
+            self.assertEqual(coding["status"], "ok")
+            self.assertEqual(coding["runtime_selected_model"], "wbp-web-primary-openrouter")
+            self.assertTrue(coding["runtime_selected_model_matches_bound_model"])
+            self.assertEqual(coding["selected_source_provenance"], "route_proven")
+            self.assertEqual(coding["configured_provider"], "external_route")
+            self.assertEqual(
+                calls,
+                [
+                    {
+                        "prompt": "PRIMARY",
+                        "model_id": "gpt-5.3-codex",
+                        "slot_id": "primary_model_slot",
+                    },
+                    {
+                        "prompt": "CODING",
+                        "model_id": "wbp-web-primary-openrouter",
+                        "slot_id": "coding_agent_model_slot",
+                    },
+                ],
+            )
+
+    def test_revalidate_blocks_when_reloaded_slot_source_class_drops_from_saved_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manager = CodexCustomSessionManager(root)
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-web-primary-openrouter",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
+
+            reloaded = CodexCustomSessionManager(root)
+            blocked = reloaded.revalidate_packet(
+                session_id,
+                commands(),
+                operator_status(),
+                api_snapshot={"status": "ok", "source": "api_connections_readonly", "routes": []},
+            )
+
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertEqual(blocked["machine_error_code"], "MODEL_NOT_SERVER_ISSUED")
+            self.assertFalse(blocked["slot_catalog_revalidated"])
+            self.assertFalse(blocked["provider_model_identity_persistence_proven"])
+            self.assertFalse(
+                blocked[
+                    "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven"
+                ]
+            )
+
     def test_prompt_dry_run_hashes_prompt_and_does_not_claim_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))

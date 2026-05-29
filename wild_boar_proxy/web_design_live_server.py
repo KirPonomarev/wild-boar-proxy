@@ -4112,6 +4112,21 @@ def build_handler(
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:
                 session_id, action = custom_session
+                if action == "revalidate":
+                    operator_status = operator_surface_session.status_payload()
+                    account_commands = self._codex_account_commands()
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    self._send_json(
+                        codex_custom_sessions.revalidate_packet(
+                            session_id,
+                            account_commands,
+                            operator_status,
+                            api_snapshot=api_snapshot,
+                        )
+                    )
+                    return
                 if action == "prompt-dry-run":
                     self._send_json(
                         codex_custom_sessions.prompt_dry_run_packet(

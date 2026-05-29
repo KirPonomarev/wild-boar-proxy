@@ -7189,6 +7189,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 )
                 session_id = created["session"]["session_id"]
                 detail = json.loads(fetch(f"{base}/api/codex/custom/sessions/{session_id}"))
+                revalidated = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions/{session_id}/revalidate", {})
+                )
                 prompt = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions/{session_id}/prompt-dry-run",
@@ -7255,6 +7258,14 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertNotIn("/tmp/wbp-auth.json", json.dumps(created))
         self.assertNotIn("acct-active", json.dumps(created))
         self.assertEqual(detail["session"]["session_id"], session_id)
+        self.assertEqual(revalidated["status"], "ok")
+        self.assertTrue(revalidated["slot_catalog_revalidated"])
+        self.assertTrue(revalidated["provider_model_identity_persistence_proven"])
+        self.assertTrue(
+            revalidated[
+                "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven"
+            ]
+        )
         self.assertTrue(prompt["prompt_admitted"])
         self.assertEqual(prompt["prompt_length"], len("Reply with exactly SESSION_OK."))
         self.assertNotIn("Reply with exactly SESSION_OK.", json.dumps(prompt))

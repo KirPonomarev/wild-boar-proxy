@@ -603,6 +603,221 @@ class CodexCustomSessionManager:
             "next_action": "none",
         }
 
+    def revalidate_packet(
+        self,
+        session_id: str,
+        commands: dict[str, dict[str, Any]],
+        operator_status: dict[str, Any] | None,
+        *,
+        api_snapshot: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        if session.get("cleanup_state") == "cleaned":
+            return {
+                **self._base_packet("rejected", "SESSION_ALREADY_CLEANED"),
+                "session_id": session_id,
+                "slot_catalog_revalidated": False,
+                "revalidated_bound_slot_count": 0,
+                "next_action": "create_session",
+            }
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        selector_index = _selector_entry_index(operator_status, api_snapshot=api_snapshot)
+        slot_rows: list[dict[str, Any]] = []
+        failures: list[dict[str, Any]] = []
+        backend_identity_matches: list[bool] = []
+        for slot_id in ROLE_SLOT_IDS:
+            slot = dict(role_slots.get(slot_id) or _unbound_slot(slot_id))
+            if slot.get("binding_status") != "bound":
+                continue
+            model_id = str(slot.get("model_id") or "")
+            entry = selector_index.get(model_id)
+            if entry is None:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": "MODEL_NOT_SERVER_ISSUED",
+                    }
+                )
+                continue
+            if entry.get("selection_enabled") is not True:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": "MODEL_NOT_SELECTABLE",
+                    }
+                )
+                continue
+            selection = _selection_packet_for_slot(
+                model_id,
+                commands,
+                operator_status,
+                api_snapshot,
+            )
+            source_class_matches_saved = str(selection.get("selected_source_class") or "") == str(
+                slot.get("selected_source_class") or ""
+            )
+            lane_kind_matches_saved = str(entry.get("lane_kind") or "unknown") == str(
+                slot.get("lane_kind") or "unknown"
+            )
+            route_required = slot.get("route_provenance_required") is True
+            route_digest_matches_saved = str(selection.get("selected_route_ref") or "") == str(
+                slot.get("selected_route_ref") or ""
+            )
+            backend_digest_matches_saved = str(selection.get("selected_backend_ref") or "") == str(
+                slot.get("selected_backend_ref") or ""
+            )
+            if slot.get("selected_source_class") == "gpt_account":
+                backend_identity_matches.append(backend_digest_matches_saved)
+            slot_row = {
+                "slot_id": slot_id,
+                "model_id": model_id,
+                "persisted_lane_kind": str(slot.get("lane_kind") or "unknown"),
+                "current_lane_kind": str(entry.get("lane_kind") or "unknown"),
+                "lane_kind_matches_saved": lane_kind_matches_saved,
+                "persisted_selected_source_class": str(slot.get("selected_source_class") or "none"),
+                "current_selected_source_class": str(
+                    selection.get("selected_source_class") or "none"
+                ),
+                "source_class_matches_saved": source_class_matches_saved,
+                "persisted_selected_backend_digest": str(slot.get("selected_backend_ref") or ""),
+                "current_selected_backend_digest": str(selection.get("selected_backend_ref") or ""),
+                "backend_digest_matches_saved": backend_digest_matches_saved,
+                "persisted_selected_route_digest": str(slot.get("selected_route_ref") or ""),
+                "current_selected_route_digest": str(selection.get("selected_route_ref") or ""),
+                "route_digest_matches_saved": route_digest_matches_saved,
+                "selection_proven": selection.get("selection_proven") is True,
+                "selected_backend_server_issued": selection.get("selected_backend_server_issued")
+                is True,
+                "selected_route_server_issued": selection.get("selected_route_server_issued")
+                is True,
+                "route_provenance_required": selection.get("route_provenance_required") is True,
+                "route_provenance_proven": selection.get("route_provenance_proven") is True,
+                "machine_error_code": str(selection.get("machine_error_code") or "OK"),
+            }
+            slot_rows.append(slot_row)
+            if selection.get("selection_proven") is not True:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": str(
+                            selection.get("machine_error_code") or "SELECTION_NOT_PROVEN"
+                        ),
+                    }
+                )
+                continue
+            if not lane_kind_matches_saved:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": "LANE_KIND_MISMATCH_AFTER_RELOAD",
+                    }
+                )
+                continue
+            if not source_class_matches_saved:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": "SOURCE_CLASS_MISMATCH_AFTER_RELOAD",
+                    }
+                )
+                continue
+            if route_required:
+                if selection.get("selected_route_server_issued") is not True:
+                    failures.append(
+                        {
+                            "slot_id": slot_id,
+                            "model_id": model_id,
+                            "machine_error_code": "ROUTE_NOT_SERVER_ISSUED",
+                        }
+                    )
+                    continue
+                if selection.get("route_provenance_proven") is not True:
+                    failures.append(
+                        {
+                            "slot_id": slot_id,
+                            "model_id": model_id,
+                            "machine_error_code": "ROUTE_PROVENANCE_MISSING",
+                        }
+                    )
+                    continue
+                if not route_digest_matches_saved:
+                    failures.append(
+                        {
+                            "slot_id": slot_id,
+                            "model_id": model_id,
+                            "machine_error_code": "ROUTE_IDENTITY_MISMATCH_AFTER_RELOAD",
+                        }
+                    )
+                    continue
+            elif selection.get("selected_backend_server_issued") is not True:
+                failures.append(
+                    {
+                        "slot_id": slot_id,
+                        "model_id": model_id,
+                        "machine_error_code": "BACKEND_NOT_SERVER_ISSUED",
+                    }
+                )
+                continue
+
+        if failures:
+            return {
+                **self._base_packet("blocked", str(failures[0]["machine_error_code"])),
+                "session_id": session_id,
+                "slot_catalog_revalidated": False,
+                "revalidated_bound_slot_count": len(slot_rows),
+                "role_slot_rows": slot_rows,
+                "revalidation_failures": failures,
+                "provider_model_identity_persistence_proven": False,
+                "same_provider_account_selection_proven": False,
+                "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven": False,
+                "counts_as_runtime_dispatch_proof": False,
+                "session": self._public_session(session),
+                "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                "next_action": "repair_session_preconditions",
+            }
+
+        session["slot_catalog_revalidated"] = True
+        session["updated_at_utc"] = utc_now()
+        self._append_ledger(
+            session,
+            "slot_catalog_revalidated",
+            {
+                "revalidated_bound_slot_count": len(slot_rows),
+                "role_slot_rows": slot_rows,
+                "provider_model_identity_persistence_proven": True,
+                "same_provider_account_selection_proven": all(backend_identity_matches)
+                if backend_identity_matches
+                else False,
+                "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven": True,
+                "counts_as_runtime_dispatch_proof": False,
+            },
+        )
+        self._write_session(session)
+        return {
+            **self._base_packet("ok", "OK"),
+            "session_id": session_id,
+            "slot_catalog_revalidated": True,
+            "revalidated_bound_slot_count": len(slot_rows),
+            "role_slot_rows": slot_rows,
+            "revalidation_failures": [],
+            "provider_model_identity_persistence_proven": True,
+            "same_provider_account_selection_proven": all(backend_identity_matches)
+            if backend_identity_matches
+            else False,
+            "no_hidden_fallback_from_saved_slot_to_different_provider_model_proven": True,
+            "counts_as_runtime_dispatch_proof": False,
+            "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+            "next_action": "prompt",
+        }
+
     def prompt_dry_run_packet(self, session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         session = self._sessions.get(session_id)
         if not session:
