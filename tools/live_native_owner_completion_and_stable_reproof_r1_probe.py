@@ -209,12 +209,23 @@ def _build_post_login_materialization_gap_packet(
         and bool(matching_entries)
         and matching_changed_since_session_created == 0
     )
+    process_alive_without_materialization_write = (
+        bool(owner_email)
+        and login_status == "waiting_for_user"
+        and not bool(session_result.get("auth_materialized"))
+        and pid_alive
+        and added_count == 0
+        and bool(matching_entries)
+        and matching_changed_since_session_created == 0
+    )
     if (
         gap_detected
         and login_status == "failed"
         and failure_reason == "device_handoff_process_exited_before_auth_materialized"
     ):
         classification = "device_handoff_process_exited_before_auth_materialized"
+    elif process_alive_without_materialization_write:
+        classification = "process_alive_but_no_materialization_write"
     elif gap_detected and login_status == "waiting_for_user":
         classification = "existing_auth_ref_present_but_unmaterialized"
     elif gap_detected and login_status == "expired":
@@ -249,6 +260,9 @@ def _build_post_login_materialization_gap_packet(
         "refresh_token_reused_observed_in_recent_logs": "refresh_token_reused" in log_tail,
         "classification": classification,
         "existing_auth_ref_present_but_unmaterialized_gap_detected": gap_detected,
+        "process_alive_without_materialization_write": (
+            process_alive_without_materialization_write
+        ),
     }
 
 
@@ -318,21 +332,8 @@ def build_packets(
         repo_root, ["accounts", "login", "status", "--session", session_id, "--json"]
     )
     session_result = _login_result(session_status_command)
-    login_complete_command = (
-        _run_json_command(
-            repo_root, ["accounts", "login", "complete", "--session", session_id, "--json"]
-        )
-        if bool(session_result.get("auth_materialized"))
-        else {
-            "exit_code": 0,
-            "stdout_json": {
-                "status": "not_run",
-                "machine_error_code": "LOGIN_COMPLETE_NOT_ATTEMPTED",
-            },
-            "stderr_redacted_len": 0,
-            "captured_at_utc": utc_now(),
-            "args": [],
-        }
+    login_complete_command = _run_json_command(
+        repo_root, ["accounts", "login", "complete", "--session", session_id, "--json"]
     )
     health_after = _run_json_command(repo_root, ["healthcheck", "--json"])
     status_after = _run_json_command(repo_root, ["status", "--json"])
@@ -618,7 +619,7 @@ def build_packets(
             ),
             "recommended_closure": str(gap_packet.get("classification") or ""),
         }
-        if bool(gap_packet.get("existing_auth_ref_present_but_unmaterialized_gap_detected")):
+        if str(gap_packet.get("classification") or "") != "no_gap_detected":
             independent_audit_packet["materialization_gap_classification"] = str(
                 gap_packet.get("classification") or ""
             )

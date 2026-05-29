@@ -11878,6 +11878,7 @@ def run_accounts_login_start(
                 stderr=stderr_handle,
                 text=True,
                 env=env,
+                start_new_session=True,
             )
         session["pid"] = int(process.pid)
         write_json_atomic(session_path, session)

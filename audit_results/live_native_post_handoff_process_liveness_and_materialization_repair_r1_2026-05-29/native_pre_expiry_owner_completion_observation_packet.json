@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-29T04:18:00.759385Z",
+  "session_id": "codex-a6774fadc45044b989d88b9fda341035",
+  "owner_done_claim_received_in_thread": true,
+  "status_packet": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "login_result_status": "waiting_for_user",
+    "handoff_observed": true,
+    "session_process_alive": true,
+    "auth_materialized": false,
+    "auth_ref_present": false,
+    "failure_reason": ""
+  },
+  "complete_packet": {
+    "status": "error",
+    "machine_error_code": "LOGIN_AUTH_NOT_MATERIALIZED",
+    "login_result_status": "waiting_for_user",
+    "handoff_observed": true,
+    "session_process_alive": true,
+    "auth_materialized": false,
+    "auth_ref_present": false,
+    "failure_reason": ""
+  },
+  "classification": "process_alive_after_owner_completion_but_auth_not_materialized",
+  "claim_scope": "thread_observed_sequential_owner_surface_packets"
+}

@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-29T04:14:58.192153Z",
+  "classification": "owner_action_expired",
+  "complete_login_status": "",
+  "complete_machine_error_code": "LOGIN_SESSION_EXPIRED",
+  "direct_native_probe_http_status": 503,
+  "owner_action_completed": false,
+  "owner_action_required": false,
+  "runtime_loaded_count": 0,
+  "status_failure_reason": "",
+  "status_login_status": "expired",
+  "status_machine_error_code": "LOGIN_SESSION_EXPIRED"
+}

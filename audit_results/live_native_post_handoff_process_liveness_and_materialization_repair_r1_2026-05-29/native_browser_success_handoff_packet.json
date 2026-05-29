@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-29T04:14:58.202639Z",
+  "classification": "handoff_emitted_but_local_session_not_promoted",
+  "failure_reason": "",
+  "handoff_observed": true,
+  "local_session_transition_observed": false,
+  "login_status": "expired",
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "session_id": "codex-a6774fadc45044b989d88b9fda341035",
+  "session_process_alive": false
+}

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -397,6 +399,86 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             "device_handoff_process_exited_before_auth_materialized",
         )
         self.assertTrue(any(item.endswith("codex-test-session.json") for item in changed))
+
+    def test_run_accounts_login_start_spawns_detached_codex_device_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            stable_dir = root / "stable"
+            auth_dir = stable_dir
+            (managed_dir / "login-sessions").mkdir(parents=True, exist_ok=True)
+            (managed_dir / "bin").mkdir(parents=True, exist_ok=True)
+            stable_dir.mkdir(parents=True, exist_ok=True)
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            stable_config = stable_dir / "config.yaml"
+            stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+                encoding="utf-8",
+            )
+            fake_cli = managed_dir / "bin" / "fake-cli-proxy"
+            fake_cli.write_text("", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            paths = runtime.RuntimePaths(
+                profile_dir=profile_dir,
+                managed_dir=managed_dir,
+                stable_config=stable_config,
+                auth_file=profile_dir / "auth.json",
+                config_toml=profile_dir / "config.toml",
+                runtime_mode_file=profile_dir / "runtime-mode.txt",
+                runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+                registry_file=managed_dir / "backend-registry.json",
+                state_file=managed_dir / "supervisor-state.json",
+                managed_config_file=managed_dir / "managed-config.yaml",
+                launcher_script=profile_dir / "codex-custom-launch.sh",
+                sync_script=managed_dir / "supervisor-sync.sh",
+                accounts_bin=managed_dir / "bin" / "codex-accounts",
+                onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+                lock_file=managed_dir / "wild-boar-proxy.lock",
+                launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+                repair_target_inventory_dir=managed_dir / "stable-repair-target",
+                repair_target_reference_file=managed_dir / "approved-repair-target.json",
+                target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+                stable_runtime_generated_config_file=managed_dir
+                / "stable-runtime-config.generated.yaml",
+            )
+
+            popen_kwargs: dict[str, object] = {}
+
+            class FakeProcess:
+                pid = os.getpid() + 1000
+
+            def fake_popen(*args, **kwargs):
+                nonlocal popen_kwargs
+                popen_kwargs = kwargs
+                stdout_handle = kwargs["stdout"]
+                assert isinstance(stdout_handle, io.TextIOBase)
+                stdout_handle.write(
+                    "Codex device URL: https://auth.openai.com/codex/device\n"
+                    "Codex device code: TEST-DETACH\n"
+                )
+                stdout_handle.flush()
+                return FakeProcess()
+
+            with (
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.resolve_cli_proxy_bin",
+                    return_value=fake_cli,
+                ),
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.subprocess.Popen",
+                    side_effect=fake_popen,
+                ),
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.login_session_pid_is_running",
+                    return_value=True,
+                ),
+            ):
+                payload = runtime.run_accounts_login_start(paths, "codex", mode="device")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["device_code"], "TEST-DETACH")
+        self.assertTrue(popen_kwargs["start_new_session"])
 
 
 if __name__ == "__main__":
