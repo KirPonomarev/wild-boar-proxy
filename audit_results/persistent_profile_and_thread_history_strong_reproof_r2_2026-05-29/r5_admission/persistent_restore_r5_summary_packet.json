@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-29T05:45:37.899469Z",
+  "direct_egress_absence_claimed": false,
+  "durable_restoration_proven": false,
+  "execution_mode": "admission",
+  "final_e2e_claimed": false,
+  "final_status": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_RESTORATION_CORRELATION_BLOCKED",
+  "local_only_restoration_source_proven": false,
+  "model_availability_claimed": false,
+  "native_launch_attempted": false,
+  "native_ux_acceptance_claimed": false,
+  "owner_action_required": false,
+  "packet_kind": "persistent_restore_r5_summary",
+  "route_proof_claimed": false,
+  "status": "blocked",
+  "storage_correlation_classified": false,
+  "storage_level_thread_history_proven": false
+}

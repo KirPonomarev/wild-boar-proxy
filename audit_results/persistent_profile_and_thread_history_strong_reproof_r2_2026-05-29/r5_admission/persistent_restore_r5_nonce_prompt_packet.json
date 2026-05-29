@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-29T05:45:37.899444Z",
+  "nonce_recorded": false,
+  "nonce_sha256": "",
+  "packet_kind": "persistent_restore_r5_nonce_prompt",
+  "prompt_hash_recorded": false,
+  "prompt_sha256": "",
+  "prompt_template_shape": "WBP Persistent Custom R5 restoration correlation check. Please reply with OK and this nonce only: <nonce>",
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "status": "blocked"
+}

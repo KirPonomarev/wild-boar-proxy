@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-29T05:44:50.253334Z",
+  "classification": "helper_reload_observed_with_limits",
+  "final_status": "REAL_HISTORY_RESTORE_CLASSIFIED_WITH_LIMITS",
+  "helper_reload_counted_as_native_visible_restore": false,
+  "helper_reload_observed": true,
+  "native_visible_restore_non_claim": true,
+  "native_visible_restore_proven": false,
+  "original_codex_profile_participates_in_proof": false,
+  "packet_kind": "real_history_restore",
+  "prior_final_e2e_history_classification": "synthetic_storage_only_with_limits",
+  "prior_synthetic_storage_limiter_reduced": true,
+  "profile_state_preserved": true,
+  "raw_prompt_recorded": false,
+  "raw_thread_content_recorded": false,
+  "role_slot_persistence_counted_as_thread_history": false,
+  "stable_profile_identity_counted_as_thread_restore": false,
+  "stable_profile_identity_observed": true,
+  "status": "ok",
+  "storage_file_presence_counted_as_restore": false,
+  "storage_state_observed": true,
+  "thread_history_preservation_r2_status": "ok"
+}

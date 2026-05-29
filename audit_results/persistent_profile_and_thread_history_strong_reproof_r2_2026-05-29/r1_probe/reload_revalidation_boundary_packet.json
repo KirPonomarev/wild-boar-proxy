@@ -1,0 +1,15 @@
+{
+  "blocked_machine_error_code": "SLOT_CATALOG_REVALIDATION_REQUIRED",
+  "captured_at_utc": "2026-05-29T05:44:58.156316Z",
+  "counts_as_runtime_dispatch_proof": false,
+  "counts_as_slot_catalog_revalidation_proof": false,
+  "packet_kind": "reload_revalidation_boundary",
+  "precondition_failures": [
+    "SLOT_CATALOG_REVALIDATION_REQUIRED"
+  ],
+  "prompt_admitted_without_revalidation": false,
+  "reloaded_role_slots_present": true,
+  "slot_catalog_revalidated_after_reload": false,
+  "slot_catalog_revalidated_before_reload": true,
+  "status": "ok"
+}

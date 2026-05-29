@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-29T05:44:58.156327Z",
+  "continuity_scope": "profile_identity_only",
+  "live_native_relaunch_attempted": false,
+  "owner_visible_thread_continuity_proven": false,
+  "packet_kind": "relaunch_continuity",
+  "profile_root_exists_after_relaunch": true,
+  "profile_root_exists_before": true,
+  "same_active_execution_path_proven": false,
+  "same_persistent_profile_identity": true,
+  "same_profile_identity_classified_across_relaunch": true,
+  "same_provider_account_selection_proven": false,
+  "status": "ok",
+  "storage_level_thread_history_proven": false
+}

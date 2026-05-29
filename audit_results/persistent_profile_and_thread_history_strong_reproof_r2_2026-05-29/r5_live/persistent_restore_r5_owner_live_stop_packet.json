@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-29T05:47:05.176460Z",
+  "native_launch_attempted": false,
+  "next_action_after_marker": "run execution-mode=first-launch",
+  "packet_kind": "persistent_restore_r5_owner_live_stop",
+  "reason_class": "R5_OWNER_LIVE_READY_REQUIRED",
+  "required_owner_marker": "owner_live_ready_now=true",
+  "status": "blocked",
+  "stop_required_before_native_launch": true,
+  "storage_proof_may_remain_unproven": true,
+  "target_window_rule": "type only into the newly launched target Persistent Custom window"
+}
