@@ -1,0 +1,20 @@
+{
+  "budget_policy_present": false,
+  "captured_at_utc": "2026-05-29T12:25:31.483394Z",
+  "cost_ceiling": "",
+  "cost_class": "unknown",
+  "failed_checks": [
+    "budget_policy_missing",
+    "request_limit_must_be_one",
+    "cost_ceiling_missing"
+  ],
+  "fallback_policy": "forbidden",
+  "packet_kind": "budget_policy",
+  "paid_call_without_budget_forbidden": true,
+  "parallel_fanout_policy": "forbidden",
+  "quota_rate_limit_handling": "classify_without_unbounded_retry",
+  "request_limit": 0,
+  "retry_limit": 0,
+  "status": "blocked",
+  "timeout_5xx_handling": "classify_without_fallback_storm"
+}

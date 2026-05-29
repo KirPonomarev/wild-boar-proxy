@@ -1,0 +1,15 @@
+{
+  "auto_routing_used": false,
+  "browser_raw_backend_authority_widened": false,
+  "captured_at_utc": "2026-05-29T12:25:31.483400Z",
+  "cross_lane_fallback_forbidden": true,
+  "forbidden_browser_backend_fields": [],
+  "manual_choice_proven": false,
+  "manual_choice_required": true,
+  "packet_kind": "manual_model_choice",
+  "provider_id": "",
+  "route_id": "",
+  "selection_intent_counts_as_execution": false,
+  "server_issued_id": "",
+  "status": "blocked"
+}
