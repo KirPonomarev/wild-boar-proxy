@@ -1,0 +1,7 @@
+{
+  "auth_materialization_without_runtime_load": false,
+  "captured_at_utc": "2026-05-29T02:57:50.745726Z",
+  "guardrail_status": "held",
+  "owner_completion_without_auth_materialization": false,
+  "runtime_load_without_native_200": false
+}
