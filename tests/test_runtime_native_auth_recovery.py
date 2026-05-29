@@ -317,6 +317,87 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertIsNotNone(selected_backend)
         self.assertEqual(selected_backend["id"], "backend-existing")
 
+    def test_refresh_codex_login_session_marks_failed_when_handoff_process_exits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            auth_dir = root / "auth-dir"
+            login_sessions_dir = managed_dir / "login-sessions"
+            login_sessions_dir.mkdir(parents=True, exist_ok=True)
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            paths = runtime.RuntimePaths(
+                profile_dir=profile_dir,
+                managed_dir=managed_dir,
+                stable_config=root / "stable" / "config.yaml",
+                auth_file=profile_dir / "auth.json",
+                config_toml=profile_dir / "config.toml",
+                runtime_mode_file=profile_dir / "runtime-mode.txt",
+                runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+                registry_file=managed_dir / "backend-registry.json",
+                state_file=managed_dir / "supervisor-state.json",
+                managed_config_file=managed_dir / "managed-config.yaml",
+                launcher_script=profile_dir / "codex-custom-launch.sh",
+                sync_script=managed_dir / "supervisor-sync.sh",
+                accounts_bin=managed_dir / "bin" / "codex-accounts",
+                onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+                lock_file=managed_dir / "wild-boar-proxy.lock",
+                launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+                repair_target_inventory_dir=managed_dir / "stable-repair-target",
+                repair_target_reference_file=managed_dir / "approved-repair-target.json",
+                target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+                stable_runtime_generated_config_file=managed_dir
+                / "stable-runtime-config.generated.yaml",
+            )
+            session_path = runtime.sandbox_login_session_path(paths, "codex-test-session")
+            stdout_path = runtime.codex_login_session_stdout_path(paths, "codex-test-session")
+            stderr_path = runtime.codex_login_session_stderr_path(paths, "codex-test-session")
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
+            stdout_path.write_text(
+                "Codex device URL: https://auth.openai.com/codex/device\n"
+                "Codex device code: TEST-12345\n",
+                encoding="utf-8",
+            )
+            stderr_path.write_text("", encoding="utf-8")
+            session = {
+                "schema_version": 1,
+                "login_session_id": "codex-test-session",
+                "provider": "codex",
+                "mode": "device",
+                "pid": 999999,
+                "created_at": "2026-05-29T02:44:09+00:00",
+                "expires_at": "2026-06-29T02:49:09+00:00",
+                "state": "waiting_for_user",
+                "device_url": "https://auth.openai.com/codex/device",
+                "device_code": "TEST-12345",
+                "device_code_present": True,
+                "auth_materialized": False,
+                "auth_ref": "",
+                "auth_inventory_before": [],
+                "auth_inventory_before_metadata": {},
+                "auth_inventory_before_digest": "fixture",
+                "auth_inventory_source": {"source": "auth-dir"},
+                "sandbox_scope": True,
+                "inventory_scope": "admitted_owner_login",
+                "used": False,
+            }
+            session_path.write_text(json.dumps(session), encoding="utf-8")
+
+            with unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_auth_inventory_dir",
+                return_value=(auth_dir, {"source": "auth-dir"}),
+            ):
+                refreshed, changed = runtime.refresh_codex_login_session(
+                    paths, "codex-test-session"
+                )
+
+        self.assertEqual(refreshed["state"], "failed")
+        self.assertEqual(
+            refreshed["failure_reason"],
+            "device_handoff_process_exited_before_auth_materialized",
+        )
+        self.assertTrue(any(item.endswith("codex-test-session.json") for item in changed))
+
 
 if __name__ == "__main__":
     unittest.main()

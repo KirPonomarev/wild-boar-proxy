@@ -16,11 +16,15 @@ from tools import live_native_owner_completion_and_stable_reproof_r1_probe as pr
 def _command(machine_error_code: str, login_status: str = "", **extra: object) -> dict[str, object]:
     payload: dict[str, object] = {"machine_error_code": machine_error_code}
     if login_status:
-        payload["login_result"] = {
+        login_result = {
             "status": login_status,
             "auth_materialized": login_status in {"auth_materialized", "completed"},
             "auth_ref_present": login_status in {"auth_materialized", "completed"},
         }
+        for key in ("failure_reason", "handoff_observed", "session_process_alive"):
+            if key in extra:
+                login_result[key] = extra.pop(key)
+        payload["login_result"] = login_result
     payload.update(extra)
     return {
         "exit_code": 0 if machine_error_code in {"OK", "LOGIN_COMPLETE_NOT_ATTEMPTED"} else 1,
@@ -147,6 +151,9 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
                         "created_at": "2026-05-29T02:44:09+00:00",
                         "expires_at": "2026-05-29T02:49:09+00:00",
                         "state": "waiting_for_user",
+                        "device_url": "https://auth.openai.com/codex/device",
+                        "device_code": "TEST-12345",
+                        "device_code_present": True,
                         "auth_materialized": False,
                         "auth_ref": "",
                         "auth_inventory_before": [str(auth_path)],
@@ -224,6 +231,99 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
         )
         self.assertTrue(packet["existing_auth_ref_present_but_unmaterialized_gap_detected"])
 
+    def test_post_login_materialization_gap_packet_detects_dead_handoff_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            login_sessions_dir = managed_dir / "login-sessions"
+            auth_dir = root / "auth-dir"
+            logs_dir = auth_dir / "logs"
+            login_sessions_dir.mkdir(parents=True, exist_ok=True)
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            session_path = login_sessions_dir / "codex-test-session.json"
+            auth_path = auth_dir / "codex-21c5ac82-kir.test.gpt26@gmail.com-team.json"
+            session_path.write_text(
+                json.dumps(
+                    {
+                        "login_session_id": "codex-test-session",
+                        "provider": "codex",
+                        "mode": "device",
+                        "pid": 0,
+                        "created_at": "2026-05-29T02:44:09+00:00",
+                        "expires_at": "2026-05-29T02:49:09+00:00",
+                        "state": "failed",
+                        "device_url": "https://auth.openai.com/codex/device",
+                        "device_code": "TEST-12345",
+                        "device_code_present": True,
+                        "failure_reason": "device_handoff_process_exited_before_auth_materialized",
+                        "auth_materialized": False,
+                        "auth_ref": "",
+                        "auth_inventory_before": [str(auth_path)],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            auth_path.write_text(
+                json.dumps({"email": "kir.test.gpt26@gmail.com", "account_id": "acct-1"}),
+                encoding="utf-8",
+            )
+            created_epoch = 1748486649
+            os.utime(auth_path, (created_epoch - 60, created_epoch - 60))
+            (logs_dir / "main.log").write_text("", encoding="utf-8")
+            paths = probe.runtime.RuntimePaths(
+                profile_dir=profile_dir,
+                managed_dir=managed_dir,
+                stable_config=root / "stable" / "config.yaml",
+                auth_file=profile_dir / "auth.json",
+                config_toml=profile_dir / "config.toml",
+                runtime_mode_file=profile_dir / "runtime-mode.txt",
+                runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+                registry_file=managed_dir / "backend-registry.json",
+                state_file=managed_dir / "supervisor-state.json",
+                managed_config_file=managed_dir / "managed-config.yaml",
+                launcher_script=profile_dir / "codex-custom-launch.sh",
+                sync_script=managed_dir / "supervisor-sync.sh",
+                accounts_bin=managed_dir / "bin" / "codex-accounts",
+                onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+                lock_file=managed_dir / "wild-boar-proxy.lock",
+                launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+                repair_target_inventory_dir=managed_dir / "stable-repair-target",
+                repair_target_reference_file=managed_dir / "approved-repair-target.json",
+                target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+                stable_runtime_generated_config_file=managed_dir
+                / "stable-runtime-config.generated.yaml",
+            )
+            with (
+                mock.patch.object(probe.runtime.RuntimePaths, "from_env", return_value=paths),
+                mock.patch.object(
+                    probe.runtime,
+                    "login_session_auth_inventory_dir",
+                    return_value=(auth_dir, {"source": "auth-dir"}),
+                ),
+                mock.patch.object(
+                    probe.runtime,
+                    "list_login_auth_inventory_entries",
+                    return_value=[auth_path],
+                ),
+            ):
+                packet = probe._build_post_login_materialization_gap_packet(
+                    session_id="codex-test-session",
+                    owner_email="kir.test.gpt26@gmail.com",
+                    session_result={
+                        "status": "failed",
+                        "auth_materialized": False,
+                        "failure_reason": "device_handoff_process_exited_before_auth_materialized",
+                    },
+                )
+
+        self.assertTrue(packet["handoff_observed"])
+        self.assertFalse(packet["session_pid_alive"])
+        self.assertEqual(
+            packet["classification"],
+            "device_handoff_process_exited_before_auth_materialized",
+        )
+
     def test_build_packets_emits_materialization_repair_and_failure_taxonomy_packets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -246,6 +346,9 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
                         "created_at": "2026-05-29T02:44:09+00:00",
                         "expires_at": "2026-05-29T02:49:09+00:00",
                         "state": "waiting_for_user",
+                        "device_url": "https://auth.openai.com/codex/device",
+                        "device_code": "TEST-12345",
+                        "device_code_present": True,
                         "auth_materialized": False,
                         "auth_ref": "",
                         "auth_inventory_before": [str(auth_path)],
@@ -300,7 +403,7 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
                     "codex-test-session",
                     "--json",
                 ]:
-                    return _command("OK", "waiting_for_user")
+                    return _command("LOGIN_HANDOFF_PROCESS_EXITED", "failed", failure_reason="device_handoff_process_exited_before_auth_materialized")
                 raise AssertionError(args)
 
             with (
@@ -332,14 +435,23 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
         taxonomy = packets["native_materialization_failure_taxonomy_packet.json"]
         refresh_contract = packets["native_existing_auth_refresh_contract_packet.json"]
         session_bound = packets["native_session_bound_refresh_packet.json"]
+        handoff = packets["native_browser_success_handoff_packet.json"]
+        transition = packets["native_local_session_transition_packet.json"]
         self.assertEqual(repair["repair_result"], "materialization_not_observed")
         self.assertFalse(repair["repair_effective_for_materialization"])
         self.assertTrue(taxonomy["browser_success_without_local_materialization"])
+        self.assertTrue(taxonomy["browser_success_without_local_session_handoff"])
         self.assertTrue(taxonomy["refresh_token_reused_prevents_materialization"])
         self.assertFalse(refresh_contract["existing_auth_refresh_emitted"])
         self.assertFalse(refresh_contract["existing_auth_refresh_adopted"])
         self.assertFalse(session_bound["session_bound_refresh_proven"])
         self.assertEqual(session_bound["classification"], "session_bound_refresh_unproven")
+        self.assertEqual(
+            handoff["classification"], "handoff_emitted_but_local_session_not_promoted"
+        )
+        self.assertEqual(
+            transition["classification"], "handoff_received_but_session_not_promoted"
+        )
 
 
 if __name__ == "__main__":

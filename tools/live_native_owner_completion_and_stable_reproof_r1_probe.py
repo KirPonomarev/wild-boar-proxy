@@ -189,23 +189,33 @@ def _build_post_login_materialization_gap_packet(
 
     log_tail = _read_tail(auth_dir / "logs" / "main.log")
     pid = int(session.get("pid", 0) or 0)
+    pid_alive = _pid_alive(pid)
+    login_status = str(session_result.get("status") or "")
+    failure_reason = str(session.get("failure_reason") or session_result.get("failure_reason") or "")
+    handoff_observed = bool(str(session.get("device_url") or "")) and bool(
+        session.get("device_code_present", False)
+    )
     added_count = sum(
         1
         for path in current_entries
         if str(path.expanduser().resolve(strict=False)) not in before_set
     )
-    login_status = str(session_result.get("status") or "")
     gap_detected = (
         bool(owner_email)
-        and login_status in {"waiting_for_user", "expired"}
+        and login_status in {"waiting_for_user", "expired", "failed"}
         and not bool(session_result.get("auth_materialized"))
-        and not _pid_alive(pid)
+        and not pid_alive
         and added_count == 0
         and bool(matching_entries)
         and matching_changed_since_session_created == 0
-        and "refresh_token_reused" in log_tail
     )
-    if gap_detected and login_status == "waiting_for_user":
+    if (
+        gap_detected
+        and login_status == "failed"
+        and failure_reason == "device_handoff_process_exited_before_auth_materialized"
+    ):
+        classification = "device_handoff_process_exited_before_auth_materialized"
+    elif gap_detected and login_status == "waiting_for_user":
         classification = "existing_auth_ref_present_but_unmaterialized"
     elif gap_detected and login_status == "expired":
         classification = "existing_auth_ref_stale_and_unchanged_after_session_expiry"
@@ -219,9 +229,11 @@ def _build_post_login_materialization_gap_packet(
         "auth_materialized": bool(session_result.get("auth_materialized")),
         "auth_ref_present": bool(session_result.get("auth_ref_present")),
         "session_pid": pid,
-        "session_pid_alive": _pid_alive(pid),
+        "session_pid_alive": pid_alive,
         "session_created_at": str(session.get("created_at") or ""),
         "session_expires_at": str(session.get("expires_at") or ""),
+        "handoff_observed": handoff_observed,
+        "failure_reason": failure_reason,
         "auth_inventory_before_count": len(before_entries),
         "auth_inventory_current_count": len(current_entries),
         "auth_inventory_added_count": added_count,
@@ -252,11 +264,19 @@ def _classify(
     status_result = _login_result(session_status_payload)
     complete_result = _login_result(complete_payload)
     login_status = str(status_result.get("status") or "")
+    failure_reason = str(status_result.get("failure_reason") or "")
     runtime_loaded_count = _runtime_loaded_count(health_payload.get("stdout_json", {}))
     probe_http_status = direct_probe.get("http_status")
 
     if login_status in {"waiting_for_user", "started"}:
         classification = "owner_action_pending"
+    elif (
+        login_status == "failed"
+        and failure_reason == "device_handoff_process_exited_before_auth_materialized"
+    ):
+        classification = "browser_success_without_local_session_handoff"
+    elif login_status == "failed":
+        classification = "login_session_failed_before_auth_materialized"
     elif login_status == "expired":
         classification = "owner_action_expired"
     elif login_status == "cancelled":
@@ -280,6 +300,7 @@ def _classify(
         "status_machine_error_code": str(status_json.get("machine_error_code") or ""),
         "complete_machine_error_code": str(complete_json.get("machine_error_code") or ""),
         "status_login_status": login_status,
+        "status_failure_reason": failure_reason,
         "complete_login_status": str(complete_result.get("status") or ""),
         "runtime_loaded_count": runtime_loaded_count,
         "direct_native_probe_http_status": probe_http_status,
@@ -434,6 +455,46 @@ def build_packets(
             session_result=session_result,
         )
         packets["native_post_login_materialization_gap_packet.json"] = gap_packet
+        packets["native_browser_success_handoff_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "handoff_observed": bool(gap_packet.get("handoff_observed")),
+            "session_process_alive": bool(gap_packet.get("session_pid_alive")),
+            "local_session_transition_observed": str(session_result.get("status") or "")
+            in {"auth_materialized", "completed"},
+            "login_status": str(session_result.get("status") or ""),
+            "failure_reason": str(gap_packet.get("failure_reason") or ""),
+            "classification": (
+                "handoff_emitted_but_local_session_not_promoted"
+                if bool(gap_packet.get("handoff_observed"))
+                and not bool(gap_packet.get("session_pid_alive"))
+                and str(session_result.get("status") or "")
+                not in {"auth_materialized", "completed"}
+                else "handoff_status_inconclusive"
+            ),
+        }
+        packets["native_local_session_transition_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "login_status": str(session_result.get("status") or ""),
+            "auth_materialized": bool(session_result.get("auth_materialized")),
+            "auth_ref_present": bool(session_result.get("auth_ref_present")),
+            "session_process_alive": bool(gap_packet.get("session_pid_alive")),
+            "failure_reason": str(gap_packet.get("failure_reason") or ""),
+            "local_session_transition_observed": str(session_result.get("status") or "")
+            not in {"started", "waiting_for_user"},
+            "classification": (
+                "handoff_received_but_session_not_promoted"
+                if bool(gap_packet.get("handoff_observed"))
+                and not bool(gap_packet.get("session_pid_alive"))
+                and str(session_result.get("status") or "") == "failed"
+                and str(gap_packet.get("failure_reason") or "")
+                == "device_handoff_process_exited_before_auth_materialized"
+                else "local_session_transition_unproven"
+            ),
+        }
         packets["native_existing_auth_refresh_contract_packet.json"] = {
             "captured_at_utc": utc_now(),
             "session_id": session_id,
@@ -528,6 +589,10 @@ def build_packets(
             "owner_email": owner_email,
             "browser_success_without_local_materialization": bool(
                 gap_packet.get("existing_auth_ref_present_but_unmaterialized_gap_detected")
+            ),
+            "browser_success_without_local_session_handoff": (
+                dependency_packet["classification"]
+                == "browser_success_without_local_session_handoff"
             ),
             "refreshed_existing_auth_not_detected": (
                 int(

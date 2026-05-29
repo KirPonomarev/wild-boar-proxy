@@ -8782,7 +8782,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
 
-    def test_accounts_login_status_codex_keeps_waiting_after_device_handoff_process_exit(
+    def test_accounts_login_status_codex_fails_after_device_handoff_process_exit(
         self,
     ) -> None:
         auth_dir = self.managed_dir / "device-login-auth-exit-after-handoff"
@@ -8819,12 +8819,29 @@ class CliTests(unittest.TestCase):
         status = self.run_cli(
             "accounts", "login", "status", "--session", session_id, "--json"
         )
-        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertNotEqual(status.returncode, 0, status.stderr)
         payload = json.loads(status.stdout)
-        self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["next_action"], "wait_for_login")
-        self.assertEqual(payload["login_result"]["status"], "waiting_for_user")
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_HANDOFF_PROCESS_EXITED")
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["login_result"]["status"], "failed")
         self.assertFalse(payload["login_result"]["auth_materialized"])
+        self.assertFalse(payload["login_result"]["session_process_alive"])
+        self.assertTrue(payload["login_result"]["handoff_observed"])
+        self.assertEqual(
+            payload["login_result"]["failure_reason"],
+            "device_handoff_process_exited_before_auth_materialized",
+        )
+
+        completed = self.run_cli(
+            "accounts", "login", "complete", "--session", session_id, "--json"
+        )
+        self.assertNotEqual(completed.returncode, 0, completed.stderr)
+        completed_payload = json.loads(completed.stdout)
+        self.assertEqual(
+            completed_payload["machine_error_code"], "LOGIN_HANDOFF_PROCESS_EXITED"
+        )
+        self.assertEqual(completed_payload["login_result"]["status"], "failed")
 
         cancelled = self.run_cli(
             "accounts", "login", "cancel", "--session", session_id, "--json"

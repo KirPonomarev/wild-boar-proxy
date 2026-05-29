@@ -3985,6 +3985,10 @@ def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
     scope = str(session.get("inventory_scope") or "")
     if not scope:
         scope = "sandbox" if bool(session.get("sandbox_scope", False)) else "unknown"
+    pid = int(session.get("pid", 0) or 0)
+    handoff_observed = bool(str(session.get("device_url", ""))) and bool(
+        session.get("device_code_present", False)
+    )
     return {
         "status": str(session.get("state", "")),
         "provider": str(session.get("provider", "")),
@@ -4000,6 +4004,9 @@ def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
         "scope": scope,
         "created_at": str(session.get("created_at", "")),
         "expires_at": str(session.get("expires_at", "")),
+        "handoff_observed": handoff_observed,
+        "session_process_alive": login_session_pid_is_running(pid),
+        "failure_reason": str(session.get("failure_reason", "")),
         "browser_secret_intake": False,
         "browser_path_intake": False,
     }
@@ -4092,11 +4099,19 @@ def refresh_codex_login_session(
             if current_state != "waiting_for_user":
                 session["state"] = "waiting_for_user"
                 changed = True
-        elif device_url and bool(session.get("device_code_present", False)):
-            if current_state != "waiting_for_user":
-                session["state"] = "waiting_for_user"
-                changed = True
             if session.pop("failure_reason", None) is not None:
+                changed = True
+        elif device_url and bool(session.get("device_code_present", False)):
+            if current_state != "failed":
+                session["state"] = "failed"
+                changed = True
+            if (
+                str(session.get("failure_reason", ""))
+                != "device_handoff_process_exited_before_auth_materialized"
+            ):
+                session["failure_reason"] = (
+                    "device_handoff_process_exited_before_auth_materialized"
+                )
                 changed = True
         else:
             session["state"] = "failed"
@@ -12041,10 +12056,19 @@ def run_accounts_login_status(paths: RuntimePaths, login_session_id: str) -> dic
         next_action = "none"
         human_message = "Login session has already completed onboarding."
     elif current_state == "failed":
-        machine_error_code = "LOGIN_SESSION_FAILED"
+        failure_reason = str(session.get("failure_reason", ""))
+        machine_error_code = (
+            "LOGIN_HANDOFF_PROCESS_EXITED"
+            if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+            else "LOGIN_SESSION_FAILED"
+        )
         next_action = "retry"
         operator_action = "retry"
-        human_message = "Login session failed before auth materialized."
+        human_message = (
+            "Login session emitted a device handoff but the local process exited before auth materialized."
+            if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+            else "Login session failed before auth materialized."
+        )
     elif current_state == "expired":
         machine_error_code = "LOGIN_SESSION_EXPIRED"
         next_action = "user_action"
@@ -12129,6 +12153,31 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=refresh_changed,
+            )
+        if current_state == "failed":
+            failure_reason = str(session.get("failure_reason", ""))
+            return build_command_payload(
+                ok=False,
+                human_message=(
+                    "Codex login session emitted a device handoff but the local process exited before auth materialized."
+                    if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+                    else "Codex login session failed before auth materialized."
+                ),
+                machine_error_code=(
+                    "LOGIN_HANDOFF_PROCESS_EXITED"
+                    if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+                    else "LOGIN_SESSION_FAILED"
+                ),
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=refresh_changed,
+                extra={
+                    "provider": "codex",
+                    "session_id": login_session_id,
+                    "login_session_id": login_session_id,
+                    "login_result": codex_login_session_payload(session),
+                },
             )
         if current_state != "auth_materialized" or not str(session.get("auth_ref", "")):
             return build_command_payload(
