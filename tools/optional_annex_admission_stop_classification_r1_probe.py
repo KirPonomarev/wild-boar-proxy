@@ -423,9 +423,9 @@ def build_packets(
     }
 
     no_next_contour = len(admitted_rows) == 0
-    packets["optional_annex_no_next_contour_packet.json"] = {
+    packets["optional_annex_admission_boundary_packet.json"] = {
         "captured_at_utc": _utc_now(),
-        "packet_kind": "optional_annex_no_next_contour",
+        "packet_kind": "optional_annex_admission_boundary",
         "status": "ok",
         "no_further_named_contour_currently_admissible": no_next_contour,
         "currently_admitted_annexes": admitted_rows,
@@ -450,7 +450,7 @@ def build_packets(
         },
         {
             "name": "no_fake_queue_exhaustion",
-            "passed": packets["optional_annex_no_next_contour_packet.json"][
+            "passed": packets["optional_annex_admission_boundary_packet.json"][
                 "no_further_named_contour_currently_admissible"
             ]
             is False,

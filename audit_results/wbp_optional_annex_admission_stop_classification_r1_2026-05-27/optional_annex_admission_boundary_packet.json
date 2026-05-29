@@ -6,6 +6,6 @@
     "role_profile_ui_polish"
   ],
   "no_further_named_contour_currently_admissible": false,
-  "packet_kind": "optional_annex_no_next_contour",
+  "packet_kind": "optional_annex_admission_boundary",
   "status": "ok"
 }

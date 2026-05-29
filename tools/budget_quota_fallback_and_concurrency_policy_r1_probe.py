@@ -303,8 +303,14 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             "slot_ids": [PRIMARY_MODEL_SLOT, CODING_AGENT_MODEL_SLOT],
         }
     )
+    allowed_runner_payload_fields = {"model_id", "prompt", "slot_id"}
+    forbidden_model_dispatch_fields = {"model_ids", "models", "slot_ids"}
     one_model_id_per_call = all(
-        sorted(call.keys()) == ["model_id", "prompt"] for call in runner.calls
+        isinstance(call.get("model_id"), str)
+        and bool(str(call.get("model_id") or "").strip())
+        and set(call.keys()).issubset(allowed_runner_payload_fields)
+        and not any(field in call for field in forbidden_model_dispatch_fields)
+        for call in runner.calls
     )
     coding_route_proven = coding_run.get("selected_route_server_issued") is True
     coding_fallback_attempted = coding_run.get("fallback_attempted") is True
@@ -372,6 +378,10 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "browser_multi_slot_batch_request_forbidden": "slot_ids" in forbidden_batch_fields,
         "runner_call_count": len(runner.calls),
         "runner_payload_one_model_id_per_call": one_model_id_per_call,
+        "runner_payload_forbidden_model_fields_absent": one_model_id_per_call,
+        "runner_payload_only_allowed_fields_observed": all(
+            set(call.keys()).issubset(allowed_runner_payload_fields) for call in runner.calls
+        ),
         "coding_slot_route_proven": coding_route_proven,
         "concurrent_execution_blocked_observed": (
             concurrent_blocked.get("status") == "blocked"
@@ -401,6 +411,9 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         ),
         "runner_payload_keys": sorted(runner.calls[-1].keys()) if runner.calls else [],
         "one_model_dispatch_per_run": one_model_id_per_call,
+        "explicit_slot_id_allowed_in_runner_payload": (
+            "slot_id" in runner.calls[-1] if runner.calls else False
+        ),
         "slot_binding_runtime_dispatch_claimed": False,
     }
     packets["policy_non_claims_packet.json"] = {

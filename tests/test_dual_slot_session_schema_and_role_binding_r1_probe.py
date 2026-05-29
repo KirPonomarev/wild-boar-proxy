@@ -23,7 +23,8 @@ class DualSlotSessionSchemaAndRoleBindingR1ProbeTests(unittest.TestCase):
 
         schema = packets["dual_slot_session_schema_packet.json"]
         self.assertEqual(schema["status"], "ok")
-        self.assertEqual(schema["session_schema_version"], 2)
+        self.assertEqual(schema["session_schema_version"], 3)
+        self.assertEqual(schema["list_packet_session_schema_version"], 3)
         self.assertEqual(schema["role_slot_binding_count"], 2)
         self.assertFalse(schema["single_model_truth_remaining"])
 

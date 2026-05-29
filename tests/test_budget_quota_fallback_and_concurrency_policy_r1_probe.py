@@ -144,6 +144,8 @@ class BudgetQuotaFallbackAndConcurrencyPolicyR1ProbeTests(unittest.TestCase):
         self.assertTrue(concurrency["prompt_run_single_slot_only"])
         self.assertTrue(concurrency["browser_multi_slot_batch_request_forbidden"])
         self.assertTrue(concurrency["runner_payload_one_model_id_per_call"])
+        self.assertTrue(concurrency["runner_payload_forbidden_model_fields_absent"])
+        self.assertTrue(concurrency["runner_payload_only_allowed_fields_observed"])
         self.assertTrue(concurrency["concurrent_execution_blocked_observed"])
         self.assertFalse(concurrency["concurrent_execution_observed"])
         self.assertFalse(concurrency["paid_parallel_fanout_proven"])
@@ -152,8 +154,9 @@ class BudgetQuotaFallbackAndConcurrencyPolicyR1ProbeTests(unittest.TestCase):
 
         slot_limits = packets["slot_execution_limit_packet.json"]
         self.assertIn("slot_ids", slot_limits["forbidden_prompt_run_fields"])
-        self.assertEqual(slot_limits["runner_payload_keys"], ["model_id", "prompt"])
+        self.assertEqual(slot_limits["runner_payload_keys"], ["model_id", "prompt", "slot_id"])
         self.assertTrue(slot_limits["one_model_dispatch_per_run"])
+        self.assertTrue(slot_limits["explicit_slot_id_allowed_in_runner_payload"])
         self.assertFalse(slot_limits["slot_binding_runtime_dispatch_claimed"])
 
         gaps = packets["policy_gap_matrix.json"]

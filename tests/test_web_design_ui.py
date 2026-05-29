@@ -12,8 +12,6 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from PIL import Image
-
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
@@ -7903,6 +7901,11 @@ if (rendered.real_codex_app_launched !== true) {
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
+        try:
+            from PIL import Image
+        except ModuleNotFoundError as exc:
+            self.skipTest(f"PIL unavailable: {exc}")
+
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"
         image = Image.open(logo_path).convert("RGBA")
         alpha = image.getchannel("A")
