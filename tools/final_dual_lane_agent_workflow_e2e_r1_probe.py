@@ -379,6 +379,368 @@ def _acceptance_row(
     }
 
 
+ALLOWED_PROVENANCE_PROOF_LEVELS = {
+    "current_packet",
+    "current_mocked_runtime_packet",
+    "current_synthetic_storage_packet",
+    "current_inspection_packet",
+    "imported_prior_packet",
+    "historical_reference_only",
+    "non_claim_guard",
+}
+
+
+def _provenance_row(
+    *,
+    claim_id: str,
+    source_packet: str,
+    evidence_surface: str,
+    proof_level: str,
+    freshness: str,
+    acceptance_role: str,
+    counted_in_bounded_final_flow: bool,
+    counts_as_live_runtime_proof: bool,
+    counts_as_capability_proof: bool,
+    with_limits: bool,
+    classification_reason: str,
+    capability_proof_packet: str = "",
+) -> dict[str, Any]:
+    if proof_level not in ALLOWED_PROVENANCE_PROOF_LEVELS:
+        raise ValueError(f"Unsupported provenance proof level: {proof_level}")
+    return {
+        "claim_id": claim_id,
+        "source_packet": source_packet,
+        "evidence_surface": evidence_surface,
+        "proof_level": proof_level,
+        "freshness": freshness,
+        "acceptance_role": acceptance_role,
+        "counted_in_bounded_final_flow": counted_in_bounded_final_flow,
+        "counts_as_live_runtime_proof": counts_as_live_runtime_proof,
+        "counts_as_capability_proof": counts_as_capability_proof,
+        "with_limits": with_limits,
+        "classification_reason": classification_reason,
+        "capability_proof_packet": capability_proof_packet,
+    }
+
+
+def _dangerous_provenance_transitions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    transitions: list[dict[str, Any]] = []
+    for row in rows:
+        claim_id = str(row.get("claim_id") or "")
+        proof_level = str(row.get("proof_level") or "")
+        freshness = str(row.get("freshness") or "")
+        counts_as_live_runtime_proof = row.get("counts_as_live_runtime_proof") is True
+        counts_as_capability_proof = row.get("counts_as_capability_proof") is True
+        capability_proof_packet = str(row.get("capability_proof_packet") or "")
+
+        if proof_level == "historical_reference_only" and counts_as_live_runtime_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "historical_reference_counted_as_live_runtime_proof",
+                }
+            )
+        if proof_level == "current_synthetic_storage_packet" and counts_as_live_runtime_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "synthetic_storage_counted_as_live_runtime_proof",
+                }
+            )
+        if proof_level == "imported_prior_packet" and freshness == "current":
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "imported_prior_packet_marked_current",
+                }
+            )
+        if proof_level == "current_mocked_runtime_packet" and counts_as_capability_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "mocked_runtime_counted_as_capability_proof",
+                }
+            )
+        if proof_level == "current_mocked_runtime_packet" and counts_as_live_runtime_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "mocked_runtime_counted_as_live_runtime_proof",
+                }
+            )
+        if counts_as_capability_proof and not capability_proof_packet:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "capability_claim_without_separate_capability_packet",
+                }
+            )
+    return transitions
+
+
+def _build_provenance_matrix(
+    *,
+    final_status: str,
+    global_product_acceptance_claimed: bool,
+) -> dict[str, Any]:
+    rows = [
+        _provenance_row(
+            claim_id="manual_provider_model_selection",
+            source_packet="final_dual_lane_selection_packet.json",
+            evidence_surface="server_issued_catalog_and_selection_intent",
+            proof_level="current_packet",
+            freshness="current",
+            acceptance_role="manual_choice_path",
+            counted_in_bounded_final_flow=True,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=False,
+            classification_reason="server_issued_ids_and_selection_intent_only",
+        ),
+        _provenance_row(
+            claim_id="role_slot_session_binding",
+            source_packet="final_dual_lane_session_binding_packet.json",
+            evidence_surface="session_role_slot_binding",
+            proof_level="current_packet",
+            freshness="current",
+            acceptance_role="session_truth",
+            counted_in_bounded_final_flow=True,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=False,
+            classification_reason="binding_is_packet_session_truth_not_chat_text",
+        ),
+        _provenance_row(
+            claim_id="dual_lane_runtime_dispatch",
+            source_packet="final_dual_lane_runtime_packet.json",
+            evidence_surface="recording_prompt_runner_dispatch",
+            proof_level="current_mocked_runtime_packet",
+            freshness="current",
+            acceptance_role="bounded_dispatch_flow",
+            counted_in_bounded_final_flow=True,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="mocked_runner_dispatch_does_not_prove_live_upstream_capability",
+        ),
+        _provenance_row(
+            claim_id="bounded_workflow_chain",
+            source_packet="final_dual_lane_workflow_packet.json",
+            evidence_surface="primary_to_coding_to_primary_chain",
+            proof_level="current_mocked_runtime_packet",
+            freshness="current",
+            acceptance_role="bounded_final_flow",
+            counted_in_bounded_final_flow=True,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="sequential_operator_mediated_chain_not_autonomy",
+        ),
+        _provenance_row(
+            claim_id="persistent_history_classification",
+            source_packet="final_dual_lane_history_packet.json",
+            evidence_surface="synthetic_profile_storage",
+            proof_level="current_synthetic_storage_packet",
+            freshness="current",
+            acceptance_role="classified_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="synthetic_storage_preservation_not_live_native_history_restore",
+        ),
+        _provenance_row(
+            claim_id="role_slot_persistence_thread_history_boundary",
+            source_packet="persistent_profile_and_thread_history_r1 imports",
+            evidence_surface="role_slot_persistence_packet_plus_thread_history_classification_packet",
+            proof_level="imported_prior_packet",
+            freshness="imported_prior",
+            acceptance_role="imported_classification_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="imported_prior_separates_role_binding_persistence_from_thread_history",
+        ),
+        _provenance_row(
+            claim_id="generic_provider_auth_boundary",
+            source_packet=IMPORTED_PACKET_PATHS["provider_auth"],
+            evidence_surface="admitted_provider_list_packet",
+            proof_level="imported_prior_packet",
+            freshness="imported_prior",
+            acceptance_role="imported_classification_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=False,
+            classification_reason="imported_provider_count_not_current_runtime_execution_proof",
+        ),
+        _provenance_row(
+            claim_id="integrity_classification",
+            source_packet="final_dual_lane_integrity_packet.json",
+            evidence_surface="protected_surface_inspection_plus_imported_safety",
+            proof_level="current_inspection_packet",
+            freshness="current_with_imported_prior_reference",
+            acceptance_role="classified_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="inspection_scope_does_not_upgrade_history_or_workflow_claims",
+        ),
+        _provenance_row(
+            claim_id="historical_item_0_boundary",
+            source_packet="final_dual_lane_acceptance_matrix.json",
+            evidence_surface="historical_inventory_reconciliation_boundary",
+            proof_level="historical_reference_only",
+            freshness="historical",
+            acceptance_role="non_counted_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="inventory_closure_not_runtime_acceptance",
+        ),
+        _provenance_row(
+            claim_id="acceleration_boundary",
+            source_packet="final_dual_lane_non_claims_packet.json",
+            evidence_surface="acceleration_non_claim_guard",
+            proof_level="non_claim_guard",
+            freshness="current",
+            acceptance_role="non_claim_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="no_cross_surface_speed_or_token_parity_claim",
+        ),
+        _provenance_row(
+            claim_id="intelligence_speed_metadata_boundary",
+            source_packet="final_dual_lane_non_claims_packet.json",
+            evidence_surface="metadata_source_and_proof_level_guard",
+            proof_level="non_claim_guard",
+            freshness="current",
+            acceptance_role="non_claim_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="labels_remain_source_tagged_not_live_compatibility_proof",
+        ),
+        _provenance_row(
+            claim_id="provider_compatibility_boundary",
+            source_packet="final_dual_lane_non_claims_packet.json",
+            evidence_surface="provider_family_compatibility_guard",
+            proof_level="non_claim_guard",
+            freshness="current",
+            acceptance_role="non_claim_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="limited_rows_do_not_prove_family_wide_compatibility",
+        ),
+        _provenance_row(
+            claim_id="paid_api_policy_boundary",
+            source_packet="budget_boundary_packet.json + concurrency_boundary_packet.json",
+            evidence_surface="budget_policy_packet_plus_concurrency_policy_packet",
+            proof_level="imported_prior_packet",
+            freshness="imported_prior",
+            acceptance_role="imported_policy_boundary",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="imported_policy_guard_not_live_paid_route_execution",
+        ),
+        _provenance_row(
+            claim_id="final_status_boundary",
+            source_packet="final_dual_lane_acceptance_matrix.json",
+            evidence_surface="bounded_final_acceptance_status",
+            proof_level="non_claim_guard",
+            freshness="current",
+            acceptance_role="final_status_guard",
+            counted_in_bounded_final_flow=False,
+            counts_as_live_runtime_proof=False,
+            counts_as_capability_proof=False,
+            with_limits=True,
+            classification_reason="final_status_must_remain_with_limits_and_not_global_product_acceptance",
+        ),
+    ]
+    dangerous_transitions = _dangerous_provenance_transitions(rows)
+    claim_ids = [str(row["claim_id"]) for row in rows]
+    mandatory_claims = {
+        "manual_provider_model_selection",
+        "role_slot_session_binding",
+        "dual_lane_runtime_dispatch",
+        "bounded_workflow_chain",
+        "persistent_history_classification",
+        "integrity_classification",
+        "historical_item_0_boundary",
+        "acceleration_boundary",
+        "intelligence_speed_metadata_boundary",
+        "provider_compatibility_boundary",
+        "final_status_boundary",
+    }
+    missing_claims = sorted(mandatory_claims.difference(claim_ids))
+    duplicate_claim_ids = sorted(
+        {claim_id for claim_id in claim_ids if claim_ids.count(claim_id) > 1}
+    )
+    final_status_with_limits = final_status.endswith("WITH_LIMITS")
+    historical_rows_as_live_runtime = any(
+        row.get("proof_level") == "historical_reference_only"
+        and row.get("counts_as_live_runtime_proof") is True
+        for row in rows
+    )
+    synthetic_rows_as_live_runtime = any(
+        row.get("proof_level") == "current_synthetic_storage_packet"
+        and row.get("counts_as_live_runtime_proof") is True
+        for row in rows
+    )
+    mocked_runtime_rows_as_capability = any(
+        row.get("proof_level") == "current_mocked_runtime_packet"
+        and row.get("counts_as_capability_proof") is True
+        for row in rows
+    )
+    mocked_runtime_rows_as_live_runtime = any(
+        row.get("proof_level") == "current_mocked_runtime_packet"
+        and row.get("counts_as_live_runtime_proof") is True
+        for row in rows
+    )
+    imported_prior_rows_marked_current = any(
+        row.get("proof_level") == "imported_prior_packet" and row.get("freshness") == "current"
+        for row in rows
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "final_dual_lane_provenance_matrix",
+        "status": "ok"
+        if (
+            not dangerous_transitions
+            and not missing_claims
+            and not duplicate_claim_ids
+            and final_status_with_limits
+            and global_product_acceptance_claimed is False
+        )
+        else "blocked",
+        "final_status": final_status,
+        "final_status_with_limits": final_status_with_limits,
+        "global_product_acceptance_claimed": global_product_acceptance_claimed,
+        "allowed_proof_levels": sorted(ALLOWED_PROVENANCE_PROOF_LEVELS),
+        "rows": rows,
+        "mandatory_claims": sorted(mandatory_claims),
+        "missing_claims": missing_claims,
+        "duplicate_claim_ids": duplicate_claim_ids,
+        "dangerous_transitions": dangerous_transitions,
+        "dangerous_transition_count": len(dangerous_transitions),
+        "historical_reference_only_rows_counted_as_live_runtime": historical_rows_as_live_runtime,
+        "synthetic_storage_rows_counted_as_live_runtime": synthetic_rows_as_live_runtime,
+        "mocked_runtime_rows_counted_as_capability_proof": mocked_runtime_rows_as_capability,
+        "mocked_runtime_rows_counted_as_live_runtime": mocked_runtime_rows_as_live_runtime,
+        "imported_prior_rows_marked_current": imported_prior_rows_marked_current,
+    }
+
+
 def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, Any]]:
     imported = _load_imported_packets(repo_root)
 
@@ -670,17 +1032,50 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
     }
     packets["final_dual_lane_history_packet.json"] = history_packet
     packets["final_dual_lane_integrity_packet.json"] = integrity_packet
+    final_status = "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS"
+    global_product_acceptance_claimed = False
+    provenance_matrix = _build_provenance_matrix(
+        final_status=final_status,
+        global_product_acceptance_claimed=global_product_acceptance_claimed,
+    )
+    bounded_final_flow_proven_here = (
+        final_selection_status_ok
+        and final_session_binding_ok
+        and final_runtime_ok
+        and workflow_chain_ok
+    )
+    acceptance_rows_all_satisfied = all(row.get("satisfied") is True for row in acceptance_rows)
     packets["final_dual_lane_acceptance_matrix.json"] = {
         "captured_at_utc": utc_now(),
         "packet_kind": "final_dual_lane_acceptance_matrix",
-        "status": "ok",
-        "final_status": "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
-        "bounded_final_flow_proven_here": final_selection_status_ok
-        and final_session_binding_ok
-        and final_runtime_ok
-        and workflow_chain_ok,
+        "status": "ok"
+        if (
+            bounded_final_flow_proven_here
+            and acceptance_rows_all_satisfied
+            and provenance_matrix.get("status") == "ok"
+            and provenance_matrix.get("final_status_with_limits") is True
+            and global_product_acceptance_claimed is False
+        )
+        else "blocked",
+        "final_status": final_status,
+        "bounded_final_flow_proven_here": bounded_final_flow_proven_here,
+        "acceptance_rows_all_satisfied": acceptance_rows_all_satisfied,
+        "provenance_matrix_packet": "final_dual_lane_provenance_matrix.json",
+        "provenance_matrix_required": True,
+        "provenance_matrix_status": provenance_matrix.get("status"),
         "historical_item_0_counted_as_closed": False,
-        "global_product_acceptance_claimed": False,
+        "historical_item_0_inventory_closed": True,
+        "historical_item_0_runtime_acceptance_closed": False,
+        "historical_item_0_final_acceptance_counted": False,
+        "historical_item_0_classification_reason": (
+            "reconciliation_only_not_runtime_acceptance"
+        ),
+        "historical_item_0_runtime_proof_packet": "",
+        "historical_item_0_historical_evidence_used_as_runtime_proof": False,
+        "historical_item_0_reconciliation_reference": (
+            "historical_item_0_reconciliation_r1"
+        ),
+        "global_product_acceptance_claimed": global_product_acceptance_claimed,
         "rows": acceptance_rows,
     }
     packets["final_dual_lane_non_claims_packet.json"] = {
@@ -691,6 +1086,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "api_lane_equals_codex_high_or_extra_high": False,
         "partial_acceleration_truth_becomes_broad_parity_here": False,
         "historical_item_0_resolved_here": False,
+        "historical_item_0_inventory_closure_upgraded_to_runtime_acceptance": False,
         "bounded_workflow_success_implies_autonomy": False,
         "one_admitted_api_row_proves_provider_family_compatibility": False,
         "bounded_final_flow_acceptance_equals_global_product_acceptance": False,
@@ -709,8 +1105,11 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "one_api_row_treated_as_provider_family_compatibility": False,
         "final_acceptance_matrix_treated_as_global_product_acceptance": False,
         "historical_item_0_treated_as_closed_here": False,
+        "historical_item_0_inventory_treated_as_runtime_acceptance": False,
+        "historical_item_0_final_acceptance_counted_without_runtime_proof": False,
         "with_limits_truth_collapsed_into_unconditional_pass": False,
     }
+    packets["final_dual_lane_provenance_matrix.json"] = provenance_matrix
     packets["independent_audit_packet.json"] = {
         "captured_at_utc": utc_now(),
         "packet_kind": "independent_audit",
@@ -720,6 +1119,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             and packets["final_dual_lane_session_binding_packet.json"]["status"] == "ok"
             and packets["final_dual_lane_runtime_packet.json"]["status"] == "ok"
             and packets["final_dual_lane_workflow_packet.json"]["status"] == "ok"
+            and packets["final_dual_lane_provenance_matrix.json"]["status"] == "ok"
             and packets["false_green_boundary_packet.json"]["status"] == "ok"
         )
         else "blocked",

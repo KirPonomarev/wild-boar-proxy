@@ -9,7 +9,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.final_dual_lane_agent_workflow_e2e_r1_probe import build_packets
+from tools.final_dual_lane_agent_workflow_e2e_r1_probe import (
+    _build_provenance_matrix,
+    _dangerous_provenance_transitions,
+    _provenance_row,
+    build_packets,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +22,95 @@ TOOL = ROOT / "tools" / "final_dual_lane_agent_workflow_e2e_r1_probe.py"
 
 
 class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
+    def test_provenance_guard_blocks_dangerous_layer_transitions(self) -> None:
+        rows = [
+            _provenance_row(
+                claim_id="bad_historical_runtime",
+                source_packet="old.json",
+                evidence_surface="historical",
+                proof_level="historical_reference_only",
+                freshness="historical",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=False,
+                counts_as_live_runtime_proof=True,
+                counts_as_capability_proof=False,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+            _provenance_row(
+                claim_id="bad_synthetic_runtime",
+                source_packet="synthetic.json",
+                evidence_surface="synthetic",
+                proof_level="current_synthetic_storage_packet",
+                freshness="current",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=False,
+                counts_as_live_runtime_proof=True,
+                counts_as_capability_proof=False,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+            _provenance_row(
+                claim_id="bad_imported_current",
+                source_packet="imported.json",
+                evidence_surface="imported",
+                proof_level="imported_prior_packet",
+                freshness="current",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=False,
+                counts_as_live_runtime_proof=False,
+                counts_as_capability_proof=False,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+            _provenance_row(
+                claim_id="bad_mocked_capability",
+                source_packet="mock.json",
+                evidence_surface="mocked",
+                proof_level="current_mocked_runtime_packet",
+                freshness="current",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=True,
+                counts_as_live_runtime_proof=False,
+                counts_as_capability_proof=True,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+            _provenance_row(
+                claim_id="bad_mocked_live_runtime",
+                source_packet="mock.json",
+                evidence_surface="mocked",
+                proof_level="current_mocked_runtime_packet",
+                freshness="current",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=True,
+                counts_as_live_runtime_proof=True,
+                counts_as_capability_proof=False,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+        ]
+        violations = {item["violation"] for item in _dangerous_provenance_transitions(rows)}
+        self.assertIn("historical_reference_counted_as_live_runtime_proof", violations)
+        self.assertIn("synthetic_storage_counted_as_live_runtime_proof", violations)
+        self.assertIn("imported_prior_packet_marked_current", violations)
+        self.assertIn("mocked_runtime_counted_as_capability_proof", violations)
+        self.assertIn("mocked_runtime_counted_as_live_runtime_proof", violations)
+        self.assertIn("capability_claim_without_separate_capability_packet", violations)
+
+        no_limits_matrix = _build_provenance_matrix(
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN",
+            global_product_acceptance_claimed=False,
+        )
+        self.assertEqual(no_limits_matrix["status"], "blocked")
+        self.assertFalse(no_limits_matrix["final_status_with_limits"])
+
+        global_acceptance_matrix = _build_provenance_matrix(
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=True,
+        )
+        self.assertEqual(global_acceptance_matrix["status"], "blocked")
+
     def test_build_packets_keep_final_flow_bounded_and_honest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             packets = build_packets(repo_root=ROOT, evidence_dir=Path(temp_dir))
@@ -115,7 +209,29 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
         )
         self.assertTrue(acceptance["bounded_final_flow_proven_here"])
+        self.assertTrue(acceptance["acceptance_rows_all_satisfied"])
+        self.assertEqual(
+            acceptance["provenance_matrix_packet"],
+            "final_dual_lane_provenance_matrix.json",
+        )
+        self.assertTrue(acceptance["provenance_matrix_required"])
+        self.assertEqual(acceptance["provenance_matrix_status"], "ok")
         self.assertFalse(acceptance["historical_item_0_counted_as_closed"])
+        self.assertTrue(acceptance["historical_item_0_inventory_closed"])
+        self.assertFalse(acceptance["historical_item_0_runtime_acceptance_closed"])
+        self.assertFalse(acceptance["historical_item_0_final_acceptance_counted"])
+        self.assertEqual(
+            acceptance["historical_item_0_classification_reason"],
+            "reconciliation_only_not_runtime_acceptance",
+        )
+        self.assertEqual(acceptance["historical_item_0_runtime_proof_packet"], "")
+        self.assertFalse(
+            acceptance["historical_item_0_historical_evidence_used_as_runtime_proof"]
+        )
+        self.assertEqual(
+            acceptance["historical_item_0_reconciliation_reference"],
+            "historical_item_0_reconciliation_r1",
+        )
         self.assertFalse(acceptance["global_product_acceptance_claimed"])
         row_index = {row["id"]: row for row in acceptance["rows"]}
         self.assertEqual(
@@ -138,6 +254,9 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertFalse(non_claims["api_lane_equals_codex_high_or_extra_high"])
         self.assertFalse(non_claims["partial_acceleration_truth_becomes_broad_parity_here"])
         self.assertFalse(non_claims["historical_item_0_resolved_here"])
+        self.assertFalse(
+            non_claims["historical_item_0_inventory_closure_upgraded_to_runtime_acceptance"]
+        )
         self.assertFalse(non_claims["bounded_workflow_success_implies_autonomy"])
         self.assertFalse(non_claims["one_admitted_api_row_proves_provider_family_compatibility"])
         self.assertFalse(non_claims["bounded_final_flow_acceptance_equals_global_product_acceptance"])
@@ -153,7 +272,122 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertFalse(false_green["one_api_row_treated_as_provider_family_compatibility"])
         self.assertFalse(false_green["final_acceptance_matrix_treated_as_global_product_acceptance"])
         self.assertFalse(false_green["historical_item_0_treated_as_closed_here"])
+        self.assertFalse(false_green["historical_item_0_inventory_treated_as_runtime_acceptance"])
+        self.assertFalse(
+            false_green["historical_item_0_final_acceptance_counted_without_runtime_proof"]
+        )
         self.assertFalse(false_green["with_limits_truth_collapsed_into_unconditional_pass"])
+
+        provenance = packets["final_dual_lane_provenance_matrix.json"]
+        self.assertEqual(provenance["status"], "ok")
+        self.assertEqual(
+            provenance["final_status"],
+            "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(provenance["final_status_with_limits"])
+        self.assertFalse(provenance["global_product_acceptance_claimed"])
+        self.assertEqual(provenance["dangerous_transition_count"], 0)
+        self.assertEqual(provenance["dangerous_transitions"], [])
+        self.assertEqual(provenance["missing_claims"], [])
+        self.assertEqual(provenance["duplicate_claim_ids"], [])
+        self.assertFalse(provenance["historical_reference_only_rows_counted_as_live_runtime"])
+        self.assertFalse(provenance["synthetic_storage_rows_counted_as_live_runtime"])
+        self.assertFalse(provenance["mocked_runtime_rows_counted_as_capability_proof"])
+        self.assertFalse(provenance["mocked_runtime_rows_counted_as_live_runtime"])
+        self.assertFalse(provenance["imported_prior_rows_marked_current"])
+
+        provenance_rows = {row["claim_id"]: row for row in provenance["rows"]}
+        self.assertTrue(set(provenance["mandatory_claims"]).issubset(provenance_rows))
+        self.assertEqual(len(provenance_rows), len(provenance["rows"]))
+        self.assertEqual(
+            provenance_rows["manual_provider_model_selection"]["proof_level"],
+            "current_packet",
+        )
+        self.assertTrue(
+            provenance_rows["manual_provider_model_selection"][
+                "counted_in_bounded_final_flow"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["manual_provider_model_selection"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertEqual(
+            provenance_rows["dual_lane_runtime_dispatch"]["proof_level"],
+            "current_mocked_runtime_packet",
+        )
+        self.assertTrue(
+            provenance_rows["dual_lane_runtime_dispatch"][
+                "counted_in_bounded_final_flow"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["dual_lane_runtime_dispatch"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["dual_lane_runtime_dispatch"][
+                "counts_as_capability_proof"
+            ]
+        )
+        self.assertEqual(
+            provenance_rows["persistent_history_classification"]["proof_level"],
+            "current_synthetic_storage_packet",
+        )
+        self.assertFalse(
+            provenance_rows["persistent_history_classification"][
+                "counted_in_bounded_final_flow"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["persistent_history_classification"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertEqual(
+            provenance_rows["role_slot_persistence_thread_history_boundary"]["proof_level"],
+            "imported_prior_packet",
+        )
+        self.assertEqual(
+            provenance_rows["role_slot_persistence_thread_history_boundary"]["freshness"],
+            "imported_prior",
+        )
+        self.assertFalse(
+            provenance_rows["role_slot_persistence_thread_history_boundary"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertEqual(
+            provenance_rows["generic_provider_auth_boundary"]["proof_level"],
+            "imported_prior_packet",
+        )
+        self.assertEqual(
+            provenance_rows["paid_api_policy_boundary"]["proof_level"],
+            "imported_prior_packet",
+        )
+        self.assertFalse(
+            provenance_rows["paid_api_policy_boundary"]["counts_as_live_runtime_proof"]
+        )
+        self.assertEqual(
+            provenance_rows["historical_item_0_boundary"]["proof_level"],
+            "historical_reference_only",
+        )
+        self.assertFalse(
+            provenance_rows["historical_item_0_boundary"][
+                "counted_in_bounded_final_flow"
+            ]
+        )
+        self.assertFalse(
+            provenance_rows["historical_item_0_boundary"][
+                "counts_as_live_runtime_proof"
+            ]
+        )
+        self.assertTrue(provenance_rows["final_status_boundary"]["with_limits"])
+        self.assertFalse(
+            any(row["counts_as_capability_proof"] for row in provenance["rows"])
+        )
 
         audit = packets["independent_audit_packet.json"]
         self.assertEqual(audit["status"], "ok")
@@ -196,7 +430,7 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             )
             summary = json.loads(completed.stdout)
             self.assertEqual(summary["status"], "ok")
-            self.assertEqual(summary["packet_count"], 10)
+            self.assertEqual(summary["packet_count"], 11)
 
             acceptance = json.loads(
                 (Path(temp_dir) / "final_dual_lane_acceptance_matrix.json").read_text(
@@ -207,6 +441,26 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
                 acceptance["final_status"],
                 "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
             )
+            self.assertTrue(acceptance["historical_item_0_inventory_closed"])
+            self.assertFalse(acceptance["historical_item_0_runtime_acceptance_closed"])
+            self.assertFalse(acceptance["historical_item_0_final_acceptance_counted"])
+            self.assertEqual(
+                acceptance["historical_item_0_classification_reason"],
+                "reconciliation_only_not_runtime_acceptance",
+            )
+            self.assertEqual(
+                acceptance["provenance_matrix_packet"],
+                "final_dual_lane_provenance_matrix.json",
+            )
+            provenance = json.loads(
+                (Path(temp_dir) / "final_dual_lane_provenance_matrix.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(provenance["status"], "ok")
+            self.assertEqual(provenance["dangerous_transition_count"], 0)
+            self.assertTrue(provenance["final_status_with_limits"])
+            self.assertFalse(provenance["global_product_acceptance_claimed"])
 
 
 if __name__ == "__main__":
