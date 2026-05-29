@@ -368,6 +368,8 @@ def _acceptance_row(
     source: str,
     with_limits: bool,
     evidence: str,
+    provenance_claim_id: str,
+    limits_reason: str = "",
 ) -> dict[str, Any]:
     return {
         "id": row_id,
@@ -376,6 +378,8 @@ def _acceptance_row(
         "source": source,
         "with_limits": with_limits,
         "evidence": evidence,
+        "provenance_claim_id": provenance_claim_id,
+        "limits_reason": limits_reason,
     }
 
 
@@ -386,6 +390,7 @@ ALLOWED_PROVENANCE_PROOF_LEVELS = {
     "current_inspection_packet",
     "imported_prior_packet",
     "historical_reference_only",
+    "mixed_classified_boundary",
     "non_claim_guard",
 }
 
@@ -466,6 +471,20 @@ def _dangerous_provenance_transitions(rows: list[dict[str, Any]]) -> list[dict[s
                 {
                     "claim_id": claim_id,
                     "violation": "mocked_runtime_counted_as_live_runtime_proof",
+                }
+            )
+        if proof_level == "mixed_classified_boundary" and counts_as_live_runtime_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "mixed_classified_boundary_counted_as_live_runtime_proof",
+                }
+            )
+        if proof_level == "mixed_classified_boundary" and counts_as_capability_proof:
+            transitions.append(
+                {
+                    "claim_id": claim_id,
+                    "violation": "mixed_classified_boundary_counted_as_capability_proof",
                 }
             )
         if counts_as_capability_proof and not capability_proof_packet:
@@ -579,7 +598,7 @@ def _build_provenance_matrix(
             claim_id="integrity_classification",
             source_packet="final_dual_lane_integrity_packet.json",
             evidence_surface="protected_surface_inspection_plus_imported_safety",
-            proof_level="current_inspection_packet",
+            proof_level="mixed_classified_boundary",
             freshness="current_with_imported_prior_reference",
             acceptance_role="classified_boundary",
             counted_in_bounded_final_flow=False,
@@ -741,6 +760,186 @@ def _build_provenance_matrix(
     }
 
 
+def _validate_acceptance_provenance_bindings(
+    *,
+    acceptance_rows: list[dict[str, Any]],
+    provenance_matrix: dict[str, Any],
+    final_status: str,
+    global_product_acceptance_claimed: bool,
+) -> dict[str, Any]:
+    provenance_rows = {
+        str(row.get("claim_id") or ""): row
+        for row in provenance_matrix.get("rows", [])
+        if str(row.get("claim_id") or "")
+    }
+    violations: list[dict[str, Any]] = []
+    provenance_claim_ids: list[str] = []
+
+    runtime_forbidden_proof_levels = {
+        "historical_reference_only",
+        "current_synthetic_storage_packet",
+    }
+    imported_only_states = {
+        "imported_closed",
+        "imported_closed_with_limits",
+        "imported_partial_classified",
+    }
+    classified_boundary_states = {
+        "classified_with_limits_here",
+    }
+
+    for row in acceptance_rows:
+        row_id = str(row.get("id") or "")
+        claim_id = str(row.get("provenance_claim_id") or "")
+        acceptance_state = str(row.get("acceptance_state") or "")
+        row_with_limits = row.get("with_limits") is True
+        limits_reason = str(row.get("limits_reason") or "")
+
+        if not claim_id:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "violation": "missing_provenance_claim_id",
+                }
+            )
+            continue
+
+        provenance_claim_ids.append(claim_id)
+        provenance = provenance_rows.get(claim_id)
+        if provenance is None:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "unknown_provenance_claim_id",
+                }
+            )
+            continue
+
+        proof_level = str(provenance.get("proof_level") or "")
+        provenance_with_limits = provenance.get("with_limits") is True
+
+        if acceptance_state == "proven_here" and proof_level in runtime_forbidden_proof_levels:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "proven_here_row_bound_to_non_runtime_proof_level",
+                    "proof_level": proof_level,
+                }
+            )
+
+        if (
+            acceptance_state == "proven_here"
+            and proof_level == "imported_prior_packet"
+            and not limits_reason
+        ):
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "proven_here_row_bound_to_imported_prior_without_limit_reason",
+                }
+            )
+
+        if acceptance_state in imported_only_states and proof_level not in {
+            "imported_prior_packet",
+            "non_claim_guard",
+            "mixed_classified_boundary",
+        }:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "imported_or_classified_row_bound_to_wrong_proof_level",
+                    "proof_level": proof_level,
+                }
+            )
+
+        if acceptance_state in classified_boundary_states and proof_level not in {
+            "current_synthetic_storage_packet",
+            "current_inspection_packet",
+            "mixed_classified_boundary",
+            "non_claim_guard",
+        }:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "classified_row_bound_to_wrong_proof_level",
+                    "proof_level": proof_level,
+                }
+            )
+
+        if not row_with_limits and provenance_with_limits:
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "unlimited_acceptance_row_bound_to_with_limits_provenance",
+                }
+            )
+
+        if row_with_limits and not (provenance_with_limits or limits_reason):
+            violations.append(
+                {
+                    "row_id": row_id,
+                    "provenance_claim_id": claim_id,
+                    "violation": "with_limits_acceptance_row_without_limited_provenance_or_reason",
+                }
+            )
+
+    duplicate_provenance_claim_ids = sorted(
+        {
+            claim_id
+            for claim_id in provenance_claim_ids
+            if provenance_claim_ids.count(claim_id) > 1
+        }
+    )
+    for claim_id in duplicate_provenance_claim_ids:
+        violations.append(
+            {
+                "provenance_claim_id": claim_id,
+                "violation": "duplicate_acceptance_provenance_claim_id",
+            }
+        )
+
+    all_rows_bound = len(provenance_claim_ids) == len(acceptance_rows)
+    final_status_with_limits = final_status.endswith("WITH_LIMITS")
+    if not final_status_with_limits:
+        violations.append(
+            {
+                "final_status": final_status,
+                "violation": "final_status_without_with_limits",
+            }
+        )
+    if global_product_acceptance_claimed is True:
+        violations.append(
+            {
+                "violation": "global_product_acceptance_claimed",
+            }
+        )
+    return {
+        "status": "ok"
+        if (
+            not violations
+            and all_rows_bound
+            and provenance_matrix.get("status") == "ok"
+            and final_status_with_limits
+            and global_product_acceptance_claimed is False
+        )
+        else "blocked",
+        "all_rows_bound_to_provenance": all_rows_bound,
+        "bound_row_count": len(provenance_claim_ids),
+        "acceptance_row_count": len(acceptance_rows),
+        "duplicate_provenance_claim_ids": duplicate_provenance_claim_ids,
+        "violations": violations,
+        "violation_count": len(violations),
+        "final_status_with_limits": final_status_with_limits,
+        "global_product_acceptance_claimed": global_product_acceptance_claimed,
+    }
+
+
 def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, Any]]:
     imported = _load_imported_packets(repo_root)
 
@@ -851,6 +1050,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source="current_contour",
             with_limits=False,
             evidence="final_dual_lane_selection_packet.json",
+            provenance_claim_id="manual_provider_model_selection",
         ),
         _acceptance_row(
             row_id="role_slot_binding_is_session_truth",
@@ -859,6 +1059,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source="current_contour",
             with_limits=False,
             evidence="final_dual_lane_session_binding_packet.json",
+            provenance_claim_id="role_slot_session_binding",
         ),
         _acceptance_row(
             row_id="role_slot_persistence_classified_separately_from_thread_history",
@@ -870,14 +1071,17 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["role_slot_persistence"],
             with_limits=True,
             evidence="persistent_profile_and_thread_history_r1 imports",
+            provenance_claim_id="role_slot_persistence_thread_history_boundary",
         ),
         _acceptance_row(
             row_id="both_lanes_callable_from_one_custom_codex_environment",
             acceptance_state="proven_here",
             satisfied=final_runtime_ok,
             source="current_contour",
-            with_limits=False,
+            with_limits=True,
             evidence="final_dual_lane_runtime_packet.json",
+            provenance_claim_id="dual_lane_runtime_dispatch",
+            limits_reason="bounded_mocked_dispatch_not_live_upstream_capability",
         ),
         _acceptance_row(
             row_id="persistent_history_is_separately_classified",
@@ -886,6 +1090,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source="current_contour",
             with_limits=True,
             evidence="final_dual_lane_history_packet.json",
+            provenance_claim_id="persistent_history_classification",
         ),
         _acceptance_row(
             row_id="generic_provider_auth_not_hardcoded_to_two_providers",
@@ -895,6 +1100,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["provider_auth"],
             with_limits=False,
             evidence="admitted_provider_list_packet.json",
+            provenance_claim_id="generic_provider_auth_boundary",
         ),
         _acceptance_row(
             row_id="compatibility_claims_remain_honest",
@@ -907,6 +1113,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["provider_smoke_matrix"],
             with_limits=True,
             evidence="provider_smoke_matrix_packet.json",
+            provenance_claim_id="provider_compatibility_boundary",
         ),
         _acceptance_row(
             row_id="acceleration_remains_proven_or_classified_only",
@@ -915,6 +1122,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["acceleration_non_claims"],
             with_limits=True,
             evidence="acceleration_non_claims_packet.json",
+            provenance_claim_id="acceleration_boundary",
         ),
         _acceptance_row(
             row_id="intelligence_labels_remain_honest",
@@ -924,6 +1132,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["metadata_source_proof"],
             with_limits=True,
             evidence="metadata_source_and_proof_level_packet.json",
+            provenance_claim_id="intelligence_speed_metadata_boundary",
         ),
         _acceptance_row(
             row_id="paid_api_usage_remains_bounded_by_explicit_policy",
@@ -936,6 +1145,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source=IMPORTED_PACKET_PATHS["budget_boundary"],
             with_limits=True,
             evidence="budget_boundary_packet.json + concurrency_boundary_packet.json",
+            provenance_claim_id="paid_api_policy_boundary",
         ),
         _acceptance_row(
             row_id="original_codex_remains_untouched_within_admitted_scope",
@@ -946,6 +1156,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             source="current_contour_plus_imported_safety",
             with_limits=True,
             evidence="final_dual_lane_integrity_packet.json",
+            provenance_claim_id="integrity_classification",
         ),
     ]
 
@@ -1038,6 +1249,12 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         final_status=final_status,
         global_product_acceptance_claimed=global_product_acceptance_claimed,
     )
+    acceptance_provenance_binding = _validate_acceptance_provenance_bindings(
+        acceptance_rows=acceptance_rows,
+        provenance_matrix=provenance_matrix,
+        final_status=final_status,
+        global_product_acceptance_claimed=global_product_acceptance_claimed,
+    )
     bounded_final_flow_proven_here = (
         final_selection_status_ok
         and final_session_binding_ok
@@ -1053,6 +1270,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             bounded_final_flow_proven_here
             and acceptance_rows_all_satisfied
             and provenance_matrix.get("status") == "ok"
+            and acceptance_provenance_binding.get("status") == "ok"
             and provenance_matrix.get("final_status_with_limits") is True
             and global_product_acceptance_claimed is False
         )
@@ -1063,6 +1281,9 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         "provenance_matrix_packet": "final_dual_lane_provenance_matrix.json",
         "provenance_matrix_required": True,
         "provenance_matrix_status": provenance_matrix.get("status"),
+        "acceptance_provenance_binding_status": acceptance_provenance_binding.get("status"),
+        "acceptance_provenance_binding_required": True,
+        "acceptance_provenance_binding": acceptance_provenance_binding,
         "historical_item_0_counted_as_closed": False,
         "historical_item_0_inventory_closed": True,
         "historical_item_0_runtime_acceptance_closed": False,
@@ -1120,6 +1341,7 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             and packets["final_dual_lane_runtime_packet.json"]["status"] == "ok"
             and packets["final_dual_lane_workflow_packet.json"]["status"] == "ok"
             and packets["final_dual_lane_provenance_matrix.json"]["status"] == "ok"
+            and packets["final_dual_lane_acceptance_matrix.json"]["status"] == "ok"
             and packets["false_green_boundary_packet.json"]["status"] == "ok"
         )
         else "blocked",

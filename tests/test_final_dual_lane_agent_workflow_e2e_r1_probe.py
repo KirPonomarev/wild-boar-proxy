@@ -13,6 +13,7 @@ from tools.final_dual_lane_agent_workflow_e2e_r1_probe import (
     _build_provenance_matrix,
     _dangerous_provenance_transitions,
     _provenance_row,
+    _validate_acceptance_provenance_bindings,
     build_packets,
 )
 
@@ -89,6 +90,32 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
                 with_limits=True,
                 classification_reason="bad",
             ),
+            _provenance_row(
+                claim_id="bad_mixed_live_runtime",
+                source_packet="mixed.json",
+                evidence_surface="mixed",
+                proof_level="mixed_classified_boundary",
+                freshness="current_with_imported_prior_reference",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=False,
+                counts_as_live_runtime_proof=True,
+                counts_as_capability_proof=False,
+                with_limits=True,
+                classification_reason="bad",
+            ),
+            _provenance_row(
+                claim_id="bad_mixed_capability",
+                source_packet="mixed.json",
+                evidence_surface="mixed",
+                proof_level="mixed_classified_boundary",
+                freshness="current_with_imported_prior_reference",
+                acceptance_role="bad",
+                counted_in_bounded_final_flow=False,
+                counts_as_live_runtime_proof=False,
+                counts_as_capability_proof=True,
+                with_limits=True,
+                classification_reason="bad",
+            ),
         ]
         violations = {item["violation"] for item in _dangerous_provenance_transitions(rows)}
         self.assertIn("historical_reference_counted_as_live_runtime_proof", violations)
@@ -96,6 +123,8 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         self.assertIn("imported_prior_packet_marked_current", violations)
         self.assertIn("mocked_runtime_counted_as_capability_proof", violations)
         self.assertIn("mocked_runtime_counted_as_live_runtime_proof", violations)
+        self.assertIn("mixed_classified_boundary_counted_as_live_runtime_proof", violations)
+        self.assertIn("mixed_classified_boundary_counted_as_capability_proof", violations)
         self.assertIn("capability_claim_without_separate_capability_packet", violations)
 
         no_limits_matrix = _build_provenance_matrix(
@@ -110,6 +139,142 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             global_product_acceptance_claimed=True,
         )
         self.assertEqual(global_acceptance_matrix["status"], "blocked")
+
+    def test_acceptance_provenance_binding_blocks_bad_rows(self) -> None:
+        provenance_matrix = _build_provenance_matrix(
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=False,
+        )
+        common = {
+            "acceptance_state": "proven_here",
+            "satisfied": True,
+            "source": "current_contour",
+            "with_limits": False,
+            "evidence": "packet.json",
+        }
+
+        missing = [
+            {
+                "id": "missing_binding",
+                **common,
+                "provenance_claim_id": "",
+                "limits_reason": "",
+            }
+        ]
+        missing_result = _validate_acceptance_provenance_bindings(
+            acceptance_rows=missing,
+            provenance_matrix=provenance_matrix,
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=False,
+        )
+        self.assertEqual(missing_result["status"], "blocked")
+        self.assertEqual(
+            missing_result["violations"][0]["violation"],
+            "missing_provenance_claim_id",
+        )
+
+        unknown = [
+            {
+                "id": "unknown_binding",
+                **common,
+                "provenance_claim_id": "does_not_exist",
+                "limits_reason": "",
+            }
+        ]
+        unknown_result = _validate_acceptance_provenance_bindings(
+            acceptance_rows=unknown,
+            provenance_matrix=provenance_matrix,
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=False,
+        )
+        self.assertEqual(unknown_result["status"], "blocked")
+        self.assertEqual(
+            unknown_result["violations"][0]["violation"],
+            "unknown_provenance_claim_id",
+        )
+
+        bad_layers = [
+            {
+                "id": "historical_as_runtime",
+                **common,
+                "provenance_claim_id": "historical_item_0_boundary",
+                "limits_reason": "",
+            },
+            {
+                "id": "synthetic_as_runtime",
+                **common,
+                "provenance_claim_id": "persistent_history_classification",
+                "limits_reason": "",
+            },
+            {
+                "id": "imported_as_runtime",
+                **common,
+                "provenance_claim_id": "generic_provider_auth_boundary",
+                "limits_reason": "",
+            },
+            {
+                "id": "unlimited_mocked_runtime",
+                **common,
+                "provenance_claim_id": "dual_lane_runtime_dispatch",
+                "limits_reason": "",
+            },
+        ]
+        bad_layer_result = _validate_acceptance_provenance_bindings(
+            acceptance_rows=bad_layers,
+            provenance_matrix=provenance_matrix,
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=False,
+        )
+        violations = {item["violation"] for item in bad_layer_result["violations"]}
+        self.assertEqual(bad_layer_result["status"], "blocked")
+        self.assertIn("proven_here_row_bound_to_non_runtime_proof_level", violations)
+        self.assertIn(
+            "proven_here_row_bound_to_imported_prior_without_limit_reason",
+            violations,
+        )
+        self.assertIn(
+            "unlimited_acceptance_row_bound_to_with_limits_provenance",
+            violations,
+        )
+
+        no_limits_result = _validate_acceptance_provenance_bindings(
+            acceptance_rows=[
+                {
+                    "id": "ok_row",
+                    **common,
+                    "provenance_claim_id": "manual_provider_model_selection",
+                    "limits_reason": "",
+                }
+            ],
+            provenance_matrix=provenance_matrix,
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN",
+            global_product_acceptance_claimed=False,
+        )
+        self.assertEqual(no_limits_result["status"], "blocked")
+        self.assertFalse(no_limits_result["final_status_with_limits"])
+        self.assertIn(
+            "final_status_without_with_limits",
+            {item["violation"] for item in no_limits_result["violations"]},
+        )
+
+        global_acceptance_result = _validate_acceptance_provenance_bindings(
+            acceptance_rows=[
+                {
+                    "id": "ok_row",
+                    **common,
+                    "provenance_claim_id": "manual_provider_model_selection",
+                    "limits_reason": "",
+                }
+            ],
+            provenance_matrix=provenance_matrix,
+            final_status="CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+            global_product_acceptance_claimed=True,
+        )
+        self.assertEqual(global_acceptance_result["status"], "blocked")
+        self.assertIn(
+            "global_product_acceptance_claimed",
+            {item["violation"] for item in global_acceptance_result["violations"]},
+        )
 
     def test_build_packets_keep_final_flow_bounded_and_honest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -216,6 +381,21 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         )
         self.assertTrue(acceptance["provenance_matrix_required"])
         self.assertEqual(acceptance["provenance_matrix_status"], "ok")
+        self.assertTrue(acceptance["acceptance_provenance_binding_required"])
+        self.assertEqual(acceptance["acceptance_provenance_binding_status"], "ok")
+        self.assertEqual(
+            acceptance["acceptance_provenance_binding"]["status"],
+            "ok",
+        )
+        self.assertTrue(
+            acceptance["acceptance_provenance_binding"][
+                "all_rows_bound_to_provenance"
+            ]
+        )
+        self.assertEqual(
+            acceptance["acceptance_provenance_binding"]["violation_count"],
+            0,
+        )
         self.assertFalse(acceptance["historical_item_0_counted_as_closed"])
         self.assertTrue(acceptance["historical_item_0_inventory_closed"])
         self.assertFalse(acceptance["historical_item_0_runtime_acceptance_closed"])
@@ -234,11 +414,57 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         )
         self.assertFalse(acceptance["global_product_acceptance_claimed"])
         row_index = {row["id"]: row for row in acceptance["rows"]}
+        expected_bindings = {
+            "manual_provider_model_selection_works_for_both_lanes": (
+                "manual_provider_model_selection"
+            ),
+            "role_slot_binding_is_session_truth": "role_slot_session_binding",
+            "role_slot_persistence_classified_separately_from_thread_history": (
+                "role_slot_persistence_thread_history_boundary"
+            ),
+            "both_lanes_callable_from_one_custom_codex_environment": (
+                "dual_lane_runtime_dispatch"
+            ),
+            "persistent_history_is_separately_classified": (
+                "persistent_history_classification"
+            ),
+            "generic_provider_auth_not_hardcoded_to_two_providers": (
+                "generic_provider_auth_boundary"
+            ),
+            "compatibility_claims_remain_honest": "provider_compatibility_boundary",
+            "acceleration_remains_proven_or_classified_only": "acceleration_boundary",
+            "intelligence_labels_remain_honest": (
+                "intelligence_speed_metadata_boundary"
+            ),
+            "paid_api_usage_remains_bounded_by_explicit_policy": (
+                "paid_api_policy_boundary"
+            ),
+            "original_codex_remains_untouched_within_admitted_scope": (
+                "integrity_classification"
+            ),
+        }
+        self.assertEqual(set(row_index), set(expected_bindings))
+        for row_id, provenance_claim_id in expected_bindings.items():
+            self.assertEqual(
+                row_index[row_id]["provenance_claim_id"],
+                provenance_claim_id,
+            )
         self.assertEqual(
             row_index["manual_provider_model_selection_works_for_both_lanes"]["acceptance_state"],
             "proven_here",
         )
         self.assertTrue(row_index["manual_provider_model_selection_works_for_both_lanes"]["satisfied"])
+        self.assertTrue(
+            row_index["both_lanes_callable_from_one_custom_codex_environment"][
+                "with_limits"
+            ]
+        )
+        self.assertEqual(
+            row_index["both_lanes_callable_from_one_custom_codex_environment"][
+                "limits_reason"
+            ],
+            "bounded_mocked_dispatch_not_live_upstream_capability",
+        )
         self.assertEqual(
             row_index["persistent_history_is_separately_classified"]["acceptance_state"],
             "classified_with_limits_here",
@@ -371,6 +597,16 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
             provenance_rows["paid_api_policy_boundary"]["counts_as_live_runtime_proof"]
         )
         self.assertEqual(
+            provenance_rows["integrity_classification"]["proof_level"],
+            "mixed_classified_boundary",
+        )
+        self.assertFalse(
+            provenance_rows["integrity_classification"]["counts_as_live_runtime_proof"]
+        )
+        self.assertFalse(
+            provenance_rows["integrity_classification"]["counts_as_capability_proof"]
+        )
+        self.assertEqual(
             provenance_rows["historical_item_0_boundary"]["proof_level"],
             "historical_reference_only",
         )
@@ -452,6 +688,7 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
                 acceptance["provenance_matrix_packet"],
                 "final_dual_lane_provenance_matrix.json",
             )
+            self.assertEqual(acceptance["acceptance_provenance_binding_status"], "ok")
             provenance = json.loads(
                 (Path(temp_dir) / "final_dual_lane_provenance_matrix.json").read_text(
                     encoding="utf-8"
