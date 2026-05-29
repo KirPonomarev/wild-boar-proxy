@@ -1,0 +1,12 @@
+{
+  "auth_materialized_but_runtime_not_loaded": false,
+  "browser_success_without_local_materialization": true,
+  "captured_at_utc": "2026-05-29T03:23:12.664797Z",
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "recommended_closure": "existing_auth_ref_stale_and_unchanged_after_session_expiry",
+  "refresh_token_reused_prevents_materialization": true,
+  "refreshed_existing_auth_not_detected": false,
+  "runtime_loaded_but_native_responses_still_blocked": false,
+  "session_id": "codex-ff4bfb37450d4d8dac0326923fbea520",
+  "usable_auth_present_but_runtime_not_loaded": false
+}

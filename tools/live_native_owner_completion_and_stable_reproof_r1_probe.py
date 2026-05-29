@@ -434,6 +434,61 @@ def build_packets(
             session_result=session_result,
         )
         packets["native_post_login_materialization_gap_packet.json"] = gap_packet
+        packets["native_materialization_repair_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "live_reprobe_executed": True,
+            "auth_materialized_after_repair": bool(session_result.get("auth_materialized")),
+            "auth_ref_present_after_repair": bool(session_result.get("auth_ref_present")),
+            "session_bound_materialization_proven": bool(
+                gap_packet.get("matching_auth_entries_changed_since_session_created_count", 0)
+            ),
+            "matching_auth_entry_count": int(gap_packet.get("matching_auth_entry_count", 0) or 0),
+            "matching_auth_entries_changed_since_session_created_count": int(
+                gap_packet.get("matching_auth_entries_changed_since_session_created_count", 0)
+                or 0
+            ),
+            "repair_effective_for_materialization": bool(
+                session_result.get("auth_materialized")
+            ),
+            "repair_result": (
+                "materialization_observed"
+                if bool(session_result.get("auth_materialized"))
+                else "materialization_not_observed"
+            ),
+        }
+        packets["native_materialization_failure_taxonomy_packet.json"] = {
+            "captured_at_utc": utc_now(),
+            "session_id": session_id,
+            "owner_email": owner_email,
+            "browser_success_without_local_materialization": bool(
+                gap_packet.get("existing_auth_ref_present_but_unmaterialized_gap_detected")
+            ),
+            "refreshed_existing_auth_not_detected": (
+                int(
+                    gap_packet.get(
+                        "matching_auth_entries_changed_since_session_created_count", 0
+                    )
+                    or 0
+                )
+                > 0
+                and not bool(session_result.get("auth_materialized"))
+            ),
+            "refresh_token_reused_prevents_materialization": bool(
+                gap_packet.get("refresh_token_reused_observed_in_recent_logs")
+            )
+            and not bool(session_result.get("auth_materialized")),
+            "auth_materialized_but_runtime_not_loaded": (
+                dependency_packet["classification"] == "auth_materialized_but_runtime_not_loaded"
+            ),
+            "usable_auth_present_but_runtime_not_loaded": False,
+            "runtime_loaded_but_native_responses_still_blocked": (
+                dependency_packet["classification"]
+                == "runtime_loaded_but_native_responses_still_blocked"
+            ),
+            "recommended_closure": str(gap_packet.get("classification") or ""),
+        }
         if bool(gap_packet.get("existing_auth_ref_present_but_unmaterialized_gap_detected")):
             independent_audit_packet["materialization_gap_classification"] = str(
                 gap_packet.get("classification") or ""

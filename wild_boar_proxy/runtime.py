@@ -3881,6 +3881,23 @@ def login_session_entries_digest(entries: list[str]) -> str:
     return get_auth_inventory_entries_digest(entries)
 
 
+def login_auth_inventory_entry_metadata(path: Path) -> dict[str, Any]:
+    stat_result = path.stat()
+    return {
+        "mtime_ns": int(stat_result.st_mtime_ns),
+        "size": int(stat_result.st_size),
+    }
+
+
+def snapshot_login_auth_inventory_metadata(paths: RuntimePaths) -> dict[str, dict[str, Any]]:
+    metadata: dict[str, dict[str, Any]] = {}
+    for path in list_login_auth_inventory_entries(paths):
+        metadata[str(path.expanduser().resolve(strict=False))] = login_auth_inventory_entry_metadata(
+            path
+        )
+    return metadata
+
+
 def resolve_cli_proxy_bin() -> Path:
     return Path(
         os.environ.get("WBP_CLIPROXY_BIN", "~/.local/bin/cli-proxy-api")
@@ -3937,7 +3954,9 @@ def terminate_login_session_pid(pid: int) -> bool:
 
 
 def find_login_auth_candidates(
-    paths: RuntimePaths, before_entries: list[str]
+    paths: RuntimePaths,
+    before_entries: list[str],
+    before_metadata: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[Path], dict[str, Any]]:
     auth_dir, source = login_session_auth_inventory_dir(paths)
     if not auth_dir.is_dir():
@@ -3945,11 +3964,20 @@ def find_login_auth_candidates(
     before_set = {
         str(Path(item).expanduser().resolve(strict=False)) for item in before_entries
     }
-    candidates = [
-        path
-        for path in list_login_auth_inventory_entries(paths)
-        if str(path.expanduser().resolve(strict=False)) not in before_set
-    ]
+    candidates: list[Path] = []
+    for path in list_login_auth_inventory_entries(paths):
+        resolved = str(path.expanduser().resolve(strict=False))
+        if resolved not in before_set:
+            candidates.append(path)
+            continue
+        if not isinstance(before_metadata, dict):
+            continue
+        previous = before_metadata.get(resolved)
+        if not isinstance(previous, dict):
+            continue
+        current_metadata = login_auth_inventory_entry_metadata(path)
+        if current_metadata != previous:
+            candidates.append(path)
     return candidates, source
 
 
@@ -4018,7 +4046,9 @@ def refresh_codex_login_session(
         session["device_code_present"] = True
         changed = True
     candidates, inventory_source = find_login_auth_candidates(
-        paths, [str(item) for item in session.get("auth_inventory_before", []) or []]
+        paths,
+        [str(item) for item in session.get("auth_inventory_before", []) or []],
+        before_metadata=session.get("auth_inventory_before_metadata"),
     )
     if session.get("auth_inventory_source") != inventory_source:
         session["auth_inventory_source"] = inventory_source
@@ -11795,6 +11825,7 @@ def run_accounts_login_start(
             str(path.expanduser().resolve(strict=False))
             for path in list_login_auth_inventory_entries(paths)
         ]
+        before_metadata = snapshot_login_auth_inventory_metadata(paths)
         session: dict[str, Any] = {
             "schema_version": 1,
             "login_session_id": login_session_id,
@@ -11810,6 +11841,7 @@ def run_accounts_login_start(
             "auth_materialized": False,
             "auth_ref": "",
             "auth_inventory_before": before_entries,
+            "auth_inventory_before_metadata": before_metadata,
             "auth_inventory_before_digest": login_session_entries_digest(before_entries),
             "auth_inventory_source": auth_inventory_source,
             "sandbox_scope": True,

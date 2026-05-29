@@ -224,6 +224,117 @@ class LiveNativeOwnerCompletionAndStableReproofProbeTests(unittest.TestCase):
         )
         self.assertTrue(packet["existing_auth_ref_present_but_unmaterialized_gap_detected"])
 
+    def test_build_packets_emits_materialization_repair_and_failure_taxonomy_packets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            login_sessions_dir = managed_dir / "login-sessions"
+            auth_dir = root / "auth-dir"
+            logs_dir = auth_dir / "logs"
+            login_sessions_dir.mkdir(parents=True, exist_ok=True)
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            session_path = login_sessions_dir / "codex-test-session.json"
+            auth_path = auth_dir / "codex-21c5ac82-kir.test.gpt26@gmail.com-team.json"
+            session_path.write_text(
+                json.dumps(
+                    {
+                        "login_session_id": "codex-test-session",
+                        "provider": "codex",
+                        "mode": "device",
+                        "pid": 0,
+                        "created_at": "2026-05-29T02:44:09+00:00",
+                        "expires_at": "2026-05-29T02:49:09+00:00",
+                        "state": "waiting_for_user",
+                        "auth_materialized": False,
+                        "auth_ref": "",
+                        "auth_inventory_before": [str(auth_path)],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            auth_path.write_text(
+                json.dumps({"email": "kir.test.gpt26@gmail.com", "account_id": "acct-1"}),
+                encoding="utf-8",
+            )
+            created_epoch = 1748486649
+            os.utime(auth_path, (created_epoch - 60, created_epoch - 60))
+            (logs_dir / "main.log").write_text("refresh_token_reused\n", encoding="utf-8")
+            paths = probe.runtime.RuntimePaths(
+                profile_dir=profile_dir,
+                managed_dir=managed_dir,
+                stable_config=root / "stable" / "config.yaml",
+                auth_file=profile_dir / "auth.json",
+                config_toml=profile_dir / "config.toml",
+                runtime_mode_file=profile_dir / "runtime-mode.txt",
+                runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+                registry_file=managed_dir / "backend-registry.json",
+                state_file=managed_dir / "supervisor-state.json",
+                managed_config_file=managed_dir / "managed-config.yaml",
+                launcher_script=profile_dir / "codex-custom-launch.sh",
+                sync_script=managed_dir / "supervisor-sync.sh",
+                accounts_bin=managed_dir / "bin" / "codex-accounts",
+                onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+                lock_file=managed_dir / "wild-boar-proxy.lock",
+                launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+                repair_target_inventory_dir=managed_dir / "stable-repair-target",
+                repair_target_reference_file=managed_dir / "approved-repair-target.json",
+                target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+                stable_runtime_generated_config_file=managed_dir
+                / "stable-runtime-config.generated.yaml",
+            )
+
+            def fake_run_json_command(_repo_root: Path, args: list[str]) -> dict[str, object]:
+                if args == ["healthcheck", "--json"]:
+                    return _command(
+                        "AUTH_UNAVAILABLE",
+                        auth_pool_hygiene={"selected_backend_runtime_loaded_count": 0},
+                    )
+                if args == ["status", "--json"]:
+                    return _command("AUTH_UNAVAILABLE")
+                if args == [
+                    "accounts",
+                    "login",
+                    "status",
+                    "--session",
+                    "codex-test-session",
+                    "--json",
+                ]:
+                    return _command("OK", "waiting_for_user")
+                raise AssertionError(args)
+
+            with (
+                mock.patch.object(probe, "_run_json_command", side_effect=fake_run_json_command),
+                mock.patch.object(
+                    probe,
+                    "_direct_native_probe",
+                    return_value={"status": "http_error", "http_status": 503, "body_preview": ""},
+                ),
+                mock.patch.object(probe.runtime.RuntimePaths, "from_env", return_value=paths),
+                mock.patch.object(
+                    probe.runtime,
+                    "login_session_auth_inventory_dir",
+                    return_value=(auth_dir, {"source": "auth-dir"}),
+                ),
+                mock.patch.object(
+                    probe.runtime,
+                    "list_login_auth_inventory_entries",
+                    return_value=[auth_path],
+                ),
+            ):
+                packets = probe.build_packets(
+                    repo_root=Path("/Volumes/Work/wild-boar-proxy"),
+                    session_id="codex-test-session",
+                    owner_email="kir.test.gpt26@gmail.com",
+                )
+
+        repair = packets["native_materialization_repair_packet.json"]
+        taxonomy = packets["native_materialization_failure_taxonomy_packet.json"]
+        self.assertEqual(repair["repair_result"], "materialization_not_observed")
+        self.assertFalse(repair["repair_effective_for_materialization"])
+        self.assertTrue(taxonomy["browser_success_without_local_materialization"])
+        self.assertTrue(taxonomy["refresh_token_reused_prevents_materialization"])
+
 
 if __name__ == "__main__":
     unittest.main()
