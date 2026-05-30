@@ -13,6 +13,7 @@ from unittest import mock
 from pathlib import Path
 
 import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
+import wild_boar_proxy.native_filesystem_probe as native_fs_probe
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -173,6 +174,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_original_via_wbp_claim_limits_packet,
     build_provider_auth_strategy_reference_packet,
     build_selected_model_trace_claim_packet,
+    clean_env,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
@@ -187,11 +189,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     classify_user_data_dir_respected,
     collect_ambient_env_context,
     diff_scans,
+    launch_native_candidate,
     scan_tree,
     summarize_idle_baseline_windows,
     validate_external_evidence_packets,
     validate_native_safety_admission_contour_packets,
 )
+from wild_boar_proxy.runtime import DETERMINISTIC_RUNTIME_PATH
 from tools.persistent_custom_profile_history_r2_probe import (
     classify_r2_persistent_profile_history_packet,
 )
@@ -243,6 +247,42 @@ from tools.persistent_custom_profile_backup_repair_r1_probe import (
 
 
 class NativeFilesystemProbeTests(unittest.TestCase):
+    def test_codex_process_inventory_uses_ps_command_lines_with_spaced_user_data_dir(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                " 101 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
+                " 102 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://\n"
+                " 104 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
+                " 103 /bin/zsh -c unrelated\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ) as run:
+            lines = native_fs_probe._collect_codex_process_lines()
+
+        self.assertEqual(run.call_args.args[0], ["ps", "-axo", "pid=,command="])
+        self.assertEqual(len(lines), 3)
+        self.assertIn("wbp-custom-main/electron-user-data", lines[0])
+
+    def test_remove_tree_with_retry_unlinks_runtime_tmp_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            target = temp_root / "target"
+            target.mkdir()
+            link = temp_root / "runtime-bind"
+            link.symlink_to(target, target_is_directory=True)
+
+            error = native_fs_probe.remove_tree_with_retry(link)
+
+            self.assertEqual(error, "")
+            self.assertFalse(link.exists())
+            self.assertTrue(target.exists())
+
     def test_provider_config_uses_auth_command_when_cli_proxy_key_is_absent(self) -> None:
         with mock.patch(
             "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
@@ -257,6 +297,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn("[model_providers.wbp.auth]", config)
         self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
         self.assertIn('wire_api = "responses"', config)
+        self.assertIn('sandbox_mode = "workspace-write"', config)
         self.assertIn("requires_openai_auth = false", config)
         self.assertNotIn("experimental_bearer_token", config)
 
@@ -274,6 +315,16 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn('experimental_bearer_token = "fixture-token"', config)
         self.assertNotIn("[model_providers.wbp.auth]", config)
         self.assertIn('wire_api = "responses"', config)
+        self.assertIn('sandbox_mode = "workspace-write"', config)
+
+    def test_provider_config_rejects_unadmitted_sandbox_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            build_provider_config(
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.4-mini",
+                auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
+                sandbox_mode="danger-full-access",
+            )
 
     def test_recursive_scan_and_diff_report_created_deleted_and_changed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4372,6 +4423,114 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(packet["ambient_openai_api_key_present"])
         self.assertFalse(packet["unexplained_authority_present"])
 
+    def test_clean_env_strips_host_codex_and_wrapper_context_for_native_launch(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CODEX_THREAD_ID": "thread-123",
+                "CODEX_CI": "1",
+                "CODEX_INTERNAL_ORIGINATOR_OVERRIDE": "Codex Desktop",
+                "CODEX_SHELL": "1",
+                "OPENAI_API_KEY": "secret",
+                "OPENAI_BASE_URL": "https://example.invalid/v1",
+                "WBP_PROFILE_DIR": "/tmp/ambient-profile",
+                "BROWSER_USE_AVAILABLE_BACKENDS": "iab",
+                "PYTHONPATH": "/tmp/pythonpath",
+                "TMPDIR": "/tmp/ambient-tmp",
+                "PATH": "/Users/example/.codex/tmp/arg0/bin:/usr/bin",
+            },
+            clear=True,
+        ):
+            env = clean_env()
+
+        self.assertNotIn("CODEX_THREAD_ID", env)
+        self.assertNotIn("CODEX_CI", env)
+        self.assertNotIn("CODEX_INTERNAL_ORIGINATOR_OVERRIDE", env)
+        self.assertNotIn("CODEX_SHELL", env)
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("OPENAI_BASE_URL", env)
+        self.assertNotIn("WBP_PROFILE_DIR", env)
+        self.assertNotIn("BROWSER_USE_AVAILABLE_BACKENDS", env)
+        self.assertNotIn("PYTHONPATH", env)
+        self.assertNotIn("TMPDIR", env)
+        self.assertEqual(env["PATH"], DETERMINISTIC_RUNTIME_PATH)
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost,::1")
+
+    def test_launch_native_candidate_passes_sanitized_env_to_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = mock.Mock()
+            layout.tmp_root = root / "tmp"
+            layout.tmp_root.mkdir()
+            layout.profile_dir = root / "profile"
+            layout.profile_dir.mkdir()
+            layout.custom_user_data_dir = root / "electron-user-data"
+            layout.launcher_stdout = root / "launcher.stdout.log"
+            layout.launcher_stderr = root / "launcher.stderr.log"
+            layout.launcher_path = root / "launcher.sh"
+            layout.launcher_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            runtime_paths = mock.Mock()
+            runtime_paths.managed_dir = root / "managed"
+            runtime_paths.stable_config = root / "stable.json"
+            captured: dict[str, object] = {}
+
+            class _FakeProcess:
+                pid = 43210
+
+                def poll(self) -> int | None:
+                    return None
+
+            def fake_popen(*args: object, **kwargs: object) -> _FakeProcess:
+                captured["args"] = args
+                captured["kwargs"] = kwargs
+                return _FakeProcess()
+
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "CODEX_THREAD_ID": "thread-123",
+                        "CODEX_CI": "1",
+                        "OPENAI_BASE_URL": "https://example.invalid/v1",
+                        "WBP_PROFILE_DIR": "/tmp/ambient-profile",
+                        "BROWSER_USE_AVAILABLE_BACKENDS": "iab",
+                        "PATH": "/Users/example/.codex/tmp/arg0/bin:/usr/bin",
+                    },
+                    clear=True,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.subprocess.Popen",
+                    side_effect=fake_popen,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.collect_codex_process_inventory",
+                    return_value={"custom_process_count": 1},
+                ),
+            ):
+                packet = launch_native_candidate(
+                    repo_root=root,
+                    layout=layout,
+                    real_runtime_paths=runtime_paths,
+                    startup_wait_seconds=0.1,
+                )
+
+        self.assertTrue(packet["custom_process_observed"])
+        self.assertEqual(captured["args"][0][0], str(layout.launcher_path))
+        self.assertEqual(captured["args"][0][1], "desktop")
+        self.assertEqual(captured["args"][0][2], str(root.resolve(strict=False)))
+        env = captured["kwargs"]["env"]
+        self.assertNotIn("CODEX_THREAD_ID", env)
+        self.assertNotIn("CODEX_CI", env)
+        self.assertNotIn("OPENAI_BASE_URL", env)
+        self.assertNotIn("BROWSER_USE_AVAILABLE_BACKENDS", env)
+        self.assertEqual(env["PATH"], DETERMINISTIC_RUNTIME_PATH)
+        self.assertEqual(env["WBP_PROFILE_DIR"], str(layout.profile_dir))
+        self.assertEqual(env["WBP_MANAGED_DIR"], str(runtime_paths.managed_dir))
+        self.assertEqual(env["WBP_STABLE_CONFIG"], str(runtime_paths.stable_config))
+        self.assertEqual(env["WBP_RUNTIME_TMPDIR"], str(layout.tmp_root / "runtime-bind"))
+        self.assertEqual(env["WBP_PYTHON_BIN"], sys.executable)
+
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(
             host_negative_packet={
@@ -4895,6 +5054,34 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertFalse(packet["profile_state_preserved"])
         self.assertFalse(packet["after_relaunch_state_kept"])
+
+    def test_persistent_r2_profile_state_allows_relaunch_created_state_without_deletion(self) -> None:
+        profile_root = Path("/tmp/wbp-persistent/profile")
+        identity = build_persistent_custom_profile_identity_packet(
+            phase="before",
+            profile_id="wbp-custom-main",
+            profile_root=profile_root,
+            codex_home=profile_root,
+            user_data_dir=profile_root / "electron-user-data",
+        )
+        packet = build_persistent_profile_state_preservation_packet(
+            before_identity_packet=identity,
+            relaunch_identity_packet=identity,
+            after_action_state_diff_packet={
+                "status": "ok",
+                "created_count": 1,
+                "deleted_count": 0,
+            },
+            after_relaunch_state_diff_packet={
+                "status": "ok",
+                "created_count": 2,
+                "deleted_count": 0,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["profile_state_preserved"])
+        self.assertTrue(packet["after_relaunch_state_kept"])
 
     def test_persistent_r2_thread_history_classified_after_profile_state(self) -> None:
         profile_state = {

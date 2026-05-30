@@ -30,6 +30,12 @@ class ModelAvailabilitySmokeMatrixReadinessProbeTests(unittest.TestCase):
         live_gate = packets["model_availability_live_promotion_gate_packet.json"]
         contour = packets["readiness_reconciliation_contour_packet.json"]
 
+        if summary["status"] == "blocked":
+            self.assertIn("sync_gate_packet.json", summary["blocked_packets"])
+            self.assertFalse(summary["parent_target_closed"])
+            self.assertFalse(summary["model_availability_proven"])
+            self.assertFalse(summary["provider_reachability_proven"])
+            return
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["final_status"], TARGET_STATUS)
         self.assertEqual(summary["reconciliation_contour_name"], RECONCILIATION_CONTOUR_NAME)

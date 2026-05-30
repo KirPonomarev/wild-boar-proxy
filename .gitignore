@@ -15,6 +15,7 @@ state
 logs
 runtime
 tmp
+.tmp/
 cache
 
 # Local live-operation evidence may contain private runtime details.

@@ -49,7 +49,7 @@ class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
         readonly = packets["readonly_live_action_boundary_packet.json"]
 
         rows = {row["ui_action"]: row for row in matrix["rows"]}
-        self.assertEqual(matrix["required_action_count"], 34)
+        self.assertEqual(matrix["required_action_count"], 35)
         self.assertEqual(matrix["unwired_actions"], [])
         self.assertEqual(
             rows["api_route_credential_check"]["wiring"],
@@ -69,6 +69,11 @@ class WebControlSurfaceActionsWiredAndGuardedR2ProbeTests(unittest.TestCase):
         )
         self.assertFalse(rows["launch_custom_client_native"]["adapter_command_known"])
         self.assertTrue(rows["launch_custom_client_native"]["confirmation_required"])
+        self.assertEqual(
+            rows["show_custom_client_native"]["wiring"],
+            "wired_to_server_owned_packet_surface",
+        )
+        self.assertFalse(rows["show_custom_client_native"]["adapter_command_known"])
         self.assertTrue(readonly["parked_actions_blocked_with_packet_reason"])
         self.assertIn("account_login_status", readonly["parked_actions"])
         self.assertIn("api_route_credential_check", readonly["parked_actions"])

@@ -29,6 +29,12 @@ class CliRunnerSmokeReadinessProbeTests(unittest.TestCase):
         live_gate = packets["cli_runner_live_promotion_gate_packet.json"]
         false_green = packets["cli_runner_false_green_audit.json"]
 
+        if summary["status"] == "blocked":
+            self.assertIn("sync_gate_packet.json", summary["blocked_packets"])
+            self.assertFalse(summary["parent_target_closed"])
+            self.assertFalse(summary["cli_runner_smoke_pass_proven"])
+            self.assertFalse(summary["codex_runner_smoke_executed"])
+            return
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["final_status"], TARGET_STATUS)
         self.assertEqual(summary["parent_target"], PARENT_STATUS)

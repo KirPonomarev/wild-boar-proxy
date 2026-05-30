@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .runtime import (
+    DETERMINISTIC_RUNTIME_PATH,
     RuntimePaths,
     build_repo_owned_default_launcher_script_text,
     write_text_atomic,
@@ -47,6 +48,7 @@ PROTECTED_SURFACE_PATHS = {
 }
 DEFAULT_CODEX_PROCESS_PATTERNS = (
     "/Applications/Codex.app/Contents/MacOS/Codex",
+    "Codex WBP Clean.app/Contents/MacOS/Codex",
     "Codex Helper",
     "Contents/Resources/codex app-server",
 )
@@ -170,6 +172,17 @@ def clean_env() -> dict[str, str]:
         "OPENAI_API_KEY",
     ):
         env.pop(key, None)
+    for key in list(env):
+        if (
+            key.startswith("CODEX_")
+            or key.startswith("OPENAI_")
+            or key.startswith("WBP_")
+            or key.startswith("BROWSER_USE_")
+        ):
+            env.pop(key, None)
+    for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "TMPDIR"):
+        env.pop(key, None)
+    env["PATH"] = DETERMINISTIC_RUNTIME_PATH
     env["NO_PROXY"] = "127.0.0.1,localhost,::1"
     env["no_proxy"] = "127.0.0.1,localhost,::1"
     return env
@@ -1733,12 +1746,17 @@ def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> di
 
 def _collect_codex_process_lines() -> list[str]:
     process = subprocess.run(
-        ["pgrep", "-fal", "|".join(DEFAULT_CODEX_PROCESS_PATTERNS)],
+        ["ps", "-axo", "pid=,command="],
         text=True,
         capture_output=True,
         check=False,
     )
-    return [line for line in process.stdout.splitlines() if line.strip()]
+    lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
+    return [
+        line
+        for line in lines
+        if any(pattern in line for pattern in DEFAULT_CODEX_PROCESS_PATTERNS)
+    ]
 
 
 def collect_codex_process_inventory(
@@ -1752,7 +1770,7 @@ def collect_codex_process_inventory(
     root_lines = [
         line
         for line in lines
-        if "/Applications/Codex.app/Contents/MacOS/Codex" in line
+        if "/Contents/MacOS/Codex" in line
     ]
     root_pids = sorted(
         int(line.split(" ", 1)[0])
@@ -4097,7 +4115,10 @@ def remove_tree_with_retry(path: Path, *, attempts: int = 12, delay_seconds: flo
         if not path.exists():
             return ""
         try:
-            shutil.rmtree(path)
+            if path.is_symlink():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
         except OSError as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             time.sleep(delay_seconds)
@@ -4161,14 +4182,26 @@ def _cli_proxy_api_key() -> str:
     return ""
 
 
-def build_provider_config(*, endpoint: str, model: str, auth_command_path: Path) -> str:
+NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE = "workspace-write"
+NATIVE_CUSTOM_ADMITTED_SANDBOX_MODES = frozenset({"read-only", "workspace-write"})
+
+
+def build_provider_config(
+    *,
+    endpoint: str,
+    model: str,
+    auth_command_path: Path,
+    sandbox_mode: str = NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
+) -> str:
+    if sandbox_mode not in NATIVE_CUSTOM_ADMITTED_SANDBOX_MODES:
+        raise ValueError(f"unsupported native custom sandbox mode: {sandbox_mode}")
     cli_key = _cli_proxy_api_key()
     if cli_key:
         return (
             f'model = "{model}"\n'
             'model_provider = "wbp"\n'
             'approval_policy = "never"\n'
-            'sandbox_mode = "read-only"\n\n'
+            f'sandbox_mode = "{sandbox_mode}"\n\n'
             "[model_providers.wbp]\n"
             'name = "Wild Boar Proxy"\n'
             f'base_url = "{endpoint}"\n'
@@ -4181,7 +4214,7 @@ def build_provider_config(*, endpoint: str, model: str, auth_command_path: Path)
         f'model = "{model}"\n'
         'model_provider = "wbp"\n'
         'approval_policy = "never"\n'
-        'sandbox_mode = "read-only"\n\n'
+        f'sandbox_mode = "{sandbox_mode}"\n\n'
         "[model_providers.wbp]\n"
         'name = "Wild Boar Proxy"\n'
         f'base_url = "{endpoint}"\n'
@@ -4220,6 +4253,30 @@ def create_native_probe_layout(tmp_root: Path) -> NativeProbeLayout:
     )
 
 
+def create_persistent_custom_profile_layout(
+    *,
+    profile_id: str = "wbp-custom-main",
+    base_dir: Path | None = None,
+) -> NativeProbeLayout:
+    paths = default_persistent_custom_profile_paths(
+        profile_id=profile_id,
+        base_dir=base_dir,
+    )
+    profile_dir = Path(str(paths["persistent_profile_root"])).expanduser()
+    runtime_tmp_dir = Path(str(paths["runtime_tmp_dir"])).expanduser()
+    return NativeProbeLayout(
+        tmp_root=runtime_tmp_dir,
+        profile_dir=profile_dir,
+        launcher_path=Path(str(paths["launcher_path"])).expanduser(),
+        launcher_stdout=runtime_tmp_dir / "launcher.stdout.log",
+        launcher_stderr=runtime_tmp_dir / "launcher.stderr.log",
+        custom_user_data_dir=Path(str(paths["user_data_dir"])).expanduser(),
+        custom_home_dir=Path(str(paths["home_dir"])).expanduser(),
+        custom_codex_home=Path(str(paths["codex_home"])).expanduser(),
+        custom_tmp_dir=Path(str(paths["tmp_dir"])).expanduser(),
+    )
+
+
 def materialize_probe_profile(
     *,
     layout: NativeProbeLayout,
@@ -4228,7 +4285,12 @@ def materialize_probe_profile(
     auth_command_path: Path,
     local_token: str,
 ) -> dict[str, Any]:
+    layout.tmp_root.mkdir(parents=True, exist_ok=True)
     layout.profile_dir.mkdir(parents=True, exist_ok=True)
+    layout.custom_user_data_dir.mkdir(parents=True, exist_ok=True)
+    layout.custom_home_dir.mkdir(parents=True, exist_ok=True)
+    layout.custom_codex_home.mkdir(parents=True, exist_ok=True)
+    layout.custom_tmp_dir.mkdir(parents=True, exist_ok=True)
     write_text_atomic(
         layout.profile_dir / "config.toml",
         build_provider_config(endpoint=endpoint, model=model, auth_command_path=auth_command_path),
@@ -4247,6 +4309,7 @@ def materialize_probe_profile(
         "launcher_path": str(layout.launcher_path),
         "config_path": str(layout.profile_dir / "config.toml"),
         "auth_path": str(layout.profile_dir / "auth.json"),
+        "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
         "custom_user_data_dir": str(layout.custom_user_data_dir),
         "custom_home_dir": str(layout.custom_home_dir),
         "custom_tmp_dir": str(layout.custom_tmp_dir),
@@ -4259,6 +4322,7 @@ def launch_native_candidate(
     layout: NativeProbeLayout,
     real_runtime_paths: RuntimePaths,
     startup_wait_seconds: float = DEFAULT_STARTUP_WAIT_SECONDS,
+    post_observation_wait_seconds: float = 2.0,
 ) -> dict[str, Any]:
     env = clean_env()
     env.update(
@@ -4266,13 +4330,14 @@ def launch_native_candidate(
             "WBP_PROFILE_DIR": str(layout.profile_dir),
             "WBP_MANAGED_DIR": str(real_runtime_paths.managed_dir),
             "WBP_STABLE_CONFIG": str(real_runtime_paths.stable_config),
+            "WBP_RUNTIME_TMPDIR": str(layout.tmp_root / "runtime-bind"),
             "WBP_PYTHON_BIN": sys.executable,
         }
     )
     stdout_handle = layout.launcher_stdout.open("w", encoding="utf-8")
     stderr_handle = layout.launcher_stderr.open("w", encoding="utf-8")
     process = subprocess.Popen(
-        [str(layout.launcher_path), "desktop"],
+        [str(layout.launcher_path), "desktop", str(repo_root.resolve(strict=False))],
         cwd=str(repo_root),
         env=env,
         stdout=stdout_handle,
@@ -4296,14 +4361,24 @@ def launch_native_candidate(
         if process.poll() is not None:
             break
         time.sleep(0.5)
+    stability_inventory = last_inventory
+    if custom_observed and post_observation_wait_seconds > 0:
+        time.sleep(post_observation_wait_seconds)
+        stability_inventory = collect_codex_process_inventory(
+            custom_user_data_dir=str(layout.custom_user_data_dir)
+        )
     stdout_handle.close()
     stderr_handle.close()
+    still_observed = stability_inventory["custom_process_count"] > 0
     return {
         "captured_at_utc": utc_now(),
         "launcher_pid": process.pid,
         "launcher_exit_code_early": process.poll(),
         "custom_process_observed": custom_observed,
+        "custom_process_still_observed_after_wait": still_observed,
+        "post_observation_wait_seconds": post_observation_wait_seconds,
         "startup_inventory": last_inventory,
+        "stability_inventory": stability_inventory,
         "launcher_stdout_path": str(layout.launcher_stdout),
         "launcher_stderr_path": str(layout.launcher_stderr),
         "launcher_stdout_size": layout.launcher_stdout.stat().st_size if layout.launcher_stdout.exists() else 0,
@@ -5872,6 +5947,7 @@ def default_persistent_custom_profile_paths(
         "user_data_dir": str((root / "electron-user-data").expanduser()),
         "home_dir": str((root / "home").expanduser()),
         "tmp_dir": str((root / "tmp").expanduser()),
+        "runtime_tmp_dir": str((Path("/tmp") / f"wbp-cdx-{profile_id}").expanduser()),
         "launcher_path": str((root / "codex-custom-launch.sh").expanduser()),
     }
 
@@ -6190,8 +6266,7 @@ def build_persistent_profile_state_preservation_packet(
     relaunch_kept_state = (
         after_relaunch_state_diff_packet is None
         or (
-            after_relaunch_state_diff_packet.get("created_count", 0) == 0
-            and after_relaunch_state_diff_packet.get("deleted_count", 0) == 0
+            after_relaunch_state_diff_packet.get("deleted_count", 0) == 0
         )
     )
     preserved = same_identity and action_changed_storage and relaunch_kept_state

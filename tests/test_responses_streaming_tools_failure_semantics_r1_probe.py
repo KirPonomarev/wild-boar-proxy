@@ -44,7 +44,7 @@ class ResponsesStreamingToolsFailureSemanticsR1ProbeTests(unittest.TestCase):
         self.assertTrue(tools["adapter_tool_call_shape_observed"])
         self.assertTrue(tools["adapter_tool_output_shape_observed"])
         self.assertTrue(tools["adapter_function_tool_request_admitted"])
-        self.assertFalse(tools["upstream_tool_declaration_forwarded"])
+        self.assertTrue(tools["upstream_tool_declaration_forwarded"])
         self.assertFalse(tools["model_driven_function_tool_protocol_supported"])
         self.assertTrue(tools["unsupported_tool_type_rejected"])
         self.assertFalse(tools["consumer_tool_execution_proven"])

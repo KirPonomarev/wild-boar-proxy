@@ -37,6 +37,8 @@ class PersistentProfileLauncherDryRunEnforcementReadinessR2Tests(unittest.TestCa
         self.assertEqual(validation["failed_checks"], [])
         self.assertEqual(validation["profile_mode"], "persistent_custom")
         self.assertEqual(validation["persistent_profile_id"], "wbp-custom-main")
+        self.assertTrue(validation["runtime_tmp_dir_under_tmp_root"])
+        self.assertLess(validation["runtime_tmp_socket_candidate_length"], 104)
         self.assertFalse(validation["config_validation_is_live_runtime_enforcement"])
         self.assertFalse(validation["dry_run_rejection_is_live_rejection_proof"])
         self.assertFalse(validation["profile_path_existence_checked"])
@@ -52,6 +54,8 @@ class PersistentProfileLauncherDryRunEnforcementReadinessR2Tests(unittest.TestCa
         self.assertIn("--user-data-dir", command["argv"])
         self.assertEqual(command["env"]["WBP_PROFILE_MODE"], "persistent_custom")
         self.assertEqual(command["env"]["WBP_PERSISTENT_PROFILE_ID"], "wbp-custom-main")
+        self.assertEqual(command["env"]["WBP_RUNTIME_TMPDIR"], command["env"]["TMPDIR"])
+        self.assertIn("/tmp/wbp-cdx-wbp-custom-main", command["env"]["TMPDIR"])
         self.assertTrue(command["dry_run_only"])
         self.assertFalse(command["command_executed"])
         self.assertFalse(command["native_launch_attempted"])
@@ -118,6 +122,22 @@ class PersistentProfileLauncherDryRunEnforcementReadinessR2Tests(unittest.TestCa
         )
         self.assertIn("live_execution_forbidden_in_dry_run", live["failed_checks"])
         self.assertIn("lock_policy_must_be_single_writer_only", lock["failed_checks"])
+
+    def test_validator_rejects_runtime_tmp_outside_tmp_root_or_with_long_socket_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = default_persistent_launcher_dry_run_config(base_dir=Path(tmp))
+            outside = validate_persistent_launcher_dry_run_config(
+                replace(config, runtime_tmp_dir=Path("/Users/example/not-tmp"))
+            )
+            too_long = validate_persistent_launcher_dry_run_config(
+                replace(
+                    config,
+                    runtime_tmp_dir=Path("/tmp") / ("w" * 120),
+                )
+            )
+
+        self.assertIn("runtime_tmp_dir_must_be_under_tmp_root", outside["failed_checks"])
+        self.assertIn("runtime_tmp_dir_socket_path_too_long", too_long["failed_checks"])
 
     def test_rejection_matrix_is_dry_run_only_and_covers_expected_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -193,7 +193,7 @@ class CustomCodexModelGridBoundAuthorityR1Tests(unittest.TestCase):
 
         manager = CodexCustomSessionManager(REPO_ROOT / "audit_results" / "_tmp_model_grid_probe_sessions")
         packet = manager.create_packet(
-            {"model_id": "wbp-disabled-openrouter"},
+            {"primary_model_id": "wbp-disabled-openrouter"},
             commands(),
             operator_status(),
             selection=selection,
@@ -205,7 +205,7 @@ class CustomCodexModelGridBoundAuthorityR1Tests(unittest.TestCase):
         self.assertFalse(selection["selection_policy_proven"])
         self.assertEqual(packet["status"], "rejected")
         self.assertFalse(packet["session_created"])
-        self.assertEqual(packet["next_action"], "repair_account_selection_truth")
+        self.assertEqual(packet["next_action"], "choose_selectable_slot_model")
 
     def test_ui_projects_provider_labels_and_disabled_state_without_extra_authority(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text(encoding="utf-8")

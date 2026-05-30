@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,7 @@ class PersistentLauncherDryRunConfig:
     user_data_dir: Path
     home_dir: Path
     tmp_dir: Path
+    runtime_tmp_dir: Path
     launcher_path: Path
     app_path: Path = Path("/Applications/Codex.app")
     browser_client_path_authority: bool = False
@@ -46,6 +48,10 @@ class PersistentLauncherDryRunConfig:
 
 def _resolved(path: Path) -> Path:
     return path.expanduser().resolve(strict=False)
+
+
+def _lexical_absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.path.expanduser(str(path))))
 
 
 def _path_is_relative_to(path: Path, parent: Path) -> bool:
@@ -76,6 +82,7 @@ def default_persistent_launcher_dry_run_config(
         user_data_dir=Path(paths["user_data_dir"]),
         home_dir=Path(paths["home_dir"]),
         tmp_dir=Path(paths["tmp_dir"]),
+        runtime_tmp_dir=Path(paths["runtime_tmp_dir"]),
         launcher_path=Path(paths["launcher_path"]),
     )
 
@@ -94,7 +101,8 @@ def render_persistent_launcher_dry_run_command(
     env = {
         "CODEX_HOME": str(_resolved(config.codex_home)),
         "HOME": str(_resolved(config.home_dir)),
-        "TMPDIR": str(_resolved(config.tmp_dir)),
+        "TMPDIR": str(_lexical_absolute(config.runtime_tmp_dir)),
+        "WBP_RUNTIME_TMPDIR": str(_lexical_absolute(config.runtime_tmp_dir)),
         "WBP_PROFILE_MODE": config.profile_mode,
         "WBP_PERSISTENT_PROFILE_ID": config.persistent_profile_id,
     }
@@ -120,6 +128,7 @@ def validate_persistent_launcher_dry_run_config(
     user_data_dir = _resolved(config.user_data_dir)
     home_dir = _resolved(config.home_dir)
     tmp_dir = _resolved(config.tmp_dir)
+    runtime_tmp_dir = _lexical_absolute(config.runtime_tmp_dir)
     launcher_path = _resolved(config.launcher_path)
 
     if config.profile_mode != "persistent_custom":
@@ -147,6 +156,11 @@ def validate_persistent_launcher_dry_run_config(
     ]
     if protected_overlap:
         failed.append("persistent_paths_must_not_overlap_original_codex_surfaces")
+    if not _lexical_absolute(runtime_tmp_dir).is_relative_to(_lexical_absolute(Path("/tmp"))):
+        failed.append("runtime_tmp_dir_must_be_under_tmp_root")
+    socket_candidate = runtime_tmp_dir / "codex-ipc" / "ipc-501.sock"
+    if len(str(socket_candidate)) >= 104:
+        failed.append("runtime_tmp_dir_socket_path_too_long")
     if config.browser_client_path_authority:
         failed.append("browser_client_path_authority_forbidden")
     if config.remote_client_path_authority:
@@ -180,7 +194,13 @@ def validate_persistent_launcher_dry_run_config(
         "user_data_dir": str(user_data_dir),
         "home_dir": str(home_dir),
         "tmp_dir": str(tmp_dir),
+        "runtime_tmp_dir": str(runtime_tmp_dir),
         "launcher_path": str(launcher_path),
+        "runtime_tmp_dir_under_tmp_root": runtime_tmp_dir.is_relative_to(
+            _lexical_absolute(Path("/tmp"))
+        ),
+        "runtime_tmp_socket_candidate": str(socket_candidate),
+        "runtime_tmp_socket_candidate_length": len(str(socket_candidate)),
         "protected_surface_overlap": protected_overlap,
         "browser_client_path_authority": config.browser_client_path_authority,
         "remote_client_path_authority": config.remote_client_path_authority,

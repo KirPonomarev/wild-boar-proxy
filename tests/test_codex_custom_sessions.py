@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,19 @@ def command(packet: dict[str, object]) -> dict[str, object]:
         "human_message": "ok",
         "packet": packet,
     }
+
+
+def init_git_repo(path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True, text=True)
+    (path / "README.md").write_text("safe worktree test repo\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "init"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def account(backend_id: str, priority: int = 10) -> dict[str, object]:
@@ -1298,6 +1312,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "path": "/v1/responses",
                     "upstream_status": 200,
                     "forwarded_to_wbp": True,
+                    "response_error_type": "invalid_request_error",
+                    "response_error_message_bounded": "bounded provider message",
                     "authorization": "forbidden",
                     "raw_body": "forbidden",
                 },
@@ -1321,6 +1337,14 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["trace_path"], "/v1/responses")
             self.assertEqual(packet["upstream_status"], 200)
             self.assertTrue(packet["forwarded_to_wbp"])
+            self.assertEqual(
+                packet["trace_observer_packet"]["response_error_type"],
+                "invalid_request_error",
+            )
+            self.assertEqual(
+                packet["trace_observer_packet"]["response_error_message_bounded"],
+                "bounded provider message",
+            )
             self.assertNotIn("authorization", packet["trace_observer_packet"])
             self.assertNotIn("raw_body", packet["trace_observer_packet"])
             self.assertTrue(packet["wbp_path_proven"])
@@ -1339,6 +1363,342 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["path_proof_status"], "independently_observed")
             self.assertTrue(packet["runtime_selected_model_recorded"])
             self.assertTrue(packet["runtime_selected_model_matches_bound_model"])
+
+    def test_api_only_temp_write_probe_requires_owner_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.temp_write_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=False,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+            self.assertEqual(
+                packet["final_status"],
+                "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+            )
+            self.assertFalse(packet["repo_mutation_attempted"])
+
+    def test_api_only_temp_write_probe_rejects_browser_path_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.temp_write_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter", "path": "/tmp/owned"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("path", packet["forbidden_fields"])
+            self.assertFalse(packet["browser_path_intake"])
+            self.assertFalse(packet["repo_mutation_attempted"])
+
+    def test_api_only_temp_write_probe_proves_temp_file_write_and_cleanup(self) -> None:
+        observed_payload: dict[str, object] = {}
+
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            observed_payload.update(payload)
+            prompt = str(payload["prompt"])
+            target = Path(prompt.split("> ", 1)[1].split(" &&", 1)[0]).resolve()
+            self.assertEqual(target.parent, writable_dir)
+            target.write_text("WBP_DEEPSEEK_TEMP_WRITE_OK", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "selected_model": "wbp-web-primary-openrouter",
+                "runtime_model": "wbp-web-primary-openrouter",
+                "final_message": "WBP_DEEPSEEK_TEMP_WRITE_OK",
+                "configured_provider": "external_route",
+                "configured_wire_api": "responses",
+                "workspace_write_admitted": True,
+                "current_codex_home_used": False,
+                "secret_value_recorded": False,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                    "request_count": 2,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.temp_write_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter"},
+                runner,
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["final_status"],
+                "API_ONLY_DEEPSEEK_TEMP_WRITE_PROVEN_WITH_LIMITS",
+            )
+            self.assertEqual(observed_payload["model_id"], "wbp-web-primary-openrouter")
+            self.assertEqual(observed_payload["slot_id"], "primary_model_slot")
+            self.assertTrue(packet["tool_loop_proven"])
+            self.assertEqual(packet["request_count"], 2)
+            self.assertTrue(packet["file_existed_after_tool"])
+            self.assertTrue(packet["file_content_matches"])
+            self.assertTrue(packet["file_removed_after_probe"])
+            self.assertTrue(packet["file_within_probe_dir"])
+            self.assertEqual(packet["write_surface"], "temp_only")
+            self.assertFalse(packet["repo_mutation_attempted"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["wbp_patch_applier_used"])
+            self.assertFalse(packet["live_product_code_edit_claimed"])
+
+    def test_api_only_safe_worktree_edit_probe_requires_owner_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.safe_worktree_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=False,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+            self.assertEqual(
+                packet["final_status"],
+                "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+            )
+            self.assertFalse(packet["safe_worktree_used"])
+
+    def test_api_only_safe_worktree_edit_probe_rejects_browser_worktree_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.safe_worktree_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter", "path": "/tmp/owned"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("path", packet["forbidden_fields"])
+            self.assertFalse(packet["browser_worktree_path_intake"])
+            self.assertFalse(packet["main_worktree_mutated_by_probe"])
+
+    def test_api_only_safe_worktree_edit_probe_proves_diff_and_cleanup(self) -> None:
+        observed_payload: dict[str, object] = {}
+
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            observed_payload.update(payload)
+            prompt = str(payload["prompt"])
+            target = Path(prompt.split("> ", 1)[1].split(" &&", 1)[0]).resolve()
+            self.assertEqual(target.parent, writable_dir)
+            target.write_text("WBP_DEEPSEEK_SAFE_WORKTREE_EDIT_OK", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "selected_model": "wbp-web-primary-openrouter",
+                "runtime_model": "wbp-web-primary-openrouter",
+                "final_message": "WBP_DEEPSEEK_SAFE_WORKTREE_EDIT_OK",
+                "configured_provider": "external_route",
+                "configured_wire_api": "responses",
+                "workspace_write_admitted": True,
+                "current_codex_home_used": False,
+                "secret_value_recorded": False,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                    "request_count": 2,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            init_git_repo(Path(repo_dir))
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.safe_worktree_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-web-primary-openrouter"},
+                runner,
+                owner_authorized=True,
+                repo_root=Path(repo_dir),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["final_status"],
+                "API_ONLY_DEEPSEEK_SAFE_WORKTREE_EDIT_PROVEN_WITH_LIMITS",
+            )
+            self.assertEqual(observed_payload["model_id"], "wbp-web-primary-openrouter")
+            self.assertEqual(observed_payload["slot_id"], "primary_model_slot")
+            self.assertTrue(packet["tool_loop_proven"])
+            self.assertTrue(packet["safe_worktree_used"])
+            self.assertEqual(packet["write_surface"], "safe_worktree_only")
+            self.assertTrue(packet["file_changed_by_codex_tool"])
+            self.assertTrue(packet["file_content_matches"])
+            self.assertTrue(packet["git_diff_observed"])
+            self.assertTrue(packet["expected_diff_observed"])
+            self.assertFalse(packet["main_worktree_mutated_by_probe"])
+            self.assertFalse(packet["secret_in_diff"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["original_codex_profile_touched"])
+            self.assertFalse(packet["wbp_patch_applier_used"])
+            self.assertFalse(packet["commit_attempted"])
+            self.assertFalse(packet["push_attempted"])
+            self.assertFalse(packet["merge_attempted"])
+            self.assertTrue(packet["worktree_removed_after_probe"])
+
+    def test_api_only_product_safe_worktree_coder_keeps_active_worktree_until_cleanup(self) -> None:
+        observed_payload: dict[str, object] = {}
+
+        def runner(payload: dict[str, object], worktree_dir: Path) -> dict[str, object]:
+            observed_payload.update(payload)
+            self.assertTrue((worktree_dir / ".git").exists() or (worktree_dir / ".git").is_file())
+            readme = worktree_dir / "README.md"
+            readme.write_text("safe worktree test repo\nDeepSeek product coder touched this file.\n", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "selected_model": "wbp-web-primary-openrouter",
+                "runtime_model": "wbp-web-primary-openrouter",
+                "final_message": "changed README.md",
+                "configured_provider": "external_route",
+                "configured_wire_api": "responses",
+                "workspace_write_admitted": True,
+                "working_dir_override_admitted": True,
+                "working_dir_scope": "safe_worktree_only",
+                "current_codex_home_used": False,
+                "secret_value_recorded": False,
+                "direct_non_wbp_model_egress_absent_proven": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                    "request_count": 2,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.safe_worktree_coder_packet(
+                created["session"]["session_id"],
+                {
+                    "api_model_id": "wbp-web-primary-openrouter",
+                    "task": "Append a short sentence to README.md.",
+                },
+                runner,
+                owner_authorized=True,
+                repo_root=repo,
+            )
+            cleanup = manager.safe_worktree_cleanup_packet(packet["worktree_id"])
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["final_status"],
+                "API_ONLY_DEEPSEEK_PRODUCT_SAFE_WORKTREE_CODER_READY_WITH_LIMITS",
+            )
+            self.assertEqual(observed_payload["model_id"], "wbp-web-primary-openrouter")
+            self.assertIn("Append a short sentence", observed_payload["prompt"])
+            self.assertTrue(packet["safe_worktree_used"])
+            self.assertEqual(packet["safe_worktree_status"], "active")
+            self.assertTrue(packet["cleanup_required"])
+            self.assertTrue(packet["diff_present"])
+            self.assertEqual(packet["changed_files"], ["README.md"])
+            self.assertFalse(packet["main_worktree_mutated_by_run"])
+            self.assertFalse(packet["secret_in_diff"])
+            self.assertFalse(packet["commit_attempted"])
+            self.assertFalse(packet["push_attempted"])
+            self.assertTrue(packet["push_attempt_absent_proven"])
+            self.assertFalse(packet["merge_attempted"])
+            self.assertFalse(packet["wbp_patch_applier_used"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["original_codex_profile_touched"])
+            self.assertTrue(packet["working_dir_override_admitted"])
+            self.assertEqual(packet["working_dir_scope"], "safe_worktree_only")
+            self.assertIn("DeepSeek product coder touched this file", packet["diff_text_bounded"])
+            self.assertEqual(cleanup["status"], "ok")
+            self.assertTrue(cleanup["cleanup_performed"])
+            self.assertEqual(cleanup["safe_worktree_status"], "cleaned")
+
+    def test_api_only_product_safe_worktree_coder_rejects_browser_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot(),
+            )
+
+            packet = manager.safe_worktree_coder_packet(
+                created["session"]["session_id"],
+                {
+                    "api_model_id": "wbp-web-primary-openrouter",
+                    "task": "ok",
+                    "worktree_path": "/tmp/owned",
+                },
+                lambda _payload, _worktree_dir: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("worktree_path", packet["forbidden_fields"])
+            self.assertFalse(packet["browser_worktree_path_intake"])
 
     def test_prompt_run_blocks_when_runtime_model_mismatches_bound_slot_model(self) -> None:
         def runner(payload: dict[str, object]) -> dict[str, object]:

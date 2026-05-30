@@ -2075,6 +2075,9 @@ class UiDispatchTests(unittest.TestCase):
         shell.quick_start_route_secret_ref_var.set.assert_called_once_with(
             "OPENROUTER_API_KEY"
         )
+        shell.quick_start_route_last_checked_var.set.assert_called_once_with(
+            "2026-05-21T00:00:00Z"
+        )
         shell.quick_start_route_validation_var.set.assert_called_once_with("ok")
         shell.quick_start_api_reason_var.set.assert_called_once_with("")
         shell.quick_start_check_all_reason_var.set.assert_called_once_with("")
@@ -2892,6 +2895,10 @@ class MainTests(unittest.TestCase):
         self.assertEqual(payload["quick_start_summary"]["source"], "live_sandbox")
         self.assertEqual(payload["quick_start_summary"]["bundle_verdict"], "ready")
         self.assertEqual(payload["quick_start_summary"]["route_label"], "DeepSeek V3")
+        self.assertEqual(
+            payload["quick_start_summary"]["route_last_checked"],
+            "2026-05-12T00:00:01Z",
+        )
         self.assertEqual(payload["direct_packets"]["accounts"]["account_count"], 2)
         self.assertEqual(payload["ledger"][0]["action_id"], "quick_start_check_all")
         fake_root.withdraw.assert_called_once_with()

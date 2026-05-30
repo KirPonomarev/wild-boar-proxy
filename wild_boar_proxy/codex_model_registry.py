@@ -22,10 +22,25 @@ from wild_boar_proxy.runtime import REPO_ROOT
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
 DUAL_LANE_SELECTOR_ALLOWED_FIELDS = {"chatgpt_model_id", "api_model_id"}
 CUSTOM_API_ACTION_GATE_ALLOWED_FIELDS = {"api_model_id"}
-CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
+CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS = {
+    "execution_mode",
+    "chatgpt_model_id",
+    "api_model_id",
+    "api_reasoning_option_id",
+}
+CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT = "catalog_default"
+CUSTOM_CODEX_API_REASONING_OPTION_DISABLED = "provider_declared_disabled"
+CUSTOM_CODEX_API_REASONING_OPTION_HIGH = "provider_declared_high"
+CUSTOM_CODEX_API_REASONING_OPTION_MAX = "provider_declared_max"
+CUSTOM_CODEX_API_REASONING_OPTION_ALLOWED_IDS = {
+    CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+    CUSTOM_CODEX_API_REASONING_OPTION_DISABLED,
+    CUSTOM_CODEX_API_REASONING_OPTION_HIGH,
+    CUSTOM_CODEX_API_REASONING_OPTION_MAX,
+}
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
-CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_api"
+CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_plus_api"
 CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = "api_only"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT = "API_ONLY_DEEPSEEK_READY"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT = (
@@ -537,6 +552,51 @@ def _tier_unknown() -> dict[str, str]:
     }
 
 
+def _route_thinking_metadata_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    thinking = entry.get("thinking")
+    if not isinstance(thinking, dict):
+        return {
+            "thinking": {"type": "unconfigured"},
+            "api_parameter_sent": False,
+            "intelligence_measured": False,
+            "label_source": "unavailable_unknown",
+        }
+    thinking_type = str(thinking.get("type") or "disabled").strip()
+    if thinking_type != "enabled":
+        return {
+            "thinking": {"type": "disabled"},
+            "api_parameter_sent": False,
+            "intelligence_measured": False,
+            "label_source": "operator_mapping",
+        }
+    return {
+        "thinking": {
+            "type": "enabled",
+            "reasoning_effort": str(thinking.get("reasoning_effort") or "high"),
+        },
+        "api_parameter_sent": True,
+        "intelligence_measured": False,
+        "label_source": "provider_declared_plus_operator_mapping",
+    }
+
+
+def _route_intelligence_tier_from_thinking(thinking_metadata: dict[str, Any]) -> dict[str, str]:
+    thinking = thinking_metadata.get("thinking")
+    if not isinstance(thinking, dict):
+        return _tier_unknown()
+    if thinking.get("type") != "enabled":
+        return {
+            "label": "fast_no_thinking",
+            "source": "operator_assigned",
+            "proof_level": "declared",
+        }
+    return {
+        "label": f"reasoning_effort_{str(thinking.get('reasoning_effort') or 'high')}",
+        "source": "provider_declared",
+        "proof_level": "declared",
+    }
+
+
 def _model_entry(
     model_id: str,
     *,
@@ -666,7 +726,8 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
             disabled_reasons.append("secret_ref_missing")
         selection_enabled = not disabled_reasons
         provider = str(route.get("provider") or "").strip()
-        label = str(route.get("upstream_model") or route.get("display_name") or route_id).strip()
+        label = str(route.get("display_name") or route.get("upstream_model") or route_id).strip()
+        thinking_metadata = _route_thinking_metadata_from_entry(route)
         entry.update(
             {
                 "label": label or route_id,
@@ -683,6 +744,12 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
                 "physical_provider": "",
                 "physical_provider_proven": False,
                 "provider_model_id": str(route.get("upstream_model") or route_id),
+                "upstream_model": str(route.get("upstream_model") or route_id),
+                "thinking": dict(thinking_metadata["thinking"]),
+                "api_parameter_sent": thinking_metadata["api_parameter_sent"] is True,
+                "intelligence_measured": False,
+                "label_source": str(thinking_metadata["label_source"]),
+                "intelligence_tier": _route_intelligence_tier_from_thinking(thinking_metadata),
                 "model_source_hint": "server_owned_external_route",
                 "selection_enabled": selection_enabled,
                 "selection_state": "selectable" if selection_enabled else "disabled",
@@ -802,9 +869,14 @@ def _catalog_model_entry(
         "physical_provider": str(entry.get("physical_provider") or ""),
         "physical_provider_proven": entry.get("physical_provider_proven") is True,
         "provider_model_id": str(entry.get("provider_model_id") or ""),
+        "upstream_model": str(entry.get("upstream_model") or entry.get("provider_model_id") or ""),
         "aliases": list(entry.get("aliases") or []),
         "intelligence_tier": dict(entry.get("intelligence_tier") or _tier_unknown()),
         "speed_tier": dict(entry.get("speed_tier") or _tier_unknown()),
+        "thinking": dict(entry.get("thinking") or {}),
+        "api_parameter_sent": entry.get("api_parameter_sent") is True,
+        "intelligence_measured": entry.get("intelligence_measured") is True,
+        "label_source": str(entry.get("label_source") or "unavailable_unknown"),
         "server_issued": entry.get("server_issued") is True,
         "model_id_authority": "server_issued",
         "selection_enabled": entry.get("selection_enabled") is True,
@@ -990,6 +1062,7 @@ def _current_catalog_model_rows(
                 "provider": str(model.get("physical_provider") or ""),
                 "provider_label": str(model.get("provider_label") or ""),
                 "provider_model_id": str(model.get("provider_model_id") or ""),
+                "upstream_model": str(model.get("upstream_model") or model.get("provider_model_id") or ""),
                 "lane_kind": str(model.get("lane") or ""),
                 "model_lane": str(model.get("model_lane") or UNKNOWN_MODEL_LANE),
                 "model_lane_classified": model.get("model_lane_classified") is True,
@@ -1006,6 +1079,10 @@ def _current_catalog_model_rows(
                 "cost_class": "unknown_unclassified",
                 "speed_tier": dict(model.get("speed_tier") or _tier_unknown()),
                 "intelligence_tier": dict(model.get("intelligence_tier") or _tier_unknown()),
+                "thinking": dict(model.get("thinking") or {}),
+                "api_parameter_sent": model.get("api_parameter_sent") is True,
+                "intelligence_measured": model.get("intelligence_measured") is True,
+                "label_source": str(model.get("label_source") or "unavailable_unknown"),
                 "capability_tags": [],
                 "availability_state": str(model.get("availability_claim_level") or "listed_not_live_proven"),
                 "proof_level": "classified",
@@ -1168,6 +1245,7 @@ def _selector_entry_from_row(
         "provider": str(row.get("provider") or ""),
         "provider_label": str(row.get("provider_label") or ""),
         "provider_model_id": str(row.get("provider_model_id") or ""),
+        "upstream_model": str(row.get("upstream_model") or row.get("provider_model_id") or ""),
         "lane_kind": str(row.get("lane_kind") or ""),
         "model_lane": str(row.get("model_lane") or UNKNOWN_MODEL_LANE),
         "model_lane_classified": row.get("model_lane_classified") is True,
@@ -1196,6 +1274,10 @@ def _selector_entry_from_row(
         "proof_level": str(row.get("proof_level") or "classified"),
         "speed_tier": dict(row.get("speed_tier") or _tier_unknown()),
         "intelligence_tier": dict(row.get("intelligence_tier") or _tier_unknown()),
+        "thinking": dict(row.get("thinking") or {}),
+        "api_parameter_sent": row.get("api_parameter_sent") is True,
+        "intelligence_measured": row.get("intelligence_measured") is True,
+        "label_source": str(row.get("label_source") or "unavailable_unknown"),
         "selection_intent_only": True,
         "runtime_selection_proven": False,
         "session_execution_ready": False,
@@ -1540,6 +1622,78 @@ def _execution_mode_not_bound_slot(*, slot_id: str, reason: str) -> dict[str, An
     }
 
 
+def _api_reasoning_option_from_selection(selection: dict[str, Any] | None) -> str:
+    selection = dict(selection or {})
+    thinking = selection.get("thinking")
+    if not isinstance(thinking, dict):
+        return CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+    thinking_type = str(thinking.get("type") or "").strip()
+    if thinking_type == "enabled":
+        effort = str(thinking.get("reasoning_effort") or "").strip().lower()
+        if effort == "max":
+            return CUSTOM_CODEX_API_REASONING_OPTION_MAX
+        if effort == "high":
+            return CUSTOM_CODEX_API_REASONING_OPTION_HIGH
+        return CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+    if thinking_type == "disabled":
+        return CUSTOM_CODEX_API_REASONING_OPTION_DISABLED
+    return CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+
+
+def _api_reasoning_option_packet(
+    *,
+    raw_option_id: str,
+    api_required: bool,
+    api_selection: dict[str, Any] | None,
+) -> dict[str, Any]:
+    selected_model_option_id = _api_reasoning_option_from_selection(api_selection)
+    option_id = raw_option_id or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+    effective_option_id = (
+        selected_model_option_id
+        if option_id == CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        else option_id
+    )
+    thinking = (api_selection or {}).get("thinking")
+    thinking = dict(thinking) if isinstance(thinking, dict) else {}
+    provider_option = {
+        "thinking": thinking if thinking else {"type": "unconfigured"},
+        "api_parameter_sent": bool((api_selection or {}).get("api_parameter_sent") is True),
+    }
+    if not api_required:
+        return {
+            "status": "ignored_for_mode",
+            "option_id": "",
+            "requested_option_id": raw_option_id,
+            "effective_option_id": "",
+            "selected_model_option_id": "",
+            "source": "mode_does_not_use_api",
+            "proof_level": "not_applicable",
+            "provider_option": {},
+            "runtime_mutation_claimed": False,
+            "intelligence_measured": False,
+            "codex_intelligence_parity_claimed": False,
+        }
+    return {
+        "status": "ok",
+        "option_id": option_id,
+        "requested_option_id": raw_option_id,
+        "effective_option_id": effective_option_id,
+        "selected_model_option_id": selected_model_option_id,
+        "source": (
+            "server_catalog_selected_model"
+            if option_id == CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+            else "browser_choice_server_validated"
+        ),
+        "proof_level": "provider_declared"
+        if selected_model_option_id != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        else "unproven",
+        "provider_option": provider_option,
+        "runtime_mutation_claimed": False,
+        "intelligence_measured": False,
+        "codex_intelligence_parity_claimed": False,
+    }
+
+
 def build_custom_codex_execution_mode_selector_packet(
     payload: Any,
     operator_status: dict[str, Any] | None,
@@ -1565,8 +1719,12 @@ def build_custom_codex_execution_mode_selector_packet(
     chatgpt_index = _selector_entry_index(chatgpt_rows)
     api_index = _selector_entry_index(api_rows)
     execution_mode = str(payload.get("execution_mode") or "").strip()
+    raw_chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
     raw_api_model_id = str(payload.get("api_model_id") or "").strip()
-    chatgpt_model_id = str(chatgpt_lane.get("default_model_id") or "").strip()
+    raw_api_reasoning_option_id = str(payload.get("api_reasoning_option_id") or "").strip()
+    chatgpt_model_id = raw_chatgpt_model_id or str(
+        chatgpt_lane.get("default_model_id") or ""
+    ).strip()
     chatgpt_selection = chatgpt_index.get(chatgpt_model_id) if chatgpt_model_id else None
     api_required = execution_mode in {
         CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
@@ -1574,6 +1732,11 @@ def build_custom_codex_execution_mode_selector_packet(
     }
     api_model_id = raw_api_model_id if api_required else ""
     api_selection = api_index.get(api_model_id) if api_model_id else None
+    api_reasoning_option_packet = _api_reasoning_option_packet(
+        raw_option_id=raw_api_reasoning_option_id,
+        api_required=api_required,
+        api_selection=api_selection,
+    )
 
     status = "ok"
     machine_error_code = "OK"
@@ -1582,10 +1745,21 @@ def build_custom_codex_execution_mode_selector_packet(
         status = "rejected"
         machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_BROWSER_AUTHORITY_REJECTED"
         next_action = "remove_browser_payload_fields"
+    elif (
+        raw_api_reasoning_option_id
+        and raw_api_reasoning_option_id not in CUSTOM_CODEX_API_REASONING_OPTION_ALLOWED_IDS
+    ):
+        status = "rejected"
+        machine_error_code = "CUSTOM_CODEX_API_REASONING_OPTION_NOT_ADMITTED"
+        next_action = "choose_server_issued_api_reasoning_option"
     elif execution_mode not in CUSTOM_CODEX_EXECUTION_MODES:
         status = "rejected"
         machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_NOT_ADMITTED"
         next_action = "choose_admitted_execution_mode"
+    elif raw_chatgpt_model_id and chatgpt_selection is None:
+        status = "rejected"
+        machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_MODEL_NOT_SERVER_ISSUED"
+        next_action = "choose_server_issued_chatgpt_model"
     elif execution_mode in {
         CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
         CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
@@ -1605,6 +1779,16 @@ def build_custom_codex_execution_mode_selector_packet(
         status = "blocked"
         machine_error_code = "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SELECTABLE"
         next_action = "choose_selectable_api_model"
+    elif (
+        api_required
+        and raw_api_reasoning_option_id
+        and raw_api_reasoning_option_id != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        and raw_api_reasoning_option_id
+        != api_reasoning_option_packet.get("selected_model_option_id")
+    ):
+        status = "blocked"
+        machine_error_code = "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL"
+        next_action = "choose_matching_api_model_variant"
 
     primary_slot: dict[str, Any]
     coding_slot: dict[str, Any]
@@ -1676,6 +1860,7 @@ def build_custom_codex_execution_mode_selector_packet(
         "browser_authority": {
             "execution_mode": True,
             "api_model_id": True,
+            "api_reasoning_option_id": True,
             "provider": False,
             "route_id": False,
             "account_id": False,
@@ -1704,10 +1889,22 @@ def build_custom_codex_execution_mode_selector_packet(
         "ui_text_counts_as_runtime_truth": False,
         "deepseek_special_case": False,
         "first_admitted_api_provider": "deepseek",
+        "chatgpt_model_id": chatgpt_model_id if chatgpt_executor_selected else "",
+        "chatgpt_model_selected_by_user": bool(raw_chatgpt_model_id),
+        "chatgpt_catalog_default_used": bool(
+            not raw_chatgpt_model_id and chatgpt_executor_selected
+        ),
         "api_provider_id": str((api_selection or {}).get("provider") or ""),
         "api_model_id": api_model_id,
         "api_model_selected_by_user": bool(raw_api_model_id),
         "api_model_ignored_for_mode": bool(raw_api_model_id and not api_required),
+        "api_reasoning_option_id": str(api_reasoning_option_packet.get("option_id") or ""),
+        "api_reasoning_option_selected_by_user": bool(raw_api_reasoning_option_id),
+        "api_reasoning_option_ignored_for_mode": bool(raw_api_reasoning_option_id and not api_required),
+        "api_reasoning_option_packet": api_reasoning_option_packet,
+        "api_reasoning_option_runtime_mutation_claimed": False,
+        "api_reasoning_intelligence_measured": False,
+        "api_reasoning_codex_parity_claimed": False,
         "primary_model_slot": primary_slot,
         "coding_agent_model_slot": coding_slot,
         "chatgpt_executor_selected": chatgpt_executor_selected,

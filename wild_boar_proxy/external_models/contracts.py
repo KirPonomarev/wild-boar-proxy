@@ -29,6 +29,7 @@ ROUTE_ALLOWED_FIELDS = frozenset(
         "enabled",
         "transform_profile",
         "response_profile",
+        "thinking",
     }
 )
 ROUTE_REQUIRED_FIELDS = frozenset(

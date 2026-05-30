@@ -8,11 +8,29 @@ import os
 import subprocess
 import sys
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from tkinter import StringVar, Tk, messagebox
-from tkinter import ttk
 from typing import Any
+
+try:
+    from tkinter import StringVar, Tk, messagebox
+    from tkinter import ttk
+except ModuleNotFoundError as exc:
+    StringVar = None  # type: ignore[assignment]
+    Tk = None  # type: ignore[assignment]
+    ttk = None  # type: ignore[assignment]
+    _TKINTER_IMPORT_ERROR: ModuleNotFoundError | None = exc
+
+    class _UnavailableMessagebox:
+        def askyesno(self, *args: Any, **kwargs: Any) -> bool:
+            raise RuntimeError("tkinter is unavailable")
+
+        def showinfo(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("tkinter is unavailable")
+
+    messagebox = _UnavailableMessagebox()
+else:
+    _TKINTER_IMPORT_ERROR = None
 
 
 VALID_LIVENESS = {"healthy", "degraded", "down", "stale", "unknown"}
@@ -184,6 +202,16 @@ DEFAULT_ACTIVE_WINDOW_TARGET = 10
 
 class UiShellError(Exception):
     """Raised when the UI cannot trust a command result."""
+
+
+def _require_tkinter() -> None:
+    if Tk is None or StringVar is None or ttk is None:
+        raise UiShellError("tkinter is required for the desktop UI") from _TKINTER_IMPORT_ERROR
+
+
+def _require_tkinter_root() -> None:
+    if Tk is None:
+        raise UiShellError("tkinter is required for the desktop UI") from _TKINTER_IMPORT_ERROR
 
 
 def parse_exact_json_object(stdout: str) -> dict[str, Any]:
@@ -382,6 +410,7 @@ class ExternalModelRecord:
     fallback_eligible: bool
     synthetic_adapter_state: str
     profile_ready: bool
+    thinking: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -399,6 +428,7 @@ class ExternalRouteRecord:
     fallback_eligible: bool
     auth_type: str
     secret_ref: str
+    thinking: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -648,6 +678,7 @@ def _normalize_external_model_record(raw: dict[str, Any]) -> ExternalModelRecord
         ),
         synthetic_adapter_state=str(raw["synthetic_adapter_state"]),
         profile_ready=require_bool(raw["profile_ready"], "external model profile_ready"),
+        thinking=dict(raw.get("thinking") or {}),
     )
 
 
@@ -672,6 +703,7 @@ def _normalize_external_route_record(raw: dict[str, Any]) -> ExternalRouteRecord
         ),
         auth_type=str(auth.get("type", "")),
         secret_ref=str(auth.get("secret_ref", "")),
+        thinking=dict(raw.get("thinking") or {}),
     )
 
 
@@ -1525,6 +1557,7 @@ def build_quick_start_check_all_payload(
 
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
+        _require_tkinter()
         self.root = root
         self.runner = runner
         self.root.title("Wild Boar Proxy")
@@ -3265,6 +3298,7 @@ class MinimalCompanionShell:
 def run_packaged_continuity_smoke_json() -> tuple[dict[str, Any], int]:
     root: Tk | None = None
     try:
+        _require_tkinter_root()
         root = Tk()
         root.withdraw()
         runner = JsonCommandRunner()
@@ -3417,6 +3451,7 @@ def main(argv: list[str] | None = None) -> int:
         payload, exit_code = run_packaged_continuity_smoke_json()
         sys.stdout.write(json.dumps(payload, ensure_ascii=True) + "\n")
         return exit_code
+    _require_tkinter_root()
     root = Tk()
     runner = JsonCommandRunner()
     MinimalCompanionShell(root, runner)

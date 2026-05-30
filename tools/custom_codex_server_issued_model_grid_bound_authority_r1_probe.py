@@ -341,14 +341,14 @@ def build_server_selection_binding_packet() -> dict[str, Any]:
     temp_root = Path(tempfile.mkdtemp(prefix="wbp-model-grid-r1-"))
     manager = CodexCustomSessionManager(temp_root)
     enabled_session = manager.create_packet(
-        {"model_id": "wbp-enabled-openrouter"},
+        {"primary_model_id": "wbp-enabled-openrouter"},
         commands(),
         operator_status(),
         selection=enabled,
         api_snapshot=api_snapshot(),
     )
     disabled_session = manager.create_packet(
-        {"model_id": "wbp-disabled-openrouter"},
+        {"primary_model_id": "wbp-disabled-openrouter"},
         commands(),
         operator_status(),
         selection=disabled,
@@ -361,9 +361,9 @@ def build_server_selection_binding_packet() -> dict[str, Any]:
         and enabled.get("status") == "degraded"
         and enabled.get("selected_route_server_issued") is True
         and disabled.get("status") == "degraded"
-        and enabled_session.get("status") == "rejected"
-        and enabled_session.get("next_action") == "repair_account_selection_truth"
+        and enabled_session.get("status") == "ok"
         and disabled_session.get("status") == "rejected"
+        and disabled_session.get("next_action") == "choose_selectable_slot_model"
     )
     return packet(
         "server_selection_binding",

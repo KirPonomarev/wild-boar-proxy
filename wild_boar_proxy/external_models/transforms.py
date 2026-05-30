@@ -11,10 +11,12 @@ from . import errors
 DEFAULT_REQUEST_TRANSFORM = "openai_chat_passthrough"
 DEFAULT_RESPONSE_PROFILE = "openai_chat_choices_message"
 CHECK_REQUEST_COMPLETION_BUDGET = 96
+THINKING_REASONING_EFFORTS = frozenset({"high", "max"})
 
 REQUEST_TRANSFORM_PROFILES = frozenset(
     {
         DEFAULT_REQUEST_TRANSFORM,
+        "openai_chat_developer_to_system",
         "openai_chat_system_to_developer",
         "openai_chat_input_text",
     }
@@ -43,6 +45,95 @@ def validate_route_transform_profiles(route: dict[str, Any]) -> None:
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )
+    thinking = route.get("thinking")
+    if thinking is None:
+        return
+    if str(route.get("provider") or "") != "deepseek":
+        raise RuntimeErrorInfo(
+            "thinking policy is admitted only for DeepSeek routes.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    if not isinstance(thinking, dict):
+        raise RuntimeErrorInfo(
+            "thinking must be an object.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    thinking_type = str(thinking.get("type") or "").strip()
+    if thinking_type == "disabled":
+        unexpected = sorted(str(key) for key in thinking if key != "type")
+        if unexpected:
+            raise RuntimeErrorInfo(
+                "disabled thinking policy must not include extra fields.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="user_action",
+            )
+        return
+    if thinking_type != "enabled":
+        raise RuntimeErrorInfo(
+            "thinking.type must be disabled or enabled.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    reasoning_effort = str(thinking.get("reasoning_effort") or "").strip()
+    if reasoning_effort not in THINKING_REASONING_EFFORTS:
+        raise RuntimeErrorInfo(
+            "thinking.reasoning_effort must be high or max.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    unexpected = sorted(str(key) for key in thinking if key not in {"type", "reasoning_effort"})
+    if unexpected:
+        raise RuntimeErrorInfo(
+            "thinking policy contains unsupported fields.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+
+
+def route_thinking_metadata(route: dict[str, Any]) -> dict[str, Any]:
+    thinking = route.get("thinking")
+    if not isinstance(thinking, dict):
+        return {
+            "thinking": {"type": "unconfigured"},
+            "api_parameter_sent": False,
+            "label_source": "unavailable_unknown",
+            "intelligence_measured": False,
+        }
+    thinking_type = str(thinking.get("type") or "disabled").strip()
+    if thinking_type != "enabled":
+        return {
+            "thinking": {"type": "disabled"},
+            "api_parameter_sent": False,
+            "label_source": "operator_mapping",
+            "intelligence_measured": False,
+        }
+    reasoning_effort = str(thinking.get("reasoning_effort") or "high").strip()
+    return {
+        "thinking": {
+            "type": "enabled",
+            "reasoning_effort": reasoning_effort,
+        },
+        "api_parameter_sent": True,
+        "label_source": "provider_declared_plus_operator_mapping",
+        "intelligence_measured": False,
+    }
+
+
+def apply_route_thinking_policy(
+    payload: dict[str, Any],
+    route: dict[str, Any],
+) -> dict[str, Any]:
+    metadata = route_thinking_metadata(route)
+    thinking = metadata.get("thinking")
+    if (
+        isinstance(thinking, dict)
+        and thinking.get("type") == "enabled"
+        and metadata.get("api_parameter_sent") is True
+    ):
+        payload["thinking"] = dict(thinking)
+    return metadata
 
 
 def route_transform_metadata(route: dict[str, Any]) -> dict[str, Any]:
@@ -63,6 +154,8 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         "messages": [{"role": "user", "content": user_prompt}],
         "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
     }
+    thinking_metadata = apply_route_thinking_policy(base_payload, route)
+    metadata = metadata | thinking_metadata
     transform_profile = metadata["transform_profile"]
     if transform_profile == DEFAULT_REQUEST_TRANSFORM:
         return base_payload, metadata | {"request_shape": "openai_chat_messages"}
@@ -71,14 +164,27 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         for message in base_payload["messages"]:
             role = "developer" if message.get("role") == "system" else message.get("role")
             transformed_messages.append({"role": role, "content": message.get("content", "")})
-        return (
-            {
-                "model": route["upstream_model"],
-                "messages": transformed_messages,
-                "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
-            },
-            metadata | {"request_shape": "openai_chat_messages"},
-        )
+        payload = {
+            "model": route["upstream_model"],
+            "messages": transformed_messages,
+            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+        }
+        if "thinking" in base_payload:
+            payload["thinking"] = base_payload["thinking"]
+        return (payload, metadata | {"request_shape": "openai_chat_messages"})
+    if transform_profile == "openai_chat_developer_to_system":
+        transformed_messages = []
+        for message in base_payload["messages"]:
+            role = "system" if message.get("role") == "developer" else message.get("role")
+            transformed_messages.append({"role": role, "content": message.get("content", "")})
+        payload = {
+            "model": route["upstream_model"],
+            "messages": transformed_messages,
+            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+        }
+        if "thinking" in base_payload:
+            payload["thinking"] = base_payload["thinking"]
+        return (payload, metadata | {"request_shape": "openai_chat_messages"})
     if transform_profile == "openai_chat_input_text":
         parts = [str(message.get("content", "")).strip() for message in base_payload["messages"]]
         input_text = "\n".join(part for part in parts if part)

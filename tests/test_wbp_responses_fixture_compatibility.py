@@ -320,7 +320,145 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(upstream_messages[0]["role"], "developer")
         self.assertEqual(upstream_messages[0]["content"], "system fixture")
-        self.assertEqual(upstream_messages[1]["role"], "user")
+        self.assertEqual(upstream_messages[1]["role"], "developer")
+        self.assertIn("runtime routing truth", upstream_messages[1]["content"])
+        self.assertEqual(upstream_messages[2]["role"], "user")
+
+    def test_developer_role_transform_profile_maps_developer_to_system(self) -> None:
+        route = fixture_route()
+        route["transform_profile"] = "openai_chat_developer_to_system"
+        status, _body, captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={
+                "model": "wbp-fixture-route",
+                "instructions": "developer fixture",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "user fixture"}],
+                    },
+                ],
+            },
+            route=route,
+        )
+        upstream_messages = captured["payload"]["messages"]  # type: ignore[index]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(upstream_messages[0]["role"], "system")
+        self.assertEqual(upstream_messages[0]["content"], "developer fixture")
+        self.assertEqual(upstream_messages[1]["role"], "system")
+        self.assertIn("runtime routing truth", upstream_messages[1]["content"])
+        self.assertEqual(upstream_messages[2]["role"], "user")
+
+    def test_codex_namespace_and_web_search_tools_are_dropped_for_text_only_routes(self) -> None:
+        status, body, captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={
+                "model": "wbp-fixture-route",
+                "tools": [
+                    {"type": "namespace", "name": "shell"},
+                    {"type": "web_search", "name": "web_search"},
+                ],
+                "input": "Reply directly.",
+            },
+        )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload["wbp_route_tool_policy"],
+            "unsupported_codex_tools_dropped_for_text_only",
+        )
+        self.assertEqual(
+            payload["dropped_responses_tool_types"],
+            ["namespace", "web_search"],
+        )
+        self.assertNotIn("tools", captured["payload"])  # type: ignore[operator]
+
+    def test_function_tools_are_forwarded_to_chat_completions(self) -> None:
+        status, _body, captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={
+                "model": "wbp-fixture-route",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "exec_command",
+                        "description": "Run command.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"cmd": {"type": "string"}},
+                            "required": ["cmd"],
+                        },
+                    }
+                ],
+                "input": "Use tools only if needed.",
+            },
+        )
+        upstream_payload = captured["payload"]  # type: ignore[index]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            upstream_payload["tools"],
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "exec_command",
+                        "description": "Run command.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"cmd": {"type": "string"}},
+                            "required": ["cmd"],
+                        },
+                    },
+                }
+            ],
+        )
+
+    def test_chat_completion_tool_call_is_returned_as_responses_function_call(self) -> None:
+        status, body, _captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            request_payload={
+                "model": "wbp-fixture-route",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "exec_command",
+                        "parameters": {"type": "object", "properties": {}},
+                    }
+                ],
+                "input": "Call a tool.",
+            },
+            response_payload={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_fixture",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "exec_command",
+                                        "arguments": "{\"cmd\":\"pwd\"}",
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["output_text"], "")
+        self.assertEqual(payload["output"][0]["type"], "function_call")
+        self.assertEqual(payload["output"][0]["call_id"], "call_fixture")
+        self.assertEqual(payload["output"][0]["name"], "exec_command")
+        self.assertEqual(payload["output"][0]["arguments"], "{\"cmd\":\"pwd\"}")
 
     def test_failure_semantics_partial_stream_classified(self) -> None:
         status, body, _captured, _fixture = self.run_adapter_request(
@@ -361,21 +499,25 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         upstream_messages = captured["payload"]["messages"]  # type: ignore[index]
 
         self.assertEqual(status, 200)
-        self.assertEqual(upstream_messages[0]["role"], "assistant")
+        self.assertEqual(upstream_messages[0]["role"], "developer")
+        self.assertIn("runtime routing truth", upstream_messages[0]["content"])
         self.assertEqual(upstream_messages[1]["role"], "assistant")
-        self.assertEqual(upstream_messages[1]["tool_calls"][0]["function"]["name"], "shell")
-        self.assertEqual(upstream_messages[1]["tool_calls"][0]["function"]["arguments"], "{\"cmd\":\"pwd\"}")
+        self.assertEqual(upstream_messages[2]["role"], "assistant")
+        self.assertEqual(upstream_messages[2]["tool_calls"][0]["function"]["name"], "shell")
+        self.assertEqual(upstream_messages[2]["tool_calls"][0]["function"]["arguments"], "{\"cmd\":\"pwd\"}")
 
     def test_wbp_responses_tool_call_output_loop_classified(self) -> None:
         status, _body, captured, _fixture = self.run_adapter_request("tool_call_output_followup.json")
         upstream_messages = captured["payload"]["messages"]  # type: ignore[index]
 
         self.assertEqual(status, 200)
-        self.assertEqual(upstream_messages[0]["role"], "assistant")
-        self.assertEqual(upstream_messages[0]["tool_calls"][0]["id"], "call_fixture_1")
-        self.assertEqual(upstream_messages[1]["role"], "tool")
-        self.assertEqual(upstream_messages[1]["tool_call_id"], "call_fixture_1")
-        self.assertEqual(upstream_messages[2]["role"], "user")
+        self.assertEqual(upstream_messages[0]["role"], "developer")
+        self.assertIn("runtime routing truth", upstream_messages[0]["content"])
+        self.assertEqual(upstream_messages[1]["role"], "assistant")
+        self.assertEqual(upstream_messages[1]["tool_calls"][0]["id"], "call_fixture_1")
+        self.assertEqual(upstream_messages[2]["role"], "tool")
+        self.assertEqual(upstream_messages[2]["tool_call_id"], "call_fixture_1")
+        self.assertEqual(upstream_messages[3]["role"], "user")
 
     def test_wbp_responses_reasoning_item_classified(self) -> None:
         status, _body, captured, _fixture = self.run_adapter_request("reasoning_item_input.json")

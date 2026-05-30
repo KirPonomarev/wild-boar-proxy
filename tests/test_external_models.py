@@ -74,6 +74,41 @@ class ExternalModelContractTests(unittest.TestCase):
         self.assertEqual(validated["transform_profile"], "openai_chat_input_text")
         self.assertEqual(validated["response_profile"], "top_level_output_text")
 
+        developer_to_system = routes.validate_route_schema(
+            sample_route() | {"transform_profile": "openai_chat_developer_to_system"}
+        )
+        self.assertEqual(
+            developer_to_system["transform_profile"],
+            "openai_chat_developer_to_system",
+        )
+
+    def test_validate_route_schema_accepts_deepseek_thinking_policy_only_for_deepseek(self) -> None:
+        deepseek = sample_route() | {
+            "provider": "deepseek",
+            "upstream_model": "deepseek-v4-pro",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+        validated = routes.validate_route_schema(deepseek)
+        self.assertEqual(validated["thinking"]["reasoning_effort"], "max")
+
+        disabled = routes.validate_route_schema(
+            deepseek | {"thinking": {"type": "disabled"}}
+        )
+        self.assertEqual(disabled["thinking"]["type"], "disabled")
+
+        with self.assertRaises(RuntimeErrorInfo):
+            routes.validate_route_schema(
+                sample_route() | {"thinking": {"type": "enabled", "reasoning_effort": "max"}}
+            )
+        with self.assertRaises(RuntimeErrorInfo):
+            routes.validate_route_schema(
+                deepseek | {"thinking": {"type": "enabled", "reasoning_effort": "medium"}}
+            )
+        with self.assertRaises(RuntimeErrorInfo):
+            routes.validate_route_schema(
+                deepseek | {"thinking": {"type": "disabled", "reasoning_effort": "max"}}
+            )
+
     def test_build_check_request_uses_shared_completion_budget_across_profiles(self) -> None:
         request_payload, _metadata = transforms.build_check_request(
             sample_route(),
@@ -91,6 +126,15 @@ class ExternalModelContractTests(unittest.TestCase):
             developer_payload["max_tokens"], transforms.CHECK_REQUEST_COMPLETION_BUDGET
         )
 
+        developer_to_system_payload, _metadata = transforms.build_check_request(
+            sample_route() | {"transform_profile": "openai_chat_developer_to_system"},
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            developer_to_system_payload["max_tokens"],
+            transforms.CHECK_REQUEST_COMPLETION_BUDGET,
+        )
+
         input_text_payload, _metadata = transforms.build_check_request(
             sample_route() | {"transform_profile": "openai_chat_input_text"},
             user_prompt="ping",
@@ -98,6 +142,20 @@ class ExternalModelContractTests(unittest.TestCase):
         self.assertEqual(
             input_text_payload["max_output_tokens"],
             transforms.CHECK_REQUEST_COMPLETION_BUDGET,
+        )
+
+        deepseek_payload, _metadata = transforms.build_check_request(
+            sample_route()
+            | {
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            },
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            deepseek_payload["thinking"],
+            {"type": "enabled", "reasoning_effort": "max"},
         )
 
     def test_paths_from_env_uses_isolated_overrides(self) -> None:

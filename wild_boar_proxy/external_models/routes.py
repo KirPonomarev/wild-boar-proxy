@@ -196,6 +196,7 @@ def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
         "fallback_eligible": route["fallback_eligible"],
         "transform_profile": route.get("transform_profile"),
         "response_profile": route.get("response_profile"),
+        "thinking": route.get("thinking"),
     }
 
 

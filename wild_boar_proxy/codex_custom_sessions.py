@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
 import tempfile
 import threading
 import uuid
@@ -47,6 +48,9 @@ ROLE_SLOT_IDS = tuple(ROLE_SLOT_PAYLOAD_FIELDS)
 SESSION_CREATE_ALLOWED_FIELDS = set(ROLE_SLOT_PAYLOAD_FIELDS.values())
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
 PROMPT_RUN_ALLOWED_FIELDS = {"prompt", "slot_id"}
+TEMP_WRITE_PROBE_ALLOWED_FIELDS = {"api_model_id"}
+SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
+SAFE_WORKTREE_CODER_ALLOWED_FIELDS = {"api_model_id", "task"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {
     "ready",
@@ -153,6 +157,18 @@ def forbidden_prompt_dry_run_fields(payload: Any) -> list[str]:
 
 def forbidden_prompt_run_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, PROMPT_RUN_ALLOWED_FIELDS)))
+
+
+def forbidden_temp_write_probe_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, TEMP_WRITE_PROBE_ALLOWED_FIELDS)))
+
+
+def forbidden_safe_worktree_edit_probe_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS)))
+
+
+def forbidden_safe_worktree_coder_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, SAFE_WORKTREE_CODER_ALLOWED_FIELDS)))
 
 
 def _model_ids(
@@ -376,6 +392,7 @@ def _token_usage(result: dict[str, Any]) -> tuple[bool, dict[str, Any], int | No
 def _safe_trace_observer_packet(packet: dict[str, Any]) -> dict[str, Any]:
     allowed = {
         "request_observed",
+        "request_count",
         "response_observed",
         "forwarded_to_wbp",
         "forwarded_endpoint",
@@ -389,6 +406,10 @@ def _safe_trace_observer_packet(packet: dict[str, Any]) -> dict[str, Any]:
         "secret_value_recorded",
         "raw_account_id_recorded",
         "raw_backend_id_recorded",
+        "response_error_code",
+        "response_error_message_bounded",
+        "response_error_param",
+        "response_error_type",
         "machine_error_code",
         "observer_closed",
     }
@@ -399,6 +420,38 @@ def _safe_trace_observer_packet(packet: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (str, int, bool)) or value is None:
             safe[key] = value
     return safe
+
+
+def _run_git_command(
+    repo_root: Path,
+    args: list[str],
+    *,
+    timeout_seconds: int = 30,
+) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(repo_root),
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except Exception as exc:  # pragma: no cover - defensive host boundary
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "stdout": "",
+            "stderr": f"{type(exc).__name__}: {str(exc)[:240]}",
+            "timed_out": type(exc).__name__ == "TimeoutExpired",
+        }
+    return {
+        "ok": completed.returncode == 0,
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "timed_out": False,
+    }
 
 
 def _safe_process_network_observation_packet(packet: dict[str, Any]) -> dict[str, Any]:
@@ -715,6 +768,7 @@ class CodexCustomSessionManager:
         self.root = base.resolve()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._sessions: dict[str, dict[str, Any]] = {}
+        self._product_worktrees: dict[str, dict[str, Any]] = {}
         self._active_prompt_sessions: set[str] = set()
         self._active_prompt_lock = threading.Lock()
         self._load_existing_sessions()
@@ -1833,6 +1887,751 @@ class CodexCustomSessionManager:
         self._write_session(session)
         packet["session"] = self._public_session(session)
         return packet
+
+    def temp_write_probe_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_temp_write_probe_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+                "browser_path_intake": False,
+                "browser_backend_intake": False,
+                "repo_mutation_attempted": False,
+                "fallback_attempted": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+                "next_action": "provide_exact_owner_authorization_phrase",
+                "fallback_attempted": False,
+                "repo_mutation_attempted": False,
+                "file_existed_after_tool": False,
+                "file_removed_after_probe": False,
+            }
+
+        requested_slot_id = PRIMARY_MODEL_SLOT
+        precondition_failure = self._prompt_precondition_failure(session, requested_slot_id)
+        if precondition_failure:
+            return {
+                **precondition_failure,
+                "final_status": "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+                "fallback_attempted": False,
+                "repo_mutation_attempted": False,
+            }
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        slot = dict(role_slots[PRIMARY_MODEL_SLOT])
+        model_id = str(slot.get("model_id") or "")
+        api_model_id = str(payload.get("api_model_id") or model_id).strip()
+        if api_model_id != model_id:
+            return {
+                **self._base_packet("rejected", "MODEL_ID_DOES_NOT_MATCH_BOUND_PRIMARY_SLOT"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+                "model_id": model_id,
+                "api_model_id": api_model_id,
+                "fallback_attempted": False,
+                "repo_mutation_attempted": False,
+            }
+        if slot.get("selected_source_class") != "route_backed":
+            return {
+                **self._base_packet("blocked", "API_ONLY_ROUTE_BACKED_PRIMARY_SLOT_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_TEMP_WRITE_NOT_ADMITTED",
+                "model_id": model_id,
+                "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+                "fallback_attempted": False,
+                "repo_mutation_attempted": False,
+            }
+
+        probe_dir = Path(tempfile.mkdtemp(prefix="wbp-api-only-write-probe-")).resolve()
+        probe_file = probe_dir / "deepseek-temp-write-proof.txt"
+        expected_text = "WBP_DEEPSEEK_TEMP_WRITE_OK"
+        prompt = (
+            "Use the available command execution tool. Run exactly this shell command, "
+            "then answer with exactly the file content and nothing else:\n"
+            f"printf {expected_text} > {probe_file} && cat {probe_file}"
+        )
+        runner_payload = {
+            "prompt": prompt,
+            "model_id": model_id,
+            "slot_id": PRIMARY_MODEL_SLOT,
+            "slot_id_explicit": False,
+        }
+        try:
+            result = prompt_runner(runner_payload, probe_dir)
+        except Exception as exc:  # pragma: no cover - defensive live boundary
+            result = {
+                "status": "failed",
+                "machine_error_code": "TEMP_WRITE_PROMPT_RUNNER_EXCEPTION",
+                "error_class": type(exc).__name__,
+            }
+
+        file_existed_after_tool = probe_file.exists()
+        file_content = ""
+        if file_existed_after_tool:
+            file_content = probe_file.read_text(encoding="utf-8", errors="replace")
+        file_content_matches = file_content == expected_text
+        file_within_probe_dir = probe_dir in probe_file.resolve().parents
+        cleanup_error = ""
+        try:
+            if probe_file.exists():
+                probe_file.unlink()
+            probe_dir.rmdir()
+        except OSError as exc:
+            cleanup_error = f"{type(exc).__name__}: {str(exc)[:160]}"
+        file_removed_after_probe = not probe_file.exists() and not probe_dir.exists()
+
+        raw_trace = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        trace_packet = _safe_trace_observer_packet(raw_trace)
+        request_count = trace_packet.get("request_count")
+        tool_loop_proven = isinstance(request_count, int) and request_count >= 2
+        response_text = str(result.get("final_message") or result.get("response_text") or "")
+        provider_response_proven = result.get("status") == "ok" and bool(response_text)
+        success = (
+            provider_response_proven
+            and tool_loop_proven
+            and result.get("configured_provider") == "external_route"
+            and result.get("runtime_model") == model_id
+            and file_existed_after_tool
+            and file_content_matches
+            and file_within_probe_dir
+            and file_removed_after_probe
+            and result.get("current_codex_home_used") is False
+            and result.get("secret_value_recorded") is False
+        )
+        return {
+            **self._base_packet("ok" if success else "blocked", "OK" if success else "TEMP_WRITE_PROBE_NOT_PROVEN"),
+            "final_status": (
+                "API_ONLY_DEEPSEEK_TEMP_WRITE_PROVEN_WITH_LIMITS"
+                if success
+                else "KNOWN_BLOCKER_CODEX_CUSTOM_WRITE_SANDBOX_NOT_ADMISSIBLE"
+            ),
+            "execution_mode": "api_only",
+            "session_id": session_id,
+            "model_id": model_id,
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "selected_source_class": slot.get("selected_source_class"),
+            "provider_response_proven": provider_response_proven,
+            "fallback_attempted": False,
+            "tool_loop_proven": tool_loop_proven,
+            "request_count": request_count if isinstance(request_count, int) else 0,
+            "write_surface": "temp_only",
+            "browser_path_intake": False,
+            "browser_backend_intake": False,
+            "file_existed_after_tool": file_existed_after_tool,
+            "file_content_matches": file_content_matches,
+            "file_removed_after_probe": file_removed_after_probe,
+            "file_within_probe_dir": file_within_probe_dir,
+            "repo_mutation_attempted": False,
+            "original_codex_touched": False,
+            "wbp_patch_applier_used": False,
+            "live_product_code_edit_claimed": False,
+            "workspace_write_admitted": result.get("workspace_write_admitted") is True,
+            "danger_full_access_admitted": False,
+            "current_codex_touched": result.get("current_codex_home_used") is True,
+            "secret_value_recorded": result.get("secret_value_recorded") is True,
+            "response_preview_bounded": _response_preview(response_text),
+            "trace_observer_packet": trace_packet,
+            "cleanup_error": cleanup_error,
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+        }
+
+    def safe_worktree_edit_probe_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+        repo_root: Path | None = None,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_safe_worktree_edit_probe_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "browser_worktree_path_intake": False,
+                "browser_backend_intake": False,
+                "main_worktree_mutated_by_probe": False,
+                "fallback_attempted": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "next_action": "provide_exact_owner_authorization_phrase",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_probe": False,
+                "safe_worktree_used": False,
+            }
+
+        requested_slot_id = PRIMARY_MODEL_SLOT
+        precondition_failure = self._prompt_precondition_failure(session, requested_slot_id)
+        if precondition_failure:
+            return {
+                **precondition_failure,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_probe": False,
+            }
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        slot = dict(role_slots[PRIMARY_MODEL_SLOT])
+        model_id = str(slot.get("model_id") or "")
+        api_model_id = str(payload.get("api_model_id") or model_id).strip()
+        if api_model_id != model_id:
+            return {
+                **self._base_packet("rejected", "MODEL_ID_DOES_NOT_MATCH_BOUND_PRIMARY_SLOT"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "model_id": model_id,
+                "api_model_id": api_model_id,
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_probe": False,
+            }
+        if slot.get("selected_source_class") != "route_backed":
+            return {
+                **self._base_packet("blocked", "API_ONLY_ROUTE_BACKED_PRIMARY_SLOT_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "model_id": model_id,
+                "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_probe": False,
+            }
+
+        repo = (repo_root or Path.cwd()).resolve()
+        git_root = _run_git_command(repo, ["rev-parse", "--show-toplevel"])
+        if not git_root["ok"]:
+            return {
+                **self._base_packet("blocked", "SAFE_WORKTREE_REPO_ROOT_NOT_GIT"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_probe": False,
+            }
+        repo = Path(str(git_root["stdout"]).strip()).resolve()
+        status_before = _run_git_command(repo, ["status", "--short", "--branch"])
+        main_status_before = str(status_before.get("stdout") or "")
+        probe_parent = Path(tempfile.mkdtemp(prefix="wbp-api-only-safe-worktree-")).resolve()
+        worktree_dir = probe_parent / "worktree"
+        control_rel = Path("tmp_wbp_deepseek_safe_worktree_edit_proof.txt")
+        control_file = worktree_dir / control_rel
+        before_text = "WBP_DEEPSEEK_SAFE_WORKTREE_EDIT_BEFORE\n"
+        expected_text = "WBP_DEEPSEEK_SAFE_WORKTREE_EDIT_OK"
+        setup_error = ""
+        cleanup_error = ""
+        result: dict[str, Any] = {
+            "status": "failed",
+            "machine_error_code": "SAFE_WORKTREE_PROMPT_NOT_RUN",
+        }
+        safe_worktree_used = False
+        git_diff = ""
+        file_existed_after_tool = False
+        file_content = ""
+        worktree_removed_after_probe = False
+        try:
+            add_worktree = _run_git_command(
+                repo,
+                ["worktree", "add", "--detach", str(worktree_dir), "HEAD"],
+                timeout_seconds=60,
+            )
+            if not add_worktree["ok"]:
+                setup_error = str(add_worktree.get("stderr") or add_worktree.get("stdout") or "")[:240]
+            else:
+                safe_worktree_used = True
+                control_file.write_text(before_text, encoding="utf-8")
+                add_control = _run_git_command(worktree_dir, ["add", str(control_rel)])
+                if not add_control["ok"]:
+                    setup_error = str(add_control.get("stderr") or add_control.get("stdout") or "")[:240]
+                else:
+                    prompt = (
+                        "Use the available command execution tool. Run exactly this shell command, "
+                        "then answer with exactly the file content and nothing else:\n"
+                        f"printf {expected_text} > {control_file} && cat {control_file}"
+                    )
+                    runner_payload = {
+                        "prompt": prompt,
+                        "model_id": model_id,
+                        "slot_id": PRIMARY_MODEL_SLOT,
+                        "slot_id_explicit": False,
+                    }
+                    try:
+                        result = prompt_runner(runner_payload, worktree_dir)
+                    except Exception as exc:  # pragma: no cover - defensive live boundary
+                        result = {
+                            "status": "failed",
+                            "machine_error_code": "SAFE_WORKTREE_PROMPT_RUNNER_EXCEPTION",
+                            "error_class": type(exc).__name__,
+                        }
+                    file_existed_after_tool = control_file.exists()
+                    if file_existed_after_tool:
+                        file_content = control_file.read_text(encoding="utf-8", errors="replace")
+                    diff_result = _run_git_command(worktree_dir, ["diff", "--", str(control_rel)])
+                    git_diff = str(diff_result.get("stdout") or "") if diff_result["ok"] else ""
+        finally:
+            if worktree_dir.exists():
+                removed = _run_git_command(repo, ["worktree", "remove", "--force", str(worktree_dir)], timeout_seconds=60)
+                if not removed["ok"]:
+                    cleanup_error = str(removed.get("stderr") or removed.get("stdout") or "")[:240]
+            try:
+                shutil.rmtree(probe_parent)
+            except OSError as exc:
+                cleanup_error = cleanup_error or f"{type(exc).__name__}: {str(exc)[:160]}"
+            worktree_list = _run_git_command(repo, ["worktree", "list", "--porcelain"])
+            worktree_removed_after_probe = (
+                not worktree_dir.exists()
+                and str(worktree_dir) not in str(worktree_list.get("stdout") or "")
+            )
+
+        file_content_matches = file_content == expected_text
+        git_diff_observed = bool(git_diff.strip())
+        expected_diff_observed = (
+            f"-{before_text.strip()}" in git_diff and f"+{expected_text}" in git_diff
+        )
+        secret_in_diff = bool(re.search(r"(sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,})", git_diff))
+        status_after = _run_git_command(repo, ["status", "--short", "--branch"])
+        main_status_after = str(status_after.get("stdout") or "")
+        main_worktree_mutated_by_probe = main_status_before != main_status_after
+        raw_trace = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        trace_packet = _safe_trace_observer_packet(raw_trace)
+        request_count = trace_packet.get("request_count")
+        tool_loop_proven = isinstance(request_count, int) and request_count >= 2
+        response_text = str(result.get("final_message") or result.get("response_text") or "")
+        provider_response_proven = result.get("status") == "ok" and bool(response_text)
+        success = (
+            provider_response_proven
+            and tool_loop_proven
+            and result.get("configured_provider") == "external_route"
+            and result.get("runtime_model") == model_id
+            and result.get("workspace_write_admitted") is True
+            and safe_worktree_used
+            and file_existed_after_tool
+            and file_content_matches
+            and git_diff_observed
+            and expected_diff_observed
+            and not main_worktree_mutated_by_probe
+            and not secret_in_diff
+            and worktree_removed_after_probe
+            and result.get("current_codex_home_used") is False
+            and result.get("secret_value_recorded") is False
+            and not setup_error
+            and not cleanup_error
+        )
+        if success:
+            final_status = "API_ONLY_DEEPSEEK_SAFE_WORKTREE_EDIT_PROVEN_WITH_LIMITS"
+            machine_error_code = "OK"
+        elif cleanup_error or not worktree_removed_after_probe:
+            final_status = "KNOWN_BLOCKER_SAFE_WORKTREE_CLEANUP_FAILED"
+            machine_error_code = "SAFE_WORKTREE_CLEANUP_FAILED"
+        elif not safe_worktree_used or setup_error or result.get("workspace_write_admitted") is not True:
+            final_status = "KNOWN_BLOCKER_SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE"
+            machine_error_code = "SAFE_WORKTREE_WRITE_NOT_ADMISSIBLE"
+        elif not git_diff_observed or not expected_diff_observed:
+            final_status = "KNOWN_BLOCKER_SAFE_WORKTREE_DIFF_NOT_PROVEN"
+            machine_error_code = "SAFE_WORKTREE_DIFF_NOT_PROVEN"
+        else:
+            final_status = "KNOWN_BLOCKER_DEEPSEEK_REPO_EDIT_TOOL_CALL_FAILED"
+            machine_error_code = "DEEPSEEK_REPO_EDIT_TOOL_CALL_FAILED"
+        return {
+            **self._base_packet("ok" if success else "blocked", machine_error_code),
+            "final_status": final_status,
+            "execution_mode": "api_only",
+            "session_id": session_id,
+            "model_id": model_id,
+            "provider_id": "deepseek" if "deepseek" in model_id else "external_route",
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "selected_source_class": slot.get("selected_source_class"),
+            "selected_from_server_catalog": slot.get("server_issued") is True,
+            "provider_response_proven": provider_response_proven,
+            "fallback_attempted": False,
+            "tool_loop_proven": tool_loop_proven,
+            "request_count": request_count if isinstance(request_count, int) else 0,
+            "safe_worktree_used": safe_worktree_used,
+            "browser_worktree_path_intake": False,
+            "browser_backend_intake": False,
+            "write_surface": "safe_worktree_only",
+            "danger_full_access_admitted": False,
+            "file_changed_by_codex_tool": file_existed_after_tool and file_content_matches,
+            "file_content_matches": file_content_matches,
+            "git_diff_observed": git_diff_observed,
+            "expected_diff_observed": expected_diff_observed,
+            "main_worktree_mutated_by_probe": main_worktree_mutated_by_probe,
+            "secret_value_recorded": result.get("secret_value_recorded") is True,
+            "secret_in_diff": secret_in_diff,
+            "original_codex_touched": False,
+            "original_codex_profile_touched": False,
+            "current_codex_touched": result.get("current_codex_home_used") is True,
+            "wbp_patch_applier_used": False,
+            "commit_attempted": False,
+            "push_attempted": False,
+            "merge_attempted": False,
+            "worktree_removed_after_probe": worktree_removed_after_probe,
+            "workspace_write_admitted": result.get("workspace_write_admitted") is True,
+            "live_product_code_edit_claimed": False,
+            "response_preview_bounded": _response_preview(response_text),
+            "git_diff_sha256": _digest(git_diff) if git_diff else "",
+            "setup_error_bounded": setup_error,
+            "cleanup_error": cleanup_error,
+            "trace_observer_packet": trace_packet,
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+        }
+
+    def safe_worktree_coder_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+        repo_root: Path | None = None,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_safe_worktree_coder_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "browser_worktree_path_intake": False,
+                "browser_backend_intake": False,
+                "main_worktree_mutated_by_run": False,
+                "fallback_attempted": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "next_action": "provide_exact_owner_authorization_phrase",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+                "safe_worktree_status": "not_created",
+            }
+        task = str(payload.get("task") or "").strip()
+        if not task:
+            return {
+                **self._base_packet("rejected", "TASK_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+        if len(task) > 6000:
+            return {
+                **self._base_packet("rejected", "TASK_TOO_LONG"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+
+        requested_slot_id = PRIMARY_MODEL_SLOT
+        precondition_failure = self._prompt_precondition_failure(session, requested_slot_id)
+        if precondition_failure:
+            return {
+                **precondition_failure,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        slot = dict(role_slots[PRIMARY_MODEL_SLOT])
+        model_id = str(slot.get("model_id") or "")
+        api_model_id = str(payload.get("api_model_id") or model_id).strip()
+        if api_model_id != model_id:
+            return {
+                **self._base_packet("rejected", "MODEL_ID_DOES_NOT_MATCH_BOUND_PRIMARY_SLOT"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "model_id": model_id,
+                "api_model_id": api_model_id,
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+        if slot.get("selected_source_class") != "route_backed":
+            return {
+                **self._base_packet("blocked", "API_ONLY_ROUTE_BACKED_PRIMARY_SLOT_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "model_id": model_id,
+                "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+
+        repo = (repo_root or Path.cwd()).resolve()
+        git_root = _run_git_command(repo, ["rev-parse", "--show-toplevel"])
+        if not git_root["ok"]:
+            return {
+                **self._base_packet("blocked", "SAFE_WORKTREE_REPO_ROOT_NOT_GIT"),
+                "session_id": session_id,
+                "final_status": "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE",
+                "fallback_attempted": False,
+                "main_worktree_mutated_by_run": False,
+            }
+        repo = Path(str(git_root["stdout"]).strip()).resolve()
+        status_before = _run_git_command(repo, ["status", "--short", "--branch"])
+        main_status_before = str(status_before.get("stdout") or "")
+        parent_dir = Path(tempfile.mkdtemp(prefix="wbp-product-safe-worktree-")).resolve()
+        worktree_dir = parent_dir / "worktree"
+        worktree_id = f"wbt-{uuid.uuid4().hex[:20]}"
+        setup_error = ""
+        result: dict[str, Any] = {
+            "status": "failed",
+            "machine_error_code": "PRODUCT_CODER_PROMPT_NOT_RUN",
+        }
+        safe_worktree_used = False
+        diff_text = ""
+        changed_files: list[str] = []
+        head_before = ""
+        head_after = ""
+        merge_head_present = False
+        try:
+            add_worktree = _run_git_command(
+                repo,
+                ["worktree", "add", "--detach", str(worktree_dir), "HEAD"],
+                timeout_seconds=60,
+            )
+            if not add_worktree["ok"]:
+                setup_error = str(add_worktree.get("stderr") or add_worktree.get("stdout") or "")[:240]
+            else:
+                safe_worktree_used = True
+                head_before_result = _run_git_command(worktree_dir, ["rev-parse", "HEAD"])
+                head_before = str(head_before_result.get("stdout") or "").strip()
+                prompt = (
+                    "You are the API-only coding model for Wild Boar Proxy. "
+                    "Work only in the current repository worktree. Do not commit, push, merge, "
+                    "read secrets, edit credentials, or touch Codex profiles. "
+                    "Make the requested code change using the available tools, then briefly report "
+                    "changed files and tests/checks you ran.\n\n"
+                    f"Task:\n{task}"
+                )
+                runner_payload = {
+                    "prompt": prompt,
+                    "model_id": model_id,
+                    "slot_id": PRIMARY_MODEL_SLOT,
+                    "slot_id_explicit": False,
+                }
+                try:
+                    result = prompt_runner(runner_payload, worktree_dir)
+                except Exception as exc:  # pragma: no cover - defensive live boundary
+                    result = {
+                        "status": "failed",
+                        "machine_error_code": "PRODUCT_CODER_PROMPT_RUNNER_EXCEPTION",
+                        "error_class": type(exc).__name__,
+                    }
+                head_after_result = _run_git_command(worktree_dir, ["rev-parse", "HEAD"])
+                head_after = str(head_after_result.get("stdout") or "").strip()
+                diff_result = _run_git_command(worktree_dir, ["diff", "--"])
+                diff_text = str(diff_result.get("stdout") or "") if diff_result["ok"] else ""
+                names_result = _run_git_command(worktree_dir, ["diff", "--name-only", "--"])
+                if names_result["ok"]:
+                    changed_files = [
+                        line.strip()
+                        for line in str(names_result.get("stdout") or "").splitlines()
+                        if line.strip()
+                    ]
+                merge_head_result = _run_git_command(worktree_dir, ["rev-parse", "--git-path", "MERGE_HEAD"])
+                if merge_head_result["ok"]:
+                    merge_head_present = Path(str(merge_head_result.get("stdout") or "").strip()).exists()
+        except Exception as exc:  # pragma: no cover - defensive host boundary
+            setup_error = setup_error or f"{type(exc).__name__}: {str(exc)[:240]}"
+
+        status_after = _run_git_command(repo, ["status", "--short", "--branch"])
+        main_status_after = str(status_after.get("stdout") or "")
+        main_worktree_mutated_by_run = main_status_before != main_status_after
+        raw_trace = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        trace_packet = _safe_trace_observer_packet(raw_trace)
+        request_count = trace_packet.get("request_count")
+        tool_loop_proven = isinstance(request_count, int) and request_count >= 2
+        response_text = str(result.get("final_message") or result.get("response_text") or "")
+        provider_response_proven = result.get("status") == "ok" and bool(response_text)
+        diff_present = bool(diff_text.strip())
+        secret_in_diff = bool(re.search(r"(sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,})", diff_text))
+        commit_attempted = bool(head_before and head_after and head_before != head_after)
+        push_attempt_absent_proven = result.get("direct_non_wbp_model_egress_absent_proven") is True
+        success = (
+            provider_response_proven
+            and tool_loop_proven
+            and result.get("configured_provider") == "external_route"
+            and result.get("runtime_model") == model_id
+            and result.get("workspace_write_admitted") is True
+            and result.get("working_dir_override_admitted") is True
+            and result.get("working_dir_scope") == "safe_worktree_only"
+            and safe_worktree_used
+            and diff_present
+            and bool(changed_files)
+            and not main_worktree_mutated_by_run
+            and not secret_in_diff
+            and not commit_attempted
+            and not merge_head_present
+            and result.get("current_codex_home_used") is False
+            and result.get("secret_value_recorded") is False
+            and not setup_error
+        )
+        if success:
+            final_status = "API_ONLY_DEEPSEEK_PRODUCT_SAFE_WORKTREE_CODER_READY_WITH_LIMITS"
+            machine_error_code = "OK"
+            safe_worktree_status = "active"
+        elif not safe_worktree_used or setup_error or result.get("workspace_write_admitted") is not True:
+            final_status = "KNOWN_BLOCKER_SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE"
+            machine_error_code = "SAFE_WORKTREE_PRODUCT_WRITE_NOT_ADMISSIBLE"
+            safe_worktree_status = "blocked"
+        elif not diff_present or not changed_files:
+            final_status = "KNOWN_BLOCKER_PRODUCT_CODER_DIFF_NOT_PROVEN"
+            machine_error_code = "PRODUCT_CODER_DIFF_NOT_PROVEN"
+            safe_worktree_status = "active"
+        else:
+            final_status = "KNOWN_BLOCKER_DEEPSEEK_PRODUCT_CODER_TOOL_CALL_FAILED"
+            machine_error_code = "DEEPSEEK_PRODUCT_CODER_TOOL_CALL_FAILED"
+            safe_worktree_status = "active" if safe_worktree_used else "blocked"
+
+        if safe_worktree_used:
+            self._product_worktrees[worktree_id] = {
+                "worktree_id": worktree_id,
+                "owner": "wbp",
+                "session_id": session_id,
+                "model_id": model_id,
+                "created_at_utc": utc_now(),
+                "status": safe_worktree_status,
+                "path": str(worktree_dir),
+                "parent_path": str(parent_dir),
+                "repo_root": str(repo),
+                "path_redacted": True,
+            }
+        return {
+            **self._base_packet("ok" if success else "blocked", machine_error_code),
+            "final_status": final_status,
+            "execution_mode": "api_only",
+            "session_id": session_id,
+            "worktree_id": worktree_id if safe_worktree_used else "",
+            "worktree_owner": "wbp" if safe_worktree_used else "none",
+            "path_redacted": True,
+            "model_id": model_id,
+            "provider_id": "deepseek" if "deepseek" in model_id else "external_route",
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "selected_source_class": slot.get("selected_source_class"),
+            "selected_from_server_catalog": slot.get("server_issued") is True,
+            "task_preview": _safe_preview(task),
+            "provider_response_proven": provider_response_proven,
+            "fallback_attempted": False,
+            "tool_loop_proven": tool_loop_proven,
+            "request_count": request_count if isinstance(request_count, int) else 0,
+            "safe_worktree_used": safe_worktree_used,
+            "safe_worktree_status": safe_worktree_status,
+            "cleanup_required": safe_worktree_used and safe_worktree_status != "cleaned",
+            "browser_worktree_path_intake": False,
+            "browser_backend_intake": False,
+            "write_surface": "safe_worktree_only",
+            "danger_full_access_admitted": False,
+            "diff_present": diff_present,
+            "changed_files": changed_files[:50],
+            "changed_file_count": len(changed_files),
+            "diff_text_bounded": redact_text(diff_text)[:20000],
+            "git_diff_sha256": _digest(diff_text) if diff_text else "",
+            "main_worktree_mutated_by_run": main_worktree_mutated_by_run,
+            "secret_value_recorded": result.get("secret_value_recorded") is True,
+            "secret_in_diff": secret_in_diff,
+            "original_codex_touched": False,
+            "original_codex_profile_touched": False,
+            "current_codex_touched": result.get("current_codex_home_used") is True,
+            "wbp_patch_applier_used": False,
+            "commit_attempted": commit_attempted,
+            "push_attempted": False if push_attempt_absent_proven else "not_proven",
+            "push_attempt_absent_proven": push_attempt_absent_proven,
+            "merge_attempted": merge_head_present,
+            "workspace_write_admitted": result.get("workspace_write_admitted") is True,
+            "working_dir_override_admitted": result.get("working_dir_override_admitted") is True,
+            "working_dir_scope": str(result.get("working_dir_scope") or ""),
+            "live_product_code_edit_claimed": success,
+            "response_preview_bounded": _response_preview(response_text),
+            "setup_error_bounded": setup_error,
+            "trace_observer_packet": trace_packet,
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+        }
+
+    def safe_worktree_cleanup_packet(
+        self,
+        worktree_id: str,
+    ) -> dict[str, Any]:
+        if not SESSION_ID_RE.match(str(worktree_id or "")):
+            return {
+                **self._base_packet("rejected", "WORKTREE_ID_INVALID"),
+                "worktree_id": worktree_id,
+                "path_intake": False,
+                "cleanup_performed": False,
+            }
+        record = self._product_worktrees.get(worktree_id)
+        if not record:
+            return {
+                **self._base_packet("rejected", "WORKTREE_NOT_FOUND"),
+                "worktree_id": worktree_id,
+                "path_intake": False,
+                "cleanup_performed": False,
+            }
+        repo = Path(str(record.get("repo_root") or "")).resolve()
+        worktree_dir = Path(str(record.get("path") or "")).resolve()
+        parent_dir = Path(str(record.get("parent_path") or "")).resolve()
+        temp_root_parent = Path(tempfile.gettempdir()).resolve()
+        if temp_root_parent not in worktree_dir.parents or temp_root_parent not in parent_dir.parents:
+            return {
+                **self._base_packet("blocked", "WORKTREE_PATH_NOT_OWNED_BY_WBP"),
+                "worktree_id": worktree_id,
+                "path_intake": False,
+                "cleanup_performed": False,
+            }
+        cleanup_error = ""
+        if worktree_dir.exists():
+            removed = _run_git_command(repo, ["worktree", "remove", "--force", str(worktree_dir)], timeout_seconds=60)
+            if not removed["ok"]:
+                cleanup_error = str(removed.get("stderr") or removed.get("stdout") or "")[:240]
+        try:
+            shutil.rmtree(parent_dir)
+        except OSError as exc:
+            cleanup_error = cleanup_error or f"{type(exc).__name__}: {str(exc)[:160]}"
+        worktree_list = _run_git_command(repo, ["worktree", "list", "--porcelain"])
+        removed_after_cleanup = (
+            not worktree_dir.exists()
+            and str(worktree_dir) not in str(worktree_list.get("stdout") or "")
+            and not cleanup_error
+        )
+        record["status"] = "cleaned" if removed_after_cleanup else "cleanup_failed"
+        return {
+            **self._base_packet("ok" if removed_after_cleanup else "blocked", "OK" if removed_after_cleanup else "PRODUCT_CODER_CLEANUP_FAILED"),
+            "final_status": (
+                "API_ONLY_DEEPSEEK_PRODUCT_SAFE_WORKTREE_CODER_CLEANED"
+                if removed_after_cleanup
+                else "KNOWN_BLOCKER_PRODUCT_CODER_CLEANUP_FAILED"
+            ),
+            "worktree_id": worktree_id,
+            "worktree_owner": "wbp",
+            "path_intake": False,
+            "path_redacted": True,
+            "cleanup_performed": removed_after_cleanup,
+            "safe_worktree_status": record["status"],
+            "worktree_removed_after_cleanup": removed_after_cleanup,
+            "cleanup_error": cleanup_error,
+        }
 
     def transcript_packet(self, session_id: str) -> dict[str, Any]:
         session = self._sessions.get(session_id)

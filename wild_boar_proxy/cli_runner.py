@@ -13,7 +13,12 @@ from typing import Any
 from .cli_runner_via_wbp import PRIMARY_MODEL_ID, build_codex_auth_command_config, remove_tree
 from .codex_account_selection import build_account_selection_packet
 from .codex_custom_sessions import CodexCustomSessionManager
-from .codex_model_registry import build_custom_model_registry_packet
+from .codex_model_registry import (
+    API_ROUTE_MODEL_LANE,
+    CODEX_ACCOUNT_MODEL_LANE,
+    build_custom_model_registry_packet,
+    model_lane_classification_from_registry,
+)
 from .operator_surface import DEFAULT_ENDPOINT, OperatorSurfaceSession, WbpTraceObserver, clean_env, stat_hash
 from .runtime import RuntimePaths, build_command_payload, build_launcher_subprocess_env
 
@@ -341,6 +346,18 @@ def _selection_packet_for_external_route(
             "route_provenance_required": False,
             "route_provenance_proven": False,
             "source_provenance_status": "not_proven",
+            "api_model_selected_by_user": True,
+            "route_selected_by_user": False,
+            "browser_selected_route": False,
+            "route_candidate_source": "none",
+            "route_candidate_classified": False,
+            "route_static_readiness_classified": False,
+            "route_execution_proven": False,
+            "provider_response_proven": False,
+            "secret_validity_proven": False,
+            "live_compatibility_proven": False,
+            "raw_route_exposed": False,
+            "raw_secret_ref_exposed": False,
             "selection_dry_run_proven": False,
             "live_selection_proven": False,
             "selection_proven": False,
@@ -349,22 +366,36 @@ def _selection_packet_for_external_route(
     route_id = str(route.get("route_id") or "")
     secret_ref = str(route.get("secret_ref") or "")
     enabled = route.get("enabled") is True
-    proven = enabled and bool(secret_ref)
+    ready = enabled and bool(secret_ref)
     return {
         "schema_version": 1,
-        "status": "ok" if proven else "degraded",
-        "machine_error_code": "OK" if proven else "EXTERNAL_API_ROUTE_NOT_READY",
-        "selected_source_class": "route_backed" if proven else "none",
+        "status": "ok" if ready else "degraded",
+        "machine_error_code": "OK" if ready else "EXTERNAL_API_ROUTE_NOT_READY",
+        "selected_source_class": "route_backed" if ready else "none",
         "selected_backend_ref": "",
         "selected_backend_server_issued": False,
         "selected_route_ref": route_id,
-        "selected_route_server_issued": proven,
-        "route_provenance_required": proven,
-        "route_provenance_proven": proven,
-        "source_provenance_status": "route_proven" if proven else "route_provenance_missing",
-        "selection_dry_run_proven": proven,
+        "selected_route_server_issued": ready,
+        "route_provenance_required": ready,
+        "route_provenance_proven": False,
+        "source_provenance_status": (
+            "route_static_candidate_classified" if ready else "route_static_candidate_missing"
+        ),
+        "api_model_selected_by_user": True,
+        "route_selected_by_user": False,
+        "browser_selected_route": False,
+        "route_candidate_source": "server_issued_route_registry" if route_id else "none",
+        "route_candidate_classified": bool(route_id),
+        "route_static_readiness_classified": ready,
+        "route_execution_proven": False,
+        "provider_response_proven": False,
+        "secret_validity_proven": False,
+        "live_compatibility_proven": False,
+        "raw_route_exposed": False,
+        "raw_secret_ref_exposed": False,
+        "selection_dry_run_proven": ready,
         "live_selection_proven": False,
-        "selection_proven": proven,
+        "selection_proven": ready,
         "browser_selected_backend": False,
         "claim_gate_status": str(operator_status.get("claim_gate", {}).get("status") or ""),
     }
@@ -376,9 +407,21 @@ def _build_selection_packet(
     operator_status: dict[str, Any],
     api_snapshot: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    if model_id.startswith("gpt-"):
-        return build_account_selection_packet(commands, operator_status)
-    return _selection_packet_for_external_route(model_id, operator_status, api_snapshot)
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    lane_classification = model_lane_classification_from_registry(model_id, registry)
+    model_lane = str(lane_classification.get("model_lane") or "")
+    if model_lane == CODEX_ACCOUNT_MODEL_LANE:
+        return build_account_selection_packet(commands, operator_status) | lane_classification
+    if model_lane == API_ROUTE_MODEL_LANE:
+        return _selection_packet_for_external_route(model_id, operator_status, api_snapshot) | lane_classification
+    return {
+        "schema_version": 1,
+        "status": "rejected",
+        "machine_error_code": "MODEL_LANE_NOT_CLASSIFIED",
+        "selection_proven": False,
+        "selected_source_class": "none",
+        **lane_classification,
+    }
 
 
 def _choose_server_model_id(
@@ -392,13 +435,18 @@ def _choose_server_model_id(
         if isinstance(entry, dict) and str(entry.get("model_id") or "")
     ]
     reported = str(registry.get("reported_configured_model") or "")
-    if reported and reported in available and reported.startswith("gpt-"):
+    native_available = [
+        model_id
+        for model_id in available
+        if model_lane_classification_from_registry(model_id, registry).get("model_lane")
+        == CODEX_ACCOUNT_MODEL_LANE
+    ]
+    if reported and reported in native_available:
         return reported
     if PRIMARY_MODEL_ID in available:
         return PRIMARY_MODEL_ID
-    preferred_gpt = next((model_id for model_id in available if model_id.startswith("gpt-")), "")
-    if preferred_gpt:
-        return preferred_gpt
+    if native_available:
+        return native_available[0]
     if reported and reported in available:
         return reported
     if isinstance(api_snapshot, dict):
@@ -459,7 +507,7 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
 
     selection = _build_selection_packet(model_id, commands, operator_status, api_snapshot)
     launch_packet = manager.create_packet(
-        {"model_id": model_id},
+        {"primary_model_id": model_id},
         commands,
         operator_status,
         selection=selection,

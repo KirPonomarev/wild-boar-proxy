@@ -176,6 +176,39 @@ def _step_packet(packet: dict[str, Any], call: dict[str, Any]) -> dict[str, Any]
         "runner_slot_id_matches_requested": packet.get("runner_slot_id_matches_requested") is True,
         "runner_payload_slot_id": call.get("slot_id"),
         "runner_payload_model_id": call.get("model_id"),
+        "requested_slot_bound": packet.get("requested_slot_bound") is True,
+        "slot_catalog_revalidated": packet.get("slot_catalog_revalidated") is True,
+        "slot_model_server_issued": packet.get("slot_model_server_issued") is True,
+        "slot_lane_revalidated": packet.get("slot_lane_revalidated") is True,
+        "slot_source_revalidated": packet.get("slot_source_revalidated") is True,
+        "slot_admission_passed": packet.get("slot_admission_passed") is True,
+        "wbp_runner_payload_slot_id": packet.get("wbp_runner_payload_slot_id"),
+        "wbp_runner_payload_model_id": packet.get("wbp_runner_payload_model_id"),
+        "wbp_runner_payload_slot_matches_requested": (
+            packet.get("wbp_runner_payload_slot_matches_requested") is True
+        ),
+        "wbp_runner_payload_model_matches_slot": (
+            packet.get("wbp_runner_payload_model_matches_slot") is True
+        ),
+        "wbp_session_manager_slot_dispatch_proven": (
+            packet.get("wbp_session_manager_slot_dispatch_proven") is True
+        ),
+        "runtime_slot_dispatch_proof_scope": packet.get("runtime_slot_dispatch_proof_scope"),
+        "downstream_runner_slot_echo_present": (
+            packet.get("downstream_runner_slot_echo_present") is True
+        ),
+        "downstream_runner_slot_echo": packet.get("downstream_runner_slot_echo"),
+        "downstream_runner_slot_echo_matches_requested": (
+            packet.get("downstream_runner_slot_echo_matches_requested") is True
+        ),
+        "executed_slot_id": packet.get("executed_slot_id"),
+        "executed_slot_model_id": packet.get("executed_slot_model_id"),
+        "runtime_slot_dispatch_proven": packet.get("runtime_slot_dispatch_proven") is True,
+        "slot_binding_runtime_dispatch_claimed": (
+            packet.get("slot_binding_runtime_dispatch_claimed") is True
+        ),
+        "parallel_slot_execution_proven": packet.get("parallel_slot_execution_proven") is True,
+        "fanout_execution_proven": packet.get("fanout_execution_proven") is True,
         "model_id": packet.get("model_id"),
         "selected_source_provenance": packet.get("selected_source_provenance"),
         "configured_provider": packet.get("configured_provider"),
@@ -257,7 +290,15 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         primary_first.get("status") == "ok"
         and primary_first.get("current_execution_slot_id") == PRIMARY_MODEL_SLOT
         and primary_first.get("runner_slot_id_matches_requested") is True
+        and primary_first.get("runtime_slot_dispatch_proven") is True
+        and primary_first.get("slot_binding_runtime_dispatch_claimed") is True
+        and primary_first.get("runtime_slot_dispatch_proof_scope") == "wbp_session_manager_payload_plus_downstream_echo"
+        and primary_first.get("parallel_slot_execution_proven") is False
+        and primary_first.get("fanout_execution_proven") is False
         and primary_first_call.get("slot_id") == PRIMARY_MODEL_SLOT
+        and primary_first.get("wbp_runner_payload_slot_id") == PRIMARY_MODEL_SLOT
+        and primary_first.get("wbp_runner_payload_model_id") == PRIMARY_MODEL_ID
+        and primary_first.get("wbp_session_manager_slot_dispatch_proven") is True
         and primary_first.get("model_id") == PRIMARY_MODEL_ID
         and primary_first_call.get("model_id") == PRIMARY_MODEL_ID
         and primary_first.get("configured_provider") == "cliproxy"
@@ -267,7 +308,15 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         coding.get("status") == "ok"
         and coding.get("current_execution_slot_id") == CODING_AGENT_MODEL_SLOT
         and coding.get("runner_slot_id_matches_requested") is True
+        and coding.get("runtime_slot_dispatch_proven") is True
+        and coding.get("slot_binding_runtime_dispatch_claimed") is True
+        and coding.get("runtime_slot_dispatch_proof_scope") == "wbp_session_manager_payload_plus_downstream_echo"
+        and coding.get("parallel_slot_execution_proven") is False
+        and coding.get("fanout_execution_proven") is False
         and coding_call.get("slot_id") == CODING_AGENT_MODEL_SLOT
+        and coding.get("wbp_runner_payload_slot_id") == CODING_AGENT_MODEL_SLOT
+        and coding.get("wbp_runner_payload_model_id") == CODING_AGENT_MODEL_ID
+        and coding.get("wbp_session_manager_slot_dispatch_proven") is True
         and coding.get("model_id") == CODING_AGENT_MODEL_ID
         and coding_call.get("model_id") == CODING_AGENT_MODEL_ID
         and coding.get("configured_provider") == "external_route"
@@ -277,7 +326,15 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         primary_second.get("status") == "ok"
         and primary_second.get("current_execution_slot_id") == PRIMARY_MODEL_SLOT
         and primary_second.get("runner_slot_id_matches_requested") is True
+        and primary_second.get("runtime_slot_dispatch_proven") is True
+        and primary_second.get("slot_binding_runtime_dispatch_claimed") is True
+        and primary_second.get("runtime_slot_dispatch_proof_scope") == "wbp_session_manager_payload_plus_downstream_echo"
+        and primary_second.get("parallel_slot_execution_proven") is False
+        and primary_second.get("fanout_execution_proven") is False
         and primary_second_call.get("slot_id") == PRIMARY_MODEL_SLOT
+        and primary_second.get("wbp_runner_payload_slot_id") == PRIMARY_MODEL_SLOT
+        and primary_second.get("wbp_runner_payload_model_id") == PRIMARY_MODEL_ID
+        and primary_second.get("wbp_session_manager_slot_dispatch_proven") is True
         and primary_second.get("model_id") == PRIMARY_MODEL_ID
         and primary_second_call.get("model_id") == PRIMARY_MODEL_ID
         and primary_second.get("configured_provider") == "cliproxy"
@@ -287,6 +344,9 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         blocked.get("status") == "rejected"
         and blocked.get("machine_error_code") == "SLOT_NOT_BOUND"
         and blocked.get("requested_slot_id") == REVIEWER_MODEL_SLOT
+        and blocked.get("runtime_slot_dispatch_proven") is False
+        and blocked.get("slot_binding_runtime_dispatch_claimed") is False
+        and blocked.get("runtime_slot_dispatch_proof_scope") == "not_attempted_precondition_failed"
         and blocked.get("fallback_attempted") is False
         and call_count_after_blocked == call_count_before_blocked
     )
@@ -295,6 +355,9 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
         and defaulted_primary.get("requested_slot_id") == PRIMARY_MODEL_SLOT
         and defaulted_primary.get("requested_slot_explicit") is False
         and defaulted_primary.get("requested_slot_defaulted_to_primary") is True
+        and defaulted_primary.get("wbp_runner_payload_slot_id") == PRIMARY_MODEL_SLOT
+        and defaulted_primary.get("wbp_session_manager_slot_dispatch_proven") is True
+        and defaulted_primary.get("runtime_slot_dispatch_proven") is True
     )
 
     dispatch_ok = primary_honored and coding_honored and return_to_primary_observed
@@ -318,8 +381,13 @@ def build_packets(*, repo_root: Path, evidence_dir: Path) -> dict[str, dict[str,
             coding_call.get("slot_id"),
             primary_second_call.get("slot_id"),
         ],
+        "runtime_slot_dispatch_proof_scope": "wbp_session_manager_payload_plus_downstream_echo",
+        "wbp_session_manager_slot_dispatch_proven": dispatch_ok,
+        "runtime_slot_dispatch_proven": dispatch_ok,
         "slot_binding_implies_dispatch": False,
         "operator_mediated_sequential_dispatch_proven": dispatch_ok,
+        "parallel_slot_execution_proven": False,
+        "fanout_execution_proven": False,
         "runtime_native_orchestration_proven": False,
         "same_model_multi_role_disambiguation_proven": False,
     }

@@ -62,6 +62,11 @@ class PersistentProfileLauncherContractReadinessR1ProbeTests(unittest.TestCase):
         self.assertFalse(command["command_shape_counts_as_launch_proof"])
         self.assertEqual(command["env_shape"]["WBP_PROFILE_MODE"], "persistent_custom")
         self.assertEqual(command["env_shape"]["WBP_PERSISTENT_PROFILE_ID"], "wbp-custom-main")
+        self.assertEqual(
+            command["env_shape"]["TMPDIR"],
+            command["env_shape"]["WBP_RUNTIME_TMPDIR"],
+        )
+        self.assertIn("/tmp/wbp-cdx-wbp-custom-main", command["env_shape"]["TMPDIR"])
 
     def test_profile_identity_and_path_authority_do_not_prove_history_or_storage(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:

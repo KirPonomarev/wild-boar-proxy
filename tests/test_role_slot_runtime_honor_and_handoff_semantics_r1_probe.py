@@ -31,6 +31,11 @@ class RoleSlotRuntimeHonorAndHandoffSemanticsR1ProbeTests(unittest.TestCase):
             ["primary_model_slot", "coding_agent_model_slot", "primary_model_slot"],
         )
         self.assertTrue(dispatch["operator_mediated_sequential_dispatch_proven"])
+        self.assertEqual(dispatch["runtime_slot_dispatch_proof_scope"], "wbp_session_manager_payload_plus_downstream_echo")
+        self.assertTrue(dispatch["wbp_session_manager_slot_dispatch_proven"])
+        self.assertTrue(dispatch["runtime_slot_dispatch_proven"])
+        self.assertFalse(dispatch["parallel_slot_execution_proven"])
+        self.assertFalse(dispatch["fanout_execution_proven"])
         self.assertFalse(dispatch["runtime_native_orchestration_proven"])
         self.assertFalse(dispatch["slot_binding_implies_dispatch"])
 
@@ -53,6 +58,29 @@ class RoleSlotRuntimeHonorAndHandoffSemanticsR1ProbeTests(unittest.TestCase):
         self.assertTrue(
             all(step["runner_slot_id_matches_requested"] for step in provenance["steps"])
         )
+        self.assertTrue(
+            all(step["runtime_slot_dispatch_proven"] for step in provenance["steps"])
+        )
+        self.assertTrue(
+            all(step["slot_binding_runtime_dispatch_claimed"] for step in provenance["steps"])
+        )
+        self.assertTrue(
+            all(
+                step["runtime_slot_dispatch_proof_scope"] == "wbp_session_manager_payload_plus_downstream_echo"
+                for step in provenance["steps"]
+            )
+        )
+        self.assertTrue(
+            all(step["wbp_runner_payload_slot_matches_requested"] for step in provenance["steps"])
+        )
+        self.assertTrue(
+            all(step["wbp_runner_payload_model_matches_slot"] for step in provenance["steps"])
+        )
+        self.assertTrue(
+            all(step["wbp_session_manager_slot_dispatch_proven"] for step in provenance["steps"])
+        )
+        self.assertFalse(any(step["parallel_slot_execution_proven"] for step in provenance["steps"]))
+        self.assertFalse(any(step["fanout_execution_proven"] for step in provenance["steps"]))
         self.assertTrue(provenance["transcript_preserves_step_events"])
 
         blocked = packets["blocked_handoff_packet.json"]

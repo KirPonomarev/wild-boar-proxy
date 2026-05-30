@@ -202,6 +202,7 @@ def build_web_control_surface_matrix_packet(live_server: Any, command_adapter: A
         "api_route_credential_check",
         "api_route_connect",
         "launch_custom_client_native",
+        "show_custom_client_native",
         "quick_start_check_all",
     }
     rows: list[dict[str, Any]] = []
@@ -251,7 +252,11 @@ def build_readonly_live_action_boundary_packet(live_server: Any) -> dict[str, An
             mismatches.append(f"{ui_action}:disabled_reason_code")
         if tuple(row.get("disabled_reasons", [])) != tuple(live_server.LIVE_READONLY_ACTION_DISABLED_REASONS):
             mismatches.append(f"{ui_action}:disabled_reasons")
-    expected_live_available = {"setup_discovery", "legacy_import_discovery"}
+    expected_live_available = {
+        "setup_discovery",
+        "legacy_import_discovery",
+        "show_custom_client_native",
+    }
     live_available = sorted(
         name for name, row in actions.items() if isinstance(row, dict) and row.get("available") is True
     )

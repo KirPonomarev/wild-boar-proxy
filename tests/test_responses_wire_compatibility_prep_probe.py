@@ -58,7 +58,7 @@ class ResponsesWireCompatibilityPrepProbeTests(unittest.TestCase):
         self.assertFalse(failures["failure_fixture_counts_as_provider_live_behavior"])
         self.assertFalse(failures["live_failure_semantics_compatibility_proven"])
         self.assertTrue(summary["transform_profile_fixture_ok"])
-        self.assertEqual(false_green["status"], "ok")
+        self.assertEqual(false_green["status"], "blocked")
         self.assertFalse(false_green["fixture_streaming_claimed_as_live_streaming"])
         self.assertFalse(false_green["wire_readiness_claimed_as_model_availability"])
 
@@ -80,8 +80,15 @@ class ResponsesWireCompatibilityPrepProbeTests(unittest.TestCase):
         }
         self.assertFalse(required - set(packets))
         summary = packets["responses_no_live_summary_packet.json"]
-        self.assertEqual(summary["status"], "ok")
-        self.assertEqual(summary["blocked_packets"], [])
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(
+            summary["blocked_packets"],
+            [
+                "responses_fixture_tool_loop_contract_packet.json",
+                "responses_live_promotion_gate_packet.json",
+                "responses_wire_compatibility_readiness_matrix.json",
+            ],
+        )
         self.assertFalse(summary["provider_reachability_proven"])
         self.assertFalse(summary["model_availability_proven"])
         self.assertFalse(summary["codex_consumer_acceptance_proven"])

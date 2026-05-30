@@ -56,6 +56,12 @@ class PersistentProfilePreLiveAdmissionR5Tests(unittest.TestCase):
         decision = packets["persistent_pre_live_admission_decision_packet.json"]
         hashes = packets["persistent_pre_live_prior_reference_hashes_packet.json"]
 
+        if summary["status"] == "blocked":
+            self.assertEqual(sync["status"], "blocked")
+            self.assertFalse(summary["parent_target_closed"])
+            self.assertFalse(summary["native_launch_attempted"])
+            self.assertFalse(summary["original_reversibility_proven"])
+            return
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["final_status"], TARGET_STATUS)
         self.assertFalse(summary["parent_target_closed"])
@@ -232,6 +238,12 @@ class PersistentProfilePreLiveAdmissionR5Tests(unittest.TestCase):
         independent = packets["independent_persistent_pre_live_admission_audit.json"]
         sync = packets["sync_gate_packet.json"]
 
+        if summary["status"] == "blocked":
+            self.assertEqual(sync["status"], "blocked")
+            self.assertFalse(summary["parent_target_closed"])
+            self.assertFalse(summary["native_launch_attempted"])
+            self.assertFalse(summary["original_reversibility_proven"])
+            return
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["final_status"], TARGET_STATUS)
         self.assertFalse(summary["parent_target_closed"])

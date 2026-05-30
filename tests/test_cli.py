@@ -18002,8 +18002,37 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', launcher_text)
         self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', launcher_text)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', launcher_text)
+        self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', launcher_text)
+        self.assertIn('WORKSPACE_PATH="${1:-}"', launcher_text)
+        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', launcher_text)
         self.assertIn(
-            'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            launcher_text,
+        )
+        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', launcher_text)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', launcher_text)
+        self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', launcher_text)
+        self.assertIn('cd "$CODEX_APP_RESOURCES"', launcher_text)
+        self.assertIn("primary_bin_hash=", launcher_text)
+        self.assertIn("preferred_asar_hash=", launcher_text)
+        self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', launcher_text)
+        self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', launcher_text)
+        self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', launcher_text)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", launcher_text)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", launcher_text)
+        self.assertIn('"$CODEX_APP_BIN"', launcher_text)
+        self.assertNotIn('proxy_env "$CODEX_APP_BIN"', launcher_text)
+        self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', launcher_text)
+        self.assertIn(
+            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
+            launcher_text,
+        )
+        self.assertIn(
+            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            launcher_text,
+        )
+        self.assertIn(
+            'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             launcher_text,
         )
         self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
@@ -18021,6 +18050,9 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"', payload)
         self.assertIn('APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"', payload)
         self.assertIn('APP_TMP_DIR="$PROFILE_DIR/tmp"', payload)
+        self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', payload)
+        self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', payload)
+        self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', payload)
         self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', payload)
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', payload)
         self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
@@ -18030,9 +18062,35 @@ class CliTests(unittest.TestCase):
         self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', payload)
         self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
+        self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', payload)
         self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('WORKSPACE_PATH="${1:-}"', payload)
+        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', payload)
         self.assertIn(
-            'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            payload,
+        )
+        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', payload)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', payload)
+        self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', payload)
+        self.assertIn('cd "$CODEX_APP_RESOURCES"', payload)
+        self.assertIn("primary_bin_hash=", payload)
+        self.assertIn("preferred_asar_hash=", payload)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", payload)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", payload)
+        self.assertIn('"$CODEX_APP_BIN"', payload)
+        self.assertNotIn('proxy_env "$CODEX_APP_BIN"', payload)
+        self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', payload)
+        self.assertIn(
+            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
+            payload,
+        )
+        self.assertIn(
+            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            payload,
+        )
+        self.assertIn(
+            'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             payload,
         )
 
@@ -18130,6 +18188,49 @@ class CliTests(unittest.TestCase):
         self.assertFalse(contract["repo_owned_default_consumer_provisioned"])
         self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertNotIn(str(self.default_launcher_script), status_payload["changed_files"])
+
+    def test_launch_smoke_repairs_signed_legacy_repo_owned_default_launcher_file(
+        self,
+    ) -> None:
+        legacy_payload = (
+            "set -eu\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n"
+        )
+        legacy_text = runtime_mod.render_repo_owned_default_launcher_script_text(
+            legacy_payload
+        )
+        legacy_digest = runtime_mod.compute_repo_managed_default_launcher_digest(
+            legacy_payload
+        )
+        self.default_launcher_script.write_text(legacy_text + "\n", encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+
+        paths = runtime_mod.RuntimePaths.from_env()
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_LAUNCHER_SCRIPT": str(self.default_launcher_script),
+            },
+        ), mock.patch.object(
+            runtime_mod,
+            "LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS",
+            {legacy_digest},
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            runtime_mod.ensure_repo_owned_default_launcher_consumer(paths)
+
+        self.assertTrue(
+            runtime_mod.repo_managed_default_launcher_recognized(
+                self.default_launcher_script
+            )
+        )
+        self.assertIn(
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            self.default_launcher_script.read_text(encoding="utf-8"),
+        )
 
     def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(
         self,

@@ -50,6 +50,10 @@ REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
 REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
+LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
+    # Repo-owned v1 launcher before same-hash clean app copy selection.
+    "074dff0a0796ccc0042238caa9e1001a64c3ca4074123d86fd184bb0ad93c52d",
+}
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
 REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_SHA256="
@@ -976,9 +980,25 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"',
             'APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"',
             'APP_TMP_DIR="$PROFILE_DIR/tmp"',
+            'APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"',
+            'APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"',
+            'APP_PID_FILE="$APP_TMP_DIR/launcher.pid"',
             'PROFILE_BASENAME="$(basename "$PROFILE_DIR")"',
             'APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"',
-            'CODEX_APP_BIN="/Applications/Codex.app/Contents/MacOS/Codex"',
+            'PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"',
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            'CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"',
+            'if [ -d "$PREFERRED_CODEX_APP_PATH" ] && [ -x "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" ]; then',
+            '  primary_bin_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
+            '  preferred_bin_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
+            '  primary_asar_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
+            '  preferred_asar_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
+            '  if [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ]; then',
+            '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
+            "  fi",
+            "fi",
+            'CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"',
+            'CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
             '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
@@ -995,8 +1015,12 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             'if [ "$mode" = "desktop" ]; then',
             '  [ -f "$AUTH_FILE" ] || exit 9',
+            '  [ -d "$CODEX_APP_PATH" ] || exit 9',
             '  [ -x "$CODEX_APP_BIN" ] || exit 9',
+            '  [ -d "$CODEX_APP_RESOURCES" ] || exit 9',
+            '  { [ -f "$CODEX_APP_RESOURCES/app.asar" ] || [ -d "$CODEX_APP_RESOURCES/app" ]; } || exit 9',
             '  mkdir -p "$APP_USER_DATA_DIR" "$APP_SUPPORT_DIR" "$APP_CACHE_DIR" "$APP_HTTPSTORAGE_DIR" "$APP_TMP_DIR"',
+            '  printf "wbp launch app path: %s\\n" "$CODEX_APP_PATH" >> "$APP_STDOUT_LOG"',
             '  if [ -e "$APP_RUNTIME_TMPDIR" ] && [ ! -L "$APP_RUNTIME_TMPDIR" ]; then',
             '    printf "runtime tmp bind path occupied: %s\\n" "$APP_RUNTIME_TMPDIR" >&2',
             "    exit 9",
@@ -1007,6 +1031,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  export XDG_CONFIG_HOME="$APP_HOME/.config"',
             '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
             '  export TMPDIR="$APP_RUNTIME_TMPDIR"',
+            '  export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"',
             '  export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3} - "$AUTH_FILE" <<\'PY\'',
             "import json",
             "import sys",
@@ -1016,8 +1041,51 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "print(data.get(\"OPENAI_API_KEY\", \"\"))",
             "PY",
             ')"',
+            '  cd "$CODEX_APP_RESOURCES"',
             "  shift || true",
-            '  exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
+            '  WORKSPACE_PATH="${1:-}"',
+            '  if [ -n "$WORKSPACE_PATH" ]; then',
+            '    if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            '      env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' "--open-project=$WORKSPACE_PATH"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "    else",
+            '      "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' "--open-project=$WORKSPACE_PATH"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "    fi",
+            '    printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "    sleep 3",
+            '    kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            "    exit 0",
+            "  fi",
+            '  if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "  else",
+            '    "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "  fi",
+            '  printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "  sleep 3",
+            '  kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            "  exit 0",
             "fi",
             'if [ "$mode" = "smoke" ]; then',
             '  printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
@@ -1136,6 +1204,29 @@ def repo_managed_default_launcher_payload_if_valid(path: Path) -> str | None:
     return script_payload
 
 
+def repo_managed_default_launcher_digest_if_valid(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 4:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_DEFAULT_LAUNCHER_MARKER:
+        return None
+    digest_line = lines[2]
+    if not digest_line.startswith(REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(
+        REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX
+    )
+    script_payload = "\n".join(lines[3:])
+    if expected_digest != compute_repo_managed_default_launcher_digest(script_payload):
+        return None
+    return expected_digest
+
+
 def repo_managed_default_launcher_signature_valid(path: Path) -> bool:
     return repo_managed_default_launcher_payload_if_valid(path) is not None
 
@@ -1149,6 +1240,11 @@ def repo_managed_default_launcher_recognized(path: Path) -> bool:
     if script_payload is None:
         return False
     return repo_managed_default_launcher_payload_recognized(script_payload)
+
+
+def repo_managed_default_launcher_legacy_recognized(path: Path) -> bool:
+    digest = repo_managed_default_launcher_digest_if_valid(path)
+    return digest in LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS
 
 
 def compute_repo_managed_owner_helper_digest(script_payload: str) -> str:
@@ -1400,7 +1496,11 @@ def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
     if not paths.launcher_script.exists():
         write_executable_text_atomic(paths.launcher_script, expected_text)
         return
-    if not repo_managed_default_launcher_recognized(paths.launcher_script):
+    recognized = repo_managed_default_launcher_recognized(paths.launcher_script)
+    legacy_recognized = repo_managed_default_launcher_legacy_recognized(
+        paths.launcher_script
+    )
+    if not recognized and not legacy_recognized:
         return
     current_text = paths.launcher_script.read_text(encoding="utf-8").rstrip("\n")
     if current_text != expected_text:

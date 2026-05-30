@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,9 @@ from .native_filesystem_probe import (
     NativeProbeLayout,
     clean_env,
     collect_codex_process_inventory,
+    create_persistent_custom_profile_layout,
     create_native_probe_layout,
+    default_persistent_custom_profile_paths,
     json_write,
     launch_native_candidate,
     materialize_probe_profile,
@@ -46,6 +49,14 @@ from .token_command import emit_local_token
 
 
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
+WINDOW_OBSERVATION_WAIT_SECONDS = 12.0
+WINDOW_OBSERVATION_POLL_SECONDS = 0.5
+DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
+RUNTIME_READY_STDOUT_MARKERS = (
+    "Handled 'ready' message",
+    "method=model/list",
+    "browser_use_iab_backend_startup_ready",
+)
 
 
 def owner_authorization_phrase_present(value: str | None) -> bool:
@@ -102,12 +113,36 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
         {
             pid
             for line in custom_lines
-            if isinstance(line, str) and "/Applications/Codex.app/Contents/MacOS/Codex" in line
+            if isinstance(line, str) and "/Contents/MacOS/Codex" in line
             for pid in [_pid_from_process_line(line)]
             if pid is not None
         }
     )
     return custom_root_pids
+
+
+def _parse_ax_point(value: str) -> list[int]:
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    parsed: list[int] = []
+    for part in parts:
+        try:
+            parsed.append(int(float(part)))
+        except ValueError:
+            return []
+    return parsed
+
+
+def _window_bounds_from_ax(position: str, size: str) -> dict[str, int]:
+    parsed_position = _parse_ax_point(position)
+    parsed_size = _parse_ax_point(size)
+    if len(parsed_position) != 2 or len(parsed_size) != 2:
+        return {}
+    return {
+        "x": parsed_position[0],
+        "y": parsed_position[1],
+        "width": parsed_size[0],
+        "height": parsed_size[1],
+    }
 
 
 def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
@@ -121,7 +156,17 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     script = (
         'tell application "System Events"\n'
         f'  set p to first process whose unix id is {observed_pid}\n'
-        '  return (name of p as text) & tab & (visible of p as text) & tab & (frontmost of p as text) & tab & (background only of p as text) & tab & (count of windows of p as text)\n'
+        '  set windowCount to count of windows of p\n'
+        '  set windowPosition to ""\n'
+        '  set windowSize to ""\n'
+        '  if windowCount > 0 then\n'
+        '    set w to window 1 of p\n'
+        '    set {windowX, windowY} to position of w\n'
+        '    set {windowWidth, windowHeight} to size of w\n'
+        '    set windowPosition to (windowX as text) & "," & (windowY as text)\n'
+        '    set windowSize to (windowWidth as text) & "," & (windowHeight as text)\n'
+        '  end if\n'
+        '  return (name of p as text) & tab & (visible of p as text) & tab & (frontmost of p as text) & tab & (background only of p as text) & tab & (windowCount as text) & tab & windowPosition & tab & windowSize\n'
         'end tell\n'
     )
     result = subprocess.run(
@@ -140,6 +185,9 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         window_count = int(parts[4].strip()) if len(parts) >= 5 else 0
     except ValueError:
         window_count = 0
+    window_position = parts[5].strip() if len(parts) >= 6 else ""
+    window_size = parts[6].strip() if len(parts) >= 7 else ""
+    window_bounds = _window_bounds_from_ax(window_position, window_size)
     window_observed = (
         result.returncode == 0
         and bool(stdout)
@@ -153,12 +201,39 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
             {
                 "observed_pid": observed_pid,
                 "window_query": stdout,
+                "window_query_method": "AX/System Events process window count",
                 "window_query_rc": result.returncode,
                 "window_query_error_class": "",
                 "window_count": window_count,
                 "window_frontmost": frontmost,
                 "window_visible": visible,
                 "window_background_only": background_only,
+                "window_bounds": window_bounds,
+                "window_position": window_position,
+                "window_size": window_size,
+            }
+        )
+        return packet
+    cg_observed, cg_result = _cg_window_presence(observed_pid)
+    if cg_observed:
+        packet = build_native_window_observation_packet(window_observed=True)
+        packet.update(
+            {
+                "observed_pid": observed_pid,
+                "window_query": cg_result,
+                "window_query_method": "CGWindowList pid-bound on-screen window",
+                "window_query_rc": result.returncode,
+                "window_query_error_class": "",
+                "window_count": 1,
+                "window_frontmost": frontmost,
+                "window_visible": True,
+                "window_background_only": background_only,
+                "window_bounds": window_bounds,
+                "window_position": window_position,
+                "window_size": window_size,
+                "ax_window_query": stdout,
+                "ax_window_query_error_class": "SystemEventsInvalidIndex" if result.returncode else "",
+                "ax_window_count": window_count,
             }
         )
         return packet
@@ -170,15 +245,168 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         {
             "observed_pid": observed_pid,
             "window_query": stdout,
+            "window_query_method": "AX/System Events process window count",
             "window_query_rc": result.returncode,
             "window_query_error_class": "SystemEventsInvalidIndex" if result.returncode else "",
             "window_count": window_count,
             "window_frontmost": frontmost,
             "window_visible": visible,
             "window_background_only": background_only,
+            "window_bounds": window_bounds,
+            "window_position": window_position,
+            "window_size": window_size,
         }
     )
     return packet
+
+
+def _focus_custom_window_by_pid(
+    observed_pid: int,
+    *,
+    target_position: tuple[int, int] = (120, 80),
+    target_size: tuple[int, int] = (1320, 820),
+) -> dict[str, Any]:
+    script = (
+        'tell application "System Events"\n'
+        f'  set p to first process whose unix id is {observed_pid}\n'
+        '  set visible of p to true\n'
+        '  set frontmost of p to true\n'
+        '  set windowCount to count of windows of p\n'
+        '  set windowPosition to ""\n'
+        '  set windowSize to ""\n'
+        '  if windowCount > 0 then\n'
+        '    set w to window 1 of p\n'
+        f'    set position of w to {{{target_position[0]}, {target_position[1]}}}\n'
+        f'    set size of w to {{{target_size[0]}, {target_size[1]}}}\n'
+        '    set {windowX, windowY} to position of w\n'
+        '    set {windowWidth, windowHeight} to size of w\n'
+        '    set windowPosition to (windowX as text) & "," & (windowY as text)\n'
+        '    set windowSize to (windowWidth as text) & "," & (windowHeight as text)\n'
+        '  end if\n'
+        '  return (name of p as text) & tab & (visible of p as text) & tab & (frontmost of p as text) & tab & (windowCount as text) & tab & windowPosition & tab & windowSize\n'
+        'end tell\n'
+    )
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    stdout = result.stdout.strip()
+    parts = stdout.split("\t") if stdout else []
+    visible = len(parts) >= 2 and parts[1].strip().lower() == "true"
+    frontmost = len(parts) >= 3 and parts[2].strip().lower() == "true"
+    try:
+        window_count = int(parts[3].strip()) if len(parts) >= 4 else 0
+    except ValueError:
+        window_count = 0
+    window_position = parts[4].strip() if len(parts) >= 5 else ""
+    window_size = parts[5].strip() if len(parts) >= 6 else ""
+    bounds = _window_bounds_from_ax(window_position, window_size)
+    succeeded = result.returncode == 0 and visible and frontmost and window_count > 0
+    return {
+        "window_focus_action_attempted": True,
+        "window_focus_action_succeeded": succeeded,
+        "window_focus_query": stdout,
+        "window_focus_query_rc": result.returncode,
+        "window_focus_query_error_class": "" if result.returncode == 0 else "SystemEventsFocusFailed",
+        "window_focus_stderr_bounded": result.stderr.strip()[:240],
+        "window_focus_observed_pid": observed_pid,
+        "window_focus_visible": visible,
+        "window_focus_frontmost": frontmost,
+        "window_focus_window_count": window_count,
+        "window_focus_bounds": bounds,
+    }
+
+
+def show_custom_native_window_packet(
+    *,
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    paths = default_persistent_custom_profile_paths(
+        profile_id=persistent_profile_id,
+        base_dir=persistent_profile_base_dir,
+    )
+    user_data_dir = str(paths["user_data_dir"])
+    inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
+    root_pids = _custom_root_app_pids(inventory)
+    if not root_pids:
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "packet_kind": "custom_codex_show_window",
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+            "human_message": "No Custom Codex process using the WBP profile was found.",
+            "persistent_profile_id": persistent_profile_id,
+            "persistent_user_data_dir": user_data_dir,
+            "custom_process_observed": False,
+            "custom_process_pid": None,
+            "custom_window_observed": False,
+            "custom_window_visible": False,
+            "custom_window_frontmost": False,
+            "window_focus_action_attempted": False,
+            "window_focus_action_succeeded": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "next_action": "launch_custom_codex_first",
+        }
+
+    observed_pid = int(root_pids[0])
+    before = _window_observation_via_ax(inventory)
+    focus = _focus_custom_window_by_pid(observed_pid)
+    after_inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
+    after = _window_observation_via_ax(after_inventory)
+    visible = after.get("window_observed") is True and after.get("window_visible") is True
+    frontmost = after.get("window_frontmost") is True
+    status_ok = visible and focus.get("window_focus_action_succeeded") is True
+    return {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_show_window",
+        "status": "ok" if status_ok else "blocked",
+        "machine_error_code": "OK" if status_ok else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN",
+        "human_message": (
+            "Custom Codex window is visible and frontmost."
+            if status_ok
+            else "Custom Codex window could not be proven visible and frontmost."
+        ),
+        "persistent_profile_id": persistent_profile_id,
+        "persistent_user_data_dir": user_data_dir,
+        "custom_process_observed": True,
+        "custom_process_pid": observed_pid,
+        "custom_window_observed": after.get("window_observed") is True,
+        "custom_window_visible": visible,
+        "custom_window_frontmost": frontmost,
+        "custom_window_bounds": after.get("window_bounds", {}),
+        "window_focus_action_attempted": focus.get("window_focus_action_attempted") is True,
+        "window_focus_action_succeeded": focus.get("window_focus_action_succeeded") is True,
+        "window_focus_packet": focus,
+        "window_observation_before_focus": before,
+        "window_observation_after_focus": after,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "next_action": "none" if status_ok else "stop_and_diagnose_window_visibility",
+    }
+
+
+def _wait_for_window_observation_via_ax(
+    process_inventory: dict[str, Any],
+    *,
+    timeout_seconds: float = WINDOW_OBSERVATION_WAIT_SECONDS,
+    poll_seconds: float = WINDOW_OBSERVATION_POLL_SECONDS,
+) -> dict[str, Any]:
+    deadline = time.time() + timeout_seconds
+    last_packet = _window_observation_via_ax(process_inventory)
+    attempt_count = 1
+    while last_packet.get("window_observed") is not True and time.time() < deadline:
+        time.sleep(poll_seconds)
+        last_packet = _window_observation_via_ax(process_inventory)
+        attempt_count += 1
+    last_packet["window_observation_attempt_count"] = attempt_count
+    last_packet["window_observation_wait_seconds"] = timeout_seconds
+    return last_packet
 
 
 def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
@@ -268,6 +496,14 @@ def _cg_input_capable(observed_pid: int) -> tuple[bool, str]:
     return False, "cg_query_no_windows_found_for_pid"
 
 
+def _cg_window_presence(observed_pid: int) -> tuple[bool, str]:
+    """Pid-bound on-screen window proof when Accessibility window counts are unavailable."""
+    cg_observed, cg_result = _cg_input_capable(observed_pid)
+    if cg_observed:
+        return True, cg_result
+    return False, cg_result
+
+
 def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
     if not window_observed:
@@ -318,6 +554,78 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
     return packet
 
 
+def _runtime_ready_stdout_paths(
+    launch_result: dict[str, Any],
+    layout: NativeProbeLayout,
+) -> list[Path]:
+    paths: list[Path] = []
+    stdout_path_value = launch_result.get("launcher_stdout_path")
+    if not isinstance(stdout_path_value, str) or not stdout_path_value:
+        return []
+    paths.append(Path(stdout_path_value))
+    paths.append(layout.profile_dir / "tmp" / "launcher.stdout.log")
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def _latest_launch_stdout_segment(text: str) -> str:
+    marker = "wbp launch app path:"
+    index = text.rfind(marker)
+    return text[index:] if index >= 0 else text
+
+
+def _runtime_ready_from_launcher_stdout(
+    launch_result: dict[str, Any],
+    layout: NativeProbeLayout,
+    *,
+    timeout_seconds: float = 12.0,
+) -> dict[str, Any]:
+    stdout_paths = _runtime_ready_stdout_paths(launch_result, layout)
+    if not stdout_paths:
+        return {
+            "runtime_ready_observed": False,
+            "runtime_ready_source": "launcher_stdout_unavailable",
+            "runtime_ready_stdout_paths_checked": [],
+            "runtime_ready_markers": list(RUNTIME_READY_STDOUT_MARKERS),
+            "runtime_ready_missing_markers": list(RUNTIME_READY_STDOUT_MARKERS),
+        }
+
+    deadline = time.time() + timeout_seconds
+    text = ""
+    while time.time() <= deadline:
+        for stdout_path in stdout_paths:
+            try:
+                text = _latest_launch_stdout_segment(
+                    stdout_path.read_text(encoding="utf-8", errors="replace")
+                )
+            except FileNotFoundError:
+                text = ""
+            missing = [marker for marker in RUNTIME_READY_STDOUT_MARKERS if marker not in text]
+            if not missing:
+                return {
+                    "runtime_ready_observed": True,
+                    "runtime_ready_source": "launcher_stdout_markers",
+                    "runtime_ready_stdout_paths_checked": [str(path) for path in stdout_paths],
+                    "runtime_ready_markers": list(RUNTIME_READY_STDOUT_MARKERS),
+                    "runtime_ready_missing_markers": [],
+                }
+        time.sleep(0.5)
+
+    return {
+        "runtime_ready_observed": False,
+        "runtime_ready_source": "launcher_stdout_markers",
+        "runtime_ready_stdout_paths_checked": [str(path) for path in stdout_paths],
+        "runtime_ready_markers": list(RUNTIME_READY_STDOUT_MARKERS),
+        "runtime_ready_missing_markers": missing,
+    }
+
+
 def _build_identity_binding(
     window_packet: dict[str, Any],
     layout: NativeProbeLayout,
@@ -363,6 +671,10 @@ def launch_custom_native_app_packet(
     endpoint: str,
     model: str,
     owner_authorization_phrase: str | None = None,
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+    keep_running_on_window_observed: bool = False,
+    reuse_existing_window_if_present: bool = False,
 ) -> dict[str, Any]:
     admission = build_native_custom_preflight_packet(
         native_window_probe_command(),
@@ -413,6 +725,29 @@ def launch_custom_native_app_packet(
         "keychain_item_read": False,
         "keychain_reset_performed": False,
         "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+        "profile_mode": "persistent_custom",
+        "persistent_profile_id": persistent_profile_id,
+        "persistent_profile_root": "",
+        "persistent_codex_home": "",
+        "persistent_home_dir": "",
+        "persistent_user_data_dir": "",
+        "persistent_runtime_tmp_dir": "",
+        "temp_profile_used": False,
+        "history_persistence_expected": True,
+        "visible_thread_history_restored_proven": False,
+        "cleanup_deletes_persistent_profile_by_default": False,
+        "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+        "browser_client_path_authority": False,
+        "original_codex_profile_runtime_dependency": False,
+        "prelaunch_existing_custom_process_stop_attempted": False,
+        "prelaunch_existing_custom_processes_gone": True,
+        "prelaunch_existing_custom_process_stop_scope": "none",
+        "reuse_existing_window_if_present": reuse_existing_window_if_present,
+        "existing_custom_window_detected": False,
+        "existing_custom_window_reused": False,
+        "new_launch_started": False,
+        "launcher_exit_code_early": None,
+        "launcher_failed_before_custom_process": False,
     }
     if auth["status"] != "ok":
         return {
@@ -430,8 +765,15 @@ def launch_custom_native_app_packet(
     try:
         real_runtime_paths = RuntimePaths.from_env()
         local_token = emit_local_token(real_runtime_paths)
-        tmp_root = Path(tempfile.mkdtemp(prefix="wbp-native-window-live-", dir="/tmp"))
-        layout = create_native_probe_layout(tmp_root)
+        paths = default_persistent_custom_profile_paths(
+            profile_id=persistent_profile_id,
+            base_dir=persistent_profile_base_dir,
+        )
+        layout = create_persistent_custom_profile_layout(
+            profile_id=persistent_profile_id,
+            base_dir=persistent_profile_base_dir,
+        )
+        tmp_root = layout.tmp_root
         materialize_probe_profile(
             layout=layout,
             endpoint=endpoint,
@@ -439,6 +781,21 @@ def launch_custom_native_app_packet(
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
         )
+        persistent_fields = {
+            "profile_mode": "persistent_custom",
+            "persistent_profile_id": str(paths["persistent_profile_id"]),
+            "persistent_profile_root": str(paths["persistent_profile_root"]),
+            "persistent_codex_home": str(paths["codex_home"]),
+            "persistent_home_dir": str(paths["home_dir"]),
+            "persistent_user_data_dir": str(paths["user_data_dir"]),
+            "persistent_runtime_tmp_dir": str(paths["runtime_tmp_dir"]),
+            "temp_profile_used": False,
+            "history_persistence_expected": True,
+            "cleanup_deletes_persistent_profile_by_default": False,
+            "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+            "browser_client_path_authority": False,
+            "original_codex_profile_runtime_dependency": False,
+        }
         keychain_preflight = prepare_isolated_home_keychain(
             isolated_home=layout.custom_home_dir,
         )
@@ -468,6 +825,7 @@ def launch_custom_native_app_packet(
             cleanup_error = remove_tree_with_retry(tmp_root)
             return {
                 **base,
+                **persistent_fields,
                 **keychain_fields,
                 "status": "blocked",
                 "machine_error_code": str(
@@ -483,39 +841,225 @@ def launch_custom_native_app_packet(
                     "cleanup_error_class": cleanup_error,
                 },
             }
+        if reuse_existing_window_if_present:
+            existing_inventory = collect_codex_process_inventory(
+                custom_user_data_dir=str(layout.custom_user_data_dir)
+            )
+            existing_custom_process = existing_inventory.get("custom_process_count", 0) > 0
+            if existing_custom_process:
+                show_packet = show_custom_native_window_packet(
+                    persistent_profile_id=persistent_profile_id,
+                    persistent_profile_base_dir=persistent_profile_base_dir,
+                )
+                existing_window_visible = show_packet.get("status") == "ok"
+                return {
+                    **base,
+                    **persistent_fields,
+                    **keychain_fields,
+                    "status": "ok" if existing_window_visible else "blocked",
+                    "machine_error_code": (
+                        "OK"
+                        if existing_window_visible
+                        else "CUSTOM_CODEX_EXISTING_WINDOW_VISIBILITY_NOT_PROVEN"
+                    ),
+                    "human_message": (
+                        "Existing Custom Codex window was reused; no new launch was started."
+                        if existing_window_visible
+                        else "Existing Custom Codex process was found, but window visibility was not proven."
+                    ),
+                    "next_action": (
+                        "none"
+                        if existing_window_visible
+                        else "show_existing_custom_codex_window_or_stop_same_profile_process"
+                    ),
+                    "running_status": existing_window_visible,
+                    "process_started": False,
+                    "custom_process_observed": True,
+                    "custom_process_pid": show_packet.get("custom_process_pid"),
+                    "process_still_observed_after_wait": True,
+                    "expected_custom_identity_observed": existing_window_visible,
+                    "native_window_observed": show_packet.get("custom_window_observed") is True,
+                    "custom_window_observed": show_packet.get("custom_window_observed") is True,
+                    "custom_window_visible": show_packet.get("custom_window_visible") is True,
+                    "custom_window_frontmost": show_packet.get("custom_window_frontmost") is True,
+                    "custom_window_bounds": show_packet.get("custom_window_bounds", {}),
+                    "window_focus_action_attempted": show_packet.get("window_focus_action_attempted") is True,
+                    "window_focus_action_succeeded": show_packet.get("window_focus_action_succeeded") is True,
+                    "native_app_usable": existing_window_visible,
+                    "native_app_usability_source": (
+                        "existing_visible_custom_window" if existing_window_visible else "not_proven"
+                    ),
+                    "real_codex_app_launched": False,
+                    "isolated_home": True,
+                    "isolated_codex_home": True,
+                    "isolated_profile_dir": True,
+                    "isolated_app_support_dir": True,
+                    "isolated_cache_dir": True,
+                    "isolated_runtime_dir": True,
+                    "server_owned_route_configuration": True,
+                    "current_original_profile_shortcut_used": False,
+                    "current_codex_touched": False,
+                    "cleanup_deferred_while_running": existing_window_visible,
+                    "keep_running_on_window_observed": keep_running_on_window_observed,
+                    "existing_custom_window_detected": True,
+                    "existing_custom_window_reused": existing_window_visible,
+                    "new_launch_started": False,
+                    "show_existing_window_packet": show_packet,
+                    "cleanup_result": {
+                        "attempted": False,
+                        "status": "existing_window_reused" if existing_window_visible else "existing_process_left_running",
+                        "termination": {},
+                        "cleanup_error_class": "",
+                    },
+                }
+        prelaunch_termination = terminate_custom_processes(str(layout.custom_user_data_dir))
+        prelaunch_processes_gone = prelaunch_termination.get("custom_processes_gone") is True
+        prelaunch_fields = {
+            "prelaunch_existing_custom_process_stop_attempted": True,
+            "prelaunch_existing_custom_processes_gone": prelaunch_processes_gone,
+            "prelaunch_existing_custom_process_stop_scope": "same_custom_user_data_dir_only",
+            "prelaunch_existing_custom_process_initial_pids": prelaunch_termination.get(
+                "initial_custom_pids",
+                [],
+            ),
+        }
+        if not prelaunch_processes_gone:
+            cleanup_error = remove_tree_with_retry(tmp_root)
+            return {
+                **base,
+                **persistent_fields,
+                **keychain_fields,
+                **prelaunch_fields,
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_PRELAUNCH_PROCESS_STOP_FAILED",
+                "human_message": "Custom Codex native launch stopped because existing same-profile Custom processes could not be stopped safely.",
+                "next_action": "stop_and_diagnose_existing_custom_processes",
+                "running_status": False,
+                "process_started": False,
+                "real_codex_app_launched": False,
+                "current_codex_touched": False,
+                "cleanup_result": {
+                    "attempted": True,
+                    "status": "ok" if not cleanup_error else "blocked",
+                    "termination": prelaunch_termination,
+                    "cleanup_error_class": cleanup_error,
+                },
+            }
         launch_result = launch_native_candidate(
             repo_root=repo_root,
             layout=layout,
             real_runtime_paths=real_runtime_paths,
         )
         process_started = launch_result.get("custom_process_observed") is True
-        window_packet = _window_observation_via_ax(launch_result["startup_inventory"])
+        launcher_exit_code_early = launch_result.get("launcher_exit_code_early")
+        launcher_failed_before_process = (
+            not process_started
+            and isinstance(launcher_exit_code_early, int)
+            and launcher_exit_code_early != 0
+        )
+        process_still_alive = (
+            launch_result.get("custom_process_still_observed_after_wait") is True
+        )
+        window_packet = _wait_for_window_observation_via_ax(launch_result["startup_inventory"])
+        focus_packet: dict[str, Any] = {
+            "window_focus_action_attempted": False,
+            "window_focus_action_succeeded": False,
+        }
+        observed_pid_for_focus = window_packet.get("observed_pid")
+        if isinstance(observed_pid_for_focus, int) and (
+            window_packet.get("window_observed") is not True
+            or window_packet.get("window_visible") is not True
+            or window_packet.get("window_frontmost") is not True
+        ):
+            focus_packet = _focus_custom_window_by_pid(observed_pid_for_focus)
+            window_packet = _window_observation_via_ax(
+                collect_codex_process_inventory(
+                    custom_user_data_dir=str(layout.custom_user_data_dir)
+                )
+            )
         usability_packet = _window_usability_from_observation(window_packet)
+        runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
         native_window_observed = window_packet.get("window_observed") is True
-        native_app_usable = usability_packet.get("native_window_usable") is True
-        success = process_started and expected_identity and native_window_observed
+        custom_window_visible = (
+            native_window_observed and window_packet.get("window_visible") is True
+        )
+        custom_window_frontmost = window_packet.get("window_frontmost") is True
+        input_capable_ui_observed = usability_packet.get("native_window_usable") is True
+        runtime_ready_observed = runtime_ready_packet.get("runtime_ready_observed") is True
+        native_app_usable = input_capable_ui_observed or custom_window_visible
+        native_app_usability_source = (
+            "input_capable_ui"
+            if input_capable_ui_observed
+            else ("visible_custom_window" if custom_window_visible else "not_proven")
+        )
+        success = (
+            process_started
+            and process_still_alive
+            and expected_identity
+            and runtime_ready_observed
+            and native_window_observed
+            and native_app_usable
+        )
+        keep_running_with_limited_proof = (
+            keep_running_on_window_observed
+            and process_started
+            and process_still_alive
+            and expected_identity
+            and native_window_observed
+        )
 
-        if not success:
+        if not success and not keep_running_with_limited_proof:
             termination = terminate_custom_processes(str(layout.custom_user_data_dir))
             cleanup_error = remove_tree_with_retry(tmp_root)
 
         return {
             **base,
+            **persistent_fields,
             **keychain_fields,
+            **prelaunch_fields,
             "status": "ok" if success else "blocked",
-            "machine_error_code": "OK" if success else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN",
+            "machine_error_code": (
+                "OK"
+                if success
+                else (
+                    "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
+                    if launcher_failed_before_process
+                    else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
+                )
+            ),
             "human_message": (
                 "Custom Codex native app launched and pid-bound window proof passed."
                 if success
-                else "Custom Codex native launch did not satisfy process/window proof."
+                else (
+                    "Custom Codex launcher exited before a Custom process was observed."
+                    if launcher_failed_before_process
+                    else "Custom Codex native launch did not satisfy process/window proof."
+                )
             ),
-            "running_status": success,
+            "running_status": success or keep_running_with_limited_proof,
             "process_started": process_started,
+            "custom_process_observed": process_started,
+            "custom_process_pid": window_packet.get("observed_pid"),
+            "process_still_observed_after_wait": process_still_alive,
+            "post_observation_wait_seconds": launch_result.get(
+                "post_observation_wait_seconds",
+                0,
+            ),
             "expected_custom_identity_observed": expected_identity,
             "native_window_observed": native_window_observed,
+            "custom_window_observed": native_window_observed,
+            "custom_window_visible": custom_window_visible,
+            "custom_window_frontmost": custom_window_frontmost,
+            "custom_window_bounds": window_packet.get("window_bounds", {}),
+            "window_focus_action_attempted": focus_packet.get("window_focus_action_attempted") is True,
+            "window_focus_action_succeeded": focus_packet.get("window_focus_action_succeeded") is True,
+            "window_focus_packet": focus_packet,
             "native_app_usable": native_app_usable,
+            "native_app_usability_source": native_app_usability_source,
+            "input_capable_ui_observed": input_capable_ui_observed,
+            **runtime_ready_packet,
             "real_codex_app_launched": success,
             "isolated_home": True,
             "isolated_codex_home": True,
@@ -526,25 +1070,48 @@ def launch_custom_native_app_packet(
             "server_owned_route_configuration": True,
             "current_original_profile_shortcut_used": False,
             "current_codex_touched": False,
-            "cleanup_deferred_while_running": success,
+            "cleanup_deferred_while_running": success or keep_running_with_limited_proof,
+            "keep_running_on_window_observed": keep_running_on_window_observed,
+            "native_window_process_kept_running": keep_running_with_limited_proof and not success,
             "profile_receipt_redacted": True,
             "route_endpoint_redacted": True,
             "selection_model_id": model,
-            "next_action": "none" if success else "stop_and_diagnose_native_launch",
+            "next_action": (
+                "none"
+                if success
+                else (
+                    "stop_and_diagnose_custom_native_launcher"
+                    if launcher_failed_before_process
+                    else "stop_and_diagnose_native_launch"
+                )
+            ),
+            "new_launch_started": True,
+            "launcher_exit_code_early": launcher_exit_code_early,
+            "launcher_failed_before_custom_process": launcher_failed_before_process,
             "window_observation_blocked_reason_class": str(window_packet.get("blocked_reason_class") or ""),
             "native_app_usability_blocked_reason_class": str(
-                usability_packet.get("blocked_reason_class") or ""
+                ""
+                if native_app_usable
+                else usability_packet.get("blocked_reason_class") or ""
             ),
             "identity_chain_status": identity_packet.get("status"),
             "launch_receipt": {
                 "tmp_root_redacted": True,
                 "launcher_stdout_redacted": True,
                 "launcher_stderr_redacted": True,
-                "cleanup_deferred_while_running": success,
+                "cleanup_deferred_while_running": success or keep_running_with_limited_proof,
             },
             "cleanup_result": {
-                "attempted": not success,
-                "status": "deferred_running_process" if success else ("ok" if not cleanup_error else "blocked"),
+                "attempted": not (success or keep_running_with_limited_proof),
+                "status": (
+                    "deferred_running_process"
+                    if success
+                    else (
+                        "deferred_window_observed_process_running"
+                        if keep_running_with_limited_proof
+                        else ("ok" if not cleanup_error else "blocked")
+                    )
+                ),
                 "termination": termination or {},
                 "cleanup_error_class": cleanup_error,
             },
