@@ -15777,7 +15777,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
     def _api_only_live_code_edit_truth_packet(
         self,
         *,
-        file_text: str | None = "WBP_DEEPSEEK_CODE_EDIT_OK",
+        file_text: str | None = "WBP_API_ONLY_DEEPSEEK_EDIT_OK",
         launch_overrides: dict[str, object] | None = None,
         record_overrides: dict[str, object] | None = None,
         write_logs: bool = True,
@@ -15786,7 +15786,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
             repo_root = Path(repo_dir)
             profile_root = Path(profile_dir)
             if file_text is not None:
-                probe_file = repo_root / ".tmp" / "deepseek_live_probe.txt"
+                probe_file = repo_root / ".tmp" / "deepseek_api_only_live_edit_probe.txt"
                 probe_file.parent.mkdir(parents=True)
                 probe_file.write_text(file_text, encoding="utf-8")
 
@@ -15818,7 +15818,8 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                             1,
                             "thread-deepseek",
                             "turn model=wbp-deepseek-v4-pro-max cwd="
-                            f"{repo_root}: ToolCall: exec_command .tmp/deepseek_live_probe.txt",
+                            f"{repo_root}: ToolCall: exec_command "
+                            ".tmp/deepseek_api_only_live_edit_probe.txt",
                         ),
                     )
                     connection.execute(
@@ -15826,7 +15827,8 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                         (
                             2,
                             "thread-deepseek",
-                            ".tmp/deepseek_live_probe.txt success=true model=wbp-deepseek-v4-pro-max",
+                            ".tmp/deepseek_api_only_live_edit_probe.txt success=true "
+                            "model=wbp-deepseek-v4-pro-max",
                         ),
                     )
 
@@ -15888,11 +15890,25 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["packet_kind"], "api_only_deepseek_live_code_edit_truth")
         self.assertEqual(
+            packet["expected_file"],
+            ".tmp/deepseek_api_only_live_edit_probe.txt",
+        )
+        self.assertIn("WBP_API_ONLY_DEEPSEEK_EDIT_OK", packet["manual_prompt_required"])
+        self.assertEqual(
             packet["final_status"],
             "API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_PROVEN_WITH_LIMITS",
         )
         self.assertEqual(packet["execution_mode"], "api_only")
         self.assertEqual(packet["selected_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(packet["api_primary_slot_proven"])
+        self.assertTrue(packet["api_only_executor_truth_proven"])
+        self.assertEqual(packet["primary_model_slot"]["slot_id"], "primary_model_slot")
+        self.assertEqual(packet["primary_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(packet["primary_model_slot"]["provider_id"], "deepseek")
+        self.assertEqual(
+            packet["coding_agent_model_slot"]["status"],
+            "not_bound_for_mode",
+        )
         self.assertEqual(packet["provider_id"], "deepseek")
         self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
         self.assertEqual(packet["stable_bridge_preflight"], "ok")
@@ -15902,12 +15918,12 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertTrue(packet["file_edit_observed"])
         self.assertTrue(packet["file_mutation_observed"])
         self.assertTrue(packet["file_content_matches_expected"])
-        self.assertEqual(packet["changed_files"], [".tmp/deepseek_live_probe.txt"])
+        self.assertEqual(packet["changed_files"], [".tmp/deepseek_api_only_live_edit_probe.txt"])
         self.assertTrue(packet["mutation_scope_allowed"])
-        self.assertEqual(packet["file_size_bytes"], 25)
+        self.assertEqual(packet["file_size_bytes"], 29)
         self.assertEqual(
             packet["file_content_sha256"],
-            "e194b74cf6799b576df9de96415b4c55c7fd4cf89057e24e73d1529576391444",
+            "8824e44257ce27045c1e47e79807aa93ceb66b90a31c1f49a5b88637b97a3a0c",
         )
         self.assertTrue(packet["route_unchanged"])
         self.assertTrue(packet["selected_route_preserved"])
@@ -15965,12 +15981,18 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
     def test_api_only_deepseek_live_code_edit_truth_blocks_extra_changed_file(self) -> None:
         packet = self._api_only_live_code_edit_truth_packet(
             record_overrides={
-                "changed_files": [".tmp/deepseek_live_probe.txt", "README.md"],
+                "changed_files": [
+                    ".tmp/deepseek_api_only_live_edit_probe.txt",
+                    "README.md",
+                ],
             },
         )
 
         self.assertEqual(packet["status"], "blocked")
-        self.assertEqual(packet["changed_files"], [".tmp/deepseek_live_probe.txt", "README.md"])
+        self.assertEqual(
+            packet["changed_files"],
+            [".tmp/deepseek_api_only_live_edit_probe.txt", "README.md"],
+        )
         self.assertFalse(packet["mutation_scope_allowed"])
         self.assertTrue(packet["file_mutation_observed"])
         self.assertEqual(
@@ -15990,6 +16012,8 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertNotEqual(packet["provider_id"], "deepseek")
+        self.assertFalse(packet["api_primary_slot_proven"])
+        self.assertFalse(packet["api_only_executor_truth_proven"])
         self.assertFalse(packet["route_unchanged"])
         self.assertFalse(packet["selected_route_preserved"])
         self.assertEqual(
@@ -16040,6 +16064,10 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
             server.server_close()
 
         self.assertEqual(packet["packet_kind"], "api_only_deepseek_live_code_edit_truth")
+        self.assertEqual(
+            packet["expected_file"],
+            ".tmp/deepseek_api_only_live_edit_probe.txt",
+        )
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["final_status"],
@@ -16049,6 +16077,37 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertFalse(packet["push_attempted"])
         self.assertFalse(packet["merge_attempted"])
         self.assertFalse(packet["wbp_patch_applier_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_api_only_deepseek_live_code_edit_truth_endpoint_rejects_forbidden_browser_fields(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            packet = json.loads(
+                post_json(
+                    f"{base}/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth",
+                    {
+                        "execution_mode": "api_only",
+                        "api_model_id": "wbp-deepseek-v4-pro-max",
+                        "base_url": "https://api.deepseek.example",
+                    },
+                )
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "api_only_deepseek_live_code_edit_truth")
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(packet["forbidden_fields"], ["base_url"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
 

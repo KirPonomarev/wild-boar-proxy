@@ -144,6 +144,8 @@ from wild_boar_proxy.operator_surface import (
 
 DEEPSEEK_CODE_EDIT_PROBE_FILE = ".tmp/deepseek_live_probe.txt"
 DEEPSEEK_CODE_EDIT_EXPECTED_TEXT = "WBP_DEEPSEEK_CODE_EDIT_OK"
+API_ONLY_DEEPSEEK_CODE_EDIT_PROBE_FILE = ".tmp/deepseek_api_only_live_edit_probe.txt"
+API_ONLY_DEEPSEEK_CODE_EDIT_EXPECTED_TEXT = "WBP_API_ONLY_DEEPSEEK_EDIT_OK"
 DEEPSEEK_ROUTE_BOUND_EDIT_PROBE_FILE = ".tmp/deepseek_route_bound_edit.txt"
 DEEPSEEK_ROUTE_BOUND_EDIT_EXPECTED_TEXT = "WBP_DEEPSEEK_ROUTE_BOUND_EDIT_OK"
 MIXED_MODE_CODE_EDIT_PROBE_FILE = ".tmp/mixed_mode_probe.txt"
@@ -5749,6 +5751,20 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     chatgpt_called = record.get("chatgpt_route_used") is True or bool(
         log_evidence.get("chatgpt_model_seen")
     )
+    api_primary_slot_proven = bool(
+        execution_mode == "api_only"
+        and selected_model == "wbp-deepseek-v4-pro-max"
+        and thread_model == selected_model
+        and thread_provider == "wbp"
+        and provider_id == "deepseek"
+        and effective_route_model == selected_model
+    )
+    api_only_executor_truth_proven = bool(
+        api_primary_slot_proven
+        and selected_route_preserved
+        and not chatgpt_called
+        and not fallback_used
+    )
     launch_alive_enough = (
         launch.get("status") == "ok"
         and launch.get("custom_codex_window_deepseek_launch_proven_with_limits") is True
@@ -5758,6 +5774,8 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         launch_alive_enough
         and execution_mode == "api_only"
         and selected_model == "wbp-deepseek-v4-pro-max"
+        and api_primary_slot_proven
+        and api_only_executor_truth_proven
         and stable_bridge_preflight_ok
         and thread_cwd == str(repo_root)
         and thread_model == selected_model
@@ -5799,6 +5817,25 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         ),
         "execution_mode": execution_mode,
         "selected_model": selected_model,
+        "api_primary_slot_proven": api_primary_slot_proven,
+        "api_only_executor_truth_proven": api_only_executor_truth_proven,
+        "primary_model_slot": {
+            "slot_id": "primary_model_slot",
+            "status": "bound" if api_primary_slot_proven else "not_proven",
+            "lane": "api_route_lane" if api_primary_slot_proven else "",
+            "model_id": selected_model if api_primary_slot_proven else "",
+            "provider_id": provider_id if api_primary_slot_proven else "",
+            "source": "server_catalog",
+        },
+        "coding_agent_model_slot": {
+            "slot_id": "coding_agent_model_slot",
+            "status": "not_bound_for_mode" if execution_mode == "api_only" else "not_proven",
+            "reason": (
+                "api_only_uses_primary_model_slot"
+                if execution_mode == "api_only"
+                else "execution_mode_not_api_only"
+            ),
+        },
         "api_model_id": str(payload.get("api_model_id") or ""),
         "api_reasoning_option_id": api_reasoning_option_id,
         "cwd": thread_cwd,
@@ -5895,6 +5932,8 @@ def build_api_only_deepseek_live_code_edit_truth_packet(
         bridge_trace_packet=bridge_trace_packet,
         browser_payload=browser_payload,
         repo_root=repo_root,
+        expected_file=API_ONLY_DEEPSEEK_CODE_EDIT_PROBE_FILE,
+        expected_text=API_ONLY_DEEPSEEK_CODE_EDIT_EXPECTED_TEXT,
         packet_kind="api_only_deepseek_live_code_edit_truth",
         quick_start_button_id="quickStartApiOnlyDeepSeekLiveCodeEditTruthAction",
         ok_final_status="API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_PROVEN_WITH_LIMITS",
