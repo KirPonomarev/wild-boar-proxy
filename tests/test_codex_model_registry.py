@@ -8,6 +8,7 @@ import unittest
 
 from wild_boar_proxy.codex_model_registry import (
     build_api_only_deepseek_live_route_format_packet,
+    build_chatgpt_plus_api_slot_truth_packet,
     build_model_catalog_fidelity_packets,
     build_custom_api_compat_packet,
     build_custom_codex_execution_mode_selector_packet,
@@ -671,6 +672,143 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(
             invented_model["machine_error_code"],
             "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
+        )
+
+    def test_chatgpt_plus_api_slot_truth_proves_slots_without_live_claims(self) -> None:
+        packet = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-high",
+                "api_reasoning_option_id": "provider_declared_high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_SLOT_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["slot_truth_proven"])
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-high")
+        self.assertEqual(packet["primary_model_slot"]["slot_id"], "primary_model_slot")
+        self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(packet["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["coding_agent_model_slot"]["slot_id"], "coding_agent_model_slot")
+        self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(
+            packet["coding_agent_model_slot"]["model_id"],
+            "wbp-deepseek-v4-pro-high",
+        )
+        self.assertTrue(packet["chatgpt_primary_slot_proven"])
+        self.assertTrue(packet["api_coding_slot_proven"])
+        self.assertTrue(packet["api_line_selected_as_coding_agent"])
+        self.assertTrue(packet["api_line_used_as_coding_agent"])
+        self.assertTrue(packet["chatgpt_line_used_as_executor"])
+        self.assertTrue(packet["dual_lane_slots_preserved"])
+        self.assertFalse(packet["api_line_used_as_primary_executor"])
+        self.assertFalse(packet["chatgpt_line_used_as_coding_agent"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["fallback_attempted"])
+        self.assertFalse(packet["fallback_can_prove_success"])
+        self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["full_delegation_claimed"])
+        self.assertFalse(packet["simultaneous_execution_proven"])
+
+    def test_chatgpt_plus_api_slot_truth_blocks_wrong_mode_and_bad_inputs(self) -> None:
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
+        api_only = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-high",
+                "api_reasoning_option_id": "provider_declared_high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+        missing_api = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+        unknown_chatgpt = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "browser-gpt",
+                "api_model_id": "wbp-deepseek-v4-pro-high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+        raw_backend = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-high",
+                "api_reasoning_option_id": "provider_declared_high",
+                "fallback_used": True,
+                "route_id": "browser-route",
+                "base_url": "https://browser.invalid/v1",
+                "api_key": "browser-key",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+        reasoning_mismatch = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+
+        for packet in (api_only, missing_api, unknown_chatgpt, raw_backend, reasoning_mismatch):
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["final_status"],
+                "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN",
+            )
+            self.assertFalse(packet["slot_truth_proven"])
+            self.assertFalse(packet["live_call_attempted"])
+            self.assertFalse(packet["provider_called"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["fallback_can_prove_success"])
+
+        self.assertEqual(
+            api_only["machine_error_code"],
+            "CHATGPT_PLUS_API_SLOT_TRUTH_REQUIRES_CHATGPT_PLUS_API_MODE",
+        )
+        self.assertEqual(
+            missing_api["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_REQUIRED",
+        )
+        self.assertEqual(
+            unknown_chatgpt["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_MODEL_NOT_SERVER_ISSUED",
+        )
+        self.assertIn("fallback_used", raw_backend["forbidden_fields"])
+        self.assertIn("route_id", raw_backend["forbidden_fields"])
+        self.assertIn("base_url", raw_backend["forbidden_fields"])
+        self.assertIn("api_key", raw_backend["forbidden_fields"])
+        self.assertTrue(raw_backend["browser_raw_backend_authority_widened"])
+        self.assertEqual(
+            reasoning_mismatch["machine_error_code"],
+            "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
         )
 
     def test_api_only_deepseek_live_route_format_packet_requires_owner_and_live_proof(self) -> None:

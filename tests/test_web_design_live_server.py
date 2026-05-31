@@ -11008,6 +11008,68 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertTrue(rejected["browser_raw_backend_authority_widened"])
         self.assertFalse(rejected["live_call_attempted"])
 
+    def test_codex_custom_chatgpt_plus_api_slot_truth_endpoint_is_non_live(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/chatgpt-plus-api-slot-truth",
+                        {
+                            "execution_mode": "chatgpt_plus_api",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/chatgpt-plus-api-slot-truth",
+                        {
+                            "execution_mode": "chatgpt_plus_api",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "route_id": "browser-route",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["final_status"], "CHATGPT_PLUS_API_SLOT_TRUTH_PROVEN_WITH_LIMITS")
+        self.assertTrue(packet["slot_truth_proven"])
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v3")
+        self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertTrue(packet["api_line_selected_as_coding_agent"])
+        self.assertTrue(packet["api_line_used_as_coding_agent"])
+        self.assertFalse(packet["api_line_used_as_primary_executor"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["fallback_attempted"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["full_delegation_claimed"])
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["final_status"],
+            "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN",
+        )
+        self.assertIn("route_id", rejected["forbidden_fields"])
+        self.assertTrue(rejected["browser_raw_backend_authority_widened"])
+        self.assertFalse(rejected["fallback_used"])
+        self.assertFalse(rejected["live_call_attempted"])
+
     def test_codex_custom_api_only_deepseek_live_format_requires_owner_auth(self) -> None:
         runner = MappingRunner(live_payloads())
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
