@@ -4307,6 +4307,16 @@ def build_custom_codex_window_prompt_trace_packet(
     api_reasoning_option_id = str(launch.get("api_reasoning_option_id") or "")
     launch_id = str(launch.get("launch_id") or "")
     trace_id = str(launch.get("trace_id") or "")
+    bridge_health_packet = (
+        trace.get("bridge_health_packet")
+        if isinstance(trace.get("bridge_health_packet"), dict)
+        else {}
+    )
+    bridge_request_trace_packet = (
+        trace.get("bridge_request_trace_packet")
+        if isinstance(trace.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
     route_digest_matches = record.get("route_digest_matches_launch") is True
     request_seen = record.get("request_seen_after_launch") is True
     provider_called = record.get("provider_called") is True
@@ -4351,6 +4361,14 @@ def build_custom_codex_window_prompt_trace_packet(
         "browser_trace_authority": False,
         "request_seen_after_launch": request_seen,
         "request_count": int(trace.get("request_count") or 0),
+        "bridge_health_packet": bridge_health_packet,
+        "bridge_request_trace_packet": bridge_request_trace_packet,
+        "bridge_machine_error_code": str(
+            trace.get("bridge_machine_error_code")
+            or bridge_health_packet.get("machine_error_code")
+            or bridge_request_trace_packet.get("machine_error_code")
+            or ""
+        ),
         "path": str(record.get("path") or ""),
         "selected_model": selected_model,
         "requested_model": str(record.get("requested_model") or ""),
@@ -4363,6 +4381,12 @@ def build_custom_codex_window_prompt_trace_packet(
         "launch_route_digest": str(launch.get("launch_route_digest") or ""),
         "trace_route_digest": str(record.get("route_digest") or ""),
         "route_digest_matches_launch": route_digest_matches,
+        "route_unchanged": (
+            bridge_request_trace_packet.get("route_unchanged")
+            if "route_unchanged" in bridge_request_trace_packet
+            else route_digest_matches
+        )
+        is True,
         "prompt_hash": str(record.get("prompt_hash") or ""),
         "known_smoke_phrase_matched": record.get("known_smoke_phrase_matched") is True,
         "response_seen": record.get("response_seen") is True,
@@ -4477,11 +4501,15 @@ def build_custom_codex_window_input_route_trace_packet(
         "route_trace_proven": route_trace_proven,
         "provider_called": route_packet.get("provider_called") is True,
         "provider_id": str(route_packet.get("provider_id") or ""),
+        "bridge_health_packet": route_packet.get("bridge_health_packet", {}),
+        "bridge_request_trace_packet": route_packet.get("bridge_request_trace_packet", {}),
+        "bridge_machine_error_code": str(route_packet.get("bridge_machine_error_code") or ""),
         "selected_model": str(route_packet.get("selected_model") or ""),
         "upstream_model": str(route_packet.get("upstream_model") or ""),
         "execution_mode": str(launch.get("execution_mode") or ""),
         "api_reasoning_option_id": str(route_packet.get("api_reasoning_option_id") or ""),
         "route_digest_matches_launch": route_packet.get("route_digest_matches_launch") is True,
+        "route_unchanged": route_packet.get("route_unchanged") is True,
         "known_smoke_phrase_matched": route_packet.get("known_smoke_phrase_matched") is True,
         "response_seen": route_packet.get("response_seen") is True,
         "fallback_used": route_packet.get("fallback_used") is True,

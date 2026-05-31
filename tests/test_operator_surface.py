@@ -1058,10 +1058,34 @@ class OperatorSurfaceTests(unittest.TestCase):
         auth_payload = json.loads(body.decode("utf-8"))
         self.assertEqual(auth_payload["error"]["type"], "local_bridge_auth_error")
         self.assertEqual(auth_payload["error"]["code"], "LOCAL_BRIDGE_AUTH_ERROR")
+        self.assertEqual(auth_payload["error"]["bridge_code"], "BRIDGE_AUTH_MISSING")
+        self.assertEqual(auth_payload["bridge_machine_error_code"], "BRIDGE_AUTH_MISSING")
         self.assertTrue(auth_payload["auth_header_expected"])
         self.assertFalse(auth_payload["auth_header_seen"])
         self.assertFalse(auth_payload["auth_ok"])
         self.assertNotIn("sk-local-test", json.dumps(auth_payload))
+        auth_trace = strict_adapter.trace_snapshot()
+        self.assertEqual(auth_trace["bridge_machine_error_code"], "BRIDGE_AUTH_MISSING")
+        self.assertEqual(auth_trace["bridge_health_packet"]["machine_error_code"], "BRIDGE_AUTH_MISSING")
+        self.assertEqual(
+            auth_trace["bridge_request_trace_packet"]["machine_error_code"],
+            "BRIDGE_AUTH_MISSING",
+        )
+        self.assertFalse(auth_trace["bridge_request_trace_packet"]["fallback_used"])
+
+        status, _, body = strict_adapter.handle(
+            method="GET",
+            path="/v1/models",
+            headers={"Authorization": "Bearer wrong-local-token"},
+            body=b"",
+            client_host="127.0.0.1",
+        )
+        self.assertEqual(status, 401)
+        rejected_payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(rejected_payload["bridge_machine_error_code"], "BRIDGE_AUTH_REJECTED")
+        rejected_trace = strict_adapter.trace_snapshot()
+        self.assertEqual(rejected_trace["bridge_machine_error_code"], "BRIDGE_AUTH_REJECTED")
+        self.assertFalse(rejected_trace["bridge_health_packet"]["secret_value_recorded"])
 
         route = {
             "route_id": "wbp-web-primary-openrouter",
@@ -1320,15 +1344,57 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(status, 502)
         self.assertEqual(payload["error"]["type"], "local_bridge_error")
         self.assertEqual(payload["error"]["code"], "STALE_RESPONSES_PORT")
+        self.assertEqual(payload["error"]["bridge_code"], "BRIDGE_PORT_STALE")
+        self.assertEqual(payload["bridge_machine_error_code"], "BRIDGE_PORT_STALE")
         self.assertTrue(payload["restart_required"])
         self.assertTrue(payload["stale_port_detected"])
         self.assertEqual(trace["request_count"], 1)
         self.assertEqual(trace["trace_id"], "trace-stale")
         self.assertEqual(trace["last_error_type"], "STALE_RESPONSES_PORT")
+        self.assertEqual(trace["bridge_machine_error_code"], "BRIDGE_PORT_STALE")
         self.assertTrue(trace["restart_required"])
+        self.assertTrue(trace["recoverable"])
         self.assertTrue(trace["stale_port_detected"])
         self.assertFalse(trace["fallback_used"])
+        self.assertEqual(trace["bridge_health_packet"]["machine_error_code"], "BRIDGE_PORT_STALE")
+        self.assertFalse(trace["bridge_health_packet"]["responses_endpoint_ready"])
+        self.assertEqual(
+            trace["bridge_request_trace_packet"]["machine_error_code"],
+            "BRIDGE_PORT_STALE",
+        )
+        self.assertFalse(trace["bridge_request_trace_packet"]["fallback_used"])
+        self.assertTrue(trace["bridge_request_trace_packet"]["retry_allowed"])
         self.assertNotIn("sk-local-test", json.dumps(payload))
+
+    def test_hybrid_openai_compat_adapter_reports_unstarted_responses_endpoint_unready(self) -> None:
+        adapter = HybridOpenAICompatAdapter(
+            downstream_endpoint="http://127.0.0.1:8329/v1",
+            expected_api_key="sk-local-test",
+            routes=[],
+        )
+        adapter.set_trace_context(
+            {
+                "launch_id": "launch-unready",
+                "trace_id": "trace-unready",
+                "selected_model": "gpt-5.4",
+            }
+        )
+
+        trace = adapter.trace_snapshot()
+
+        self.assertFalse(trace["bridge_alive"])
+        self.assertFalse(trace["responses_endpoint_alive"])
+        self.assertEqual(
+            trace["bridge_machine_error_code"],
+            "BRIDGE_RESPONSES_ENDPOINT_UNREADY",
+        )
+        self.assertEqual(
+            trace["bridge_health_packet"]["machine_error_code"],
+            "BRIDGE_RESPONSES_ENDPOINT_UNREADY",
+        )
+        self.assertFalse(trace["bridge_health_packet"]["responses_endpoint_ready"])
+        self.assertFalse(trace["bridge_request_trace_packet"]["request_started"])
+        self.assertFalse(trace["bridge_request_trace_packet"]["fallback_used"])
 
     def test_hybrid_openai_compat_adapter_classifies_stream_disconnect(self) -> None:
         adapter = HybridOpenAICompatAdapter(
@@ -1358,12 +1424,60 @@ class OperatorSurfaceTests(unittest.TestCase):
         trace = adapter.trace_snapshot()
 
         self.assertEqual(status, 502)
-        self.assertEqual(payload["error"]["code"], "LOCAL_BRIDGE_STREAM_DISCONNECTED")
+        self.assertEqual(payload["error"]["code"], "LOCAL_BRIDGE_STREAM_TIMEOUT")
+        self.assertEqual(payload["error"]["bridge_code"], "BRIDGE_STREAM_TIMEOUT")
+        self.assertEqual(payload["bridge_machine_error_code"], "BRIDGE_STREAM_TIMEOUT")
         self.assertTrue(payload["restart_required"])
-        self.assertEqual(trace["last_error_type"], "LOCAL_BRIDGE_STREAM_DISCONNECTED")
+        self.assertEqual(trace["last_error_type"], "LOCAL_BRIDGE_STREAM_TIMEOUT")
+        self.assertEqual(trace["bridge_machine_error_code"], "BRIDGE_STREAM_TIMEOUT")
         self.assertTrue(trace["restart_required"])
         self.assertFalse(trace["fallback_used"])
         self.assertFalse(trace["stale_launch_packet"])
+        self.assertEqual(
+            trace["bridge_request_trace_packet"]["machine_error_code"],
+            "BRIDGE_STREAM_TIMEOUT",
+        )
+
+    def test_hybrid_openai_compat_adapter_classifies_stream_reset_disconnect(self) -> None:
+        adapter = HybridOpenAICompatAdapter(
+            downstream_endpoint="http://127.0.0.1:8329/v1",
+            expected_api_key="sk-local-test",
+            routes=[],
+        )
+        adapter.set_trace_context(
+            {
+                "launch_id": "launch-reset",
+                "trace_id": "trace-reset",
+                "selected_model": "gpt-5.4",
+            }
+        )
+
+        with mock.patch.object(
+            urllib.request.OpenerDirector,
+            "open",
+            side_effect=ConnectionResetError,
+        ):
+            status, _, body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": "Bearer sk-local-test",
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {"model": "gpt-5.4", "input": "hello", "stream": True}
+                ).encode("utf-8"),
+            )
+        payload = json.loads(body.decode("utf-8"))
+        trace = adapter.trace_snapshot()
+
+        self.assertEqual(status, 502)
+        self.assertEqual(payload["error"]["code"], "LOCAL_BRIDGE_STREAM_DISCONNECTED")
+        self.assertEqual(payload["error"]["bridge_code"], "BRIDGE_STREAM_DISCONNECTED")
+        self.assertEqual(trace["bridge_machine_error_code"], "BRIDGE_STREAM_DISCONNECTED")
+        self.assertTrue(trace["bridge_request_trace_packet"]["stream_requested"])
+        self.assertFalse(trace["bridge_request_trace_packet"]["stream_completed"])
+        self.assertFalse(trace["bridge_request_trace_packet"]["fallback_used"])
 
     def test_hybrid_openai_compat_adapter_classifies_dead_bridge(self) -> None:
         adapter = HybridOpenAICompatAdapter(
@@ -1394,8 +1508,11 @@ class OperatorSurfaceTests(unittest.TestCase):
 
         self.assertEqual(status, 502)
         self.assertEqual(payload["error"]["code"], "LOCAL_BRIDGE_DEAD")
+        self.assertEqual(payload["error"]["bridge_code"], "BRIDGE_PROCESS_DEAD")
+        self.assertEqual(payload["bridge_machine_error_code"], "BRIDGE_PROCESS_DEAD")
         self.assertTrue(payload["restart_required"])
         self.assertEqual(trace["last_error_type"], "LOCAL_BRIDGE_DEAD")
+        self.assertEqual(trace["bridge_machine_error_code"], "BRIDGE_PROCESS_DEAD")
         self.assertTrue(trace["restart_required"])
         self.assertFalse(trace["fallback_used"])
         self.assertFalse(trace["stale_launch_packet"])
@@ -1461,6 +1578,11 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(trace["last_record_launch_packet_id"], "launch-old")
         self.assertTrue(trace["stale_launch_packet"])
         self.assertEqual(trace["last_error_type"], "STALE_LAUNCH_PACKET")
+        self.assertEqual(trace["bridge_machine_error_code"], "BRIDGE_PORT_NOT_OWNED")
+        self.assertEqual(
+            trace["bridge_health_packet"]["machine_error_code"],
+            "BRIDGE_PORT_NOT_OWNED",
+        )
         self.assertTrue(trace["restart_required"])
         self.assertFalse(trace["fallback_used"])
 

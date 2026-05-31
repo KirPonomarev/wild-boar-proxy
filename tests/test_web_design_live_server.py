@@ -7441,6 +7441,21 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             },
             bridge_trace_packet={
                 "request_count": 1,
+                "bridge_machine_error_code": "OK",
+                "bridge_health_packet": {
+                    "packet_kind": "hybrid_openai_compat_bridge_health",
+                    "machine_error_code": "OK",
+                    "responses_endpoint_ready": True,
+                    "fallback_used": False,
+                    "secret_value_recorded": False,
+                },
+                "bridge_request_trace_packet": {
+                    "packet_kind": "hybrid_openai_compat_bridge_request_trace",
+                    "machine_error_code": "OK",
+                    "route_unchanged": True,
+                    "fallback_used": False,
+                    "retry_attempted": False,
+                },
                 "last_record": {
                     "launch_id": "launch-test",
                     "trace_id": "trace-test",
@@ -7483,6 +7498,16 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
         self.assertTrue(packet["known_smoke_phrase_matched"])
         self.assertTrue(packet["route_digest_matches_launch"])
+        self.assertTrue(packet["route_unchanged"])
+        self.assertEqual(packet["bridge_machine_error_code"], "OK")
+        self.assertEqual(
+            packet["bridge_health_packet"]["packet_kind"],
+            "hybrid_openai_compat_bridge_health",
+        )
+        self.assertEqual(
+            packet["bridge_request_trace_packet"]["packet_kind"],
+            "hybrid_openai_compat_bridge_request_trace",
+        )
         self.assertFalse(packet["chatgpt_route_used"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["raw_prompt_recorded"])

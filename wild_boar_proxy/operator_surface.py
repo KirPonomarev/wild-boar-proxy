@@ -70,21 +70,63 @@ WINDOW_SMOKE_PHRASES = (
 BRIDGE_RESTART_ERROR_CODES = {
     "LOCAL_BRIDGE_DEAD",
     "LOCAL_BRIDGE_STREAM_DISCONNECTED",
+    "LOCAL_BRIDGE_STREAM_TIMEOUT",
     "STALE_RESPONSES_PORT",
     "STALE_LAUNCH_PACKET",
 }
+BRIDGE_CANONICAL_RECOVERABLE_CODES = {
+    "BRIDGE_PORT_STALE",
+    "BRIDGE_PROCESS_DEAD",
+    "BRIDGE_RESPONSES_ENDPOINT_UNREADY",
+    "BRIDGE_STREAM_DISCONNECTED",
+    "BRIDGE_STREAM_TIMEOUT",
+}
+
+
+def _canonical_bridge_error_code(
+    code: str,
+    *,
+    auth_header_seen: bool | None = None,
+    exception: BaseException | None = None,
+) -> str:
+    if code == "LOCAL_BRIDGE_AUTH_ERROR":
+        return "BRIDGE_AUTH_REJECTED" if auth_header_seen else "BRIDGE_AUTH_MISSING"
+    if code == "STALE_RESPONSES_PORT":
+        return "BRIDGE_PORT_STALE"
+    if code == "LOCAL_BRIDGE_DEAD":
+        return "BRIDGE_PROCESS_DEAD"
+    if code == "LOCAL_BRIDGE_STREAM_TIMEOUT":
+        return "BRIDGE_STREAM_TIMEOUT"
+    if code == "LOCAL_BRIDGE_STREAM_DISCONNECTED":
+        if isinstance(exception, TimeoutError):
+            return "BRIDGE_STREAM_TIMEOUT"
+        return "BRIDGE_STREAM_DISCONNECTED"
+    if code == "STALE_LAUNCH_PACKET":
+        return "BRIDGE_PORT_NOT_OWNED"
+    if code:
+        return code
+    return "OK"
 
 
 def _bridge_auth_error_payload(*, auth_header_seen: bool) -> dict[str, Any]:
+    canonical_code = _canonical_bridge_error_code(
+        "LOCAL_BRIDGE_AUTH_ERROR",
+        auth_header_seen=auth_header_seen,
+    )
     return {
         "error": {
             "message": "local bridge authorization failed",
             "type": "local_bridge_auth_error",
             "code": "LOCAL_BRIDGE_AUTH_ERROR",
+            "bridge_code": canonical_code,
         },
+        "machine_error_code": canonical_code,
+        "bridge_machine_error_code": canonical_code,
+        "legacy_machine_error_code": "LOCAL_BRIDGE_AUTH_ERROR",
         "auth_header_expected": True,
         "auth_header_seen": auth_header_seen,
         "auth_ok": False,
+        "recoverable": False,
         "secret_value_recorded": False,
     }
 
@@ -95,13 +137,13 @@ def _bridge_error_code_from_exception(exc: BaseException) -> str:
         if isinstance(reason, ConnectionRefusedError):
             return "STALE_RESPONSES_PORT"
         if isinstance(reason, TimeoutError):
-            return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
+            return "LOCAL_BRIDGE_STREAM_TIMEOUT"
         if isinstance(reason, OSError):
             return "LOCAL_BRIDGE_DEAD"
     if isinstance(exc, ConnectionRefusedError):
         return "STALE_RESPONSES_PORT"
     if isinstance(exc, TimeoutError):
-        return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
+        return "LOCAL_BRIDGE_STREAM_TIMEOUT"
     if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
         return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
     if isinstance(exc, OSError):
@@ -109,17 +151,30 @@ def _bridge_error_code_from_exception(exc: BaseException) -> str:
     return "LOCAL_BRIDGE_DEAD"
 
 
-def _bridge_error_payload(code: str, *, message: str = "local bridge request failed") -> dict[str, Any]:
+def _bridge_error_payload(
+    code: str,
+    *,
+    message: str = "local bridge request failed",
+    exception: BaseException | None = None,
+) -> dict[str, Any]:
+    canonical_code = _canonical_bridge_error_code(code, exception=exception)
     return {
         "error": {
             "message": message,
             "type": "local_bridge_error",
             "code": code,
+            "bridge_code": canonical_code,
             "restart_required": code in BRIDGE_RESTART_ERROR_CODES,
         },
+        "machine_error_code": canonical_code,
+        "bridge_machine_error_code": canonical_code,
+        "legacy_machine_error_code": code,
         "last_error_type": code,
+        "last_bridge_error_type": canonical_code,
         "restart_required": code in BRIDGE_RESTART_ERROR_CODES,
+        "recoverable": canonical_code in BRIDGE_CANONICAL_RECOVERABLE_CODES,
         "stale_port_detected": code == "STALE_RESPONSES_PORT",
+        "responses_endpoint_ready": False,
         "secret_value_recorded": False,
     }
 
@@ -1636,6 +1691,86 @@ class HybridOpenAICompatAdapter:
             or ""
         )
         last_error_type = "STALE_LAUNCH_PACKET" if stale_launch_packet else response_error_type
+        bridge_started = self._server is not None
+        if stale_launch_packet:
+            bridge_machine_error_code = _canonical_bridge_error_code("STALE_LAUNCH_PACKET")
+        elif not bridge_started and not last_error_type:
+            bridge_machine_error_code = "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
+        else:
+            bridge_machine_error_code = str(
+                last_record.get("bridge_machine_error_code")
+                or _canonical_bridge_error_code(
+                    last_error_type,
+                    auth_header_seen=(
+                        bool(last_record.get("auth_header_seen")) if last_record else None
+                    ),
+                )
+            )
+        bridge_port = int(self._server.server_port) if self._server is not None else 0
+        recoverable = bridge_machine_error_code in BRIDGE_CANONICAL_RECOVERABLE_CODES
+        route_unchanged = bool(
+            last_record.get("route_digest_matches_launch")
+            if last_record.get("route_digest")
+            else not stale_launch_packet
+        )
+        request_trace_packet = {
+            "schema_version": 1,
+            "packet_kind": "hybrid_openai_compat_bridge_request_trace",
+            "captured_at_utc": utc_now(),
+            "trace_id": str(context.get("trace_id") or ""),
+            "launch_packet_id": launch_packet_id,
+            "request_started": bool(last_record),
+            "request_count": len(records),
+            "path": str(last_record.get("path") or ""),
+            "requested_model": str(last_record.get("requested_model") or ""),
+            "effective_route_model": str(last_record.get("effective_route_model") or ""),
+            "provider_called": last_record.get("provider_called") is True,
+            "downstream_called": last_record.get("downstream_called") is True,
+            "stream_requested": last_record.get("stream_requested") is True,
+            "stream_started": last_record.get("stream_started") is True,
+            "stream_completed": last_record.get("stream_completed") is True,
+            "route_unchanged": route_unchanged,
+            "route_digest_matches_launch": last_record.get("route_digest_matches_launch") is True,
+            "fallback_used": last_record.get("fallback_used") is True,
+            "recovery_attempted": False,
+            "recovery_succeeded": False,
+            "retry_attempted": False,
+            "retry_allowed": recoverable and bool(last_record),
+            "machine_error_code": bridge_machine_error_code,
+            "legacy_machine_error_code": last_error_type,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        health_packet = {
+            "schema_version": 1,
+            "packet_kind": "hybrid_openai_compat_bridge_health",
+            "captured_at_utc": utc_now(),
+            "trace_id": str(context.get("trace_id") or ""),
+            "launch_packet_id": launch_packet_id,
+            "bridge_started": bridge_started,
+            "bridge_alive": bridge_started,
+            "bridge_port": bridge_port,
+            "port_bound": bridge_port > 0,
+            "port_owned_by_bridge": bridge_started and bridge_port > 0,
+            "auth_header_expected": True,
+            "auth_header_present": bool(last_record.get("auth_header_seen")),
+            "auth_ok": bool(last_record.get("auth_ok")) if last_record else False,
+            "responses_endpoint_ready": bridge_started and bridge_machine_error_code == "OK",
+            "fallback_used": last_record.get("fallback_used") is True,
+            "machine_error_code": bridge_machine_error_code,
+            "legacy_machine_error_code": last_error_type,
+            "recoverable": recoverable,
+            "route_unchanged": route_unchanged,
+            "request_trace_packet": request_trace_packet,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
         return {
             "schema_version": 1,
             "packet_kind": "hybrid_openai_compat_prompt_trace",
@@ -1644,8 +1779,10 @@ class HybridOpenAICompatAdapter:
             "trace_id": str(context.get("trace_id") or ""),
             "launch_packet_id": launch_packet_id,
             "last_record_launch_packet_id": last_record_launch_packet_id,
-            "bridge_alive": self._server is not None,
-            "responses_endpoint_alive": self._server is not None,
+            "bridge_alive": bridge_started,
+            "responses_endpoint_alive": bridge_started,
+            "bridge_health_packet": health_packet,
+            "bridge_request_trace_packet": request_trace_packet,
             "auth_header_expected": True,
             "auth_header_seen": bool(last_record.get("auth_header_seen")),
             "auth_ok": bool(last_record.get("auth_ok")) if last_record else False,
@@ -1654,10 +1791,13 @@ class HybridOpenAICompatAdapter:
             "model_id": str(last_record.get("upstream_model") or ""),
             "fallback_used": last_record.get("fallback_used") is True,
             "last_error_type": last_error_type,
+            "bridge_machine_error_code": bridge_machine_error_code,
             "last_error_message": "",
             "restart_required": last_error_type in BRIDGE_RESTART_ERROR_CODES,
+            "recoverable": recoverable,
             "stale_launch_packet": stale_launch_packet,
             "stale_port_detected": response_error_type == "STALE_RESPONSES_PORT",
+            "route_unchanged": route_unchanged,
             "request_count": len(records),
             "last_record": last_record,
             "records": records[-5:],
@@ -1711,6 +1851,10 @@ class HybridOpenAICompatAdapter:
         )
         if not auth_matches and not loopback_missing_auth:
             payload = _bridge_auth_error_payload(auth_header_seen=bool(authorization))
+            self._record_auth_failure_trace(
+                path=normalized_path,
+                auth_header_seen=bool(authorization),
+            )
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 401, {"Content-Type": "application/json"}, body_bytes
         if loopback_missing_auth:
@@ -1725,6 +1869,9 @@ class HybridOpenAICompatAdapter:
                 body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
                 return 400, {"Content-Type": "application/json"}, body_bytes
             requested_model = str(request_payload.get("model") or "").strip()
+            wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(
+                headers.get("Accept") or ""
+            )
             prompt_hash, smoke_match = _prompt_trace_hash_and_smoke_match(request_payload)
             route_adapter = self._route_adapters.get(requested_model)
             original_requested_model = requested_model
@@ -1754,6 +1901,7 @@ class HybridOpenAICompatAdapter:
                     route=route_record,
                     prompt_hash=prompt_hash,
                     smoke_match=smoke_match,
+                    stream_requested=wants_stream,
                     response_body=response_body,
                 )
                 return status, response_headers, response_body
@@ -1769,10 +1917,43 @@ class HybridOpenAICompatAdapter:
                 requested_model=original_requested_model,
                 prompt_hash=prompt_hash,
                 smoke_match=smoke_match,
+                stream_requested=wants_stream,
                 response_body=response_body,
             )
             return status, response_headers, response_body
         return self._forward_downstream(method=method, path=path, headers=headers, body=body)
+
+    def _record_auth_failure_trace(self, *, path: str, auth_header_seen: bool) -> None:
+        record = {
+            **self._trace_context,
+            "captured_at_utc": utc_now(),
+            "path": path,
+            "request_seen_after_launch": bool(self._trace_context.get("launch_id")),
+            "provider_called": False,
+            "downstream_called": False,
+            "response_seen": True,
+            "response_error_type": "local_bridge_auth_error",
+            "response_error_code": "LOCAL_BRIDGE_AUTH_ERROR",
+            "bridge_machine_error_code": _canonical_bridge_error_code(
+                "LOCAL_BRIDGE_AUTH_ERROR",
+                auth_header_seen=auth_header_seen,
+            ),
+            "auth_header_expected": True,
+            "auth_header_seen": auth_header_seen,
+            "auth_ok": False,
+            "stream_requested": False,
+            "stream_started": False,
+            "stream_completed": False,
+            "fallback_used": False,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        with self._trace_lock:
+            self._trace_records.append(record)
+            self._trace_records = self._trace_records[-20:]
 
     def _record_prompt_trace(
         self,
@@ -1785,6 +1966,7 @@ class HybridOpenAICompatAdapter:
         route: dict[str, Any],
         prompt_hash: str,
         smoke_match: bool,
+        stream_requested: bool,
         response_body: bytes,
     ) -> None:
         route_digest = _safe_route_digest(route) if route else ""
@@ -1815,6 +1997,9 @@ class HybridOpenAICompatAdapter:
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
             "known_smoke_phrase_matched": smoke_match,
+            "stream_requested": stream_requested,
+            "stream_started": bool(stream_requested and 200 <= status < 300 and response_body),
+            "stream_completed": bool(stream_requested and 200 <= status < 300 and response_body),
             "auth_header_expected": True,
             "auth_header_seen": True,
             "auth_ok": True,
@@ -1833,6 +2018,14 @@ class HybridOpenAICompatAdapter:
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")
             record["response_error_code"] = str(error.get("code") or "")
+            record["bridge_machine_error_code"] = str(
+                error.get("bridge_code")
+                or response_payload.get("bridge_machine_error_code")
+                or response_payload.get("machine_error_code")
+                or _canonical_bridge_error_code(str(error.get("code") or ""))
+            )
+        else:
+            record["bridge_machine_error_code"] = "OK"
         with self._trace_lock:
             self._trace_records.append(record)
             self._trace_records = self._trace_records[-20:]
@@ -1845,6 +2038,7 @@ class HybridOpenAICompatAdapter:
         requested_model: str,
         prompt_hash: str,
         smoke_match: bool,
+        stream_requested: bool,
         response_body: bytes,
     ) -> None:
         response_payload = _json_loads_object(response_body)
@@ -1872,6 +2066,9 @@ class HybridOpenAICompatAdapter:
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
             "known_smoke_phrase_matched": smoke_match,
+            "stream_requested": stream_requested,
+            "stream_started": bool(stream_requested and 200 <= status < 300 and response_body),
+            "stream_completed": bool(stream_requested and 200 <= status < 300 and response_body),
             "auth_header_expected": True,
             "auth_header_seen": True,
             "auth_ok": True,
@@ -1890,6 +2087,14 @@ class HybridOpenAICompatAdapter:
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")
             record["response_error_code"] = str(error.get("code") or "")
+            record["bridge_machine_error_code"] = str(
+                error.get("bridge_code")
+                or response_payload.get("bridge_machine_error_code")
+                or response_payload.get("machine_error_code")
+                or _canonical_bridge_error_code(str(error.get("code") or ""))
+            )
+        else:
+            record["bridge_machine_error_code"] = "OK"
         with self._trace_lock:
             self._trace_records.append(record)
             self._trace_records = self._trace_records[-20:]
@@ -1967,9 +2172,11 @@ class HybridOpenAICompatAdapter:
                 exc.read(),
             )
         except Exception as exc:
+            legacy_code = _bridge_error_code_from_exception(exc)
             payload = _bridge_error_payload(
-                _bridge_error_code_from_exception(exc),
+                legacy_code,
                 message="hybrid bridge upstream request failed",
+                exception=exc,
             )
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 502, {"Content-Type": "application/json"}, body_bytes
