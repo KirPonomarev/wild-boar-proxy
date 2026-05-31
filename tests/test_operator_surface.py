@@ -26,6 +26,7 @@ from wild_boar_proxy.operator_surface import (
     WbpTraceObserver,
     _prompt_trace_hash_and_smoke_match,
     _run_command_with_observation,
+    build_bridge_failure_recovery_truth_packet,
     build_codex_config,
     forbidden_browser_fields,
     run_process_isolation_proof,
@@ -1660,6 +1661,230 @@ class OperatorSurfaceTests(unittest.TestCase):
         )
         self.assertTrue(trace["restart_required"])
         self.assertFalse(trace["fallback_used"])
+
+    def _bridge_failure_recovery_truth_fixture(
+        self,
+        *,
+        bridge_machine_error_code: str = "OK",
+        upstream_status: int = 200,
+        bridge_alive: bool = True,
+        responses_endpoint_ready: bool = True,
+        route_unchanged: bool = True,
+        fallback_used: bool = False,
+        stale_launch_packet: bool = False,
+        response_seen: bool = True,
+        stream_requested: bool = False,
+        stream_completed: bool = True,
+        selected_route: str = "wbp-deepseek-v4-pro-max",
+        effective_route: str = "wbp-deepseek-v4-pro-max",
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        launch: dict[str, object] = {
+            "status": "ok",
+            "launch_id": "launch-bridge",
+            "trace_id": "trace-bridge",
+            "selected_model": selected_route,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        trace: dict[str, object] = {
+            "bridge_alive": bridge_alive,
+            "responses_endpoint_alive": responses_endpoint_ready,
+            "bridge_machine_error_code": bridge_machine_error_code,
+            "fallback_used": fallback_used,
+            "stale_launch_packet": stale_launch_packet,
+            "route_unchanged": route_unchanged,
+            "selected_route": effective_route,
+            "bridge_health_packet": {
+                "packet_kind": "hybrid_openai_compat_bridge_health",
+                "machine_error_code": bridge_machine_error_code,
+                "responses_endpoint_ready": responses_endpoint_ready,
+                "bridge_alive": bridge_alive,
+                "fallback_used": fallback_used,
+                "secret_value_recorded": False,
+            },
+            "bridge_request_trace_packet": {
+                "packet_kind": "hybrid_openai_compat_bridge_request_trace",
+                "machine_error_code": bridge_machine_error_code,
+                "request_started": True,
+                "route_unchanged": route_unchanged,
+                "fallback_used": fallback_used,
+                "retry_attempted": False,
+                "stream_requested": stream_requested,
+                "stream_completed": stream_completed,
+            },
+            "last_record": {
+                "request_seen_after_launch": True,
+                "response_seen": response_seen,
+                "selected_model": selected_route,
+                "effective_route_model": effective_route,
+                "forced_route_used": effective_route == selected_route,
+                "upstream_status": upstream_status,
+                "fallback_used": fallback_used,
+                "raw_prompt_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        }
+        return launch, trace
+
+    def test_bridge_failure_recovery_truth_reports_ready_bridge_without_restart(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture()
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["last_error_kind"], "none")
+        self.assertTrue(packet["bridge_ready"])
+        self.assertTrue(packet["last_request_seen"])
+        self.assertTrue(packet["last_response_completed"])
+        self.assertTrue(packet["selected_route_preserved"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["restart_admissible"])
+        self.assertFalse(packet["restart_attempted"])
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_BRIDGE_FAILURE_AND_RECOVERY_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+
+    def test_bridge_failure_recovery_truth_classifies_stream_disconnect_as_retryable(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(
+            bridge_machine_error_code="BRIDGE_STREAM_DISCONNECTED",
+            response_seen=False,
+            stream_requested=True,
+            stream_completed=False,
+        )
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["last_error_kind"], "stream_disconnected")
+        self.assertTrue(packet["safe_to_retry"])
+        self.assertFalse(packet["requires_owner_action"])
+        self.assertTrue(packet["restart_admissible"])
+        self.assertFalse(packet["restart_attempted"])
+        self.assertTrue(packet["owner_action_required_for_live_restart"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertTrue(packet["selected_route_preserved"])
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_BRIDGE_FAILURE_AND_RECOVERY_TRUTH_PROVEN_WITH_LIMITS",
+        )
+
+    def test_bridge_failure_recovery_truth_classifies_unauthorized_as_owner_action(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(
+            upstream_status=401,
+            response_seen=False,
+        )
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["bridge_ready"])
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["last_error_kind"], "unauthorized")
+        self.assertFalse(packet["safe_to_retry"])
+        self.assertTrue(packet["requires_owner_action"])
+        self.assertFalse(packet["restart_admissible"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_CUSTOM_CODEX_BRIDGE_STABILITY_NOT_PROVEN",
+        )
+
+    def test_bridge_failure_recovery_truth_classifies_dead_bridge_without_live_restart(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(
+            bridge_machine_error_code="BRIDGE_PROCESS_DEAD",
+            bridge_alive=False,
+            responses_endpoint_ready=False,
+            response_seen=False,
+        )
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["last_error_kind"], "bridge_process_dead")
+        self.assertTrue(packet["safe_to_retry"])
+        self.assertTrue(packet["restart_admissible"])
+        self.assertFalse(packet["restart_attempted"])
+        self.assertFalse(packet["profile_mutation_attempted"])
+        self.assertFalse(packet["history_deletion_attempted"])
+
+    def test_bridge_failure_recovery_truth_blocks_stale_port_as_not_ready(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(
+            bridge_machine_error_code="BRIDGE_PORT_STALE",
+            responses_endpoint_ready=False,
+            response_seen=False,
+        )
+        trace["stale_port_detected"] = True
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["last_error_kind"], "stale_port")
+        self.assertTrue(packet["stale_port_detected"])
+        self.assertTrue(packet["safe_to_retry"])
+        self.assertTrue(packet["restart_admissible"])
+        self.assertFalse(packet["restart_attempted"])
+
+    def test_bridge_failure_recovery_truth_blocks_route_mismatch(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(
+            route_unchanged=False,
+            effective_route="gpt-5.4",
+        )
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["last_error_kind"], "route_mismatch")
+        self.assertFalse(packet["selected_route_preserved"])
+        self.assertFalse(packet["restart_admissible"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_CUSTOM_CODEX_BRIDGE_STABILITY_NOT_PROVEN",
+        )
+        self.assertFalse(packet["route_swap_attempted"])
+
+    def test_bridge_failure_recovery_truth_blocks_fallback_attempt(self) -> None:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(fallback_used=True)
+
+        packet = build_bridge_failure_recovery_truth_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["last_error_kind"], "fallback_attempt")
+        self.assertTrue(packet["fallback_used"])
+        self.assertTrue(packet["fallback_attempted"])
+        self.assertFalse(packet["selected_route_preserved"])
+        self.assertFalse(packet["restart_admissible"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_CUSTOM_CODEX_BRIDGE_STABILITY_NOT_PROVEN",
+        )
 
     def test_hybrid_openai_compat_adapter_marks_stable_bridge_window_smoke_phrase(self) -> None:
         prompt_hash, smoke_match = _prompt_trace_hash_and_smoke_match(

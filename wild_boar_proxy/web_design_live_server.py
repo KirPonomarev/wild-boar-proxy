@@ -130,6 +130,7 @@ from wild_boar_proxy.operator_surface import (
     HybridOpenAICompatAdapter,
     OperatorSurfaceSession,
     _safe_route_digest,
+    build_bridge_failure_recovery_truth_packet,
     clean_env,
     compare_snapshots,
     extract_local_api_key,
@@ -4532,6 +4533,35 @@ def build_custom_codex_window_input_route_trace_packet(
     }
 
 
+def build_custom_codex_bridge_failure_recovery_truth_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_bridge_failure_recovery_truth",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "STOP_AND_DIAGNOSE_CUSTOM_CODEX_BRIDGE_STABILITY_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "browser_trace_authority": False,
+            "fallback_used": False,
+            "restart_attempted": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    return build_bridge_failure_recovery_truth_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=bridge_trace_packet,
+    )
+
+
 def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     *,
     last_launch_packet: dict[str, Any] | None,
@@ -7720,6 +7750,19 @@ def build_handler(
             if parsed.path == "/api/codex/custom/window-input-route-trace":
                 self._send_json(
                     build_custom_codex_window_input_route_trace_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/bridge-failure-recovery-truth":
+                self._send_json(
+                    build_custom_codex_bridge_failure_recovery_truth_packet(
                         last_launch_packet=custom_native_launch_state["last_packet"],
                         bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
                         browser_payload=(

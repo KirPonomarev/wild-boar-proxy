@@ -7691,6 +7691,74 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["forbidden_fields"], ["trace_id"])
         self.assertFalse(packet["browser_trace_authority"])
 
+    def test_custom_bridge_failure_recovery_truth_rejects_browser_authority_fields(self) -> None:
+        packet = live_server.build_custom_codex_bridge_failure_recovery_truth_packet(
+            last_launch_packet={},
+            bridge_trace_packet={},
+            browser_payload={"route_id": ["browser"], "api_key": ["sk-browser"]},
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(packet["forbidden_fields"], ["api_key", "route_id"])
+        self.assertFalse(packet["browser_trace_authority"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["restart_attempted"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_bridge_failure_recovery_truth_endpoint_rejects_query_authority(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with NO_PROXY_OPENER.open(
+                f"{base}/api/codex/custom/bridge-failure-recovery-truth?trace_id=browser",
+                timeout=2,
+            ) as response:
+                packet = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(packet["forbidden_fields"], ["trace_id"])
+        self.assertFalse(packet["browser_trace_authority"])
+
+    def test_custom_bridge_failure_recovery_truth_endpoint_reports_current_trace_without_restart(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with NO_PROXY_OPENER.open(
+                f"{base}/api/codex/custom/bridge-failure-recovery-truth",
+                timeout=2,
+            ) as response:
+                packet = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "custom_codex_bridge_failure_recovery_truth")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "BRIDGE_RESPONSES_ENDPOINT_UNREADY")
+        self.assertFalse(packet["browser_trace_authority"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["restart_attempted"])
+        self.assertFalse(packet["live_paid_call_attempted_by_packet"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_chatgpt_plus_api_coder_trace_reports_slot_binding_without_dispatch(self) -> None:
         packet = live_server.build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             last_launch_packet={
