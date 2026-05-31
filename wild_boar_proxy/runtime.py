@@ -6535,6 +6535,515 @@ def clear_stale_managed_pid_if_needed(paths: RuntimePaths) -> bool:
     return True
 
 
+def managed_listener_start_wait_seconds() -> float:
+    raw = os.environ.get("WBP_MANAGED_LISTENER_START_WAIT_SECONDS", "5").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 5.0
+    return max(0.0, value)
+
+
+def terminate_process_group_or_pid(pid: int, *, wait_seconds: float = 1.0) -> bool:
+    if pid <= 0:
+        return True
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return True
+    deadline = time.monotonic() + max(0.0, wait_seconds)
+    while time.monotonic() < deadline:
+        if not process_is_alive(str(pid)):
+            return True
+        time.sleep(0.05)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            return True
+    deadline = time.monotonic() + max(0.0, wait_seconds)
+    while time.monotonic() < deadline:
+        if not process_is_alive(str(pid)):
+            return True
+        time.sleep(0.05)
+    return not process_is_alive(str(pid))
+
+
+def terminate_started_managed_process(process: subprocess.Popen[str]) -> bool:
+    pid = int(process.pid)
+    terminated = terminate_process_group_or_pid(pid)
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        terminate_process_group_or_pid(pid, wait_seconds=0.5)
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            return False
+    return terminated or process.poll() is not None
+
+
+def build_managed_listener_start_surface(
+    *,
+    status: str,
+    startup_outcome: str,
+    startup_attempted: bool,
+    process_started: bool,
+    pid_recorded: bool,
+    managed_listener_endpoint: str,
+    managed_listener_reachable: bool,
+    live_attestation_passed: bool,
+    effective_mode_written: bool,
+    repo_owned_startup_owner_path_defined: bool,
+    machine_error_code: str,
+    blocking_reason: str,
+    started_pid: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "owner_command_surface": "managed listener start --json",
+        "delegated_from_status": False,
+        "startup_attempted": startup_attempted,
+        "startup_outcome": startup_outcome,
+        "process_started": process_started,
+        "started_pid": started_pid,
+        "pid_recorded": pid_recorded,
+        "managed_listener_endpoint": managed_listener_endpoint,
+        "managed_listener_reachable": managed_listener_reachable,
+        "live_attestation_passed": live_attestation_passed,
+        "effective_mode_written": effective_mode_written,
+        "repo_owned_startup_owner_path_defined": repo_owned_startup_owner_path_defined,
+        "machine_error_code": machine_error_code,
+        "blocking_reason": blocking_reason,
+    }
+
+
+def managed_listener_start_failure_payload(
+    paths: RuntimePaths,
+    *,
+    machine_error_code: str,
+    blocking_reason: str,
+    startup_outcome: str,
+    startup_attempted: bool,
+    process_started: bool,
+    pid_recorded: bool = False,
+    managed_listener_reachable: bool = False,
+    live_attestation_passed: bool = False,
+    effective_mode_written: bool = False,
+    repo_owned_startup_owner_path_defined: bool = True,
+    started_pid: int | None = None,
+    changed_files: list[str] | None = None,
+    last_error: str = "",
+) -> dict[str, Any]:
+    _, _, managed_endpoint = get_endpoint(paths, "managed")
+    return build_command_payload(
+        ok=False,
+        human_message=f"Managed listener startup blocked: {blocking_reason}.",
+        machine_error_code=machine_error_code,
+        liveness="down",
+        severity=(
+            "fatal"
+            if machine_error_code == "MANAGED_STARTUP_ROLLBACK_FAILED"
+            else "recoverable"
+        ),
+        operator_action=(
+            "stop"
+            if machine_error_code == "MANAGED_STARTUP_ROLLBACK_FAILED"
+            else "user_action"
+        ),
+        changed_files=changed_files or [],
+        extra={
+            "managed_startup_owner": build_managed_listener_start_surface(
+                status="blocked",
+                startup_outcome=startup_outcome,
+                startup_attempted=startup_attempted,
+                process_started=process_started,
+                started_pid=started_pid,
+                pid_recorded=pid_recorded,
+                managed_listener_endpoint=managed_endpoint,
+                managed_listener_reachable=managed_listener_reachable,
+                live_attestation_passed=live_attestation_passed,
+                effective_mode_written=effective_mode_written,
+                repo_owned_startup_owner_path_defined=repo_owned_startup_owner_path_defined,
+                machine_error_code=machine_error_code,
+                blocking_reason=blocking_reason,
+            ),
+            "last_error": last_error,
+        },
+    )
+
+
+def probe_managed_listener_start_attestation(
+    paths: RuntimePaths,
+) -> tuple[bool, dict[str, Any], str]:
+    host, port, endpoint = get_endpoint(paths, "managed")
+    listener_ok = socket_is_listening(host, port)
+    models_ok = False
+    responses_ok = False
+    error_detail = ""
+    configured_model = get_model(paths)
+    if listener_ok:
+        try:
+            api_key = read_api_key(paths.auth_file)
+            models_payload = http_get_json(f"{endpoint}/models", api_key)
+            models_ok = isinstance(models_payload.get("data"), list)
+            responses_payload = http_post_json(
+                f"{endpoint}/responses",
+                api_key,
+                {"model": configured_model, "input": "Respond with exactly OK"},
+            )
+            responses_ok = response_ok(responses_payload)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "ignore").strip()
+            error_detail = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"
+        except urllib.error.URLError as exc:
+            error_detail = str(exc.reason)
+        except RuntimeErrorInfo as exc:
+            error_detail = exc.message
+        except Exception as exc:  # noqa: BLE001
+            error_detail = str(exc)
+    attestation = {
+        "configured_model": configured_model,
+        "requested_model": configured_model,
+        "listener_ok": listener_ok,
+        "models_ok": models_ok,
+        "responses_ok": responses_ok,
+        "effective_mode_match": True,
+        "base_url_match": True,
+        "selected_backends_digest": "",
+        "observed_at_utc": now_iso(),
+        "runtime_version": "unknown",
+        "attestation_source": "managed listener start --json",
+    }
+    return listener_ok and models_ok and responses_ok, attestation, error_detail
+
+
+def restore_managed_listener_start_runtime_surfaces(
+    paths: RuntimePaths,
+    snapshots: dict[str, dict[str, Any]],
+) -> None:
+    restore_path_state(
+        paths.state_file, snapshots.get("state_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.config_toml, snapshots.get("config_toml", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.runtime_effective_mode_file,
+        snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        managed_pid_path(paths),
+        snapshots.get("managed_pid_file", {"state": "missing"}),
+    )
+
+
+def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    runtime_snapshots = {
+        "state_file": snapshot_path_state(paths.state_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+        "managed_pid_file": snapshot_path_state(managed_pid_path(paths)),
+    }
+    managed_host, managed_port, managed_endpoint = get_endpoint(paths, "managed")
+    cli_proxy_bin = resolve_cli_proxy_bin()
+    started_process: subprocess.Popen[str] | None = None
+    started_pid: int | None = None
+    startup_attempted = False
+    process_started = False
+    pid_recorded = False
+    live_attestation_passed = False
+    effective_mode_written = False
+    repo_owned_path_defined = cli_proxy_bin.exists() and cli_proxy_bin.is_file()
+
+    try:
+        with serialized_lock(paths):
+            pid_text = read_text(managed_pid_path(paths))
+            stale_pid_cleanup_needed = bool(pid_text) and not process_is_alive(pid_text)
+            existing_listener = socket_is_listening(managed_host, managed_port)
+            if existing_listener:
+                if (
+                    pid_text
+                    and process_is_alive(pid_text)
+                    and managed_pid_matches_expected(paths, pid_text)
+                ):
+                    started_pid = int(pid_text.strip())
+                    startup_outcome = "already_running_verified"
+                else:
+                    return managed_listener_start_failure_payload(
+                        paths,
+                        machine_error_code="MANAGED_STARTUP_AMBIGUOUS_EXISTING_LISTENER",
+                        blocking_reason="existing_listener_without_matching_repo_owned_pid",
+                        startup_outcome="ambiguous_existing_listener",
+                        startup_attempted=False,
+                        process_started=False,
+                        managed_listener_reachable=True,
+                        repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                    )
+            elif pid_text and process_is_alive(pid_text):
+                return managed_listener_start_failure_payload(
+                    paths,
+                    machine_error_code="MANAGED_STARTUP_STALE_PID_CONFLICT",
+                    blocking_reason="pid_alive_but_listener_unreachable",
+                    startup_outcome="stale_pid_conflict",
+                    startup_attempted=False,
+                    process_started=False,
+                    repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                )
+            else:
+                if not repo_owned_path_defined:
+                    return managed_listener_start_failure_payload(
+                        paths,
+                        machine_error_code="MANAGED_STARTUP_ENGINE_ENTRYPOINT_MISSING",
+                        blocking_reason="cli_proxy_api_entrypoint_missing",
+                        startup_outcome="engine_entrypoint_missing",
+                        startup_attempted=False,
+                        process_started=False,
+                        repo_owned_startup_owner_path_defined=False,
+                    )
+                if not paths.managed_config_file.exists():
+                    return managed_listener_start_failure_payload(
+                        paths,
+                        machine_error_code="MANAGED_STARTUP_MANAGED_CONFIG_MISSING",
+                        blocking_reason="managed_config_missing",
+                        startup_outcome="managed_config_missing",
+                        startup_attempted=False,
+                        process_started=False,
+                        repo_owned_startup_owner_path_defined=True,
+                    )
+                stale_pid_cleared = False
+                if stale_pid_cleanup_needed:
+                    managed_pid_path(paths).unlink(missing_ok=True)
+                    stale_pid_cleared = True
+                command = [
+                    str(cli_proxy_bin),
+                    "-config",
+                    str(paths.managed_config_file),
+                    "-local-model",
+                ]
+                startup_attempted = True
+                started_process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    start_new_session=True,
+                )
+                process_started = True
+                started_pid = started_process.pid
+                deadline = time.monotonic() + managed_listener_start_wait_seconds()
+                while time.monotonic() < deadline:
+                    if socket_is_listening(managed_host, managed_port):
+                        break
+                    if started_process.poll() is not None:
+                        restore_managed_listener_start_runtime_surfaces(
+                            paths, runtime_snapshots
+                        )
+                        return managed_listener_start_failure_payload(
+                            paths,
+                            machine_error_code="MANAGED_STARTUP_PROCESS_FAILED",
+                            blocking_reason="engine_process_exited_before_listener",
+                            startup_outcome="process_failed",
+                            startup_attempted=True,
+                            process_started=True,
+                            started_pid=started_pid,
+                            repo_owned_startup_owner_path_defined=True,
+                            last_error=f"engine_exit_code={started_process.returncode}",
+                        )
+                    time.sleep(0.05)
+                if not socket_is_listening(managed_host, managed_port):
+                    terminate_started_managed_process(started_process)
+                    restore_managed_listener_start_runtime_surfaces(
+                        paths, runtime_snapshots
+                    )
+                    return managed_listener_start_failure_payload(
+                        paths,
+                        machine_error_code="MANAGED_STARTUP_LISTENER_UNREACHABLE",
+                        blocking_reason="listener_unreachable_after_start",
+                        startup_outcome="listener_unreachable",
+                        startup_attempted=True,
+                        process_started=True,
+                        started_pid=started_pid,
+                        repo_owned_startup_owner_path_defined=True,
+                    )
+                startup_outcome = (
+                    "stale_pid_cleaned_and_started" if stale_pid_cleared else "started"
+                )
+
+            proof_passed, startup_attestation, error_detail = (
+                probe_managed_listener_start_attestation(paths)
+            )
+            if not proof_passed:
+                if started_process is not None and startup_attempted:
+                    terminate_started_managed_process(started_process)
+                elif started_pid is not None and startup_attempted:
+                    terminate_process_group_or_pid(started_pid)
+                restore_managed_listener_start_runtime_surfaces(
+                    paths, runtime_snapshots
+                )
+                return managed_listener_start_failure_payload(
+                    paths,
+                    machine_error_code="MANAGED_STARTUP_ATTESTATION_FAILED",
+                    blocking_reason="live_attestation_failed",
+                    startup_outcome="attestation_failed",
+                    startup_attempted=startup_attempted,
+                    process_started=process_started,
+                    started_pid=started_pid,
+                    managed_listener_reachable=socket_is_listening(
+                        managed_host, managed_port
+                    ),
+                    repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                    last_error=error_detail,
+                )
+            live_attestation_passed = True
+            state = read_json(paths.state_file, required=False)
+            state["status"] = "healthy"
+            state["last_error"] = ""
+            state["effective_mode"] = "managed"
+            state["managed_port"] = managed_port
+            state["last_sync_at"] = now_iso()
+            write_json_atomic(paths.state_file, state)
+            write_text_atomic(paths.runtime_effective_mode_file, "managed")
+            write_toml_string_atomic(paths.config_toml, "base_url", managed_endpoint)
+            if started_pid is not None:
+                write_text_atomic(managed_pid_path(paths), str(started_pid))
+                pid_recorded = True
+            effective_mode_written = True
+
+        post_payload = run_healthcheck(
+            paths,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
+            allow_stable_fallback_write=False,
+        )
+        post_ok = (
+            post_payload.get("status") == "ok"
+            and str(post_payload.get("effective_mode", "")) == "managed"
+        )
+        if not post_ok:
+            if started_process is not None and startup_attempted:
+                terminate_started_managed_process(started_process)
+            elif started_pid is not None and startup_attempted:
+                terminate_process_group_or_pid(started_pid)
+            try:
+                with serialized_lock(paths):
+                    restore_managed_listener_start_runtime_surfaces(
+                        paths, runtime_snapshots
+                    )
+            except Exception as exc:  # noqa: BLE001
+                changed_files = detect_changed_files(
+                    before, runtime_write_surface_candidates(paths)
+                )
+                return managed_listener_start_failure_payload(
+                    paths,
+                    machine_error_code="MANAGED_STARTUP_ROLLBACK_FAILED",
+                    blocking_reason="post_write_reproof_failed_and_rollback_failed",
+                    startup_outcome="rollback_failed",
+                    startup_attempted=startup_attempted,
+                    process_started=process_started,
+                    started_pid=started_pid,
+                    pid_recorded=pid_recorded,
+                    managed_listener_reachable=socket_is_listening(
+                        managed_host, managed_port
+                    ),
+                    live_attestation_passed=live_attestation_passed,
+                    effective_mode_written=effective_mode_written,
+                    repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                    changed_files=changed_files,
+                    last_error=str(exc),
+                )
+            return managed_listener_start_failure_payload(
+                paths,
+                machine_error_code="MANAGED_STARTUP_ATTESTATION_FAILED",
+                blocking_reason="post_write_reproof_failed",
+                startup_outcome="post_write_reproof_failed",
+                startup_attempted=startup_attempted,
+                process_started=process_started,
+                started_pid=started_pid,
+                pid_recorded=pid_recorded,
+                managed_listener_reachable=socket_is_listening(
+                    managed_host, managed_port
+                ),
+                live_attestation_passed=live_attestation_passed,
+                effective_mode_written=False,
+                repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                changed_files=detect_changed_files(
+                    before, runtime_write_surface_candidates(paths)
+                ),
+                last_error=str(post_payload.get("last_error", "")),
+            )
+
+        changed_files = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
+        return build_command_payload(
+            ok=True,
+            human_message="Managed listener startup completed with live proof.",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=changed_files,
+            extra={
+                "desired_mode": get_desired_mode(paths),
+                "effective_mode": "managed",
+                "endpoint": managed_endpoint,
+                "attestation": post_payload.get("attestation", {}),
+                "startup_attestation": startup_attestation,
+                "managed_startup_owner": build_managed_listener_start_surface(
+                    status="started",
+                    startup_outcome=startup_outcome,
+                    startup_attempted=startup_attempted,
+                    process_started=process_started,
+                    started_pid=started_pid,
+                    pid_recorded=pid_recorded,
+                    managed_listener_endpoint=managed_endpoint,
+                    managed_listener_reachable=True,
+                    live_attestation_passed=True,
+                    effective_mode_written=True,
+                    repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                    machine_error_code="OK",
+                    blocking_reason="",
+                ),
+                "last_error": "",
+            },
+        )
+    except RuntimeErrorInfo:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        if started_process is not None and startup_attempted:
+            terminate_started_managed_process(started_process)
+        elif started_pid is not None and startup_attempted:
+            terminate_process_group_or_pid(started_pid)
+        return managed_listener_start_failure_payload(
+            paths,
+            machine_error_code="MANAGED_STARTUP_PROCESS_FAILED",
+            blocking_reason="unexpected_startup_exception",
+            startup_outcome="process_failed",
+            startup_attempted=startup_attempted,
+            process_started=process_started,
+            started_pid=started_pid,
+            repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            last_error=str(exc),
+        )
+
+
 def reconcile_stable_fallback(
     paths: RuntimePaths,
     state: dict[str, Any],

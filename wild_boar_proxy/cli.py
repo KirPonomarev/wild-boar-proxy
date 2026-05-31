@@ -29,6 +29,7 @@ from .runtime import (
     run_hold,
     run_launch_client,
     run_launch_smoke,
+    run_managed_listener_start,
     run_legacy_import,
     run_onboard,
     run_policy_stage_set,
@@ -101,6 +102,15 @@ def build_parser() -> argparse.ArgumentParser:
     launch_client = launch_subparsers.add_parser("client")
     launch_client.add_argument("--client-path", required=True)
     launch_client.add_argument("--json", action="store_true", required=True)
+
+    managed = subparsers.add_parser("managed")
+    managed_subparsers = managed.add_subparsers(dest="managed_command", required=True)
+    managed_listener = managed_subparsers.add_parser("listener")
+    managed_listener_subparsers = managed_listener.add_subparsers(
+        dest="managed_listener_command", required=True
+    )
+    managed_listener_start = managed_listener_subparsers.add_parser("start")
+    managed_listener_start.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -407,6 +417,12 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_launch_smoke(paths))
         if args.command == "launch" and args.launch_command == "client":
             return emit_json(run_launch_client(paths, args.client_path))
+        if (
+            args.command == "managed"
+            and args.managed_command == "listener"
+            and args.managed_listener_command == "start"
+        ):
+            return emit_json(run_managed_listener_start(paths))
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
             return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
         if args.command == "accounts" and args.accounts_command == "list":
