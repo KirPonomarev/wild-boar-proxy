@@ -1,0 +1,19 @@
+{
+  "catalog_ready": true,
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "declared_port_listening_after_command": true,
+  "fallback_used": false,
+  "legacy_managed_listener_reachable": true,
+  "lifecycle_ready": true,
+  "listener_ready": true,
+  "machine_error_code": "OK",
+  "model_execution_probe_ready": true,
+  "observed_at_utc": "2026-05-31T23:49:25.172859+00:00",
+  "phase": "post_patch",
+  "process_started": true,
+  "responses_smoke_ready": true,
+  "secrets_redacted": true,
+  "stage_fields_present": true,
+  "startup_gate_passed": true,
+  "startup_outcome": "started"
+}

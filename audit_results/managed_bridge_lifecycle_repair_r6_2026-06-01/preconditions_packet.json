@@ -1,0 +1,15 @@
+{
+  "cli_proxy_api": {
+    "executable": true,
+    "exists": true
+  },
+  "config_auth_dir_redacted": true,
+  "config_proxy_url_removed": true,
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "managed_port": 61330,
+  "observed_at_utc": "2026-05-31T23:46:36.991131+00:00",
+  "scope": "managed_cli_proxy_lifecycle_only_no_ui_no_deepseek_no_profile_history",
+  "secrets_redacted": true,
+  "startup_probe_model": "gpt-5.4-mini",
+  "temp_root": "redacted_temp_root"
+}

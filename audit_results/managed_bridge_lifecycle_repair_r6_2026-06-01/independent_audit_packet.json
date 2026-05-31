@@ -1,0 +1,31 @@
+{
+  "auditor": "gpt-5.4-mini",
+  "blocker": false,
+  "checks": {
+    "config_default_change_present": false,
+    "deepseek_or_external_route_scope_present": false,
+    "model_probe_and_lifecycle_separated": true,
+    "raw_auth_or_config_material_present": false,
+    "summary_matches_post_patch_classification": true,
+    "tests_cover_success_wrong_port_and_probe_separation": true,
+    "ui_or_profile_history_scope_present": false
+  },
+  "commands_reported": [
+    "git -C /private/tmp/wbp-managed-bridge-lifecycle-repair-r6 diff --name-only",
+    "git -C /private/tmp/wbp-managed-bridge-lifecycle-repair-r6 diff -- COMMAND_API.md tests/test_cli.py wild_boar_proxy/runtime.py",
+    "rg over audit_results/managed_bridge_lifecycle_repair_r6_2026-06-01"
+  ],
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "evidence_reviewed": [
+    "COMMAND_API.md",
+    "tests/test_cli.py",
+    "wild_boar_proxy/runtime.py",
+    "audit_results/managed_bridge_lifecycle_repair_r6_2026-06-01/preconditions_packet.json",
+    "audit_results/managed_bridge_lifecycle_repair_r6_2026-06-01/post_patch_lifecycle_classification_packet.json",
+    "audit_results/managed_bridge_lifecycle_repair_r6_2026-06-01/post_patch_startup_packet.json",
+    "audit_results/managed_bridge_lifecycle_repair_r6_2026-06-01/summary_packet.json"
+  ],
+  "finding": "No blocker. Scope stayed in managed bridge lifecycle, COMMAND_API contract, and targeted CLI tests. New managed_startup_owner stage fields separate listener/catalog lifecycle readiness from model execution probe readiness, without model substitution, config default changes, UI work, DeepSeek work, profile/history work, or final E2E claims.",
+  "schema_version": 1,
+  "secrets_redacted": true
+}

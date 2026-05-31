@@ -1693,6 +1693,11 @@ Field meaning rules:
   - `startup_attempted`
   - `startup_outcome`
   - `process_started`
+  - `listener_ready`
+  - `catalog_ready`
+  - `model_execution_probe_ready`
+  - `lifecycle_ready`
+  - `startup_gate_passed`
   - `pid_recorded`
   - `managed_listener_endpoint`
   - `managed_listener_reachable`
@@ -1715,6 +1720,11 @@ Field meaning rules:
   but live model binding could not support the startup attestation probe. The
   failure packet must expose `startup_attestation.binding_failure_reason` and
   must not write managed truth surfaces or silently substitute a user model.
+- `listener_ready`, `catalog_ready`, and `lifecycle_ready` separate managed
+  bridge readiness from model execution readiness. `model_execution_probe_ready`
+  and `startup_gate_passed` report the bounded startup attestation gate and must
+  not be used to hide a listener/catalog-ready bridge behind a model-layer
+  refusal.
 - managed listener startup must use the configured engine/provider model
   inventory for live attestation. It may perform a bounded `/v1/models` retry
   after the listener socket opens, and it must expose
