@@ -1,0 +1,25 @@
+{
+  "cleanup_ok": true,
+  "configured_probe_model": "gpt-5.4",
+  "contour": "managed_listener_attestation_model_binding_r3",
+  "evidence_files": [
+    "cleanup_packet.json",
+    "live_models_packet.json",
+    "preconditions_packet.json",
+    "startup_packet.json",
+    "summary_packet.json"
+  ],
+  "live_attestation_passed": false,
+  "live_model_available": false,
+  "live_model_count": 0,
+  "managed_false_green_detected": false,
+  "managed_truth_written": false,
+  "observed_at_utc": "2026-05-31T23:07:18.791850+00:00",
+  "outcome": "binding_blocker",
+  "probe_model_source": "config_toml",
+  "probe_model_substitution_attempted": false,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "startup_blocking_reason": "live_models_empty",
+  "startup_machine_error_code": "MANAGED_STARTUP_PROBE_MODEL_UNBOUND"
+}

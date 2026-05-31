@@ -6643,6 +6643,7 @@ def managed_listener_start_failure_payload(
     started_pid: int | None = None,
     changed_files: list[str] | None = None,
     last_error: str = "",
+    startup_attestation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _, _, managed_endpoint = get_endpoint(paths, "managed")
     return build_command_payload(
@@ -6677,34 +6678,72 @@ def managed_listener_start_failure_payload(
                 machine_error_code=machine_error_code,
                 blocking_reason=blocking_reason,
             ),
+            "startup_attestation": startup_attestation or {},
             "last_error": last_error,
         },
     )
 
 
+def extract_model_ids_from_models_payload(payload: dict[str, Any]) -> list[str]:
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return []
+    model_ids: list[str] = []
+    for item in data:
+        raw_model_id = item.get("id") if isinstance(item, dict) else item
+        if isinstance(raw_model_id, str) and raw_model_id.strip():
+            model_ids.append(raw_model_id.strip())
+    return model_ids
+
+
 def probe_managed_listener_start_attestation(
     paths: RuntimePaths,
-) -> tuple[bool, dict[str, Any], str]:
+) -> tuple[bool, dict[str, Any], str, str]:
     host, port, endpoint = get_endpoint(paths, "managed")
     listener_ok = socket_is_listening(host, port)
     models_ok = False
     responses_ok = False
     error_detail = ""
     configured_model = get_model(paths)
+    probe_model_source = (
+        "config_toml"
+        if read_toml_string(paths.config_toml, "model")
+        else "runtime_default"
+    )
+    effective_probe_model = configured_model
+    live_model_ids: list[str] = []
+    binding_failure_reason = ""
+    machine_error_code = "MANAGED_STARTUP_ATTESTATION_FAILED"
     if listener_ok:
         try:
             api_key = read_api_key(paths.auth_file)
             models_payload = http_get_json(f"{endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
-            responses_payload = http_post_json(
-                f"{endpoint}/responses",
-                api_key,
-                {"model": configured_model, "input": "Respond with exactly OK"},
-            )
-            responses_ok = response_ok(responses_payload)
+            live_model_ids = extract_model_ids_from_models_payload(models_payload)
+            if models_ok and not live_model_ids:
+                binding_failure_reason = "live_models_empty"
+                machine_error_code = "MANAGED_STARTUP_PROBE_MODEL_UNBOUND"
+            elif models_ok and configured_model not in live_model_ids:
+                binding_failure_reason = (
+                    "configured_probe_model_absent_from_live_models"
+                )
+                machine_error_code = "MANAGED_STARTUP_PROBE_MODEL_UNBOUND"
+            else:
+                responses_payload = http_post_json(
+                    f"{endpoint}/responses",
+                    api_key,
+                    {
+                        "model": effective_probe_model,
+                        "input": "Respond with exactly OK",
+                    },
+                )
+                responses_ok = response_ok(responses_payload)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore").strip()
             error_detail = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"
+            if "unknown provider for model" in error_detail.lower():
+                binding_failure_reason = "unknown_provider_for_probe_model"
+                machine_error_code = "MANAGED_STARTUP_PROBE_MODEL_UNBOUND"
         except urllib.error.URLError as exc:
             error_detail = str(exc.reason)
         except RuntimeErrorInfo as exc:
@@ -6714,6 +6753,17 @@ def probe_managed_listener_start_attestation(
     attestation = {
         "configured_model": configured_model,
         "requested_model": configured_model,
+        "probe_model_source": probe_model_source,
+        "configured_probe_model": configured_model,
+        "effective_probe_model": effective_probe_model,
+        "probe_model_substitution_attempted": False,
+        "live_model_count": len(live_model_ids),
+        "live_model_available": configured_model in live_model_ids,
+        "live_model_sample": live_model_ids[:5],
+        "binding_failure_reason": binding_failure_reason,
+        "machine_error_code": (
+            "OK" if listener_ok and models_ok and responses_ok else machine_error_code
+        ),
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
@@ -6724,7 +6774,12 @@ def probe_managed_listener_start_attestation(
         "runtime_version": "unknown",
         "attestation_source": "managed listener start --json",
     }
-    return listener_ok and models_ok and responses_ok, attestation, error_detail
+    return (
+        listener_ok and models_ok and responses_ok,
+        attestation,
+        error_detail,
+        str(attestation["machine_error_code"]),
+    )
 
 
 def restore_managed_listener_start_runtime_surfaces(
@@ -6882,7 +6937,7 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     "stale_pid_cleaned_and_started" if stale_pid_cleared else "started"
                 )
 
-            proof_passed, startup_attestation, error_detail = (
+            proof_passed, startup_attestation, error_detail, attestation_error_code = (
                 probe_managed_listener_start_attestation(paths)
             )
             if not proof_passed:
@@ -6893,10 +6948,13 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                 restore_managed_listener_start_runtime_surfaces(
                     paths, runtime_snapshots
                 )
+                blocking_reason = str(
+                    startup_attestation.get("binding_failure_reason", "")
+                )
                 return managed_listener_start_failure_payload(
                     paths,
-                    machine_error_code="MANAGED_STARTUP_ATTESTATION_FAILED",
-                    blocking_reason="live_attestation_failed",
+                    machine_error_code=attestation_error_code,
+                    blocking_reason=blocking_reason or "live_attestation_failed",
                     startup_outcome="attestation_failed",
                     startup_attempted=startup_attempted,
                     process_started=process_started,
@@ -6906,6 +6964,7 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     ),
                     repo_owned_startup_owner_path_defined=repo_owned_path_defined,
                     last_error=error_detail,
+                    startup_attestation=startup_attestation,
                 )
             live_attestation_passed = True
             state = read_json(paths.state_file, required=False)
