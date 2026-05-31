@@ -58,6 +58,7 @@ from wild_boar_proxy.codex_model_registry import (
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
     build_api_only_deepseek_live_route_format_packet,
+    build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
     build_custom_api_action_gate_packet,
     build_custom_api_compat_packet,
@@ -9083,6 +9084,20 @@ def build_handler(
                 )
                 self._send_json(
                     build_chatgpt_plus_api_slot_truth_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/api-only-executor-truth":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                self._send_json(
+                    build_api_only_executor_truth_packet(
                         payload,
                         operator_status,
                         api_snapshot=api_snapshot,
