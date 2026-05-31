@@ -7804,6 +7804,12 @@ def run_healthcheck(
                 "activation_blocking_reason": (
                     activation_attempt.activation_blocking_reason
                 ),
+                "activation_blocking_machine_error_code": (
+                    "MANAGED_LISTENER_UNAVAILABLE"
+                    if activation_attempt.activation_blocking_reason
+                    == "managed_listener_unavailable"
+                    else ""
+                ),
                 "activation_surface_kind": "repo_owned_handoff_env_var",
                 "managed_listener_endpoint": activation_attempt.managed_listener_endpoint,
                 "managed_listener_reachable": activation_attempt.managed_listener_reachable,
