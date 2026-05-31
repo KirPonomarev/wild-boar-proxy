@@ -9012,7 +9012,7 @@ def run_rollout_rotation_inspect(
             registry,
             policy_drift_observed,
             state,
-            require_live_stable_runtime=False,
+            require_live_stable_runtime=True,
         ):
             policy_drift = get_stable_policy_drift_for_inventory_source(
                 registry,

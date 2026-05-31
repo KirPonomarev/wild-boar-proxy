@@ -11591,7 +11591,9 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["changed_files"], [])
         evidence = payload["rotation_evidence_result"]
-        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(
+            evidence["evidence_status"], "participation_evidence_contradicted"
+        )
         self.assertEqual(evidence["evidence_strength"], "partial")
         self.assertEqual(
             evidence["evidence_reason"], "selected_backend_outside_active_candidates"
@@ -11863,7 +11865,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["participation_status"], "contradicted")
         self.assertEqual(evidence["blocker_type"], "contradicted_state")
 
-    def test_rollout_rotation_inspect_uses_approved_target_policy_surface_when_activation_evidence_is_valid(
+    def test_rollout_rotation_inspect_does_not_use_approved_target_policy_surface_from_snapshot_alone(
         self,
     ) -> None:
         self.configure_rotation_evidence_fixture(
@@ -11901,18 +11903,21 @@ class CliTests(unittest.TestCase):
         }
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
         result = self.run_cli("rollout", "rotation", "inspect", "--json")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
         evidence = payload["rotation_evidence_result"]
         self.assertEqual(evidence["policy_drift_observed_status"], "detected")
-        self.assertEqual(evidence["policy_drift_status"], "clear")
+        self.assertEqual(evidence["policy_drift_status"], "detected")
         self.assertEqual(
             evidence["policy_drift_claim_surface_source"],
-            "approved_repair_target",
+            "stable_config_parent",
         )
-        self.assertEqual(evidence["evidence_status"], "participation_evidence_present")
-        self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_reason"], "policy_drift_detected")
+        self.assertEqual(evidence["participation_status"], "contradicted")
 
     def test_rollout_posture_inspect_20_reports_insufficient_eligible_pool_for_step41_shape(
         self,
