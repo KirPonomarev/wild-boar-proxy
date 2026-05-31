@@ -1,0 +1,27 @@
+{
+  "auth_inventory": {
+    "auth_dir_exists": true,
+    "codex_json_count": 28,
+    "filenames_redacted": true
+  },
+  "bounded_source_models": [
+    "gpt-image-2",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "codex-auto-review"
+  ],
+  "cli_proxy_api": {
+    "executable": true,
+    "exists": true,
+    "version_line": "CLIProxyAPI Version: 6.9.45, Commit: 6ba7c810, BuiltAt: 2026-04-30T04:43:17Z"
+  },
+  "contour": "managed_codex_model_availability_truth_r5",
+  "observed_at_utc": "2026-05-31T23:36:18.689342+00:00",
+  "schema_version": 1,
+  "scope": "managed_cli_proxy_codex_chatgpt_only_no_deepseek_no_ui",
+  "secrets_redacted": true
+}

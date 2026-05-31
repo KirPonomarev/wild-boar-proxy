@@ -1,0 +1,185 @@
+{
+  "contour": "managed_codex_model_availability_truth_r5",
+  "endpoint": "http://127.0.0.1:60327/v1",
+  "matrix": [
+    {
+      "availability_status": "available",
+      "duration_ms": 3666,
+      "error_code": "",
+      "error_message_class": "",
+      "error_type": "",
+      "http_status": 200,
+      "model_id": "codex-auto-review",
+      "payload_keys": [
+        "background",
+        "completed_at",
+        "created_at",
+        "error",
+        "frequency_penalty",
+        "id",
+        "incomplete_details",
+        "instructions",
+        "max_output_tokens",
+        "max_tool_calls",
+        "metadata",
+        "model",
+        "moderation",
+        "object"
+      ],
+      "request_ok": true,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "quota_blocked",
+      "duration_ms": 1719,
+      "error_code": "",
+      "error_message_class": "quota_or_capacity",
+      "error_type": "",
+      "http_status": 402,
+      "model_id": "gpt-5.2",
+      "payload_keys": [
+        "detail"
+      ],
+      "request_ok": false,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "quota_blocked",
+      "duration_ms": 969,
+      "error_code": "",
+      "error_message_class": "quota_or_capacity",
+      "error_type": "",
+      "http_status": 402,
+      "model_id": "gpt-5.3-codex",
+      "payload_keys": [
+        "detail"
+      ],
+      "request_ok": false,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "catalog_only_not_executable",
+      "duration_ms": 175,
+      "error_code": "auth_unavailable",
+      "error_message_class": "other_error",
+      "error_type": "authentication_error",
+      "http_status": 401,
+      "model_id": "gpt-5.3-codex-spark",
+      "payload_keys": [
+        "error"
+      ],
+      "request_ok": false,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "quota_blocked",
+      "duration_ms": 761,
+      "error_code": "",
+      "error_message_class": "quota_or_capacity",
+      "error_type": "",
+      "http_status": 402,
+      "model_id": "gpt-5.4",
+      "payload_keys": [
+        "detail"
+      ],
+      "request_ok": false,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "available",
+      "duration_ms": 1771,
+      "error_code": "",
+      "error_message_class": "",
+      "error_type": "",
+      "http_status": 200,
+      "model_id": "gpt-5.4-mini",
+      "payload_keys": [
+        "background",
+        "completed_at",
+        "created_at",
+        "error",
+        "frequency_penalty",
+        "id",
+        "incomplete_details",
+        "instructions",
+        "max_output_tokens",
+        "max_tool_calls",
+        "metadata",
+        "model",
+        "moderation",
+        "object"
+      ],
+      "request_ok": true,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "available",
+      "duration_ms": 2151,
+      "error_code": "",
+      "error_message_class": "",
+      "error_type": "",
+      "http_status": 200,
+      "model_id": "gpt-5.5",
+      "payload_keys": [
+        "background",
+        "completed_at",
+        "created_at",
+        "error",
+        "frequency_penalty",
+        "id",
+        "incomplete_details",
+        "instructions",
+        "max_output_tokens",
+        "max_tool_calls",
+        "metadata",
+        "model",
+        "moderation",
+        "object"
+      ],
+      "request_ok": true,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    },
+    {
+      "availability_status": "wrong_endpoint_for_model",
+      "duration_ms": 2,
+      "error_code": "internal_server_error",
+      "error_message_class": "wrong_endpoint",
+      "error_type": "server_error",
+      "http_status": 503,
+      "model_id": "gpt-image-2",
+      "payload_keys": [
+        "error"
+      ],
+      "request_ok": false,
+      "source": {
+        "bounded_source_seed": true,
+        "live_catalog": true
+      }
+    }
+  ],
+  "models_tested_count": 8,
+  "observed_at_utc": "2026-05-31T23:36:30.544657+00:00",
+  "schema_version": 1,
+  "secrets_redacted": true
+}

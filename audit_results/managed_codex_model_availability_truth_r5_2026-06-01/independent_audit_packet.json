@@ -1,0 +1,27 @@
+{
+  "auditor": "gpt-5.4-mini",
+  "blocker": false,
+  "checks": {
+    "closeout_concrete_and_closed": true,
+    "config_default_change_present": false,
+    "deepseek_or_external_route_scope_present": false,
+    "raw_auth_or_config_material_present": false,
+    "summary_matches_matrix_and_recommendation": true,
+    "ui_or_profile_history_scope_present": false
+  },
+  "commands_reported": [
+    "git -C /private/tmp/wbp-managed-codex-model-availability-r5 status --short",
+    "rg -n --hidden -S <secret-markers> audit_results/managed_codex_model_availability_truth_r5_2026-06-01"
+  ],
+  "contour": "managed_codex_model_availability_truth_r5",
+  "evidence_reviewed": [
+    "audit_results/managed_codex_model_availability_truth_r5_2026-06-01/preconditions_packet.json",
+    "audit_results/managed_codex_model_availability_truth_r5_2026-06-01/responses_matrix_packet.json",
+    "audit_results/managed_codex_model_availability_truth_r5_2026-06-01/startup_probe_recommendation_packet.json",
+    "audit_results/managed_codex_model_availability_truth_r5_2026-06-01/summary_packet.json",
+    "audit_results/managed_codex_model_availability_truth_r5_2026-06-01/closeout.md"
+  ],
+  "finding": "No blocker. Scope stayed inside managed CLIProxyAPI Codex/ChatGPT availability evidence; summary buckets matched matrix and startup recommendation; no raw keys, tokens, emails, auth filenames, raw config, model substitution, or config default change were found.",
+  "schema_version": 1,
+  "secrets_redacted": true
+}

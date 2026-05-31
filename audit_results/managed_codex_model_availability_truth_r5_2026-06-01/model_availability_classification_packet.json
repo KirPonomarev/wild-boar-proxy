@@ -1,0 +1,31 @@
+{
+  "classification_rules": {
+    "available": "HTTP 200 usable /v1/responses result; catalog presence alone is insufficient.",
+    "not_in_catalog": "absent from live /v1/models.",
+    "provider_unbound": "unknown provider for model.",
+    "quota_blocked": "HTTP 402 or quota/capacity/usage-limit class.",
+    "wrong_endpoint_for_model": "model requires a different endpoint than /v1/responses."
+  },
+  "contour": "managed_codex_model_availability_truth_r5",
+  "observed_at_utc": "2026-05-31T23:36:30.545286+00:00",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "status_buckets": {
+    "available": [
+      "codex-auto-review",
+      "gpt-5.4-mini",
+      "gpt-5.5"
+    ],
+    "catalog_only_not_executable": [
+      "gpt-5.3-codex-spark"
+    ],
+    "quota_blocked": [
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.4"
+    ],
+    "wrong_endpoint_for_model": [
+      "gpt-image-2"
+    ]
+  }
+}

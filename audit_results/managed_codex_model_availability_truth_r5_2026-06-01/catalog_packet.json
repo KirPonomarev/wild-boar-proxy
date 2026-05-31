@@ -1,0 +1,48 @@
+{
+  "catalog_collected": true,
+  "contour": "managed_codex_model_availability_truth_r5",
+  "endpoint": "http://127.0.0.1:60327/v1",
+  "listener_reachable": true,
+  "model_count": 8,
+  "model_ids": [
+    "codex-auto-review",
+    "gpt-image-2",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "model_refresh_observations": [
+    {
+      "after_delay_seconds": 0,
+      "count": 0,
+      "duration_ms": 23,
+      "ok": true,
+      "sample": [],
+      "status": 200
+    },
+    {
+      "after_delay_seconds": 0.5,
+      "count": 8,
+      "duration_ms": 2,
+      "ok": true,
+      "sample": [
+        "codex-auto-review",
+        "gpt-image-2",
+        "gpt-5.3-codex-spark",
+        "gpt-5.2",
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.5"
+      ],
+      "status": 200
+    }
+  ],
+  "observed_at_utc": "2026-05-31T23:36:19.330246+00:00",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "started_pid": 35218
+}
