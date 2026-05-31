@@ -18250,6 +18250,11 @@ class CliTests(unittest.TestCase):
             self.assertEqual(startup_owner["status"], "started")
             self.assertTrue(startup_owner["startup_attempted"])
             self.assertTrue(startup_owner["process_started"])
+            self.assertTrue(startup_owner["listener_ready"])
+            self.assertTrue(startup_owner["catalog_ready"])
+            self.assertTrue(startup_owner["model_execution_probe_ready"])
+            self.assertTrue(startup_owner["lifecycle_ready"])
+            self.assertTrue(startup_owner["startup_gate_passed"])
             self.assertTrue(startup_owner["pid_recorded"])
             self.assertTrue(startup_owner["live_attestation_passed"])
             self.assertTrue(startup_owner["effective_mode_written"])
@@ -18396,6 +18401,11 @@ class CliTests(unittest.TestCase):
         startup_owner = payload["managed_startup_owner"]
         pid = int(startup_owner["started_pid"])
         self.assertTrue(startup_owner["process_started"])
+        self.assertFalse(startup_owner["listener_ready"])
+        self.assertFalse(startup_owner["catalog_ready"])
+        self.assertFalse(startup_owner["model_execution_probe_ready"])
+        self.assertFalse(startup_owner["lifecycle_ready"])
+        self.assertFalse(startup_owner["startup_gate_passed"])
         self.assertFalse(startup_owner["effective_mode_written"])
         self.assertFalse(runtime_mod.process_is_alive(str(pid)))
         self.assertEqual(
@@ -18437,6 +18447,11 @@ class CliTests(unittest.TestCase):
         startup_owner = payload["managed_startup_owner"]
         pid = int(startup_owner["started_pid"])
         self.assertEqual(startup_owner["blocking_reason"], "live_models_empty")
+        self.assertTrue(startup_owner["listener_ready"])
+        self.assertTrue(startup_owner["catalog_ready"])
+        self.assertFalse(startup_owner["model_execution_probe_ready"])
+        self.assertTrue(startup_owner["lifecycle_ready"])
+        self.assertFalse(startup_owner["startup_gate_passed"])
         self.assertFalse(startup_owner["effective_mode_written"])
         self.assertFalse(runtime_mod.process_is_alive(str(pid)))
         self.assertEqual(payload["changed_files"], [])
@@ -18521,6 +18536,11 @@ class CliTests(unittest.TestCase):
             startup_owner["blocking_reason"],
             "unknown_provider_for_probe_model",
         )
+        self.assertTrue(startup_owner["listener_ready"])
+        self.assertTrue(startup_owner["catalog_ready"])
+        self.assertFalse(startup_owner["model_execution_probe_ready"])
+        self.assertTrue(startup_owner["lifecycle_ready"])
+        self.assertFalse(startup_owner["startup_gate_passed"])
         self.assertFalse(startup_owner["effective_mode_written"])
         self.assertFalse(runtime_mod.process_is_alive(str(pid)))
         self.assertEqual(payload["changed_files"], [])

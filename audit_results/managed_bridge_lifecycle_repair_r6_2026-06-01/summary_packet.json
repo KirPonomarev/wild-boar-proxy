@@ -1,0 +1,28 @@
+{
+  "baseline_outcome": "baseline_pass",
+  "catalog_ready": true,
+  "cleanup_ok": true,
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "evidence_files": [
+    "preconditions_packet.json",
+    "baseline_startup_packet.json",
+    "baseline_lifecycle_classification_packet.json",
+    "post_patch_startup_packet.json",
+    "post_patch_lifecycle_classification_packet.json",
+    "independent_audit_packet.json",
+    "closeout.md",
+    "cleanup_packet.json",
+    "post_patch_cleanup_packet.json",
+    "summary_packet.json"
+  ],
+  "fallback_used": false,
+  "lifecycle_ready": true,
+  "listener_ready": true,
+  "model_execution_probe_ready": true,
+  "observed_at_utc": "2026-05-31T23:49:25.496636+00:00",
+  "outcome": "post_patch_live_pass",
+  "process_started": true,
+  "secrets_redacted": true,
+  "stage_fields_present": true,
+  "startup_gate_passed": true
+}

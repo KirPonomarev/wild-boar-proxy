@@ -1,0 +1,9 @@
+{
+  "cleanup_ok": true,
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "listener_after_cleanup": false,
+  "observed_at_utc": "2026-05-31T23:46:36.988585+00:00",
+  "process_terminated": true,
+  "secrets_redacted": true,
+  "temp_root_removed": true
+}

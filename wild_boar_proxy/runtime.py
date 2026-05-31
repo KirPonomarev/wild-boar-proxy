@@ -6609,6 +6609,10 @@ def build_managed_listener_start_surface(
     startup_outcome: str,
     startup_attempted: bool,
     process_started: bool,
+    listener_ready: bool | None = None,
+    catalog_ready: bool = False,
+    model_execution_probe_ready: bool = False,
+    startup_gate_passed: bool | None = None,
     pid_recorded: bool,
     managed_listener_endpoint: str,
     managed_listener_reachable: bool,
@@ -6619,6 +6623,12 @@ def build_managed_listener_start_surface(
     blocking_reason: str,
     started_pid: int | None = None,
 ) -> dict[str, Any]:
+    listener_stage_ready = (
+        managed_listener_reachable if listener_ready is None else listener_ready
+    )
+    startup_gate = (
+        live_attestation_passed if startup_gate_passed is None else startup_gate_passed
+    )
     return {
         "status": status,
         "owner_command_surface": "managed listener start --json",
@@ -6626,6 +6636,11 @@ def build_managed_listener_start_surface(
         "startup_attempted": startup_attempted,
         "startup_outcome": startup_outcome,
         "process_started": process_started,
+        "listener_ready": listener_stage_ready,
+        "catalog_ready": catalog_ready,
+        "model_execution_probe_ready": model_execution_probe_ready,
+        "lifecycle_ready": listener_stage_ready and catalog_ready,
+        "startup_gate_passed": startup_gate,
         "started_pid": started_pid,
         "pid_recorded": pid_recorded,
         "managed_listener_endpoint": managed_listener_endpoint,
@@ -6648,6 +6663,10 @@ def managed_listener_start_failure_payload(
     process_started: bool,
     pid_recorded: bool = False,
     managed_listener_reachable: bool = False,
+    listener_ready: bool | None = None,
+    catalog_ready: bool = False,
+    model_execution_probe_ready: bool = False,
+    startup_gate_passed: bool | None = None,
     live_attestation_passed: bool = False,
     effective_mode_written: bool = False,
     repo_owned_startup_owner_path_defined: bool = True,
@@ -6680,6 +6699,10 @@ def managed_listener_start_failure_payload(
                 startup_attempted=startup_attempted,
                 process_started=process_started,
                 started_pid=started_pid,
+                listener_ready=listener_ready,
+                catalog_ready=catalog_ready,
+                model_execution_probe_ready=model_execution_probe_ready,
+                startup_gate_passed=startup_gate_passed,
                 pid_recorded=pid_recorded,
                 managed_listener_endpoint=managed_endpoint,
                 managed_listener_reachable=managed_listener_reachable,
@@ -6980,6 +7003,12 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     startup_attempted=startup_attempted,
                     process_started=process_started,
                     started_pid=started_pid,
+                    listener_ready=bool(startup_attestation.get("listener_ok")),
+                    catalog_ready=bool(startup_attestation.get("models_ok")),
+                    model_execution_probe_ready=bool(
+                        startup_attestation.get("responses_ok")
+                    ),
+                    startup_gate_passed=False,
                     managed_listener_reachable=socket_is_listening(
                         managed_host, managed_port
                     ),
@@ -7089,6 +7118,10 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     startup_attempted=startup_attempted,
                     process_started=process_started,
                     started_pid=started_pid,
+                    listener_ready=True,
+                    catalog_ready=True,
+                    model_execution_probe_ready=True,
+                    startup_gate_passed=True,
                     pid_recorded=pid_recorded,
                     managed_listener_endpoint=managed_endpoint,
                     managed_listener_reachable=True,

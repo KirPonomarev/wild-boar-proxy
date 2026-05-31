@@ -1,0 +1,16 @@
+{
+  "catalog_ready": true,
+  "contour": "managed_bridge_lifecycle_repair_r6",
+  "declared_port_listening_after_command": true,
+  "fallback_used": false,
+  "lifecycle_ready": true,
+  "listener_ready": true,
+  "machine_error_code": "OK",
+  "model_execution_smoke_is_lifecycle_gate": false,
+  "observed_at_utc": "2026-05-31T23:46:44.232979+00:00",
+  "pid_recorded": true,
+  "process_started": true,
+  "responses_smoke_ready": true,
+  "secrets_redacted": true,
+  "startup_outcome": "started"
+}
