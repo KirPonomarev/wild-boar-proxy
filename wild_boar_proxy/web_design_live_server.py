@@ -133,6 +133,7 @@ from wild_boar_proxy.operator_surface import (
     OperatorSurfaceSession,
     _safe_route_digest,
     build_bridge_failure_recovery_truth_packet,
+    build_stable_bridge_preflight_packet,
     clean_env,
     compare_snapshots,
     extract_local_api_key,
@@ -4564,6 +4565,38 @@ def build_custom_codex_bridge_failure_recovery_truth_packet(
     )
 
 
+def build_custom_codex_stable_bridge_preflight_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    expected_bridge_port: int | None = None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "stable_bridge_preflight",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "launch_allowed": False,
+            "browser_trace_authority": False,
+            "fallback_used": False,
+            "fallback_attempted": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    return build_stable_bridge_preflight_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=bridge_trace_packet,
+        expected_bridge_port=expected_bridge_port,
+    )
+
+
 def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     *,
     last_launch_packet: dict[str, Any] | None,
@@ -7812,6 +7845,20 @@ def build_handler(
                     build_custom_codex_bridge_failure_recovery_truth_packet(
                         last_launch_packet=custom_native_launch_state["last_packet"],
                         bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/stable-bridge-preflight":
+                self._send_json(
+                    build_custom_codex_stable_bridge_preflight_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        expected_bridge_port=custom_native_bridge_lease.bridge_port,
                         browser_payload=(
                             parse_qs(parsed.query, keep_blank_values=True)
                             if parsed.query

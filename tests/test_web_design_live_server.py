@@ -7706,6 +7706,48 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["restart_attempted"])
         self.assertFalse(packet["secret_value_exposed"])
 
+    def test_custom_stable_bridge_preflight_rejects_browser_authority_fields(self) -> None:
+        packet = live_server.build_custom_codex_stable_bridge_preflight_packet(
+            last_launch_packet={},
+            bridge_trace_packet={},
+            browser_payload={"trace_id": ["browser"], "api_key": ["sk-browser"]},
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(packet["forbidden_fields"], ["api_key", "trace_id"])
+        self.assertFalse(packet["launch_allowed"])
+        self.assertFalse(packet["browser_trace_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_stable_bridge_preflight_endpoint_blocks_unknown_empty_bridge(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with NO_PROXY_OPENER.open(
+                f"{base}/api/codex/custom/stable-bridge-preflight",
+                timeout=2,
+            ) as response:
+                packet = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "stable_bridge_preflight")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertIn("unknown_not_admitted", packet["blocking_reasons"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN",
+        )
+
     def test_custom_bridge_failure_recovery_truth_endpoint_rejects_query_authority(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),

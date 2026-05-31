@@ -382,6 +382,212 @@ def build_bridge_failure_recovery_truth_packet(
     }
 
 
+def build_stable_bridge_preflight_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    expected_bridge_port: int | None = None,
+) -> dict[str, Any]:
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    health = (
+        trace.get("bridge_health_packet")
+        if isinstance(trace.get("bridge_health_packet"), dict)
+        else {}
+    )
+    request_trace = (
+        trace.get("bridge_request_trace_packet")
+        if isinstance(trace.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
+    bridge_port = int(
+        expected_bridge_port
+        or health.get("bridge_port")
+        or trace.get("bridge_port")
+        or launch.get("bridge_port")
+        or 0
+    )
+    last_http_status = int(
+        record.get("upstream_status")
+        or request_trace.get("upstream_status")
+        or trace.get("upstream_status")
+        or 0
+    )
+    bridge_machine_error_code = str(
+        trace.get("bridge_machine_error_code")
+        or health.get("machine_error_code")
+        or request_trace.get("machine_error_code")
+        or record.get("bridge_machine_error_code")
+        or "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
+    )
+    fallback_used = (
+        trace.get("fallback_used") is True
+        or health.get("fallback_used") is True
+        or request_trace.get("fallback_used") is True
+        or record.get("fallback_used") is True
+    )
+    fallback_attempted = fallback_used or request_trace.get("fallback_attempted") is True
+    stale_launch_packet = trace.get("stale_launch_packet") is True
+    route_unchanged = (
+        request_trace.get("route_unchanged")
+        if "route_unchanged" in request_trace
+        else trace.get("route_unchanged")
+    ) is True
+    if not request_trace and not trace:
+        route_unchanged = False
+    last_error_class = _bridge_failure_kind(
+        bridge_machine_error_code=bridge_machine_error_code,
+        upstream_status=last_http_status,
+        fallback_used=fallback_used,
+        route_unchanged=route_unchanged,
+        stale_launch_packet=stale_launch_packet,
+    )
+    bridge_process_expected = bridge_port > 0 or bool(launch.get("selected_model"))
+    bridge_process_seen = trace.get("bridge_alive") is True or health.get("bridge_alive") is True
+    bridge_health_ok = bool(
+        health
+        and bridge_process_seen
+        and health.get("responses_endpoint_ready") is True
+        and bridge_machine_error_code == "OK"
+    )
+    bridge_owner_known = health.get("port_owned_by_bridge") is True
+    auth_expected = (
+        health.get("auth_header_expected") is True
+        or trace.get("auth_header_expected") is True
+        or request_trace.get("auth_header_expected") is True
+    )
+    auth_seen = (
+        health.get("auth_header_present") is True
+        or trace.get("auth_header_seen") is True
+        or request_trace.get("auth_header_seen") is True
+        or record.get("auth_header_seen") is True
+    )
+    auth_matches = (
+        health.get("auth_ok") is True
+        or trace.get("auth_ok") is True
+        or request_trace.get("auth_ok") is True
+        or record.get("auth_ok") is True
+    )
+    stream_failure_known = last_error_class in {"stream_disconnected", "provider_timeout"}
+    stream_state_known = bool(request_trace and "stream_requested" in request_trace)
+    stream_not_known_broken = not stream_failure_known
+    last_stream_failure_classified = (
+        not stream_failure_known
+        or bridge_machine_error_code in {"BRIDGE_STREAM_DISCONNECTED", "BRIDGE_STREAM_TIMEOUT"}
+    )
+    unknown_critical_fields: list[str] = []
+    if not health:
+        unknown_critical_fields.append("bridge_health_packet")
+    if not request_trace:
+        unknown_critical_fields.append("bridge_request_trace_packet")
+    if not bridge_process_expected:
+        unknown_critical_fields.append("bridge_process_expected")
+    if not bridge_owner_known:
+        unknown_critical_fields.append("bridge_owner_known")
+    if not auth_expected:
+        unknown_critical_fields.append("auth_expected")
+    if auth_expected and not auth_seen:
+        unknown_critical_fields.append("auth_seen")
+    if last_error_class == "unknown_bridge_error":
+        unknown_critical_fields.append("last_error_class")
+    if not stream_state_known:
+        unknown_critical_fields.append("stream_state")
+    if (
+        request_trace.get("stream_requested") is True
+        and request_trace.get("stream_completed") is not True
+        and last_error_class == "none"
+    ):
+        unknown_critical_fields.append("stream_completion")
+        stream_not_known_broken = False
+        last_stream_failure_classified = False
+
+    blocking_reasons: list[str] = []
+    if not health:
+        blocking_reasons.append("missing_health_packet")
+    if not bridge_process_seen:
+        blocking_reasons.append("bridge_process_not_seen")
+    if not bridge_health_ok:
+        blocking_reasons.append("bridge_health_not_ok")
+    if not bridge_owner_known:
+        blocking_reasons.append("bridge_owner_unknown")
+    if not auth_matches:
+        blocking_reasons.append("auth_mismatch")
+    if last_http_status == 401 or last_error_class == "unauthorized":
+        blocking_reasons.append("http_401_unauthorized")
+    if stream_failure_known:
+        blocking_reasons.append(last_error_class)
+    if not last_stream_failure_classified:
+        blocking_reasons.append("stream_failure_ambiguous")
+    if not stream_state_known:
+        blocking_reasons.append("stream_state_unknown")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if fallback_attempted:
+        blocking_reasons.append("fallback_attempted")
+    if stale_launch_packet or last_error_class == "stale_port":
+        blocking_reasons.append("stale_port")
+    if unknown_critical_fields:
+        blocking_reasons.append("unknown_not_admitted")
+
+    launch_allowed = bool(
+        bridge_process_seen
+        and bridge_health_ok
+        and bridge_owner_known
+        and auth_matches
+        and stream_state_known
+        and stream_not_known_broken
+        and not fallback_used
+        and not fallback_attempted
+        and last_http_status != 401
+        and last_error_class in {"none", "port_unavailable"}
+        and not unknown_critical_fields
+    )
+    failure_reason = "" if launch_allowed else blocking_reasons[0]
+    return {
+        "schema_version": 1,
+        "packet_kind": "stable_bridge_preflight",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if launch_allowed else "blocked",
+        "machine_error_code": "OK" if launch_allowed else "STABLE_BRIDGE_PREFLIGHT_BLOCKED",
+        "final_status": (
+            "STABLE_BRIDGE_PREFLIGHT_PROVEN_WITH_LIMITS"
+            if launch_allowed
+            else "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN"
+        ),
+        "bridge_port": bridge_port,
+        "bridge_process_expected": bridge_process_expected,
+        "bridge_process_seen": bridge_process_seen,
+        "bridge_health_ok": bridge_health_ok,
+        "bridge_owner_known": bridge_owner_known,
+        "auth_expected": auth_expected,
+        "auth_seen": auth_seen,
+        "auth_matches": auth_matches,
+        "last_http_status": last_http_status,
+        "last_error_class": last_error_class,
+        "stream_state_known": stream_state_known,
+        "stream_not_known_broken": stream_not_known_broken,
+        "last_stream_failure_classified": last_stream_failure_classified,
+        "fallback_used": fallback_used,
+        "fallback_attempted": fallback_attempted,
+        "launch_allowed": launch_allowed,
+        "failure_reason": failure_reason,
+        "blocking_reasons": sorted(dict.fromkeys(blocking_reasons)),
+        "unknown_critical_fields": sorted(dict.fromkeys(unknown_critical_fields)),
+        "bridge_machine_error_code": bridge_machine_error_code,
+        "bridge_health_packet": health,
+        "bridge_request_trace_packet": request_trace,
+        "fallback_suppressed": True,
+        "browser_trace_authority": False,
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": "none" if launch_allowed else "repair_bridge_before_launch",
+    }
+
+
 def _is_loopback_client_host(client_host: str) -> bool:
     candidate = str(client_host or "").strip()
     if candidate == "localhost":

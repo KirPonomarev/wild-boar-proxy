@@ -28,6 +28,7 @@ from wild_boar_proxy.operator_surface import (
     _run_command_with_observation,
     build_bridge_failure_recovery_truth_packet,
     build_codex_config,
+    build_stable_bridge_preflight_packet,
     forbidden_browser_fields,
     run_process_isolation_proof,
     select_server_issued_model,
@@ -1885,6 +1886,154 @@ class OperatorSurfaceTests(unittest.TestCase):
             packet["final_status"],
             "STOP_AND_DIAGNOSE_CUSTOM_CODEX_BRIDGE_STABILITY_NOT_PROVEN",
         )
+
+    def _stable_bridge_preflight_fixture(
+        self,
+        **overrides: object,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        launch, trace = self._bridge_failure_recovery_truth_fixture(**overrides)
+        health = trace["bridge_health_packet"]
+        request_trace = trace["bridge_request_trace_packet"]
+        record = trace["last_record"]
+        self.assertIsInstance(health, dict)
+        self.assertIsInstance(request_trace, dict)
+        self.assertIsInstance(record, dict)
+        health.update(
+            {
+                "bridge_port": 53621,
+                "port_owned_by_bridge": True,
+                "auth_header_expected": True,
+                "auth_header_present": True,
+                "auth_ok": True,
+            }
+        )
+        request_trace.update({"auth_header_seen": True, "auth_ok": True})
+        record.update({"auth_header_seen": True, "auth_ok": True})
+        trace.update(
+            {
+                "bridge_port": 53621,
+                "auth_header_expected": True,
+                "auth_header_seen": True,
+                "auth_ok": True,
+            }
+        )
+        return launch, trace
+
+    def test_stable_bridge_preflight_allows_only_explicit_healthy_bridge(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture()
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["launch_allowed"])
+        self.assertTrue(packet["bridge_process_seen"])
+        self.assertTrue(packet["bridge_health_ok"])
+        self.assertTrue(packet["bridge_owner_known"])
+        self.assertTrue(packet["auth_matches"])
+        self.assertTrue(packet["stream_state_known"])
+        self.assertTrue(packet["stream_not_known_broken"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["fallback_attempted"])
+        self.assertEqual(packet["final_status"], "STABLE_BRIDGE_PREFLIGHT_PROVEN_WITH_LIMITS")
+        self.assertEqual(packet["next_action"], "none")
+
+    def test_stable_bridge_preflight_blocks_missing_health_as_unknown(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture()
+        trace.pop("bridge_health_packet")
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertIn("bridge_health_packet", packet["unknown_critical_fields"])
+        self.assertIn("unknown_not_admitted", packet["blocking_reasons"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN",
+        )
+
+    def test_stable_bridge_preflight_blocks_unknown_stream_state(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture()
+        request_trace = trace["bridge_request_trace_packet"]
+        self.assertIsInstance(request_trace, dict)
+        request_trace.pop("stream_requested")
+        request_trace.pop("stream_completed")
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertFalse(packet["stream_state_known"])
+        self.assertIn("stream_state", packet["unknown_critical_fields"])
+        self.assertIn("stream_state_unknown", packet["blocking_reasons"])
+
+    def test_stable_bridge_preflight_blocks_auth_and_401(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture(upstream_status=401)
+        health = trace["bridge_health_packet"]
+        request_trace = trace["bridge_request_trace_packet"]
+        record = trace["last_record"]
+        self.assertIsInstance(health, dict)
+        self.assertIsInstance(request_trace, dict)
+        self.assertIsInstance(record, dict)
+        health["auth_ok"] = False
+        request_trace["auth_ok"] = False
+        record["auth_ok"] = False
+        trace["auth_ok"] = False
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertEqual(packet["last_http_status"], 401)
+        self.assertEqual(packet["last_error_class"], "unauthorized")
+        self.assertIn("auth_mismatch", packet["blocking_reasons"])
+        self.assertIn("http_401_unauthorized", packet["blocking_reasons"])
+
+    def test_stable_bridge_preflight_blocks_stream_disconnect(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture(
+            bridge_machine_error_code="BRIDGE_STREAM_DISCONNECTED",
+            responses_endpoint_ready=False,
+            response_seen=False,
+            stream_requested=True,
+            stream_completed=False,
+        )
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertEqual(packet["last_error_class"], "stream_disconnected")
+        self.assertFalse(packet["stream_not_known_broken"])
+        self.assertTrue(packet["last_stream_failure_classified"])
+
+    def test_stable_bridge_preflight_blocks_fallback_attempt(self) -> None:
+        launch, trace = self._stable_bridge_preflight_fixture(fallback_used=True)
+
+        packet = build_stable_bridge_preflight_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=trace,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertTrue(packet["fallback_used"])
+        self.assertTrue(packet["fallback_attempted"])
+        self.assertIn("fallback_attempted", packet["blocking_reasons"])
 
     def test_hybrid_openai_compat_adapter_marks_stable_bridge_window_smoke_phrase(self) -> None:
         prompt_hash, smoke_match = _prompt_trace_hash_and_smoke_match(
