@@ -6420,6 +6420,214 @@ def build_custom_codex_stable_profile_history_before_snapshot_packet(
     }
 
 
+def build_custom_codex_persistent_profile_history_proof_packet(
+    *,
+    first_launch_packet: dict[str, Any] | None,
+    second_launch_packet: dict[str, Any] | None,
+    before_history_snapshot: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_stable_profile_history_fields(browser_payload)
+    history_marker = _payload_first_text(
+        browser_payload,
+        "history_marker",
+        DEFAULT_STABLE_PROFILE_HISTORY_MARKER,
+    )
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_persistent_profile_history_proof",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_CODEX_PERSISTENT_PROFILE_HISTORY_NOT_PROVEN",
+        "final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_HISTORY_NOT_PROVEN",
+        "profile_final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN",
+        "history_final_status": "CUSTOM_CODEX_HISTORY_RESTORE_OWNER_RELAUNCH_REQUIRED",
+        "profile_id": "",
+        "persistent_profile_used": False,
+        "profile_path_is_tmp": True,
+        "profile_root": "server_owned_redacted",
+        "profile_root_redacted_if_needed": True,
+        "first_launch_profile_root": "server_owned_redacted",
+        "second_launch_profile_root": "server_owned_redacted",
+        "first_launch_profile_root_sha256": "",
+        "second_launch_profile_root_sha256": "",
+        "same_profile_root": False,
+        "history_store_seen": False,
+        "thread_store_seen": False,
+        "previous_thread_seen_after_relaunch": False,
+        "history_reset_detected": True,
+        "owner_visible_relaunch_required": True,
+        "original_codex_profile_touched": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "ui_label_counts_as_proof": False,
+        "model_response_counts_as_proof": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "browser_profile_authority": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_forbidden_browser_payload_fields",
+        }
+    if not isinstance(first_launch_packet, dict) or not isinstance(second_launch_packet, dict):
+        return {
+            **base,
+            "machine_error_code": "TWO_CUSTOM_CODEX_LAUNCH_PACKETS_REQUIRED",
+            "next_action": "launch_custom_codex_twice_with_stable_profile",
+        }
+
+    relaunch_profile_packet = build_custom_codex_persistent_relaunch_profile_packet(
+        first_launch_packet=first_launch_packet,
+        second_launch_packet=second_launch_packet,
+    )
+    first_root_value = str(first_launch_packet.get("persistent_profile_root") or "")
+    second_root_value = str(second_launch_packet.get("persistent_profile_root") or "")
+    first_root = Path(first_root_value).expanduser() if first_root_value else None
+    second_root = Path(second_root_value).expanduser() if second_root_value else None
+    first_root_sha256 = (
+        hashlib.sha256(first_root_value.encode("utf-8")).hexdigest()
+        if first_root_value
+        else ""
+    )
+    second_root_sha256 = (
+        hashlib.sha256(second_root_value.encode("utf-8")).hexdigest()
+        if second_root_value
+        else ""
+    )
+    profile_id = str(second_launch_packet.get("persistent_profile_id") or "")
+    same_profile_root = bool(first_root_value and second_root_value and first_root_value == second_root_value)
+    profile_path_is_tmp = _path_is_tmp(second_root) if second_root is not None else True
+    persistent_profile_used = bool(
+        relaunch_profile_packet.get("profile_relaunch_proven") is True
+        and profile_id == DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+        and same_profile_root
+        and not profile_path_is_tmp
+        and second_launch_packet.get("temp_profile_used") is False
+    )
+
+    before_snapshot_ok = isinstance(before_history_snapshot, dict)
+    after_snapshot = _stable_profile_history_storage_snapshot(
+        second_root,
+        history_marker=history_marker,
+    )
+    thread_count_before = (
+        int(before_history_snapshot.get("thread_count") or 0)
+        if isinstance(before_history_snapshot, dict)
+        else 0
+    )
+    thread_count_after = int(after_snapshot.get("thread_count") or 0)
+    session_file_count_before = (
+        int(before_history_snapshot.get("session_file_count") or 0)
+        if isinstance(before_history_snapshot, dict)
+        else 0
+    )
+    session_file_count_after = int(after_snapshot.get("session_file_count") or 0)
+    history_marker_seen_before = (
+        before_history_snapshot.get("history_marker_seen") is True
+        if isinstance(before_history_snapshot, dict)
+        else False
+    )
+    history_marker_seen_after = after_snapshot.get("history_marker_seen") is True
+    history_store_seen = bool(
+        after_snapshot.get("state_db_seen") is True
+        or after_snapshot.get("session_jsonl_seen") is True
+        or after_snapshot.get("log_db_seen") is True
+    )
+    thread_store_seen = bool(after_snapshot.get("state_db_seen") is True and thread_count_after > 0)
+    previous_thread_seen_after_relaunch = bool(
+        before_snapshot_ok
+        and history_marker_seen_before
+        and history_marker_seen_after
+    )
+    history_reset_detected = bool(
+        not before_snapshot_ok
+        or thread_count_after < thread_count_before
+        or (
+            history_marker_seen_before
+            and not history_marker_seen_after
+        )
+    )
+    original_codex_touched = relaunch_profile_packet.get("original_codex_touched") is True
+    asar_touched = relaunch_profile_packet.get("asar_touched") is True
+    history_restore_proven = bool(
+        persistent_profile_used
+        and before_snapshot_ok
+        and history_store_seen
+        and thread_store_seen
+        and previous_thread_seen_after_relaunch
+        and not history_reset_detected
+        and not original_codex_touched
+        and not asar_touched
+    )
+    if history_restore_proven:
+        status = "ok"
+        machine_error_code = "OK"
+        final_status = "CUSTOM_CODEX_HISTORY_RESTORE_PROVEN_WITH_LIMITS"
+        history_final_status = "CUSTOM_CODEX_HISTORY_RESTORE_PROVEN_WITH_LIMITS"
+        next_action = "none"
+    elif persistent_profile_used:
+        status = "ok"
+        machine_error_code = "HISTORY_RESTORE_NOT_PROVEN"
+        final_status = "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS"
+        history_final_status = "CUSTOM_CODEX_HISTORY_RESTORE_OWNER_RELAUNCH_REQUIRED"
+        next_action = "capture_history_marker_and_owner_visible_relaunch_if_needed"
+    else:
+        status = "blocked"
+        machine_error_code = "CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN"
+        final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN"
+        history_final_status = "CUSTOM_CODEX_HISTORY_RESTORE_OWNER_RELAUNCH_REQUIRED"
+        next_action = "diagnose_persistent_profile_before_history_claim"
+
+    return {
+        **base,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "profile_final_status": (
+            "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS"
+            if persistent_profile_used
+            else "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN"
+        ),
+        "history_final_status": history_final_status,
+        "profile_id": profile_id,
+        "persistent_profile_used": persistent_profile_used,
+        "profile_path_is_tmp": profile_path_is_tmp,
+        "first_launch_profile_root_sha256": first_root_sha256,
+        "second_launch_profile_root_sha256": second_root_sha256,
+        "same_profile_root": same_profile_root,
+        "same_profile_root_across_launches": same_profile_root,
+        "history_store_seen": history_store_seen,
+        "thread_store_seen": thread_store_seen,
+        "previous_thread_seen_after_relaunch": previous_thread_seen_after_relaunch,
+        "history_reset_detected": history_reset_detected,
+        "owner_visible_relaunch_required": not history_restore_proven,
+        "history_restore_proven": history_restore_proven,
+        "thread_count_before": thread_count_before,
+        "thread_count_after": thread_count_after,
+        "session_file_count_before": session_file_count_before,
+        "session_file_count_after": session_file_count_after,
+        "history_marker_sha256": hashlib.sha256(
+            history_marker.encode("utf-8")
+        ).hexdigest(),
+        "history_marker_seen_before": history_marker_seen_before,
+        "history_marker_seen_after": history_marker_seen_after,
+        "before_snapshot_seen": before_snapshot_ok,
+        "after_snapshot_captured": True,
+        "relaunch_profile_packet": relaunch_profile_packet,
+        "original_codex_profile_touched": original_codex_touched,
+        "original_codex_touched": original_codex_touched,
+        "asar_touched": asar_touched,
+        "next_action": next_action,
+    }
+
+
 def build_custom_codex_visible_history_relaunch_owner_confirmation_packet(
     payload: dict[str, Any],
     *,
@@ -8197,6 +8405,23 @@ def build_handler(
                     return
                 self._send_json(
                     build_custom_codex_stable_profile_history_persistence_packet(
+                        first_launch_packet=custom_native_launch_state["previous_packet"],
+                        second_launch_packet=custom_native_launch_state["last_packet"],
+                        before_history_snapshot=custom_native_launch_state[
+                            "history_before_snapshot"
+                        ],
+                        browser_payload=payload,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/persistent-profile-history-proof":
+                payload = (
+                    parse_qs(parsed.query, keep_blank_values=True)
+                    if parsed.query
+                    else {}
+                )
+                self._send_json(
+                    build_custom_codex_persistent_profile_history_proof_packet(
                         first_launch_packet=custom_native_launch_state["previous_packet"],
                         second_launch_packet=custom_native_launch_state["last_packet"],
                         before_history_snapshot=custom_native_launch_state[

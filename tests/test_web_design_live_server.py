@@ -9196,6 +9196,223 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertIn("profile_path", packet["forbidden_fields"])
         self.assertFalse(packet["browser_profile_authority"])
 
+    def test_custom_persistent_profile_history_proof_separates_profile_and_history_success(self) -> None:
+        with tempfile.TemporaryDirectory(dir=str(ROOT)) as temp_dir:
+            profile_root = Path(temp_dir) / "wbp-custom-main"
+            session_dir = profile_root / "sessions" / "2026"
+            session_dir.mkdir(parents=True)
+            marker = "WBP_STABLE_HISTORY_MARKER"
+            (session_dir / "thread.jsonl").write_text(
+                json.dumps({"type": "message", "text": marker}) + "\n",
+                encoding="utf-8",
+            )
+            with sqlite3.connect(profile_root / "state_5.sqlite") as connection:
+                connection.execute(
+                    "create table threads (id text, cwd text, model text, model_provider text, "
+                    "created_at integer, updated_at integer)"
+                )
+                connection.execute(
+                    "insert into threads values (?, ?, ?, ?, ?, ?)",
+                    ("thread-stable", str(ROOT), "gpt-5.4", "wbp", 1, 2),
+                )
+            base_launch = {
+                "status": "ok",
+                "profile_mode": "persistent_custom",
+                "persistent_profile_id": "wbp-custom-main",
+                "persistent_profile_root": str(profile_root),
+                "persistent_codex_home": str(profile_root),
+                "persistent_user_data_dir": str(profile_root / "electron-user-data"),
+                "persistent_runtime_tmp_dir": "/tmp/wbp-cdx-wbp-custom-main",
+                "temp_profile_used": False,
+                "cleanup_deletes_persistent_profile_by_default": False,
+                "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+                "original_codex_touched": False,
+                "asar_touched": False,
+                "original_codex_profile_runtime_dependency": False,
+            }
+            before = live_server.build_custom_codex_stable_profile_history_before_snapshot_packet(
+                last_launch_packet={**base_launch, "launch_id": "first"},
+                browser_payload={"history_marker": marker},
+            )
+            packet = live_server.build_custom_codex_persistent_profile_history_proof_packet(
+                first_launch_packet={**base_launch, "launch_id": "first"},
+                second_launch_packet={**base_launch, "launch_id": "second"},
+                before_history_snapshot=before["snapshot"],
+                browser_payload={"history_marker": marker},
+            )
+
+        self.assertEqual(before["status"], "ok")
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_HISTORY_RESTORE_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(
+            packet["profile_final_status"],
+            "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(
+            packet["history_final_status"],
+            "CUSTOM_CODEX_HISTORY_RESTORE_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["profile_id"], "wbp-custom-main")
+        self.assertTrue(packet["persistent_profile_used"])
+        self.assertFalse(packet["profile_path_is_tmp"])
+        self.assertTrue(packet["same_profile_root"])
+        self.assertTrue(packet["history_store_seen"])
+        self.assertTrue(packet["thread_store_seen"])
+        self.assertTrue(packet["previous_thread_seen_after_relaunch"])
+        self.assertFalse(packet["history_reset_detected"])
+        self.assertFalse(packet["owner_visible_relaunch_required"])
+        self.assertFalse(packet["original_codex_profile_touched"])
+        self.assertFalse(packet["asar_touched"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["ui_label_counts_as_proof"])
+        self.assertFalse(packet["model_response_counts_as_proof"])
+        self.assertEqual(packet["profile_root"], "server_owned_redacted")
+        self.assertEqual(packet["first_launch_profile_root"], "server_owned_redacted")
+        self.assertEqual(packet["second_launch_profile_root"], "server_owned_redacted")
+        self.assertNotIn(str(profile_root), json.dumps(packet, ensure_ascii=False))
+
+    def test_custom_persistent_profile_history_proof_can_close_profile_without_history(self) -> None:
+        with tempfile.TemporaryDirectory(dir=str(ROOT)) as temp_dir:
+            profile_root = Path(temp_dir) / "wbp-custom-main"
+            session_dir = profile_root / "sessions" / "2026"
+            session_dir.mkdir(parents=True)
+            (session_dir / "thread.jsonl").write_text(
+                "{\"type\":\"session_meta\"}\n",
+                encoding="utf-8",
+            )
+            base_launch = {
+                "status": "ok",
+                "profile_mode": "persistent_custom",
+                "persistent_profile_id": "wbp-custom-main",
+                "persistent_profile_root": str(profile_root),
+                "persistent_codex_home": str(profile_root),
+                "persistent_user_data_dir": str(profile_root / "electron-user-data"),
+                "temp_profile_used": False,
+                "cleanup_deletes_persistent_profile_by_default": False,
+                "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+                "original_codex_touched": False,
+                "asar_touched": False,
+                "original_codex_profile_runtime_dependency": False,
+            }
+            packet = live_server.build_custom_codex_persistent_profile_history_proof_packet(
+                first_launch_packet={**base_launch, "launch_id": "first"},
+                second_launch_packet={**base_launch, "launch_id": "second"},
+                before_history_snapshot=None,
+                browser_payload={"history_marker": "WBP_STABLE_HISTORY_MARKER"},
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(
+            packet["profile_final_status"],
+            "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(
+            packet["history_final_status"],
+            "CUSTOM_CODEX_HISTORY_RESTORE_OWNER_RELAUNCH_REQUIRED",
+        )
+        self.assertTrue(packet["persistent_profile_used"])
+        self.assertFalse(packet["history_restore_proven"])
+        self.assertTrue(packet["owner_visible_relaunch_required"])
+        self.assertTrue(packet["history_reset_detected"])
+        self.assertFalse(packet["previous_thread_seen_after_relaunch"])
+
+    def test_custom_persistent_profile_history_proof_blocks_tmp_profile_root(self) -> None:
+        base_launch = {
+            "status": "ok",
+            "profile_mode": "persistent_custom",
+            "persistent_profile_id": "wbp-custom-main",
+            "persistent_profile_root": "/tmp/wbp-custom-main",
+            "persistent_codex_home": "/tmp/wbp-custom-main",
+            "persistent_user_data_dir": "/tmp/wbp-custom-main/electron-user-data",
+            "temp_profile_used": False,
+            "cleanup_deletes_persistent_profile_by_default": False,
+            "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "original_codex_profile_runtime_dependency": False,
+        }
+        packet = live_server.build_custom_codex_persistent_profile_history_proof_packet(
+            first_launch_packet={**base_launch, "launch_id": "first"},
+            second_launch_packet={**base_launch, "launch_id": "second"},
+            before_history_snapshot={"thread_count": 1, "history_marker_seen": True},
+            browser_payload={"history_marker": "WBP_STABLE_HISTORY_MARKER"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["profile_final_status"],
+            "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN",
+        )
+        self.assertTrue(packet["profile_path_is_tmp"])
+        self.assertFalse(packet["persistent_profile_used"])
+        self.assertFalse(packet["history_restore_proven"])
+
+    def test_custom_persistent_profile_history_proof_blocks_profile_drift(self) -> None:
+        with tempfile.TemporaryDirectory(dir=str(ROOT)) as temp_dir:
+            first_root = Path(temp_dir) / "wbp-custom-main"
+            second_root = Path(temp_dir) / "wbp-custom-next"
+            first_root.mkdir(parents=True)
+            second_root.mkdir(parents=True)
+            first_launch = {
+                "status": "ok",
+                "profile_mode": "persistent_custom",
+                "persistent_profile_id": "wbp-custom-main",
+                "persistent_profile_root": str(first_root),
+                "persistent_codex_home": str(first_root),
+                "persistent_user_data_dir": str(first_root / "electron-user-data"),
+                "temp_profile_used": False,
+                "cleanup_deletes_persistent_profile_by_default": False,
+                "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
+                "original_codex_touched": False,
+                "asar_touched": False,
+                "original_codex_profile_runtime_dependency": False,
+            }
+            second_launch = {
+                **first_launch,
+                "persistent_profile_id": "wbp-custom-next",
+                "persistent_profile_root": str(second_root),
+                "persistent_codex_home": str(second_root),
+                "persistent_user_data_dir": str(second_root / "electron-user-data"),
+            }
+            packet = live_server.build_custom_codex_persistent_profile_history_proof_packet(
+                first_launch_packet=first_launch,
+                second_launch_packet=second_launch,
+                before_history_snapshot={"thread_count": 1, "history_marker_seen": True},
+                browser_payload={"history_marker": "WBP_STABLE_HISTORY_MARKER"},
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["same_profile_root"])
+        self.assertFalse(packet["persistent_profile_used"])
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN",
+        )
+
+    def test_custom_persistent_profile_history_proof_rejects_browser_path_authority(self) -> None:
+        packet = live_server.build_custom_codex_persistent_profile_history_proof_packet(
+            first_launch_packet={},
+            second_launch_packet={},
+            before_history_snapshot={},
+            browser_payload={
+                "history_marker": "WBP_STABLE_HISTORY_MARKER",
+                "CODEX_HOME": "/tmp/browser-codex-home",
+            },
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("CODEX_HOME", packet["forbidden_fields"])
+        self.assertFalse(packet["browser_profile_authority"])
+
     def test_custom_persistent_relaunch_profile_endpoint_compares_two_native_launches(self) -> None:
         with tempfile.TemporaryDirectory(dir=str(ROOT)) as temp_dir:
             profile_root = Path(temp_dir) / "wbp-custom-main"
