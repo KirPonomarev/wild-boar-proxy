@@ -3903,6 +3903,10 @@ class CliTests(unittest.TestCase):
             "managed_listener_unavailable",
         )
         self.assertEqual(
+            adoption_result["activation_blocking_machine_error_code"],
+            "MANAGED_LISTENER_UNAVAILABLE",
+        )
+        self.assertEqual(
             adoption_result["managed_listener_endpoint"],
             f"http://127.0.0.1:{managed_port}/v1",
         )
