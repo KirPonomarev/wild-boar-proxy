@@ -157,6 +157,17 @@ class ExternalModelContractTests(unittest.TestCase):
             deepseek_payload["thinking"],
             {"type": "enabled", "reasoning_effort": "max"},
         )
+        deepseek_disabled_payload, disabled_metadata = transforms.build_check_request(
+            sample_route()
+            | {
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-flash",
+                "thinking": {"type": "disabled"},
+            },
+            user_prompt="ping",
+        )
+        self.assertEqual(deepseek_disabled_payload["thinking"], {"type": "disabled"})
+        self.assertTrue(disabled_metadata["api_parameter_sent"])
 
     def test_paths_from_env_uses_isolated_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1306,7 +1306,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(rows["wbp-deepseek-v4-pro-high"]["server_issued"])
         self.assertTrue(rows["wbp-deepseek-v4-pro-max"]["server_issued"])
         self.assertEqual(rows["wbp-deepseek-v4-pro-fast"]["thinking"], {"type": "disabled"})
-        self.assertFalse(rows["wbp-deepseek-v4-pro-fast"]["api_parameter_sent"])
+        self.assertTrue(rows["wbp-deepseek-v4-pro-fast"]["api_parameter_sent"])
         self.assertEqual(
             rows["wbp-deepseek-v4-pro-fast"]["intelligence_tier"]["label"],
             "fast_no_thinking",

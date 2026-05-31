@@ -1383,6 +1383,31 @@ async function runCodexCustomLaunch() {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timeoutHandle = controller ? setTimeout(() => controller.abort(), 45000) : null;
   try {
+    const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!admissionResponse.ok) {
+      throw new Error(`quick start config admission http ${admissionResponse.status}`);
+    }
+    const admissionPacket = await admissionResponse.json();
+    renderQuickStartConfigAdmission(admissionPacket);
+    if (admissionPacket?.launch_admission !== "admitted") {
+      renderCodexCustomLaunch({
+        ...admissionPacket,
+        status: admissionPacket?.status || "blocked",
+        machine_error_code: admissionPacket?.machine_error_code || "QUICK_START_CONFIG_ADMISSION_BLOCKED",
+        running_status: false,
+        process_started: false,
+        native_window_observed: false,
+        native_app_usable: false,
+        launch_claim_scope: "quick_start_config_admission_guard_no_live_mutation"
+      });
+      return;
+    }
     const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
       method: "POST",
       cache: "no-store",
@@ -1424,6 +1449,7 @@ async function runCodexCustomLaunch() {
       status: "failed",
       machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED",
       human_message: timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message,
+      launch_admission: "blocked",
       session_created: false,
       running_status: false,
       isolated_home: false,
@@ -1456,6 +1482,144 @@ async function runCodexCustomLaunch() {
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+  }
+}
+
+function quickStartExecutionModeLabel(mode) {
+  if (mode === "chatgpt_plus_api") {
+    return "ChatGPT + API";
+  }
+  if (mode === "api_only") {
+    return "API";
+  }
+  if (mode === "chatgpt_only") {
+    return "ChatGPT";
+  }
+  return "не выбран";
+}
+
+function renderQuickStartConfigAdmission(packet) {
+  const admitted = packet?.status === "ok" && packet?.launch_admission === "admitted";
+  const blocked = packet?.status === "blocked" || packet?.status === "rejected";
+  const modeLabel = quickStartExecutionModeLabel(packet?.execution_mode || "");
+  const apiRoute = packet?.api_route || {};
+  const apiReasoning = packet?.api_reasoning || {};
+  setQuickStartChip(
+    "quickStartRouteChip",
+    admitted ? "green" : (blocked ? "amber" : "red"),
+    admitted ? "допущен" : (packet?.machine_error_code || packet?.status || "blocked")
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    admitted ? "green" : (blocked ? "amber" : "red"),
+    modeLabel
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    admitted ? "green" : (blocked ? "amber" : "red"),
+    packet?.launch_admission === "admitted" ? "admitted" : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartApiRouteChip",
+    apiRoute.status === "admitted" || apiRoute.status === "not_required"
+      ? "green"
+      : (apiRoute.status === "missing" || apiRoute.status === "not_confirmed" ? "amber" : "neutral"),
+    apiRoute.status || "unknown"
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: packet?.execution_mode || "",
+    chatgpt_model_id: packet?.chatgpt_model?.model_id || "",
+    api_model_id: packet?.api_model?.model_id || "",
+    api_reasoning_option_id: apiReasoning.option_id || "",
+    api_reasoning_status: apiReasoning.status || "",
+    api_route_status: apiRoute.status || "",
+    api_route_reference: apiRoute.route_reference || "",
+    fallback_used: packet?.fallback_used === true,
+    silent_fallback_used: packet?.silent_fallback_used === true,
+    launch_admission: packet?.launch_admission || "blocked",
+    launch_admission_summary: packet?.launch_admission_summary || "",
+    dry_server_truth_only: packet?.dry_server_truth_only === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    provider_called: packet?.provider_called === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    secret_value_exposed: packet?.secret_value_exposed === true,
+    raw_path_exposed: packet?.raw_path_exposed === true,
+    original_codex_touched: packet?.original_codex_touched === true,
+    asar_touched: packet?.asar_touched === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction") {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = await buildCodexCustomLaunchSelectionPayload();
+  codexLaunchDryRunInFlight = true;
+  const button = document.getElementById(buttonId);
+  button?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "проверяю");
+  const responseNode = document.getElementById("quickStartRouteResponse");
+  if (responseNode) {
+    responseNode.textContent = "запрашиваю bounded config admission packet...";
+  }
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  try {
+    const response = await fetch("api/codex/custom/quick-start/config-admission", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!response.ok) {
+      throw new Error(`quick start config admission http ${response.status}`);
+    }
+    renderQuickStartConfigAdmission(await response.json());
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    renderQuickStartConfigAdmission({
+      status: "failed",
+      machine_error_code: timedOut ? "QUICK_START_CONFIG_ADMISSION_TIMEOUT" : "QUICK_START_CONFIG_ADMISSION_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_QUICK_START_CONFIG_ADMISSION_NOT_PROVEN",
+      execution_mode: payload.execution_mode || "",
+      chatgpt_model: {
+        status: payload.execution_mode === "api_only" ? "not_required" : "missing",
+        model_id: payload.chatgpt_model_id || ""
+      },
+      api_model: {
+        status: payload.execution_mode === "chatgpt_only" ? "not_required" : "missing",
+        model_id: payload.api_model_id || ""
+      },
+      api_reasoning: {
+        status: payload.execution_mode === "chatgpt_only" ? "not_required" : "missing",
+        option_id: payload.api_reasoning_option_id || ""
+      },
+      api_route: { status: "missing", route_reference: "" },
+      launch_admission: "blocked",
+      launch_admission_summary: "Config admission packet unavailable; launch remains gated.",
+      dry_server_truth_only: true,
+      live_call_attempted: false,
+      provider_called: false,
+      fallback_used: false,
+      silent_fallback_used: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      raw_path_exposed: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      next_action: error.message
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    codexLaunchDryRunInFlight = false;
+    button?.removeAttribute("disabled");
   }
 }
 
@@ -1873,24 +2037,24 @@ function apiReasoningOptionForModelEntry(entry) {
   if (thinking?.type === "enabled" && thinking?.reasoning_effort === "max") {
     return {
       option_id: "provider_declared_max",
-      label: "Максимум · provider-declared"
+      label: "Глубокое"
     };
   }
   if (thinking?.type === "enabled" && thinking?.reasoning_effort === "high") {
     return {
       option_id: "provider_declared_high",
-      label: "Высокий · provider-declared"
+      label: "Усиленное"
     };
   }
   if (thinking?.type === "disabled") {
     return {
       option_id: "provider_declared_disabled",
-      label: "Обычный · thinking off"
+      label: "Обычное"
     };
   }
   return {
     option_id: "catalog_default",
-    label: "По каталогу · не доказано"
+    label: "Авто"
   };
 }
 
@@ -1959,6 +2123,14 @@ function setQuickStartRouteResponse(packet) {
       api_model_id: packet?.api_model_id || "",
       selected_model: packet?.selected_model || packet?.api_model_id || packet?.chatgpt_model_id || "",
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_status: packet?.api_reasoning_status || "",
+      api_route_status: packet?.api_route_status || "",
+      api_route_reference: packet?.api_route_reference || "",
+      fallback_used: packet?.fallback_used === true,
+      silent_fallback_used: packet?.silent_fallback_used === true,
+      launch_admission: packet?.launch_admission || "",
+      launch_admission_summary: packet?.launch_admission_summary || "",
+      dry_server_truth_only: packet?.dry_server_truth_only === true,
       launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
       quick_start_stable_custom_launch_final_status:
         packet?.quick_start_stable_custom_launch_final_status || "",
@@ -7356,10 +7528,17 @@ function actionAvailabilityForButton(button) {
   };
 }
 
+function quickStartPresentationActionButton(button) {
+  return Boolean(
+    button?.closest?.("#quickStartScreen")
+    || button?.id === "quickStartCheckAllAction"
+  );
+}
+
 function applyActionAvailability() {
   for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action")) {
     const state = actionAvailabilityForButton(button);
-    button.disabled = !state.available;
+    button.disabled = quickStartPresentationActionButton(button) ? false : !state.available;
     button.dataset.available = state.available ? "true" : "false";
     button.dataset.availabilityState = state.availabilityState;
     button.dataset.disabledReasonCode = state.disabledReasonCode;
@@ -9929,12 +10108,41 @@ function renderDataLayoutSnapshot(snapshot) {
 function setActionsBusy(isBusy) {
   for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action")) {
     const state = actionAvailabilityForButton(button);
-    button.disabled = isBusy || !state.available;
+    button.disabled = isBusy || (!quickStartPresentationActionButton(button) && !state.available);
     button.dataset.available = state.available ? "true" : "false";
     button.dataset.availabilityState = state.availabilityState;
     button.dataset.disabledReasonCode = state.disabledReasonCode;
     button.dataset.disabledReasons = state.available ? "" : JSON.stringify(state.disabledReasons);
   }
+}
+
+function renderBlockedActionFromButton(button, uiAction, extraPayload = {}) {
+  const state = actionAvailabilityForButton(button);
+  if (state.available) {
+    return false;
+  }
+  setActionPanel({
+    ui_action: uiAction,
+    action_role: "blocked",
+    account_id: extraPayload.account_id || "",
+    route_id: "",
+    post_action_refresh_required: false,
+    result: {
+      status: "blocked",
+      machine_error_code: state.disabledReasonCode || "UI_ACTION_BLOCKED",
+      human_message: state.title || "Действие сейчас недоступно. Причина показана серверным или readonly packet.",
+      next_action: "resolve_preflight_or_state",
+      changed_files: []
+    }
+  });
+  return true;
+}
+
+function maybeConfirmAndRunFromButton(button, uiAction, extraPayload = {}) {
+  if (button && renderBlockedActionFromButton(button, uiAction, extraPayload)) {
+    return;
+  }
+  maybeConfirmAndRun(uiAction, extraPayload);
 }
 
 function maybeConfirmAndRun(uiAction, extraPayload = {}) {
@@ -10428,6 +10636,27 @@ function renderQuickStartAccountRows(snapshot) {
   }
 }
 
+function quickStartCompactApiLabel(route) {
+  if (!route || typeof route !== "object") {
+    return "Не настроено";
+  }
+  const upstream = String(route.upstream_model || route.effective_model || "").trim();
+  const provider = String(route.provider || route.provider_label || "").trim();
+  if (!upstream) {
+    return provider || "Не настроено";
+  }
+  return `WBP ${upstream}`;
+}
+
+function quickStartCompactApiMeta(route) {
+  if (!route || typeof route !== "object") {
+    return "Основной route не подтверждён";
+  }
+  const role = String(route.role_label || (route.is_primary || route.primary ? "main route" : "registry entry")).trim();
+  const provider = String(route.provider || route.provider_label || "").trim();
+  return [provider, role].filter(Boolean).join(" · ") || "server-owned route";
+}
+
 function quickStartApiModel(snapshot, source) {
   const routes = Array.isArray(snapshot.routes) ? snapshot.routes : [];
   if (snapshot.status === "stale") {
@@ -10436,8 +10665,8 @@ function quickStartApiModel(snapshot, source) {
       state: "stale",
       visual: "amber",
       title: "Устарело",
-      provider: primary?.provider || "Не настроено",
-      model: primary ? `${primary.upstream_model || "model unknown"} · ${primary.role_label || "registry entry"}` : "Основной route не подтверждён",
+      provider: quickStartCompactApiLabel(primary),
+      model: primary ? quickStartCompactApiMeta(primary) : "Основной route не подтверждён",
       routeId: primary?.route_id || "",
       secretRef: primary?.secret_ref || "—",
       secretState: primary?.secret_status_label || "unknown",
@@ -10509,8 +10738,8 @@ function quickStartApiModel(snapshot, source) {
     state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (primary.enabled === true ? "ok" : "unsupported_provider"))),
     visual,
     title,
-    provider: primary.provider || "Не настроено",
-    model: `${primary.upstream_model || "model unknown"} · ${primary.role_label || "registry entry"}`,
+    provider: quickStartCompactApiLabel(primary),
+    model: quickStartCompactApiMeta(primary),
     routeId: primary.route_id || "",
     secretRef: primary.secret_ref || "—",
     secretState: missingSecret ? "missing" : (primary.secret_status_label || "unknown"),
@@ -10612,12 +10841,13 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (apiModel.state === "missing_secret_ref" ? "amber" : "neutral"), apiModel.validationState);
 
   const apiAction = document.getElementById("quickStartCheckApiAction");
-  apiAction.dataset.routeId = apiModel.routeId || "";
-  apiAction.dataset.routeEnabled = apiModel.routeEnabled ? "true" : "false";
-  apiAction.dataset.routeStateProven = apiModel.confirmed && apiModel.routeId ? "true" : "false";
-  apiAction.title = apiModel.confirmed && apiModel.routeId
-    ? "Проверка маршрута требует packet + sandbox-owned readonly refresh."
-    : "Нужен confirmed main route из bounded snapshot.";
+  if (apiAction) {
+    delete apiAction.dataset.routeId;
+    delete apiAction.dataset.routeEnabled;
+    delete apiAction.dataset.routeStateProven;
+    delete apiAction.dataset.routeStateRequirement;
+    apiAction.title = "Проверяет выбранную Quick Start конфигурацию через bounded server admission packet.";
+  }
 
   const banner = document.getElementById("quickStartBanner");
   const firstRun = noAccounts && safeApi.routes.length === 0;
@@ -12297,7 +12527,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));
   document.getElementById("quickStartExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartExecutionModeSelect"));
   document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
-  document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runCodexCustomExecutionModeDryRun());
+  document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runQuickStartConfigAdmission("quickStartExecutionModeDryRunAction"));
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
   document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
@@ -12358,11 +12588,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("cancelOnboardAction").addEventListener("click", () => closeOnboardModal());
   document.getElementById("runOnboardAction").addEventListener("click", () => runOnboardFromModal());
   document.getElementById("quickStartCheckApiAction")?.addEventListener("click", () => {
-    const button = document.getElementById("quickStartCheckApiAction");
-    maybeConfirmAndRun(button.dataset.uiAction || "api_route_check", { route_id: button.dataset.routeId || "" });
+    runQuickStartConfigAdmission("quickStartCheckApiAction");
   });
   document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {
-    maybeConfirmAndRun("api_route_connect");
+    maybeConfirmAndRunFromButton(document.getElementById("quickStartConnectApiAction"), "api_route_connect");
   });
   document.getElementById("quickStartApiCredentialCheckAction")?.addEventListener("click", () => {
     maybeConfirmAndRun("api_route_credential_check");
@@ -12381,7 +12610,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("quickStartCheckAllAction")?.addEventListener("click", () => {
     const button = document.getElementById("quickStartCheckAllAction");
-    maybeConfirmAndRun(button.dataset.uiAction || "quick_start_check_all");
+    maybeConfirmAndRunFromButton(button, button.dataset.uiAction || "quick_start_check_all");
   });
   document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
   document.getElementById("confirmAction").addEventListener("click", () => confirmPendingAction());

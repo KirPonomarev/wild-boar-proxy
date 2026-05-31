@@ -105,8 +105,8 @@ def route_thinking_metadata(route: dict[str, Any]) -> dict[str, Any]:
     if thinking_type != "enabled":
         return {
             "thinking": {"type": "disabled"},
-            "api_parameter_sent": False,
-            "label_source": "operator_mapping",
+            "api_parameter_sent": True,
+            "label_source": "provider_declared_plus_operator_mapping",
             "intelligence_measured": False,
         }
     reasoning_effort = str(thinking.get("reasoning_effort") or "high").strip()
@@ -129,7 +129,7 @@ def apply_route_thinking_policy(
     thinking = metadata.get("thinking")
     if (
         isinstance(thinking, dict)
-        and thinking.get("type") == "enabled"
+        and thinking.get("type") in {"disabled", "enabled"}
         and metadata.get("api_parameter_sent") is True
     ):
         payload["thinking"] = dict(thinking)

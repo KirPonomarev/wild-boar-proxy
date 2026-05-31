@@ -132,6 +132,7 @@ from wild_boar_proxy.operator_surface import (
     DEFAULT_RUNTIME_CONFIG,
     HybridOpenAICompatAdapter,
     OperatorSurfaceSession,
+    STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     _safe_route_digest,
     build_bridge_failure_recovery_truth_packet,
     build_stable_bridge_preflight_packet,
@@ -2744,6 +2745,16 @@ CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS = frozenset(
 )
 
 
+QUICK_START_CONFIG_ADMISSION_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "execution_mode",
+        "chatgpt_model_id",
+        "api_model_id",
+        "api_reasoning_option_id",
+    }
+)
+
+
 QUICK_START_DEEPSEEK_SAFE_WORKTREE_ALLOWED_BROWSER_FIELDS = frozenset(
     {
         "execution_mode",
@@ -2765,6 +2776,29 @@ def _forbidden_custom_live_launch_fields(payload: Any, prefix: str = "") -> list
     elif isinstance(payload, list):
         for index, value in enumerate(payload):
             findings.extend(_forbidden_custom_live_launch_fields(value, f"{prefix}[{index}]"))
+    return findings
+
+
+def _forbidden_quick_start_config_admission_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in QUICK_START_CONFIG_ADMISSION_ALLOWED_BROWSER_FIELDS:
+                findings.append(key_path)
+            findings.extend(_forbidden_quick_start_config_admission_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_quick_start_config_admission_fields(
+                    value,
+                    f"{prefix}[{index}]",
+                )
+            )
     return findings
 
 
@@ -3185,6 +3219,274 @@ def _custom_native_launch_preflight_packet(
     }
 
 
+def _quick_start_slot_admission_component(
+    *,
+    required: bool,
+    slot: dict[str, Any],
+    model_id: str,
+    lane: str,
+    missing_code: str,
+) -> dict[str, Any]:
+    if not required:
+        return {
+            "status": "not_required",
+            "model_id": "",
+            "lane": lane,
+            "machine_error_code": "NOT_REQUIRED",
+            "human_message": "Этот слот не нужен для выбранного режима.",
+        }
+    if not model_id:
+        return {
+            "status": "missing",
+            "model_id": "",
+            "lane": lane,
+            "machine_error_code": missing_code,
+            "human_message": "Модель не выбрана из server-issued catalog.",
+        }
+    slot_status = str(slot.get("status") or "")
+    slot_lane = str(slot.get("lane") or "")
+    slot_model = str(slot.get("model_id") or "")
+    if slot_status == "bound" and slot_lane == lane and slot_model == model_id:
+        return {
+            "status": "admitted",
+            "model_id": model_id,
+            "lane": lane,
+            "machine_error_code": "OK",
+            "human_message": "Модель допущена server-owned selector packet.",
+        }
+    return {
+        "status": "unavailable",
+        "model_id": model_id,
+        "lane": lane,
+        "machine_error_code": "QUICK_START_CONFIG_SLOT_NOT_ADMITTED",
+        "human_message": "Server-owned selector packet не подтвердил выбранный слот.",
+    }
+
+
+def _quick_start_api_route_admission_component(
+    *,
+    required: bool,
+    model_id: str,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not required:
+        return {
+            "status": "not_required",
+            "route_reference": "",
+            "machine_error_code": "NOT_REQUIRED",
+            "human_message": "API route не нужен для выбранного режима.",
+        }
+    if not model_id:
+        return {
+            "status": "missing",
+            "route_reference": "",
+            "machine_error_code": "QUICK_START_CONFIG_API_MODEL_MISSING",
+            "human_message": "API модель не выбрана.",
+        }
+    route = _api_snapshot_route_for_model(api_snapshot, model_id)
+    if route is None:
+        return {
+            "status": "missing",
+            "route_reference": "",
+            "machine_error_code": "QUICK_START_CONFIG_API_ROUTE_MISSING",
+            "human_message": "Server-owned API route для выбранной модели не найден в bounded snapshot.",
+        }
+    if route.get("enabled") is not True:
+        return {
+            "status": "not_confirmed",
+            "route_reference": "server-owned-api-route",
+            "machine_error_code": "QUICK_START_CONFIG_API_ROUTE_DISABLED",
+            "human_message": "API route найден, но не включён.",
+        }
+    secret_status = str(route.get("secret_status_label") or "").strip()
+    if secret_status == "missing":
+        return {
+            "status": "not_confirmed",
+            "route_reference": "server-owned-api-route",
+            "machine_error_code": "QUICK_START_CONFIG_API_SECRET_MISSING",
+            "human_message": "API route найден, но credential не подтверждён bounded snapshot.",
+        }
+    return {
+        "status": "admitted",
+        "route_reference": "server-owned-api-route",
+        "provider": str(route.get("provider") or route.get("provider_label") or ""),
+        "machine_error_code": "OK",
+        "human_message": "API route допущен bounded api-connections snapshot.",
+    }
+
+
+def _quick_start_api_reasoning_admission_component(
+    *,
+    required: bool,
+    model_truth: dict[str, Any],
+) -> dict[str, Any]:
+    if not required:
+        return {
+            "status": "not_required",
+            "option_id": "",
+            "machine_error_code": "NOT_REQUIRED",
+            "human_message": "DeepSeek reasoning не нужен для выбранного режима.",
+        }
+    option_id = str(model_truth.get("api_reasoning_option_id") or "")
+    model_bound = model_truth.get("api_reasoning_option_model_bound") is True
+    if option_id == "catalog_default" and model_bound:
+        status = "defaulted"
+    elif model_bound:
+        status = "accepted"
+    else:
+        status = "rejected"
+    return {
+        "status": status,
+        "option_id": option_id,
+        "operator_level": str(model_truth.get("api_reasoning_operator_level") or ""),
+        "machine_error_code": "OK" if status in {"accepted", "defaulted"} else "QUICK_START_CONFIG_API_REASONING_REJECTED",
+        "human_message": (
+            "DeepSeek reasoning option принят server selector packet."
+            if status in {"accepted", "defaulted"}
+            else "DeepSeek reasoning option не совпал с server-issued model metadata."
+        ),
+        "runtime_mutation_claimed": False,
+        "intelligence_measured": False,
+        "codex_parity_claimed": False,
+    }
+
+
+def build_quick_start_config_admission_packet(
+    payload: dict[str, Any],
+    operator_status: dict[str, Any] | None,
+    *,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    base = {
+        "schema_version": 1,
+        "packet_kind": "quick_start_config_admission",
+        "captured_at_utc": utc_now(),
+        "source": "server_owned_config_admission",
+        "dry_server_truth_only": True,
+        "runtime_execution_proven": False,
+        "live_call_attempted": False,
+        "provider_called": False,
+        "network_calls_made": False,
+        "custom_codex_launch_attempted": False,
+        "new_launch_started": False,
+        "fallback_used": False,
+        "silent_fallback_used": False,
+        "browser_route_authority": False,
+        "browser_secret_authority": False,
+        "browser_model_authority": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "raw_path_exposed": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "launch_admission": "blocked",
+    }
+    forbidden = _forbidden_quick_start_config_admission_fields(payload)
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "QUICK_START_CONFIG_ADMISSION_BROWSER_AUTHORITY_REJECTED",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_CONFIG_ADMISSION_NOT_PROVEN",
+            "human_message": "Quick Start config admission accepts only bounded selection ids.",
+            "forbidden_fields": forbidden,
+            "execution_mode": "",
+            "chatgpt_model": {"status": "missing"},
+            "api_model": {"status": "missing"},
+            "api_reasoning": {"status": "missing"},
+            "api_route": {"status": "missing"},
+            "launch_admission_summary": "Browser payload contained forbidden raw route, secret, path, or backend authority.",
+            "next_action": "remove_forbidden_browser_fields",
+        }
+
+    model_truth = build_server_model_selection_and_reasoning_truth_packet(
+        payload,
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+    execution_mode = str(model_truth.get("execution_mode") or "")
+    chatgpt_model_id = str(model_truth.get("chatgpt_model_id") or "")
+    api_model_id = str(model_truth.get("api_model_id") or "")
+    primary_slot = model_truth.get("primary_model_slot")
+    primary_slot = primary_slot if isinstance(primary_slot, dict) else {}
+    coding_slot = model_truth.get("coding_agent_model_slot")
+    coding_slot = coding_slot if isinstance(coding_slot, dict) else {}
+    chatgpt_required = execution_mode in {"chatgpt_only", "chatgpt_plus_api"}
+    api_required = execution_mode in {"chatgpt_plus_api", "api_only"}
+    api_slot = primary_slot if execution_mode == "api_only" else coding_slot
+    chatgpt_component = _quick_start_slot_admission_component(
+        required=chatgpt_required,
+        slot=primary_slot,
+        model_id=chatgpt_model_id,
+        lane=CODEX_ACCOUNT_MODEL_LANE,
+        missing_code="QUICK_START_CONFIG_CHATGPT_MODEL_MISSING",
+    )
+    api_component = _quick_start_slot_admission_component(
+        required=api_required,
+        slot=api_slot,
+        model_id=api_model_id,
+        lane=API_ROUTE_MODEL_LANE,
+        missing_code="QUICK_START_CONFIG_API_MODEL_MISSING",
+    )
+    route_component = _quick_start_api_route_admission_component(
+        required=api_required,
+        model_id=api_model_id,
+        api_snapshot=api_snapshot,
+    )
+    reasoning_component = _quick_start_api_reasoning_admission_component(
+        required=api_required,
+        model_truth=model_truth,
+    )
+    components = (chatgpt_component, api_component, route_component, reasoning_component)
+    admitted = (
+        model_truth.get("status") == "ok"
+        and all(component["status"] in {"admitted", "accepted", "defaulted", "not_required"} for component in components)
+    )
+    status = "ok" if admitted else "blocked"
+    machine_error_code = "OK" if admitted else str(
+        model_truth.get("machine_error_code") or "QUICK_START_CONFIG_ADMISSION_BLOCKED"
+    )
+    if machine_error_code == "OK" and not admitted:
+        machine_error_code = "QUICK_START_CONFIG_ADMISSION_BLOCKED"
+    return {
+        **base,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": (
+            "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS"
+            if admitted
+            else "KNOWN_BLOCKER_QUICK_START_CONFIG_ADMISSION_NOT_PROVEN"
+        ),
+        "human_message": (
+            "Quick Start configuration admitted by bounded server packet."
+            if admitted
+            else "Quick Start configuration is not admitted by bounded server packet."
+        ),
+        "execution_mode": execution_mode,
+        "allowed_browser_fields": sorted(QUICK_START_CONFIG_ADMISSION_ALLOWED_BROWSER_FIELDS),
+        "chatgpt_model": chatgpt_component,
+        "api_model": api_component,
+        "api_reasoning": reasoning_component,
+        "api_route": route_component,
+        "model_selection_truth": {
+            "status": str(model_truth.get("status") or ""),
+            "machine_error_code": str(model_truth.get("machine_error_code") or ""),
+            "model_selection_truth_proven": model_truth.get("model_selection_truth_proven") is True,
+            "server_catalog_source": model_truth.get("server_catalog_source") is True,
+            "slots_coherent": model_truth.get("slots_coherent") is True,
+            "api_reasoning_option_model_bound": model_truth.get("api_reasoning_option_model_bound") is True,
+        },
+        "launch_admission": "admitted" if admitted else "blocked",
+        "launch_admission_summary": (
+            "Config admission is ok; next contour may use existing launch preflight gate."
+            if admitted
+            else "Config admission blocked; launch must stay gated."
+        ),
+        "selector_packet": model_truth.get("selector_packet", {}),
+        "next_action": "none" if admitted else "repair_quick_start_config_selection",
+    }
+
+
 def _custom_native_launch_stability_guard_packet(
     preflight_packet: dict[str, Any],
     *,
@@ -3358,6 +3660,181 @@ def _custom_native_stable_bridge_launch_gate_packet(
             else "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN"
         ),
         "next_action": "launch_custom_codex" if launch_allowed else "repair_bridge_before_launch",
+    }
+
+
+def _custom_native_hidden_native_model_ids(registry: dict[str, Any]) -> list[str]:
+    return [
+        str(entry.get("model_id") or "")
+        for entry in registry.get("available_models") or []
+        if isinstance(entry, dict)
+        and str(entry.get("lane") or "") == "codex_native"
+        and entry.get("selection_enabled") is not True
+    ]
+
+
+def _custom_native_stable_bridge_prewarm_packet(
+    preflight_packet: dict[str, Any],
+    *,
+    requested_model_id: str,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    external_routes_packet: dict[str, Any] | None,
+    native_bridge_lease: _CustomNativeBridgeLease,
+) -> dict[str, Any]:
+    model_id = str(requested_model_id or "").strip()
+    route_record = _external_route_record_for_model(external_routes_packet, model_id)
+    if not model_id or not route_record:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_prewarm",
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "machine_error_code": "OK",
+            "prewarm_required": False,
+            "bridge_endpoint": "",
+            "smoke_status": "not_required",
+            "final_status": "STABLE_BRIDGE_PREWARM_NOT_REQUIRED_NO_EXTERNAL_ROUTE",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
+    downstream_endpoint = str(registry.get("endpoint") or DEFAULT_ENDPOINT)
+    hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
+    preflight_packet["selected_model"] = str(preflight_packet.get("selected_model") or model_id)
+    _add_custom_codex_window_launch_trace_context(preflight_packet, route_record=route_record)
+    native_bridge_lease.set_trace_context(
+        {
+            "launch_id": preflight_packet.get("launch_id"),
+            "trace_id": preflight_packet.get("trace_id"),
+            "selected_model": model_id,
+            "api_reasoning_option_id": preflight_packet.get("api_reasoning_option_id"),
+            "launch_route_digest": preflight_packet.get("launch_route_digest"),
+        }
+    )
+    try:
+        bridge_endpoint = native_bridge_lease.ensure(
+            downstream_endpoint=downstream_endpoint,
+            routes_packet=external_routes_packet,
+            hidden_native_model_ids=hidden_native_model_ids,
+            forced_route_model_id=model_id,
+        )
+    except OSError as exc:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_prewarm",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+            "prewarm_required": True,
+            "bridge_endpoint": native_bridge_lease.stable_endpoint,
+            "downstream_endpoint": downstream_endpoint,
+            "selected_model": model_id,
+            "bridge_exception_class": type(exc).__name__,
+            "bridge_exception_message_bounded": str(exc)[:240],
+            "smoke_status": "not_started",
+            "final_status": "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    if bridge_endpoint == downstream_endpoint:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_prewarm",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_NOT_CONFIGURED",
+            "prewarm_required": True,
+            "bridge_endpoint": bridge_endpoint,
+            "downstream_endpoint": downstream_endpoint,
+            "selected_model": model_id,
+            "smoke_status": "not_started",
+            "final_status": "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    try:
+        local_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+    except RuntimeError as exc:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_prewarm",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_AUTH_UNAVAILABLE",
+            "prewarm_required": True,
+            "bridge_endpoint": bridge_endpoint,
+            "downstream_endpoint": downstream_endpoint,
+            "selected_model": model_id,
+            "auth_header_expected": True,
+            "auth_header_available": False,
+            "auth_exception_class": type(exc).__name__,
+            "smoke_status": "not_started",
+            "final_status": "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    smoke_payload = {
+        "model": model_id,
+        "input": f"Ответь одной строкой: {STABLE_BRIDGE_WINDOW_SMOKE_PHRASE}",
+        "stream": False,
+        "max_output_tokens": 32,
+    }
+    request = urllib.request.Request(
+        f"{bridge_endpoint.rstrip('/')}/responses",
+        data=json.dumps(smoke_payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {local_api_key}",
+        },
+        method="POST",
+    )
+    response_body = b""
+    http_status = 0
+    error_class = ""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=75) as response:
+            http_status = int(getattr(response, "status", 0) or 0)
+            response_body = response.read()
+    except urllib.error.HTTPError as exc:
+        http_status = int(exc.code or 0)
+        error_class = type(exc).__name__
+        response_body = exc.read()[:4096]
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        error_class = type(exc).__name__
+
+    smoke_ok = 200 <= http_status < 300
+    trace_packet = native_bridge_lease.trace_snapshot()
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_stable_bridge_prewarm",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if smoke_ok else "blocked",
+        "machine_error_code": "OK" if smoke_ok else "CUSTOM_CODEX_STABLE_WBP_BRIDGE_SMOKE_FAILED",
+        "prewarm_required": True,
+        "bridge_endpoint": bridge_endpoint,
+        "downstream_endpoint": downstream_endpoint,
+        "selected_model": model_id,
+        "forced_route_used": True,
+        "smoke_status": "ok" if smoke_ok else "blocked",
+        "smoke_http_status": http_status,
+        "smoke_error_class": error_class,
+        "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
+        "bridge_trace_packet": trace_packet,
+        "final_status": (
+            "STABLE_BRIDGE_PREWARM_PROVEN_WITH_LIMITS"
+            if smoke_ok
+            else "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN"
+        ),
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
     }
 
 
@@ -4045,13 +4522,7 @@ def _launch_custom_native_codex_packet(
         api_snapshot=api_snapshot,
     )
     endpoint = str(registry.get("endpoint") or "")
-    hidden_native_model_ids = [
-        str(entry.get("model_id") or "")
-        for entry in registry.get("available_models") or []
-        if isinstance(entry, dict)
-        and str(entry.get("lane") or "") == "codex_native"
-        and entry.get("selection_enabled") is not True
-    ]
+    hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
     route_record = _external_route_record_for_model(external_routes_packet, model_id)
     try:
         bridge_endpoint = (
@@ -4112,7 +4583,7 @@ def _launch_custom_native_codex_packet(
             OWNER_STANDING_AUTHORIZATION_PHRASE if owner_authorized else None
         ),
         keep_running_on_window_observed=True,
-        reuse_existing_window_if_present=True,
+        reuse_existing_window_if_present=not bool(route_record),
     )
     legacy_selection = _codex_custom_selection_packet(
         model_id=model_id,
@@ -8999,6 +9470,49 @@ def build_handler(
                     )
                     self._send_json(packet)
                     return
+                api_route_launch_selected = (
+                    api_route_selected or preflight_packet.get("route_selected") is True
+                )
+                stable_bridge_prewarm = {}
+                if api_route_launch_selected:
+                    stable_bridge_prewarm = _custom_native_stable_bridge_prewarm_packet(
+                        preflight_packet,
+                        requested_model_id=requested_model_id,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                        external_routes_packet=external_routes_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
+                    )
+                    preflight_packet["stable_bridge_prewarm_required"] = (
+                        stable_bridge_prewarm.get("prewarm_required") is True
+                    )
+                    preflight_packet["stable_bridge_prewarm_status"] = str(
+                        stable_bridge_prewarm.get("status") or ""
+                    )
+                    preflight_packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
+                    if stable_bridge_prewarm.get("status") != "ok":
+                        packet = _custom_native_launch_stability_guard_packet(
+                            preflight_packet,
+                            status="blocked",
+                            machine_error_code=str(
+                                stable_bridge_prewarm.get("machine_error_code")
+                                or "STABLE_BRIDGE_PREWARM_BLOCKED"
+                            ),
+                            human_message="Custom native launch stopped because the stable WBP bridge prewarm did not prove the selected API route.",
+                        )
+                        packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
+                        packet["stable_bridge_prewarm_required"] = (
+                            stable_bridge_prewarm.get("prewarm_required") is True
+                        )
+                        packet["stable_bridge_prewarm_status"] = str(
+                            stable_bridge_prewarm.get("status") or ""
+                        )
+                        packet["final_status"] = str(
+                            stable_bridge_prewarm.get("final_status")
+                            or "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN"
+                        )
+                        self._send_json(packet)
+                        return
                 stable_bridge_gate = _custom_native_stable_bridge_launch_gate_packet(
                     preflight_packet,
                     native_bridge_lease=custom_native_bridge_lease,
@@ -9026,7 +9540,9 @@ def build_handler(
                     packet["final_status"] = str(stable_bridge_gate.get("final_status") or "")
                     self._send_json(packet)
                     return
-                if preflight_packet.get("existing_window_reuse_admissible") is True:
+                if (
+                    preflight_packet.get("existing_window_reuse_admissible") is True
+                ):
                     show_window_packet = show_custom_native_window_packet()
                     show_ok = (
                         show_window_packet.get("status") == "ok"
@@ -9049,7 +9565,9 @@ def build_handler(
                     )
                     self._send_json(packet)
                     return
-                if preflight_packet.get("custom_process_observed") is True:
+                if (
+                    preflight_packet.get("custom_process_observed") is True
+                ):
                     config_status = str(preflight_packet.get("config_status") or "")
                     if config_status == "changed":
                         machine_error_code = (
@@ -9071,7 +9589,7 @@ def build_handler(
                     return
                 account_commands = (
                     {}
-                    if api_route_selected
+                    if api_route_launch_selected
                     else (
                         self._codex_account_commands()
                         if codex_custom_live_prompt_authorized
@@ -9087,6 +9605,27 @@ def build_handler(
                     external_routes_packet=external_routes_packet,
                     native_bridge_lease=custom_native_bridge_lease,
                 )
+                if (
+                    api_route_launch_selected
+                    and preflight_packet.get("launch_id")
+                    and preflight_packet.get("trace_id")
+                ):
+                    packet["launch_id"] = str(preflight_packet.get("launch_id") or "")
+                    packet["trace_id"] = str(preflight_packet.get("trace_id") or "")
+                    packet["launch_route_digest"] = str(
+                        preflight_packet.get("launch_route_digest") or ""
+                    )
+                    custom_native_bridge_lease.set_trace_context(
+                        {
+                            "launch_id": packet.get("launch_id"),
+                            "trace_id": packet.get("trace_id"),
+                            "selected_model": packet.get("selected_model"),
+                            "api_reasoning_option_id": packet.get(
+                                "api_reasoning_option_id"
+                            ),
+                            "launch_route_digest": packet.get("launch_route_digest"),
+                        }
+                    )
                 packet["launch_preflight_packet"] = preflight_packet
                 packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
                 packet["stable_bridge_preflight_required"] = (
@@ -9235,6 +9774,20 @@ def build_handler(
                 )
                 self._send_json(
                     build_server_model_selection_and_reasoning_truth_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/config-admission":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                self._send_json(
+                    build_quick_start_config_admission_packet(
                         payload,
                         operator_status,
                         api_snapshot=api_snapshot,

@@ -543,7 +543,11 @@ def build_stable_bridge_preflight_packet(
         and last_error_class in {"none", "port_unavailable"}
         and not unknown_critical_fields
     )
-    failure_reason = "" if launch_allowed else blocking_reasons[0]
+    failure_reason = (
+        ""
+        if launch_allowed
+        else (blocking_reasons[0] if blocking_reasons else "launch_not_allowed")
+    )
     return {
         "schema_version": 1,
         "packet_kind": "stable_bridge_preflight",

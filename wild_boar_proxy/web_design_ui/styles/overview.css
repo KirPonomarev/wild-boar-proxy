@@ -7059,17 +7059,34 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] {
-  --qs-main-padding: 36px;
-  --qs-section-gap: 24px;
-  --qs-card-padding: 22px;
+  --qs-main-padding: 28px;
+  --qs-section-gap: 18px;
+  --qs-card-padding: 18px;
   --qs-card-radius: 18px;
-  --qs-row-height: 58px;
-  --qs-control-height: 40px;
+  --qs-row-height: 46px;
+  --qs-control-height: 36px;
 }
 
 .desktop[data-screen="quick-start"] .main {
   overflow-y: auto;
-  padding: 48px var(--qs-main-padding) 32px;
+  padding: 32px var(--qs-main-padding) 24px;
+}
+
+.desktop[data-screen="quick-start"] .brand {
+  margin-bottom: 26px;
+}
+
+.desktop[data-screen="quick-start"] .brand img {
+  margin-bottom: 8px;
+  width: 156px;
+}
+
+.desktop[data-screen="quick-start"] .nav {
+  gap: 6px;
+}
+
+.desktop[data-screen="quick-start"] .nav-item {
+  height: 38px;
 }
 
 .desktop[data-screen="quick-start"] .sidebar-footer {
@@ -7079,7 +7096,7 @@ button:disabled {
 
 .desktop[data-screen="quick-start"] .main-header {
   align-items: center;
-  margin-bottom: 48px;
+  margin-bottom: 28px;
 }
 
 .desktop[data-screen="quick-start"] .main-header > div:first-child {
@@ -7095,8 +7112,8 @@ button:disabled {
   box-shadow: 0 12px 28px rgba(51, 41, 30, .08);
   content: "";
   display: block;
-  height: 56px;
-  width: 56px;
+  height: 52px;
+  width: 52px;
 }
 
 .desktop[data-screen="quick-start"] h1,
@@ -7110,7 +7127,8 @@ button:disabled {
 .desktop[data-screen="quick-start"] .quick-start-connections-card .quick-start-api-checklist,
 .desktop[data-screen="quick-start"] .quick-start-connections-card .api-credential-lane,
 .desktop[data-screen="quick-start"] .quick-start-history-checklist,
-.desktop[data-screen="quick-start"] .quick-start-footer {
+.desktop[data-screen="quick-start"] .quick-start-footer,
+.desktop[data-screen="quick-start"] .quick-start-card-icon {
   display: none;
 }
 
@@ -7120,6 +7138,7 @@ button:disabled {
 
 .desktop[data-screen="quick-start"] .button {
   height: var(--qs-control-height);
+  padding-inline: 14px;
 }
 
 .desktop[data-screen="quick-start"] .button.small {
@@ -7127,8 +7146,8 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .source-pill {
-  height: 34px;
-  padding-inline: 13px;
+  height: 32px;
+  padding-inline: 12px;
 }
 
 .quick-start-screen {
@@ -7146,8 +7165,8 @@ button:disabled {
 .quick-start-grid {
   align-items: start;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1.2fr) minmax(360px, .88fr);
+  gap: 18px;
+  grid-template-columns: minmax(300px, 1.15fr) minmax(300px, .85fr);
   max-width: 1110px;
   min-height: 0;
 }
@@ -7159,7 +7178,7 @@ button:disabled {
 .quick-start-card {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   height: auto;
   min-height: 0;
   padding: var(--qs-card-padding);
@@ -7217,7 +7236,7 @@ button:disabled {
 
 .quick-start-connection-actions {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -7229,10 +7248,10 @@ button:disabled {
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 12px;
-  grid-template-columns: 38px minmax(0, 1fr);
-  min-height: 74px;
-  padding: 12px 16px;
+  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-height: 62px;
+  padding: 10px 14px;
   text-align: left;
 }
 
@@ -7241,7 +7260,7 @@ button:disabled {
   font-size: inherit;
   line-height: inherit;
   max-width: none;
-  padding-inline: 16px;
+  padding-inline: 14px;
 }
 
 .quick-start-connect-tile:hover {
@@ -7260,7 +7279,7 @@ button:disabled {
 .quick-start-connect-tile strong {
   font-size: 14px;
   line-height: 19px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .quick-start-connect-tile small {
@@ -7277,8 +7296,8 @@ button:disabled {
 
 .quick-start-connection-status .quick-start-check-row {
   display: grid;
-  gap: 14px;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 10px;
+  grid-template-columns: 52px minmax(116px, 1fr) minmax(120px, 166px);
 }
 
 .quick-start-connection-status strong,
@@ -7290,10 +7309,22 @@ button:disabled {
   white-space: nowrap;
 }
 
+.quick-start-connection-status .chip {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.quick-start-connection-status .chip span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quick-start-connection-status strong {
   color: var(--text);
-  font-size: 14px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 17px;
 }
 
 .quick-start-connection-status small {
@@ -7495,7 +7526,7 @@ button:disabled {
   gap: 10px;
   margin-top: 0;
   min-height: 40px;
-  padding-top: 16px;
+  padding-top: 12px;
 }
 
 .quick-start-card-actions .button {
@@ -7521,8 +7552,9 @@ button:disabled {
 .quick-start-route-grid label {
   align-items: center;
   display: grid;
-  gap: 16px;
-  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 10px;
+  grid-template-columns: 66px minmax(0, 1fr);
+  position: relative;
 }
 
 .quick-start-route-grid label > span {
@@ -7532,15 +7564,30 @@ button:disabled {
 }
 
 .quick-start-route-grid select {
+  appearance: none;
   background: rgba(246, 241, 234, .88);
   border: 0;
   border-radius: 12px;
   color: var(--text);
   font-weight: 700;
-  min-height: 42px;
+  min-height: 38px;
   min-width: 0;
-  padding-inline: 14px;
+  overflow: hidden;
+  padding-inline: 14px 38px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   width: 100%;
+}
+
+.desktop[data-screen="quick-start"] .quick-start-route-grid label::after {
+  color: rgba(141, 133, 123, .72);
+  content: "...";
+  font-weight: 700;
+  pointer-events: none;
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .quick-start-history-checklist {
@@ -7684,9 +7731,10 @@ button:disabled {
   display: grid;
 }
 
-.desktop[data-screen="quick-start"] .quick-start-route-card .quick-start-api-checklist .quick-start-check-row:nth-child(n+3),
+.desktop[data-screen="quick-start"] .quick-start-route-card .quick-start-api-checklist .quick-start-check-row:nth-child(n+2),
 .desktop[data-screen="quick-start"] #quickStartCheckAccountsAction,
 .desktop[data-screen="quick-start"] #quickStartRouteRefreshAction,
+.desktop[data-screen="quick-start"] #quickStartExecutionModeDryRunAction,
 .desktop[data-screen="quick-start"] #quickStartLaunchPreflightAction,
 .desktop[data-screen="quick-start"] #quickStartDeepSeekCoderCheckAction,
 .desktop[data-screen="quick-start"] #quickStartDeepSeekCodeEditProofAction,
@@ -7697,7 +7745,7 @@ button:disabled {
 .quick-start-check-row {
   border-bottom: 1px solid rgba(217, 208, 195, .86);
   justify-content: space-between;
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .desktop[data-screen="quick-start"] .quick-start-check-row:last-child {
@@ -7725,22 +7773,32 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .quick-start-route-response {
-  border-top: 1px solid rgba(217, 208, 195, .86);
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 18px;
-  max-height: 92px;
-  overflow: auto;
-  padding-top: 14px;
+  display: none;
+}
+
+.desktop[data-screen="quick-start"] .quick-start-route-actions {
+  justify-content: flex-end;
 }
 
 .desktop[data-screen="quick-start"] .quick-start-card-actions #quickStartCustomLaunchAction {
-  margin-left: auto;
+  min-width: 220px;
 }
 
-@media (max-width: 1511px) {
+@media (max-width: 1100px) {
+  .desktop[data-screen="quick-start"] {
+    --qs-main-padding: 22px;
+  }
+
   .quick-start-grid {
-    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    grid-template-columns: minmax(280px, 1fr) minmax(280px, .82fr);
+  }
+
+  .quick-start-connect-tile strong,
+  .quick-start-connection-status strong,
+  .quick-start-route-grid select,
+  .desktop[data-screen="quick-start"] .button {
+    font-size: 12px;
   }
 }
 

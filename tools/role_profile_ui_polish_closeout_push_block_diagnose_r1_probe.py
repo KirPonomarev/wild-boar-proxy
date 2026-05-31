@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -61,9 +62,16 @@ def _run(
 
 def _safe_http_branch_sha(url: str) -> tuple[str | None, int | None]:
     req = urllib.request.Request(url, headers={"User-Agent": "codex-closeout-check"})
-    with urllib.request.urlopen(req, timeout=20) as response:
-        data = json.load(response)
-        return str(data["commit"]["sha"]), int(response.status)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            data = json.load(response)
+            return str(data["commit"]["sha"]), int(response.status)
+    except urllib.error.HTTPError as exc:
+        status_code = int(exc.code)
+        exc.close()
+        return None, status_code
+    except (OSError, TimeoutError, urllib.error.URLError):
+        return None, None
 
 
 def _status_in(packet: dict[str, Any], *allowed: str) -> bool:

@@ -1293,6 +1293,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertLess(nav.find('data-screen-link="quick-start"'), nav.find('data-screen-link="overview"'))
         self.assertIn('href="?screen=quick-start"', nav)
         self.assertIn('src="assets/icons/phosphor/lightning.png"', nav)
+        self.assertIn("<span>Старт</span>", nav)
+        self.assertNotIn("<span>Быстрый старт</span>", nav)
         self.assertIn(
             'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
@@ -1303,6 +1305,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("Подключения", section)
         self.assertIn("Добавить ChatGPT", section)
         self.assertIn("Добавить API", section)
+        self.assertIn("Проверка", section)
         self.assertIn("без перехода в другие разделы", section)
         self.assertIn("Упрощённый режим показывает только итоговые статусы и безопасные действия.", section + js)
         self.assertIn("Первый запуск: пустые состояния не являются ошибкой.", js)
@@ -1321,7 +1324,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('document.getElementById("quickStartAddAccountAction")?.addEventListener("click", () => openOnboardModal())', js)
         self.assertIn('id="quickStartConnectApiAction" class="quick-start-connect-tile api-route-action api-route-connect-action"', section)
         self.assertIn('document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {', js)
-        self.assertIn('maybeConfirmAndRun("api_route_connect")', js)
+        self.assertIn('maybeConfirmAndRunFromButton(document.getElementById("quickStartConnectApiAction"), "api_route_connect")', js)
         connect_api_match = re.search(r'<button id="quickStartConnectApiAction"[^>]*>', section)
         self.assertIsNotNone(connect_api_match)
         connect_api_button = connect_api_match.group(0)
@@ -1329,13 +1332,30 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn("route_id", connect_api_button)
         self.assertNotIn("api_key", connect_api_button)
         self.assertNotIn("secret_ref", connect_api_button)
-        self.assertIn('data-ui-action="api_route_check"', section)
-        self.assertIn('data-route-id=""', section)
+        check_api_match = re.search(r'<button id="quickStartCheckApiAction"[^>]*>', section)
+        self.assertIsNotNone(check_api_match)
+        check_api_button = check_api_match.group(0)
+        self.assertNotIn("api-route-action", check_api_button)
+        self.assertNotIn("data-ui-action", check_api_button)
+        self.assertNotIn("data-route-id", check_api_button)
+        self.assertNotIn("data-route-enabled", check_api_button)
+        self.assertNotIn("data-route-state-proven", check_api_button)
+        self.assertIn('fetch("api/codex/custom/quick-start/config-admission"', js)
+        self.assertIn('runQuickStartConfigAdmission("quickStartCheckApiAction")', js)
+        self.assertIn('runQuickStartConfigAdmission("quickStartExecutionModeDryRunAction")', js)
+        self.assertIn("launch_admission_summary", js)
+        self.assertIn("silent_fallback_used", js)
         self.assertIn("Рабочий маршрут", section)
         self.assertIn('id="quickStartChatModelSelect"', section)
+        self.assertIn("<option value=\"\" selected>codex-auto-review</option>", section)
         self.assertIn('id="quickStartApiModelSelect"', section)
+        self.assertIn("<option value=\"\" selected>WBP deepseek-chat</option>", section)
         self.assertIn('id="quickStartApiReasoningOptionSelect"', section)
+        self.assertIn("Мышление DeepSeek", section)
+        self.assertIn("<option value=\"\" selected>по каталогу</option>", section)
         self.assertIn('id="quickStartExecutionModeSelect"', section)
+        self.assertIn('<option value="chatgpt_plus_api">ChatGPT + API</option>', section)
+        self.assertIn('<option value="api_only">API</option>', section)
         self.assertIn('id="quickStartDeepSeekCoderCheckAction"', section)
         self.assertIn("Проверить DeepSeek-кодера", section)
         self.assertIn('id="quickStartDeepSeekCodeEditProofAction"', section)
@@ -1372,6 +1392,12 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("provider_declared_max", js)
         self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
         self.assertNotIn("reasoning_effort: apiReasoningOptionId", js)
+        self.assertIn('label: "Обычное"', js)
+        self.assertIn('label: "Глубокое"', js)
+        self.assertIn('label: "Усиленное"', js)
+        self.assertIn('label: "Авто"', js)
+        self.assertNotIn("thinking off", section + js)
+        self.assertNotIn("provider-declared", section + js)
         self.assertIn('fetch("api/codex/custom/execution-mode-dry-run"', js)
         self.assertIn('fetch("api/codex/custom/native-launch"', js)
         self.assertIn("execution_mode: executionMode", js)
@@ -1435,24 +1461,24 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("width: 34px", css)
         self.assertIn("text-overflow: clip", css)
         self.assertIn(".quick-start-api-status", css)
-        self.assertIn("--qs-main-padding: 36px", css)
-        self.assertIn("--qs-section-gap: 24px", css)
-        self.assertIn("--qs-card-padding: 22px", css)
-        self.assertIn("--qs-row-height: 58px", css)
-        self.assertIn("--qs-control-height: 40px", css)
-        self.assertIn("width: 180px", css)
+        self.assertIn("--qs-main-padding: 28px", css)
+        self.assertIn("--qs-section-gap: 18px", css)
+        self.assertIn("--qs-card-padding: 18px", css)
+        self.assertIn("--qs-row-height: 46px", css)
+        self.assertIn("--qs-control-height: 36px", css)
+        self.assertIn('width: 156px', css)
         self.assertIn("font-size: 16px", css)
         self.assertIn("line-height: 20px", css)
         self.assertIn("display: none", css)
         self.assertIn('document.getElementById("brandCaption").textContent = "";', js)
         self.assertNotIn('function liveBrandCaptionForScreen', js)
-        self.assertNotIn('.desktop[data-screen="quick-start"] .brand img', css)
+        self.assertIn('.desktop[data-screen="quick-start"] .brand img', css)
         self.assertNotIn('.desktop[data-screen="quick-start"] .brand .name', css)
         self.assertNotIn('.desktop[data-screen="quick-start"] .brand .caption', css)
         self.assertNotIn("quick start · live readonly", html + js)
         self.assertNotIn("quick start · v0.2.0", html + js)
         self.assertIn("align-items: start", css)
-        self.assertIn("grid-template-columns: minmax(0, 1.2fr) minmax(360px, .88fr)", css)
+        self.assertIn("grid-template-columns: minmax(300px, 1.15fr) minmax(300px, .85fr)", css)
         self.assertIn("max-width: 1110px", css)
         self.assertIn("quick-start-connections-card", html)
         self.assertIn(".quick-start-connection-actions", css)
@@ -1462,10 +1488,14 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn(".quick-start-route-card", css)
         self.assertIn("grid-column: auto", css)
         self.assertIn(".quick-start-route-grid", css)
+        self.assertIn("appearance: none", css)
+        self.assertIn('content: "..."', css)
         self.assertIn(".quick-start-history-checklist", css)
         self.assertIn("height: auto", css)
-        self.assertIn("padding: 48px var(--qs-main-padding) 32px", css)
-        self.assertIn("@media (max-width: 1511px)", css)
+        self.assertIn("padding: 32px var(--qs-main-padding) 24px", css)
+        self.assertIn("@media (max-width: 1100px)", css)
+        self.assertIn("grid-template-columns: minmax(280px, 1fr) minmax(280px, .82fr)", css)
+        self.assertNotIn("@media (max-width: 1511px)", css)
         self.assertIn(".main-header > div:first-child::before", css)
         self.assertIn('url("../assets/icons/phosphor/lightning.png") center / 22px 22px no-repeat', css)
         self.assertIn("min-height: 76px", css)
@@ -1481,7 +1511,17 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn('id="quickStartCheckAllAction" class="button primary', html)
         self.assertIn(".header-actions #quickStartCheckAllAction:disabled", css)
         self.assertIn('document.getElementById("quickStartCheckAllAction")?.addEventListener("click"', js)
-        self.assertIn('maybeConfirmAndRun(button.dataset.uiAction || "quick_start_check_all")', js)
+        self.assertIn('maybeConfirmAndRunFromButton(button, button.dataset.uiAction || "quick_start_check_all")', js)
+        self.assertIn("quickStartPresentationActionButton", js)
+        self.assertIn("renderBlockedActionFromButton", js)
+        blocked_action_body = js.split("function renderBlockedActionFromButton", 1)[1].split("function maybeConfirmAndRunFromButton", 1)[0]
+        self.assertIn('route_id: ""', blocked_action_body)
+        self.assertNotIn("route_id: extraPayload.route_id", blocked_action_body)
+        self.assertIn('button.disabled = quickStartPresentationActionButton(button) ? false : !state.available', js)
+        self.assertIn('.desktop[data-screen="quick-start"] #quickStartExecutionModeDryRunAction', css)
+        self.assertIn('.desktop[data-screen="quick-start"] .quick-start-route-response', css)
+        self.assertIn(".desktop[data-screen=\"quick-start\"] .quick-start-route-actions", css)
+        self.assertIn("min-width: 220px", css)
 
         for forbidden in (
             "<canvas",
@@ -1548,6 +1588,20 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("new_launch_started: false", preflight_js)
         self.assertIn("live_provider_called: false", preflight_js)
 
+        admission_body = re.search(
+            r"async function runQuickStartConfigAdmission\(buttonId = \"quickStartCheckApiAction\"\) \{(?P<body>.*?)\n\}\n\nasync function runQuickStartLaunchPreflight",
+            js,
+            re.S,
+        )
+        self.assertIsNotNone(admission_body)
+        admission_js = admission_body.group("body")
+        self.assertIn('fetch("api/codex/custom/quick-start/config-admission"', admission_js)
+        self.assertNotIn('fetch("api/codex/custom/native-launch"', admission_js)
+        self.assertNotIn("setScreen(", admission_js)
+        self.assertIn("live_call_attempted: false", admission_js)
+        self.assertIn("provider_called: false", admission_js)
+        self.assertIn("silent_fallback_used: false", admission_js)
+
         show_body = re.search(
             r"async function showCodexCustomWindow\(\) \{(?P<body>.*?)\n\}\n\nasync function confirmCodexCustomVisibleHistory",
             js,
@@ -1559,6 +1613,122 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn('fetch("api/codex/custom/native-launch"', show_js)
         self.assertNotIn("setScreen(", show_js)
         self.assertIn("custom_window_visible: false", show_js)
+
+    def test_quick_start_config_admission_posts_bounded_selection_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(id = "") {
+    this.id = id;
+    this.dataset = {};
+    this.disabled = false;
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.3-codex";
+node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+
+let requestBody = null;
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options) {
+    if (url !== "api/codex/custom/quick-start/config-admission") {
+      throw new Error(`unexpected fetch url ${url}`);
+    }
+    requestBody = JSON.parse(options.body);
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        status: "ok",
+        machine_error_code: "OK",
+        final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+        execution_mode: "chatgpt_plus_api",
+        chatgpt_model: { status: "admitted", model_id: "gpt-5.3-codex" },
+        api_model: { status: "admitted", model_id: "wbp-deepseek-v3" },
+        api_reasoning: { status: "defaulted", option_id: "catalog_default" },
+        api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+        launch_admission: "admitted",
+        launch_admission_summary: "ok",
+        dry_server_truth_only: true,
+        fallback_used: false,
+        silent_fallback_used: false,
+        live_call_attempted: false,
+        provider_called: false,
+        raw_backend_details_exposed: false,
+        secret_value_exposed: false,
+        raw_path_exposed: false,
+        original_codex_touched: false,
+        asar_touched: false
+      })
+    });
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
+  const keys = Object.keys(requestBody).sort();
+  const expected = ["api_model_id", "api_reasoning_option_id", "chatgpt_model_id", "execution_mode"];
+  if (JSON.stringify(keys) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected admission body keys ${JSON.stringify(keys)}`);
+  }
+  for (const forbidden of ["route_id", "secret_ref", "api_key", "base_url", "path", "CODEX_HOME"]) {
+    if (JSON.stringify(requestBody).includes(forbidden)) {
+      throw new Error(`forbidden browser field leaked into admission body: ${forbidden}`);
+    }
+  }
+  if (requestBody.execution_mode !== "chatgpt_plus_api" || requestBody.api_model_id !== "wbp-deepseek-v3") {
+    throw new Error(`selection body mismatch ${JSON.stringify(requestBody)}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
 
     def test_quick_start_live_rows_format_operator_copy(self) -> None:
         script = r"""
@@ -1706,6 +1876,24 @@ if (control["data-ui-action"] || control.dataset.action) {
 }
 if (descendants(control).some((item) => String(item.className || "").split(/\s+/).includes("dot"))) {
   throw new Error("quick-start check action must not include a floating status dot");
+}
+const routeOnlySummary = sandbox.quickStartApiModel({
+  status: "ok",
+  source: "api_connections_readonly",
+  routes: [{
+    route_id: "wbp-raw-route-id",
+    provider: "openrouter",
+    enabled: true,
+    role_label: "main route",
+    secret_status_label: "available"
+  }]
+}, "live");
+const routeOnlyText = `${routeOnlySummary.provider} ${routeOnlySummary.model}`;
+if (routeOnlyText.includes("wbp-raw-route-id")) {
+  throw new Error(`quick-start API summary leaked raw route id: ${routeOnlyText}`);
+}
+if (!routeOnlyText.includes("openrouter")) {
+  throw new Error(`quick-start API summary lost safe provider fallback: ${routeOnlyText}`);
 }
 """
         result = subprocess.run(

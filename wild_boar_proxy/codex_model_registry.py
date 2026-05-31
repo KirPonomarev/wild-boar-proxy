@@ -583,9 +583,9 @@ def _route_thinking_metadata_from_entry(entry: dict[str, Any]) -> dict[str, Any]
     if thinking_type != "enabled":
         return {
             "thinking": {"type": "disabled"},
-            "api_parameter_sent": False,
+            "api_parameter_sent": True,
             "intelligence_measured": False,
-            "label_source": "operator_mapping",
+            "label_source": "provider_declared_plus_operator_mapping",
         }
     return {
         "thinking": {

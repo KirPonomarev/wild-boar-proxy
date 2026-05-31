@@ -27,7 +27,7 @@
         <nav class="nav" aria-label="Основная навигация">
           <a id="quickStartNav" class="nav-item active" href="?screen=quick-start" aria-current="page" data-screen-link="quick-start">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/lightning.png" alt="" aria-hidden="true">
-            <span>Быстрый старт</span>
+            <span>Старт</span>
           </a>
           <a id="overviewNav" class="nav-item" href="?screen=overview" data-screen-link="overview">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true">
@@ -218,9 +218,9 @@
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                   <span>Проверить</span>
                 </button>
-                <button id="quickStartCheckApiAction" class="button small api-route-action" type="button" data-ui-action="api_route_check" data-route-id="" data-route-enabled="false" data-route-state-proven="false" data-route-state-requirement="enabled" disabled title="Нужен confirmed main route из bounded snapshot.">
+                <button id="quickStartCheckApiAction" class="button small" type="button" title="Проверить текущую Quick Start конфигурацию через bounded server admission packet.">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
-                  <span>Проверить API</span>
+                  <span>Проверка</span>
                 </button>
               </div>
 
@@ -268,29 +268,35 @@
               <div class="quick-start-route-grid" aria-label="Выбор исполнителя Custom Codex">
                 <label>
                   <span>ChatGPT</span>
-                  <select id="quickStartChatModelSelect" aria-label="Quick Start ChatGPT model"></select>
+                  <select id="quickStartChatModelSelect" aria-label="Quick Start ChatGPT model">
+                    <option value="" selected>codex-auto-review</option>
+                  </select>
                 </label>
                 <label>
                   <span>API</span>
-                  <select id="quickStartApiModelSelect" aria-label="Quick Start API model"></select>
+                  <select id="quickStartApiModelSelect" aria-label="Quick Start API model">
+                    <option value="" selected>WBP deepseek-chat</option>
+                  </select>
                 </label>
                 <label>
-                  <span>Уровень API</span>
-                  <select id="quickStartApiReasoningOptionSelect" aria-label="Quick Start API reasoning option"></select>
+                  <span>Мышление DeepSeek</span>
+                  <select id="quickStartApiReasoningOptionSelect" aria-label="Quick Start API reasoning option">
+                    <option value="" selected>по каталогу</option>
+                  </select>
                 </label>
                 <label>
                   <span>Режим</span>
                   <select id="quickStartExecutionModeSelect" aria-label="Quick Start execution mode">
-                    <option value="chatgpt_only">Только ChatGPT</option>
+                    <option value="chatgpt_only">ChatGPT</option>
                     <option value="chatgpt_plus_api">ChatGPT + API</option>
-                    <option value="api_only">Только API</option>
+                    <option value="api_only">API</option>
                   </select>
                 </label>
               </div>
 
               <div class="quick-start-api-checklist" aria-label="Проверка рабочего маршрута">
                 <div class="quick-start-check-row">
-                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">режим</span>
+                  <span>Маршрут</span>
                   <span id="quickStartExecutionModeState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
                 </div>
                 <div class="quick-start-check-row">
@@ -315,7 +321,7 @@
                 </div>
               </div>
 
-              <div class="quick-start-card-actions">
+              <div class="quick-start-card-actions quick-start-route-actions">
                 <button id="quickStartRouteRefreshAction" class="button small" type="button">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
                   <span>Обновить модели</span>
