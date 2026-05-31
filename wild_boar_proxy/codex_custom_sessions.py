@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+import shlex
 import subprocess
 import tempfile
 import threading
@@ -51,6 +52,7 @@ PROMPT_RUN_ALLOWED_FIELDS = {"prompt", "slot_id"}
 TEMP_WRITE_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_CODER_ALLOWED_FIELDS = {"api_model_id", "task"}
+REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {
     "ready",
@@ -169,6 +171,10 @@ def forbidden_safe_worktree_edit_probe_fields(payload: Any) -> list[str]:
 
 def forbidden_safe_worktree_coder_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, SAFE_WORKTREE_CODER_ALLOWED_FIELDS)))
+
+
+def forbidden_repo_tmp_edit_probe_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS)))
 
 
 def _model_ids(
@@ -2292,6 +2298,236 @@ class CodexCustomSessionManager:
             "cleanup_error": cleanup_error,
             "trace_observer_packet": trace_packet,
             "role_slot_binding_packet": self._role_slot_binding_packet(session),
+        }
+
+    def repo_tmp_edit_probe_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+        repo_root: Path | None = None,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_repo_tmp_edit_probe_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "browser_path_intake": False,
+                "browser_backend_intake": False,
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "next_action": "provide_exact_owner_authorization_phrase",
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+
+        requested_slot_id = PRIMARY_MODEL_SLOT
+        precondition_failure = self._prompt_precondition_failure(session, requested_slot_id)
+        if precondition_failure:
+            return {
+                **precondition_failure,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        slot = dict(role_slots[PRIMARY_MODEL_SLOT])
+        model_id = str(slot.get("model_id") or "")
+        api_model_id = str(payload.get("api_model_id") or model_id).strip()
+        if api_model_id != model_id:
+            return {
+                **self._base_packet("rejected", "MODEL_ID_DOES_NOT_MATCH_BOUND_PRIMARY_SLOT"),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "model_id": model_id,
+                "api_model_id": api_model_id,
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+        if slot.get("selected_source_class") != "route_backed":
+            return {
+                **self._base_packet("blocked", "API_ONLY_ROUTE_BACKED_PRIMARY_SLOT_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "model_id": model_id,
+                "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+                "api_only_calls_chatgpt": False,
+                "chatgpt_only_calls_api": False,
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+        if "deepseek" not in model_id.lower():
+            return {
+                **self._base_packet("rejected", "DEEPSEEK_ROUTE_MODEL_REQUIRED"),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "model_id": model_id,
+                "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+                "fallback_attempted": False,
+            }
+
+        repo = (repo_root or Path.cwd()).resolve()
+        git_root = _run_git_command(repo, ["rev-parse", "--show-toplevel"])
+        if not git_root["ok"]:
+            return {
+                **self._base_packet("blocked", "REPO_TMP_EDIT_REPO_ROOT_NOT_GIT"),
+                "session_id": session_id,
+                "final_status": "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+                "fallback_attempted": False,
+                "main_tree_mutation_admitted": False,
+                "outside_write_surface_changed": False,
+            }
+        repo = Path(str(git_root["stdout"]).strip()).resolve()
+        status_before = _run_git_command(repo, ["status", "--porcelain=v1", "-uall"])
+        status_before_lines = str(status_before.get("stdout") or "").splitlines()
+        tmp_dir = repo / ".tmp"
+        target_rel = Path(".tmp/deepseek_api_only_live_edit_probe.txt")
+        target = repo / target_rel
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        before_text = "WBP_API_ONLY_DEEPSEEK_EDIT_BEFORE"
+        target.write_text(before_text, encoding="utf-8")
+        before_existed = target.exists()
+        before_content = target.read_text(encoding="utf-8", errors="replace") if before_existed else ""
+        expected_text = "WBP_API_ONLY_DEEPSEEK_EDIT_OK"
+        result: dict[str, Any] = {
+            "status": "failed",
+            "machine_error_code": "REPO_TMP_EDIT_PROMPT_NOT_RUN",
+        }
+        try:
+            prompt = (
+                "Use the available command execution tool. Run exactly this shell command, "
+                "then answer with exactly the file content and nothing else:\n"
+                f"printf {shlex.quote(expected_text)} > {shlex.quote(str(target))} && "
+                f"cat {shlex.quote(str(target))}"
+            )
+            runner_payload = {
+                "prompt": prompt,
+                "model_id": model_id,
+                "slot_id": PRIMARY_MODEL_SLOT,
+                "slot_id_explicit": False,
+                "declared_write_surface": ".tmp_only",
+                "target_relative_path": str(target_rel),
+            }
+            result = prompt_runner(runner_payload, tmp_dir)
+        except Exception as exc:  # pragma: no cover - defensive live boundary
+            result = {
+                "status": "failed",
+                "machine_error_code": "REPO_TMP_EDIT_PROMPT_RUNNER_EXCEPTION",
+                "error_class": type(exc).__name__,
+            }
+
+        after_existed = target.exists()
+        after_content = target.read_text(encoding="utf-8", errors="replace") if after_existed else ""
+        status_after = _run_git_command(repo, ["status", "--porcelain=v1", "-uall"])
+        status_after_lines = str(status_after.get("stdout") or "").splitlines()
+
+        def outside_tmp(lines: list[str]) -> list[str]:
+            outside: list[str] = []
+            for line in lines:
+                path_text = line[3:] if len(line) > 3 else line
+                if path_text.startswith(".tmp/") or " -> .tmp/" in path_text:
+                    continue
+                outside.append(line)
+            return outside
+
+        outside_write_surface_changed = outside_tmp(status_before_lines) != outside_tmp(status_after_lines)
+        raw_trace = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        trace_packet = _safe_trace_observer_packet(raw_trace)
+        request_count = trace_packet.get("request_count")
+        tool_loop_proven = isinstance(request_count, int) and request_count >= 2
+        response_text = str(result.get("final_message") or result.get("response_text") or "")
+        provider_response_proven = result.get("status") == "ok" and bool(response_text)
+        file_content_matches = after_content == expected_text
+        file_changed_by_codex_tool = after_existed and file_content_matches and (
+            not before_existed or before_content != after_content
+        )
+        success = (
+            provider_response_proven
+            and tool_loop_proven
+            and result.get("configured_provider") == "external_route"
+            and result.get("runtime_model") == model_id
+            and result.get("workspace_write_admitted") is True
+            and result.get("additional_writable_dir_admitted") is True
+            and after_existed
+            and file_content_matches
+            and file_changed_by_codex_tool
+            and not outside_write_surface_changed
+            and result.get("current_codex_home_used") is False
+            and result.get("secret_value_recorded") is False
+        )
+        return {
+            **self._base_packet("ok" if success else "blocked", "OK" if success else "REPO_TMP_EDIT_NOT_PROVEN"),
+            "final_status": (
+                "API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_PROVEN_WITH_LIMITS"
+                if success
+                else "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN"
+            ),
+            "execution_mode": "api_only",
+            "session_id": session_id,
+            "model_id": model_id,
+            "provider_id": "deepseek",
+            "current_execution_slot_id": PRIMARY_MODEL_SLOT,
+            "selected_source_class": slot.get("selected_source_class"),
+            "selected_from_server_catalog": slot.get("server_issued") is True,
+            "provider_called": provider_response_proven,
+            "provider_response_proven": provider_response_proven,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "fallback_attempted": False,
+            "fallback_used": False,
+            "tool_loop_proven": tool_loop_proven,
+            "request_count": request_count if isinstance(request_count, int) else 0,
+            "main_tree_mutation_admitted": True,
+            "write_surface": ".tmp_only",
+            "write_surface_path_redacted": str(target_rel),
+            "browser_path_intake": False,
+            "browser_backend_intake": False,
+            "file_relative_path": str(target_rel),
+            "file_existed_before_tool": before_existed,
+            "setup_probe_file_seeded_by_wbp": True,
+            "file_existed_after_tool": after_existed,
+            "file_changed_by_codex_tool": file_changed_by_codex_tool,
+            "file_content_matches": file_content_matches,
+            "file_sha256": _digest(after_content) if after_existed else "",
+            "outside_write_surface_changed": outside_write_surface_changed,
+            "secret_value_recorded": result.get("secret_value_recorded") is True,
+            "secret_in_probe_file": bool(
+                re.search(r"(sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,})", after_content)
+            ),
+            "original_codex_touched": False,
+            "original_codex_profile_touched": False,
+            "current_codex_touched": result.get("current_codex_home_used") is True,
+            "wbp_patch_applier_used": False,
+            "commit_attempted": False,
+            "push_attempted": False,
+            "merge_attempted": False,
+            "workspace_write_admitted": result.get("workspace_write_admitted") is True,
+            "additional_writable_dir_admitted": result.get("additional_writable_dir_admitted") is True,
+            "additional_writable_dir_scope": str(result.get("additional_writable_dir_scope") or ""),
+            "danger_full_access_admitted": result.get("danger_full_access_admitted") is True,
+            "response_preview_bounded": _response_preview(response_text),
+            "trace_observer_packet": trace_packet,
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+            "next_action": "manual_review_packet" if success else "inspect_repo_tmp_edit_packet",
         }
 
     def safe_worktree_coder_packet(

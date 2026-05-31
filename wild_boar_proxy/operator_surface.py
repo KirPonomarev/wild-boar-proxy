@@ -2394,6 +2394,7 @@ class OperatorSurfaceSession:
         sandbox_mode_override: str = "read-only",
         writable_additional_dir: Path | None = None,
         working_dir_override: Path | None = None,
+        declared_repo_tmp_dir: Path | None = None,
     ) -> dict[str, Any]:
         forbidden = forbidden_browser_fields(payload)
         if forbidden:
@@ -2581,9 +2582,15 @@ class OperatorSurfaceSession:
             work = requested_work
             working_dir_scope = "safe_worktree_only"
         additional_writable_dir: Path | None = None
+        additional_writable_dir_scope = "none"
         if writable_additional_dir is not None:
             try:
                 additional_writable_dir = Path(writable_additional_dir).resolve()
+                declared_repo_tmp = (
+                    Path(declared_repo_tmp_dir).resolve()
+                    if declared_repo_tmp_dir is not None
+                    else None
+                )
             except OSError as exc:
                 remove_tree_with_retry(tmp_root)
                 return {
@@ -2600,13 +2607,30 @@ class OperatorSurfaceSession:
                     "error_class": type(exc).__name__,
                     "secret_value_recorded": False,
                 }
+            repo_tmp_declared = (
+                declared_repo_tmp is not None
+                and additional_writable_dir == declared_repo_tmp
+                and additional_writable_dir.name == ".tmp"
+            )
+            temp_add_dir_allowed = (
+                workspace_write_requested
+                and additional_writable_dir.exists()
+                and additional_writable_dir.is_dir()
+                and temp_root_parent in additional_writable_dir.parents
+                and Path.cwd().resolve() not in additional_writable_dir.parents
+                and additional_writable_dir != current_codex_home
+            )
+            repo_tmp_add_dir_allowed = (
+                workspace_write_requested
+                and repo_tmp_declared
+                and additional_writable_dir.exists()
+                and additional_writable_dir.is_dir()
+                and additional_writable_dir != current_codex_home
+                and current_codex_home not in additional_writable_dir.parents
+            )
             if (
-                not workspace_write_requested
-                or not additional_writable_dir.exists()
-                or not additional_writable_dir.is_dir()
-                or temp_root_parent not in additional_writable_dir.parents
-                or Path.cwd().resolve() in additional_writable_dir.parents
-                or additional_writable_dir == current_codex_home
+                not temp_add_dir_allowed
+                and not repo_tmp_add_dir_allowed
             ):
                 remove_tree_with_retry(tmp_root)
                 return {
@@ -2622,6 +2646,9 @@ class OperatorSurfaceSession:
                     "danger_full_access_admitted": False,
                     "secret_value_recorded": False,
                 }
+            additional_writable_dir_scope = (
+                "declared_repo_tmp_only" if repo_tmp_add_dir_allowed else "temp_only"
+            )
         route_adapter: ExternalRouteResponsesAdapter | None = None
         trace_observer = None
         effective_endpoint = downstream_endpoint
@@ -2790,7 +2817,7 @@ class OperatorSurfaceSession:
             "workspace_write_requested": workspace_write_requested,
             "workspace_write_admitted": workspace_write_requested,
             "additional_writable_dir_admitted": additional_writable_dir is not None,
-            "additional_writable_dir_scope": "temp_only" if additional_writable_dir is not None else "none",
+            "additional_writable_dir_scope": additional_writable_dir_scope,
             "working_dir_override_admitted": working_dir_override is not None,
             "working_dir_scope": working_dir_scope,
             "danger_full_access_admitted": False,

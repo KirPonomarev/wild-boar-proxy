@@ -1593,6 +1593,145 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["merge_attempted"])
             self.assertTrue(packet["worktree_removed_after_probe"])
 
+    def test_api_only_repo_tmp_edit_probe_proves_bounded_main_tmp_write(self) -> None:
+        observed_payload: dict[str, object] = {}
+
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            observed_payload.update(payload)
+            target = writable_dir / "deepseek_api_only_live_edit_probe.txt"
+            target.write_text("WBP_API_ONLY_DEEPSEEK_EDIT_OK", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "selected_model": "wbp-deepseek-v3",
+                "runtime_model": "wbp-deepseek-v3",
+                "final_message": "WBP_API_ONLY_DEEPSEEK_EDIT_OK",
+                "configured_provider": "external_route",
+                "configured_wire_api": "responses",
+                "workspace_write_admitted": True,
+                "additional_writable_dir_admitted": True,
+                "additional_writable_dir_scope": "declared_repo_tmp_only",
+                "current_codex_home_used": False,
+                "secret_value_recorded": False,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                    "request_count": 2,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-deepseek-v3"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.repo_tmp_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-deepseek-v3"},
+                runner,
+                owner_authorized=True,
+                repo_root=repo,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["final_status"],
+                "API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_PROVEN_WITH_LIMITS",
+            )
+            self.assertEqual(observed_payload["model_id"], "wbp-deepseek-v3")
+            self.assertEqual(observed_payload["slot_id"], "primary_model_slot")
+            self.assertEqual(observed_payload["declared_write_surface"], ".tmp_only")
+            self.assertEqual(
+                observed_payload["target_relative_path"],
+                ".tmp/deepseek_api_only_live_edit_probe.txt",
+            )
+            self.assertTrue(packet["main_tree_mutation_admitted"])
+            self.assertEqual(packet["write_surface"], ".tmp_only")
+            self.assertEqual(
+                packet["file_relative_path"],
+                ".tmp/deepseek_api_only_live_edit_probe.txt",
+            )
+            self.assertTrue(packet["provider_called"])
+            self.assertTrue(packet["tool_loop_proven"])
+            self.assertTrue(packet["setup_probe_file_seeded_by_wbp"])
+            self.assertTrue(packet["file_changed_by_codex_tool"])
+            self.assertTrue(packet["file_content_matches"])
+            self.assertFalse(packet["outside_write_surface_changed"])
+            self.assertFalse(packet["api_only_calls_chatgpt"])
+            self.assertFalse(packet["chatgpt_only_calls_api"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["wbp_patch_applier_used"])
+            self.assertFalse(packet["secret_in_probe_file"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["commit_attempted"])
+            self.assertFalse(packet["push_attempted"])
+            self.assertFalse(packet["merge_attempted"])
+            self.assertEqual(
+                (repo / ".tmp/deepseek_api_only_live_edit_probe.txt").read_text(encoding="utf-8"),
+                "WBP_API_ONLY_DEEPSEEK_EDIT_OK",
+            )
+
+    def test_api_only_repo_tmp_edit_probe_blocks_chatgpt_primary_without_api_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "gpt-5.3-codex"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.repo_tmp_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "gpt-5.3-codex"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=True,
+                repo_root=repo,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "API_ONLY_ROUTE_BACKED_PRIMARY_SLOT_REQUIRED")
+            self.assertEqual(
+                packet["final_status"],
+                "STOP_AND_DIAGNOSE_API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_NOT_PROVEN",
+            )
+            self.assertFalse(packet["api_only_calls_chatgpt"])
+            self.assertFalse(packet["chatgpt_only_calls_api"])
+            self.assertFalse(packet["main_tree_mutation_admitted"])
+            self.assertFalse(packet["outside_write_surface_changed"])
+
+    def test_api_only_repo_tmp_edit_probe_rejects_browser_path_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {"primary_model_id": "wbp-deepseek-v3"},
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.repo_tmp_edit_probe_packet(
+                created["session"]["session_id"],
+                {"api_model_id": "wbp-deepseek-v3", "path": ".tmp/owned"},
+                lambda _payload, _writable_dir: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("path", packet["forbidden_fields"])
+            self.assertFalse(packet["browser_path_intake"])
+            self.assertFalse(packet["browser_backend_intake"])
+
     def test_api_only_product_safe_worktree_coder_keeps_active_worktree_until_cleanup(self) -> None:
         observed_payload: dict[str, object] = {}
 

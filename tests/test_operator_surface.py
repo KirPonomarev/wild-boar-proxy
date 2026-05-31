@@ -521,6 +521,81 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("--add-dir", result["command_surface"]["args_shape"])
         self.assertNotIn(str(writable_dir.resolve()), json.dumps(result))
 
+    def test_run_prompt_admits_declared_repo_tmp_add_dir_only_with_explicit_flag(self) -> None:
+        session = OperatorSurfaceSession(
+            OperatorSurfaceConfig(
+                codex_bin=Path("/bin/echo"),
+                runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
+                timeout_seconds=5,
+            )
+        )
+        session.probe_models = lambda: {  # type: ignore[method-assign]
+            "ok": True,
+            "model_ids": ["gpt-5.3-codex"],
+            "server_issued": True,
+        }
+        session.run_wbp = lambda args: {"json": {"data": {"routes": []}}}  # type: ignore[method-assign]
+        session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
+        session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
+
+        captured_command: list[str] = []
+
+        def fake_observed_run(command: list[str], **_kwargs: object) -> dict[str, object]:
+            captured_command[:] = command
+            last_message = Path(command[command.index("-o") + 1])
+            last_message.write_text("REPO_TMP_WRITE_OK\n", encoding="utf-8")
+            return {
+                "exit_code": 0,
+                "stderr": "",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 1,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoint_observed": True,
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
+
+        repo_tmp = Path.cwd().resolve() / ".tmp"
+        repo_tmp.mkdir(exist_ok=True)
+        with mock.patch(
+            "wild_boar_proxy.operator_surface._run_command_with_observation",
+            side_effect=fake_observed_run,
+        ):
+            rejected = session.run_prompt(
+                {
+                    "prompt": "Reply with exactly REPO_TMP_WRITE_OK.",
+                    "model_id": "gpt-5.3-codex",
+                },
+                sandbox_mode_override="workspace-write",
+                writable_additional_dir=repo_tmp,
+            )
+            result = session.run_prompt(
+                {
+                    "prompt": "Reply with exactly REPO_TMP_WRITE_OK.",
+                    "model_id": "gpt-5.3-codex",
+                },
+                sandbox_mode_override="workspace-write",
+                writable_additional_dir=repo_tmp,
+                declared_repo_tmp_dir=repo_tmp,
+            )
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "ADDITIONAL_WRITABLE_DIR_NOT_ADMITTED")
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["additional_writable_dir_admitted"])
+        self.assertEqual(result["additional_writable_dir_scope"], "declared_repo_tmp_only")
+        self.assertIn("--add-dir", captured_command)
+        self.assertEqual(captured_command[captured_command.index("--add-dir") + 1], str(repo_tmp.resolve()))
+
     def test_run_prompt_rejects_danger_full_access_sandbox_override(self) -> None:
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(

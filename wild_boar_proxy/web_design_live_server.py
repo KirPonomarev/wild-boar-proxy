@@ -8488,6 +8488,25 @@ def build_handler(
                         )
                     )
                     return
+                if action == "repo-tmp-edit-probe":
+                    repo_tmp_dir = Path(codex_custom_safe_worktree_repo_root).resolve() / ".tmp"
+                    repo_tmp_dir.mkdir(parents=True, exist_ok=True)
+                    self._send_json(
+                        codex_custom_sessions.repo_tmp_edit_probe_packet(
+                            session_id,
+                            self._read_json_body(),
+                            lambda payload, writable_dir: operator_surface_session.run_prompt(
+                                payload,
+                                trace_wbp=True,
+                                sandbox_mode_override="workspace-write",
+                                writable_additional_dir=writable_dir,
+                                declared_repo_tmp_dir=repo_tmp_dir,
+                            ),
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                            repo_root=codex_custom_safe_worktree_repo_root,
+                        )
+                    )
+                    return
                 if action == "safe-worktree-coder":
                     self._send_json(
                         codex_custom_sessions.safe_worktree_coder_packet(

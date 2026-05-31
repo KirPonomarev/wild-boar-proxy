@@ -13860,6 +13860,142 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertIn("base_url", rejected["forbidden_fields"])
 
+    def test_codex_custom_repo_tmp_edit_probe_endpoint_proves_api_only_deepseek_edit(self) -> None:
+        class RepoTmpDeepSeekFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession):
+            def run_prompt(
+                self,
+                payload: dict[str, object],
+                *,
+                trace_wbp: bool = False,
+                sandbox_mode_override: str = "read-only",
+                writable_additional_dir: Path | None = None,
+                working_dir_override: Path | None = None,
+                declared_repo_tmp_dir: Path | None = None,
+            ) -> dict[str, object]:
+                assert sandbox_mode_override == "workspace-write"
+                assert writable_additional_dir is not None
+                assert declared_repo_tmp_dir == writable_additional_dir
+                target = writable_additional_dir / "deepseek_api_only_live_edit_probe.txt"
+                target.write_text("WBP_API_ONLY_DEEPSEEK_EDIT_OK", encoding="utf-8")
+                result = super().run_prompt(
+                    payload,
+                    trace_wbp=trace_wbp,
+                    sandbox_mode_override=sandbox_mode_override,
+                    writable_additional_dir=writable_additional_dir,
+                    working_dir_override=working_dir_override,
+                )
+                trace_packet = dict(result["trace_observer_packet"])
+                trace_packet["request_count"] = 2
+                result.update(
+                    {
+                        "runtime_model": "wbp-deepseek-v3",
+                        "final_message": "WBP_API_ONLY_DEEPSEEK_EDIT_OK",
+                        "trace_observer_packet": trace_packet,
+                        "additional_writable_dir_admitted": True,
+                        "additional_writable_dir_scope": "declared_repo_tmp_only",
+                    }
+                )
+                return result
+
+        created_sessions: list[RepoTmpDeepSeekFakeOperatorSurfaceSession] = []
+
+        def factory() -> RepoTmpDeepSeekFakeOperatorSurfaceSession:
+            session = RepoTmpDeepSeekFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        written_content = ""
+        with tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=MappingRunner(payloads),
+                        owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                        safe_worktree_repo_root=repo,
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    launched = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/launch",
+                            {"model_id": "wbp-deepseek-v3"},
+                        )
+                    )
+                    session_id = launched["session"]["session_id"]
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/sessions/{session_id}/repo-tmp-edit-probe",
+                            {"api_model_id": "wbp-deepseek-v3"},
+                        )
+                    )
+                    rejected = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/sessions/{session_id}/repo-tmp-edit-probe",
+                            {"api_model_id": "wbp-deepseek-v3", "path": ".tmp/owned"},
+                        )
+                    )
+                    written_content = (repo / ".tmp/deepseek_api_only_live_edit_probe.txt").read_text(
+                        encoding="utf-8"
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["execution_mode"], "api_only")
+        self.assertEqual(packet["model_id"], "wbp-deepseek-v3")
+        self.assertEqual(packet["provider_id"], "deepseek")
+        self.assertTrue(packet["main_tree_mutation_admitted"])
+        self.assertEqual(packet["write_surface"], ".tmp_only")
+        self.assertTrue(packet["provider_called"])
+        self.assertTrue(packet["tool_loop_proven"])
+        self.assertTrue(packet["setup_probe_file_seeded_by_wbp"])
+        self.assertTrue(packet["file_changed_by_codex_tool"])
+        self.assertTrue(packet["file_content_matches"])
+        self.assertFalse(packet["outside_write_surface_changed"])
+        self.assertFalse(packet["api_only_calls_chatgpt"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["wbp_patch_applier_used"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["push_attempted"])
+        self.assertEqual(written_content, "WBP_API_ONLY_DEEPSEEK_EDIT_OK")
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [
+                {
+                    "prompt": created_sessions[0].run_payloads[0]["prompt"],
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "primary_model_slot",
+                    "slot_id_explicit": False,
+                    "declared_write_surface": ".tmp_only",
+                    "target_relative_path": ".tmp/deepseek_api_only_live_edit_probe.txt",
+                }
+            ],
+        )
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("path", rejected["forbidden_fields"])
+
     def test_codex_custom_product_safe_worktree_coder_and_cleanup_endpoint(self) -> None:
         class ProductCoderExternalRouteFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession):
             def run_prompt(
