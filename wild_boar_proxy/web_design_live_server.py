@@ -4730,6 +4730,20 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     coding_model_id = str(coding_slot.get("model_id") or "")
     launch_id = str(launch.get("launch_id") or "")
     trace_id = str(launch.get("trace_id") or "")
+    stable_bridge_preflight_status = str(
+        launch.get("stable_bridge_preflight_status")
+        or (
+            launch.get("stable_bridge_preflight_packet", {})
+            if isinstance(launch.get("stable_bridge_preflight_packet"), dict)
+            else {}
+        ).get("status")
+        or ""
+    )
+    stable_bridge_preflight_ok = bool(
+        launch.get("stable_bridge_preflight_required") is True
+        and launch.get("stable_bridge_launch_allowed") is True
+        and stable_bridge_preflight_status == "ok"
+    )
 
     def record_matches_launch(record: dict[str, Any]) -> bool:
         record_launch_id = str(record.get("launch_packet_id") or record.get("launch_id") or "")
@@ -4743,6 +4757,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     slot_binding_proven = bool(
         launch_proven
+        and stable_bridge_preflight_ok
         and execution_mode == "chatgpt_plus_api"
         and primary_slot.get("status") == "bound"
         and primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
@@ -4818,7 +4833,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             "OK" if full_success else "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         ),
         "final_status": (
-            "CUSTOM_CODEX_CHATGPT_PLUS_DEEPSEEK_CODER_ROUTE_PROVEN_WITH_LIMITS"
+            "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
             if full_success
             else "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         ),
@@ -4847,11 +4862,23 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "slot_binding_proven": slot_binding_proven,
         "primary_slot_bound": primary_slot.get("status") == "bound",
         "coding_slot_bound": coding_slot.get("status") == "bound",
+        "dual_lane_slots_preserved": bool(
+            primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
+            and coding_slot.get("lane") == API_ROUTE_MODEL_LANE
+            and primary_slot.get("slot_id") == "primary_model_slot"
+            and coding_slot.get("slot_id") == "coding_agent_model_slot"
+        ),
         "prompt_seen": prompt_seen,
-        "chatgpt_route_observed": bool(prompt_record),
-        "deepseek_route_observed": bool(deepseek_record),
+        "chatgpt_route_observed": prompt_seen,
+        "chatgpt_primary_route_observed": prompt_seen,
+        "deepseek_route_observed": coder_dispatch_proven,
+        "deepseek_coding_route_observed": coder_dispatch_proven,
         "coder_dispatch_proven": coder_dispatch_proven,
         "coder_work_result_proven_with_limits": coder_work_result_proven,
+        "stable_bridge_preflight": stable_bridge_preflight_status,
+        "stable_bridge_preflight_ok": stable_bridge_preflight_ok,
+        "stable_bridge_preflight_required": launch.get("stable_bridge_preflight_required") is True,
+        "stable_bridge_launch_allowed": launch.get("stable_bridge_launch_allowed") is True,
         "launch_id": launch_id,
         "trace_id": trace_id,
         "trace_server_issued": bool(launch_id and trace_id),
@@ -4878,6 +4905,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "known_smoke_phrase_matched": deepseek_record.get("known_smoke_phrase_matched") is True,
         "fallback_used": fallback_seen,
         "api_only_mode": execution_mode == "api_only",
+        "api_only_mode_used": execution_mode == "api_only",
+        "chatgpt_only_mode_used": execution_mode == "chatgpt_only",
         "chatgpt_replaced_by_api": False,
         "browser_trace_authority": False,
         "raw_prompt_recorded": False,
@@ -4885,6 +4914,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "secret_value_recorded": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
+        "response_text_counts_as_proof": False,
+        "ui_label_counts_as_proof": False,
         "response_text_counts_as_model_truth": False,
         "model_self_report_counts_as_runtime_truth": False,
         "wbp_patch_applier_used": False,
@@ -5006,18 +5037,66 @@ def build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
         file_created = False
     file_content_exact = file_content == expected_text
     git_probe = _git_probe_file_status(repo_root, expected_file)
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    trace_records = [
+        record
+        for record in trace.get("records") or []
+        if isinstance(record, dict)
+    ]
+    trace_last_record = (
+        trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    )
+    if trace_last_record and trace_last_record not in trace_records:
+        trace_records.append(trace_last_record)
+    request_trace = (
+        trace.get("bridge_request_trace_packet")
+        if isinstance(trace.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
+    trace_changed_files: Any = request_trace.get("changed_files")
+    if not isinstance(trace_changed_files, list):
+        trace_changed_files = next(
+            (
+                record.get("changed_files")
+                for record in reversed(trace_records)
+                if str(record.get("launch_packet_id") or record.get("launch_id") or "")
+                == str(route_packet.get("launch_id") or "")
+                and str(record.get("trace_id") or "")
+                == str(route_packet.get("trace_id") or "")
+                and isinstance(record.get("changed_files"), list)
+            ),
+            [],
+        )
+    changed_files = [
+        str(item)
+        for item in (trace_changed_files if isinstance(trace_changed_files, list) else [])
+        if str(item)
+    ]
+    if not changed_files and file_created and file_content_exact:
+        changed_files = [expected_file]
+    mutation_scope_allowed = changed_files == [expected_file]
+    file_mutation_observed = bool(
+        file_created
+        and file_content_exact
+        and log_evidence.get("tool_call_seen") is True
+        and log_evidence.get("tool_result_success") is True
+    )
     fallback_used = route_packet.get("fallback_used") is True or bool(
         log_evidence.get("fallback_used_seen")
     )
     success = bool(
         route_packet.get("status") == "ok"
         and route_packet.get("execution_mode") == "chatgpt_plus_api"
+        and route_packet.get("chatgpt_primary_route_observed") is True
         and route_packet.get("coding_slot_provider") == "deepseek"
-        and route_packet.get("deepseek_route_observed") is True
+        and route_packet.get("deepseek_coding_route_observed") is True
+        and route_packet.get("stable_bridge_preflight_ok") is True
         and thread_cwd == str(repo_root)
         and thread_provider == "wbp"
         and file_created
         and file_content_exact
+        and file_mutation_observed
+        and mutation_scope_allowed
         and log_evidence.get("tool_call_seen") is True
         and log_evidence.get("tool_result_success") is True
         and log_evidence.get("model_seen") is True
@@ -5033,7 +5112,7 @@ def build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
             "OK" if success else "CHATGPT_PLUS_DEEPSEEK_FILE_EDIT_NOT_PROVEN"
         ),
         "final_status": (
-            "CUSTOM_CODEX_CHATGPT_PLUS_DEEPSEEK_CODING_SLOT_FILE_EDIT_PROVEN_WITH_LIMITS"
+            "CHATGPT_PLUS_API_CODE_EDIT_PROVEN_WITH_LIMITS"
             if success
             else "KNOWN_BLOCKER_CHATGPT_PLUS_DEEPSEEK_FILE_EDIT_NOT_PROVEN"
         ),
@@ -5049,11 +5128,28 @@ def build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
         "trace_id": str(route_packet.get("trace_id") or ""),
         "trace_launch_packet_matches": route_packet.get("trace_launch_packet_matches") is True,
         "trace_id_matches_launch": route_packet.get("trace_id_matches_launch") is True,
+        "chatgpt_primary_route_observed": (
+            route_packet.get("chatgpt_primary_route_observed") is True
+        ),
+        "deepseek_coding_route_observed": (
+            route_packet.get("deepseek_coding_route_observed") is True
+        ),
+        "stable_bridge_preflight": str(route_packet.get("stable_bridge_preflight") or ""),
+        "stable_bridge_preflight_ok": route_packet.get("stable_bridge_preflight_ok") is True,
+        "stable_bridge_preflight_required": (
+            route_packet.get("stable_bridge_preflight_required") is True
+        ),
+        "stable_bridge_launch_allowed": (
+            route_packet.get("stable_bridge_launch_allowed") is True
+        ),
         "mixed_route_trace_packet": route_packet,
         "coding_slot_provider": str(route_packet.get("coding_slot_provider") or ""),
         "coding_slot_model": coding_model_id,
         "file_created": file_created,
         "file_content_exact": file_content_exact,
+        "file_mutation_observed": file_mutation_observed,
+        "changed_files": changed_files,
+        "mutation_scope_allowed": mutation_scope_allowed,
         "file_content_sha256": hashlib.sha256(file_content.encode("utf-8")).hexdigest(),
         "file_path": str(file_path),
         "file_path_relative": expected_file,
@@ -5068,6 +5164,8 @@ def build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
         "fallback_used": fallback_used,
         "chatgpt_patch_applier_used": False,
         "wbp_patch_applier_used": False,
+        "response_text_counts_as_proof": False,
+        "ui_label_counts_as_proof": False,
         "response_text_counts_as_model_truth": False,
         "model_self_report_counts_as_runtime_truth": False,
         "next_action": (
