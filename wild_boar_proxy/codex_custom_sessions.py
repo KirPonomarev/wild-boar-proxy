@@ -53,6 +53,7 @@ TEMP_WRITE_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_CODER_ALLOWED_FIELDS = {"api_model_id", "task"}
 REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
+MIXED_SLOT_DISPATCH_PROBE_ALLOWED_FIELDS: set[str] = set()
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {
     "ready",
@@ -175,6 +176,10 @@ def forbidden_safe_worktree_coder_fields(payload: Any) -> list[str]:
 
 def forbidden_repo_tmp_edit_probe_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS)))
+
+
+def forbidden_mixed_slot_dispatch_probe_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, MIXED_SLOT_DISPATCH_PROBE_ALLOWED_FIELDS)))
 
 
 def _model_ids(
@@ -1894,6 +1899,233 @@ class CodexCustomSessionManager:
         packet["session"] = self._public_session(session)
         return packet
 
+    def mixed_slot_dispatch_probe_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_mixed_slot_dispatch_probe_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "packet_kind": "chatgpt_plus_api_slot_dispatch_probe",
+                "final_status": "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN",
+                "execution_mode": "chatgpt_plus_api",
+                "same_session_dispatch_proven": False,
+                "primary_dispatch_proven": False,
+                "coding_dispatch_proven": False,
+                "fallback_used": False,
+                "ui_label_counts_as_runtime_truth": False,
+                "model_self_report_counts_as_runtime_truth": False,
+                "browser_backend_intake": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "packet_kind": "chatgpt_plus_api_slot_dispatch_probe",
+                "final_status": "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN",
+                "execution_mode": "chatgpt_plus_api",
+                "same_session_dispatch_proven": False,
+                "primary_dispatch_proven": False,
+                "coding_dispatch_proven": False,
+                "fallback_used": False,
+                "prompt_runner_called": False,
+                "next_action": "provide_exact_owner_authorization_phrase",
+            }
+
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        primary_slot = dict(role_slots.get(PRIMARY_MODEL_SLOT) or _unbound_slot(PRIMARY_MODEL_SLOT))
+        coding_slot = dict(
+            role_slots.get(CODING_AGENT_MODEL_SLOT) or _unbound_slot(CODING_AGENT_MODEL_SLOT)
+        )
+        primary_model_id = str(primary_slot.get("model_id") or "")
+        coding_model_id = str(coding_slot.get("model_id") or "")
+        precondition_failures: list[str] = []
+        if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
+            precondition_failures.append("SESSION_STATUS_NOT_RUNNABLE")
+        if primary_slot.get("binding_status") != "bound":
+            precondition_failures.append("PRIMARY_SLOT_NOT_BOUND")
+        if coding_slot.get("binding_status") != "bound":
+            precondition_failures.append("CODING_SLOT_NOT_BOUND")
+        if primary_slot.get("selected_source_class") != "gpt_account":
+            precondition_failures.append("PRIMARY_SLOT_NOT_CHATGPT_ACCOUNT")
+        if coding_slot.get("selected_source_class") != "route_backed":
+            precondition_failures.append("CODING_SLOT_NOT_API_ROUTE_BACKED")
+        if primary_model_id and coding_model_id and primary_model_id == coding_model_id:
+            precondition_failures.append("PRIMARY_AND_CODING_MODELS_COLLAPSED")
+        for slot_id, slot in (
+            (PRIMARY_MODEL_SLOT, primary_slot),
+            (CODING_AGENT_MODEL_SLOT, coding_slot),
+        ):
+            admission = _slot_dispatch_admission_packet(
+                session=session,
+                slot=slot,
+                requested_slot_id=slot_id,
+            )
+            if not admission["slot_admission_passed"]:
+                precondition_failures.append(f"{slot_id.upper()}_ADMISSION_FAILED")
+        if precondition_failures:
+            return {
+                **self._base_packet("blocked", precondition_failures[0]),
+                "session_id": session_id,
+                "packet_kind": "chatgpt_plus_api_slot_dispatch_probe",
+                "final_status": "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN",
+                "execution_mode": "chatgpt_plus_api",
+                "precondition_failures": sorted(set(precondition_failures)),
+                "primary_model_id": primary_model_id,
+                "coding_agent_model_id": coding_model_id,
+                "primary_selected_source_class": primary_slot.get("selected_source_class"),
+                "coding_selected_source_class": coding_slot.get("selected_source_class"),
+                "same_session_dispatch_proven": False,
+                "primary_dispatch_proven": False,
+                "coding_dispatch_proven": False,
+                "chatgpt_only_calls_api": False,
+                "api_only_calls_chatgpt": False,
+                "fallback_used": False,
+                "prompt_runner_called": False,
+                "ui_label_counts_as_runtime_truth": False,
+                "model_self_report_counts_as_runtime_truth": False,
+                "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                "next_action": "repair_mixed_slot_binding",
+            }
+
+        primary_packet = self.prompt_packet(
+            session_id,
+            {
+                "prompt": "Ответь одной строкой: WBP_MIXED_PRIMARY_SLOT_OK",
+                "slot_id": PRIMARY_MODEL_SLOT,
+            },
+            prompt_runner,
+            owner_authorized=True,
+        )
+        coding_packet: dict[str, Any] = {}
+        if primary_packet.get("status") == "ok":
+            coding_packet = self.prompt_packet(
+                session_id,
+                {
+                    "prompt": "Ответь одной строкой: WBP_MIXED_DEEPSEEK_CODER_OK",
+                    "slot_id": CODING_AGENT_MODEL_SLOT,
+                },
+                prompt_runner,
+                owner_authorized=True,
+            )
+
+        primary_dispatch_proven = self._slot_dispatch_probe_success(
+            primary_packet,
+            requested_slot_id=PRIMARY_MODEL_SLOT,
+            expected_model_id=primary_model_id,
+            expected_provider="cliproxy",
+            expected_source_provenance="backend_proven",
+        )
+        coding_dispatch_proven = self._slot_dispatch_probe_success(
+            coding_packet,
+            requested_slot_id=CODING_AGENT_MODEL_SLOT,
+            expected_model_id=coding_model_id,
+            expected_provider="external_route",
+            expected_source_provenance="route_proven",
+        )
+        fallback_used = (
+            primary_packet.get("fallback_attempted") is True
+            or coding_packet.get("fallback_attempted") is True
+        )
+        same_session_dispatch_proven = bool(
+            primary_dispatch_proven
+            and coding_dispatch_proven
+            and primary_packet.get("session_id") == session_id
+            and coding_packet.get("session_id") == session_id
+            and primary_model_id != coding_model_id
+            and not fallback_used
+        )
+        success = same_session_dispatch_proven
+        machine_error_code = "OK" if success else "MIXED_SLOT_DISPATCH_NOT_PROVEN"
+        final_status = (
+            "CHATGPT_PLUS_API_SLOT_DISPATCH_PROVEN_WITH_LIMITS"
+            if success
+            else "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN"
+        )
+        return {
+            **self._base_packet("ok" if success else "blocked", machine_error_code),
+            "packet_kind": "chatgpt_plus_api_slot_dispatch_probe",
+            "final_status": final_status,
+            "execution_mode": "chatgpt_plus_api",
+            "session_id": session_id,
+            "same_session_dispatch_proven": same_session_dispatch_proven,
+            "primary_dispatch_proven": primary_dispatch_proven,
+            "coding_dispatch_proven": coding_dispatch_proven,
+            "primary_model_id": primary_model_id,
+            "coding_agent_model_id": coding_model_id,
+            "primary_requested_slot_id": PRIMARY_MODEL_SLOT,
+            "coding_requested_slot_id": CODING_AGENT_MODEL_SLOT,
+            "primary_executed_slot_id": str(primary_packet.get("executed_slot_id") or ""),
+            "coding_executed_slot_id": str(coding_packet.get("executed_slot_id") or ""),
+            "primary_runtime_model": str(primary_packet.get("runtime_selected_model") or ""),
+            "coding_runtime_model": str(coding_packet.get("runtime_selected_model") or ""),
+            "primary_configured_provider": str(primary_packet.get("configured_provider") or ""),
+            "coding_configured_provider": str(coding_packet.get("configured_provider") or ""),
+            "primary_selected_source_provenance": str(
+                primary_packet.get("selected_source_provenance") or ""
+            ),
+            "coding_selected_source_provenance": str(
+                coding_packet.get("selected_source_provenance") or ""
+            ),
+            "primary_runner_payload_slot_id": str(
+                primary_packet.get("wbp_runner_payload_slot_id") or ""
+            ),
+            "coding_runner_payload_slot_id": str(
+                coding_packet.get("wbp_runner_payload_slot_id") or ""
+            ),
+            "primary_runner_payload_model_id": str(
+                primary_packet.get("wbp_runner_payload_model_id") or ""
+            ),
+            "coding_runner_payload_model_id": str(
+                coding_packet.get("wbp_runner_payload_model_id") or ""
+            ),
+            "primary_runtime_slot_dispatch_proven": primary_packet.get(
+                "runtime_slot_dispatch_proven"
+            )
+            is True,
+            "coding_runtime_slot_dispatch_proven": coding_packet.get(
+                "runtime_slot_dispatch_proven"
+            )
+            is True,
+            "primary_live_prompt_full_success": primary_packet.get("live_prompt_full_success")
+            is True,
+            "coding_live_prompt_full_success": coding_packet.get("live_prompt_full_success")
+            is True,
+            "chatgpt_only_calls_api": False,
+            "api_only_calls_chatgpt": False,
+            "fallback_used": fallback_used,
+            "fallback_attempted": fallback_used,
+            "parallel_slot_execution_proven": False,
+            "fanout_execution_proven": False,
+            "live_file_mutation_claimed": False,
+            "wbp_patch_applier_used": False,
+            "commit_attempted": False,
+            "push_attempted": False,
+            "merge_attempted": False,
+            "ui_label_counts_as_runtime_truth": False,
+            "model_self_report_counts_as_runtime_truth": False,
+            "model_lane_proof_level_counts_as_runtime_truth": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "primary_packet_summary": self._slot_dispatch_probe_summary(primary_packet),
+            "coding_packet_summary": self._slot_dispatch_probe_summary(coding_packet),
+            "role_slot_binding_packet": self._role_slot_binding_packet(
+                self._sessions.get(session_id) or session
+            ),
+            "next_action": "none" if success else "stop_and_diagnose_mixed_slot_dispatch",
+        }
+
     def temp_write_probe_packet(
         self,
         session_id: str,
@@ -3456,6 +3688,50 @@ class CodexCustomSessionManager:
             "network_calls_made": False,
             "provider_called": False,
             "token_burn": 0,
+        }
+
+    def _slot_dispatch_probe_success(
+        self,
+        packet: dict[str, Any],
+        *,
+        requested_slot_id: str,
+        expected_model_id: str,
+        expected_provider: str,
+        expected_source_provenance: str,
+    ) -> bool:
+        return bool(
+            packet
+            and packet.get("status") == "ok"
+            and packet.get("session_id")
+            and packet.get("requested_slot_id") == requested_slot_id
+            and packet.get("executed_slot_id") == requested_slot_id
+            and packet.get("wbp_runner_payload_slot_id") == requested_slot_id
+            and packet.get("wbp_runner_payload_model_id") == expected_model_id
+            and packet.get("runtime_selected_model") == expected_model_id
+            and packet.get("configured_provider") == expected_provider
+            and packet.get("selected_source_provenance") == expected_source_provenance
+            and packet.get("runtime_slot_dispatch_proven") is True
+            and packet.get("wbp_session_manager_slot_dispatch_proven") is True
+            and packet.get("live_prompt_full_success") is True
+            and packet.get("fallback_attempted") is False
+        )
+
+    def _slot_dispatch_probe_summary(self, packet: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "status": str(packet.get("status") or ""),
+            "machine_error_code": str(packet.get("machine_error_code") or ""),
+            "session_id": str(packet.get("session_id") or ""),
+            "requested_slot_id": str(packet.get("requested_slot_id") or ""),
+            "executed_slot_id": str(packet.get("executed_slot_id") or ""),
+            "model_id": str(packet.get("model_id") or ""),
+            "runtime_selected_model": str(packet.get("runtime_selected_model") or ""),
+            "configured_provider": str(packet.get("configured_provider") or ""),
+            "selected_source_provenance": str(packet.get("selected_source_provenance") or ""),
+            "wbp_runner_payload_slot_id": str(packet.get("wbp_runner_payload_slot_id") or ""),
+            "wbp_runner_payload_model_id": str(packet.get("wbp_runner_payload_model_id") or ""),
+            "runtime_slot_dispatch_proven": packet.get("runtime_slot_dispatch_proven") is True,
+            "live_prompt_full_success": packet.get("live_prompt_full_success") is True,
+            "fallback_attempted": packet.get("fallback_attempted") is True,
         }
 
     def _is_owned_session_path(self, path: Path) -> bool:

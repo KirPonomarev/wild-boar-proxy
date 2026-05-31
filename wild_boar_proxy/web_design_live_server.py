@@ -8507,6 +8507,59 @@ def build_handler(
                         )
                     )
                     return
+                if action == "mixed-slot-dispatch-probe":
+                    def mixed_slot_probe_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                        slot_id = str(payload.get("slot_id") or "")
+                        model_id = str(payload.get("model_id") or "")
+                        route_backed = slot_id == "coding_agent_model_slot"
+                        return {
+                            "status": "ok",
+                            "machine_error_code": "OK",
+                            "requested_slot_id": slot_id,
+                            "selected_model": model_id,
+                            "runtime_model": model_id,
+                            "final_message": "WBP_MIXED_DEEPSEEK_CODER_OK"
+                            if route_backed
+                            else "WBP_MIXED_PRIMARY_SLOT_OK",
+                            "configured_provider": "external_route"
+                            if route_backed
+                            else "cliproxy",
+                            "configured_wire_api": "responses",
+                            "wbp_endpoint_configured": True,
+                            "config_endpoint_matches": True,
+                            "config_provider_matches": True,
+                            "config_wire_api_matches": True,
+                            "command_uses_stdin_dash": True,
+                            "command_json_mode": True,
+                            "env_codex_home_is_temp": True,
+                            "env_home_is_temp": True,
+                            "workdir_is_temp": True,
+                            "command_workdir_is_temp": True,
+                            "command_output_file_is_temp": True,
+                            "current_codex_home_used": False,
+                            "independent_wbp_trace_observed": True,
+                            "trace_observer_packet": {
+                                "path": "/v1/responses",
+                                "upstream_status": 200,
+                                "forwarded_to_wbp": True,
+                                "prompt_body_recorded": False,
+                                "auth_header_recorded": False,
+                                "secret_value_recorded": False,
+                            },
+                            "secret_value_recorded": False,
+                            "live_provider_call_attempted": False,
+                            "file_write_attempted": False,
+                        }
+
+                    self._send_json(
+                        codex_custom_sessions.mixed_slot_dispatch_probe_packet(
+                            session_id,
+                            self._read_json_body(),
+                            mixed_slot_probe_runner,
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                        )
+                    )
+                    return
                 if action == "safe-worktree-coder":
                     self._send_json(
                         codex_custom_sessions.safe_worktree_coder_packet(

@@ -13376,6 +13376,206 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             ],
         )
 
+    def test_codex_custom_mixed_slot_dispatch_probe_endpoint_proves_two_slots(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/mixed-slot-dispatch-probe",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_SLOT_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["same_session_dispatch_proven"])
+        self.assertTrue(packet["primary_dispatch_proven"])
+        self.assertTrue(packet["coding_dispatch_proven"])
+        self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
+        self.assertEqual(packet["primary_runner_payload_slot_id"], "primary_model_slot")
+        self.assertEqual(packet["coding_runner_payload_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(packet["primary_configured_provider"], "cliproxy")
+        self.assertEqual(packet["coding_configured_provider"], "external_route")
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["ui_label_counts_as_runtime_truth"])
+        self.assertFalse(packet["model_self_report_counts_as_runtime_truth"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["live_file_mutation_claimed"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
+    def test_codex_custom_mixed_slot_dispatch_probe_endpoint_requires_owner_auth(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/mixed-slot-dispatch-probe",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN",
+        )
+        self.assertFalse(packet["same_session_dispatch_proven"])
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
+    def test_codex_custom_mixed_slot_dispatch_probe_endpoint_rejects_browser_fields(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/mixed-slot-dispatch-probe",
+                        {
+                            "base_url": "https://example.invalid/v1",
+                            "route_id": "raw-route",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("base_url", packet["forbidden_fields"])
+        self.assertIn("route_id", packet["forbidden_fields"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertFalse(packet["same_session_dispatch_proven"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_codex_custom_launch_and_prompt_support_route_backed_external_model(self) -> None:
         created_sessions: list[ExternalRouteFakeOperatorSurfaceSession] = []
 
