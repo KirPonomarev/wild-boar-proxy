@@ -1,0 +1,14 @@
+{
+  "attempted": true,
+  "contour": "managed_listener_live_proof_r2",
+  "effective_mode_after": "stable",
+  "observed_at_utc": "2026-05-31T22:54:17.703310+00:00",
+  "pid_file_exists_after": false,
+  "port_8320_after": false,
+  "port_8320_before": false,
+  "process_after": "",
+  "process_before": "",
+  "schema_version": 1,
+  "started_pid": 55607,
+  "status": "ok"
+}

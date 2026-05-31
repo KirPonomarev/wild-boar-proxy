@@ -1,0 +1,37 @@
+{
+  "payload": {
+    "changed_files": [],
+    "exit_code": 1,
+    "human_message": "Managed listener startup blocked: live_attestation_failed.",
+    "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model gpt-5.4\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+    "liveness": "down",
+    "machine_error_code": "MANAGED_STARTUP_ATTESTATION_FAILED",
+    "managed_startup_owner": {
+      "blocking_reason": "live_attestation_failed",
+      "delegated_from_status": false,
+      "effective_mode_written": false,
+      "live_attestation_passed": false,
+      "machine_error_code": "MANAGED_STARTUP_ATTESTATION_FAILED",
+      "managed_listener_endpoint": "http://127.0.0.1:8320/v1",
+      "managed_listener_reachable": false,
+      "owner_command_surface": "managed listener start --json",
+      "pid_recorded": false,
+      "process_started": true,
+      "repo_owned_startup_owner_path_defined": true,
+      "started_pid": 55607,
+      "startup_attempted": true,
+      "startup_outcome": "attestation_failed",
+      "status": "blocked"
+    },
+    "next_action": "user_action",
+    "operator_action": "user_action",
+    "severity": "recoverable",
+    "status": "error"
+  },
+  "process_after_startup_packet": {
+    "ps": "",
+    "started_pid": 55607
+  },
+  "returncode": 1,
+  "stderr": ""
+}
