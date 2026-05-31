@@ -1,0 +1,11 @@
+{
+  "cleanup_ok": true,
+  "contour": "managed_codex_model_availability_truth_r5",
+  "observed_at_utc": "2026-05-31T23:36:30.957289+00:00",
+  "port": 60327,
+  "port_final_listening": false,
+  "run_root_removed": true,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "started_pid": 35218
+}

@@ -1,0 +1,28 @@
+{
+  "contour": "managed_codex_model_availability_truth_r5",
+  "not_route_truth_ready_models": [
+    "codex-auto-review",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+    "gpt-5.4",
+    "gpt-image-2"
+  ],
+  "observed_at_utc": "2026-05-31T23:36:30.545445+00:00",
+  "policy_notes": [
+    "Use only available /v1/responses models for ChatGPT/Codex route truth.",
+    "Do not treat /v1/models catalog presence as execution availability.",
+    "Do not change config.toml model or user defaults from this evidence.",
+    "DeepSeek/API route models are outside this contour."
+  ],
+  "recommended_startup_probe_models": [
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "route_truth_ready_models": [
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "schema_version": 1,
+  "secrets_redacted": true
+}

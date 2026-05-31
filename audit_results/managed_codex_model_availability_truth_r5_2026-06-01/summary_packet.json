@@ -1,0 +1,49 @@
+{
+  "available_models": [
+    "codex-auto-review",
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "catalog_collected": true,
+  "catalog_model_count": 8,
+  "catalog_only_not_executable_models": [
+    "gpt-5.3-codex-spark"
+  ],
+  "cleanup_ok": true,
+  "contour": "managed_codex_model_availability_truth_r5",
+  "evidence_files": [
+    "catalog_packet.json",
+    "cleanup_packet.json",
+    "closeout.md",
+    "independent_audit_packet.json",
+    "model_availability_classification_packet.json",
+    "preconditions_packet.json",
+    "responses_matrix_packet.json",
+    "startup_probe_recommendation_packet.json",
+    "summary_packet.json"
+  ],
+  "models_tested_count": 8,
+  "not_in_catalog_models": [],
+  "observed_at_utc": "2026-05-31T23:36:30.961106+00:00",
+  "outcome": "pass",
+  "provider_unbound_models": [],
+  "quota_blocked_models": [
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4"
+  ],
+  "recommended_startup_probe_models": [
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "route_truth_ready_models": [
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "timeout_or_flaky_models": [],
+  "wrong_endpoint_models": [
+    "gpt-image-2"
+  ]
+}
