@@ -8050,6 +8050,245 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN",
         )
 
+    def _live_bridge_launch_fixture(
+        self,
+        *,
+        trace_id: str = "trace-live-bridge",
+        launch_id: str = "launch-live-bridge",
+        execution_mode: str = "api_only",
+        native_window_observed: bool = True,
+    ) -> dict[str, object]:
+        return {
+            "status": "ok",
+            "launch_id": launch_id,
+            "trace_id": trace_id,
+            "execution_mode": execution_mode,
+            "selected_model": "wbp-deepseek-v4-pro-max",
+            "native_window_observed": native_window_observed,
+            "bridge_port": 50555,
+            "fallback_used": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+
+    def _live_bridge_trace_fixture(
+        self,
+        *,
+        trace_id: str = "trace-live-bridge",
+        launch_id: str = "launch-live-bridge",
+        bridge_code: str = "OK",
+        upstream_status: int = 200,
+        auth_ok: bool = True,
+        fallback_used: bool = False,
+        stream_requested: bool = False,
+        stream_completed: bool = False,
+        stale_port_detected: bool = False,
+        route_unchanged: bool = True,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "packet_kind": "hybrid_openai_compat_prompt_trace",
+            "trace_id": trace_id,
+            "launch_packet_id": launch_id,
+            "bridge_alive": True,
+            "responses_endpoint_alive": bridge_code == "OK",
+            "bridge_machine_error_code": bridge_code,
+            "fallback_used": fallback_used,
+            "stale_port_detected": stale_port_detected,
+            "route_unchanged": route_unchanged,
+            "bridge_health_packet": {
+                "bridge_alive": True,
+                "responses_endpoint_ready": bridge_code == "OK",
+                "bridge_port": 50555,
+                "port_owned_by_bridge": True,
+                "auth_header_expected": True,
+                "auth_header_present": True,
+                "auth_ok": auth_ok,
+                "machine_error_code": bridge_code,
+                "fallback_used": fallback_used,
+                "route_unchanged": route_unchanged,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+            "bridge_request_trace_packet": {
+                "request_started": True,
+                "path": "/v1/responses",
+                "machine_error_code": bridge_code,
+                "upstream_status": upstream_status,
+                "route_unchanged": route_unchanged,
+                "fallback_used": fallback_used,
+                "fallback_attempted": fallback_used,
+                "stream_requested": stream_requested,
+                "stream_started": stream_requested,
+                "stream_completed": stream_completed,
+                "auth_header_expected": True,
+                "auth_header_seen": True,
+                "auth_ok": auth_ok,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+            "last_record": {
+                "launch_packet_id": launch_id,
+                "trace_id": trace_id,
+                "request_seen_after_launch": True,
+                "path": "/v1/responses",
+                "upstream_status": upstream_status,
+                "bridge_machine_error_code": bridge_code,
+                "fallback_used": fallback_used,
+                "route_digest_matches_launch": route_unchanged,
+                "auth_header_seen": True,
+                "auth_ok": auth_ok,
+                "response_seen": bridge_code == "OK",
+                "stream_requested": stream_requested,
+                "stream_started": stream_requested,
+                "stream_completed": stream_completed,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        }
+
+    def test_custom_live_bridge_stability_reports_ready_packet(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_READY")
+        self.assertEqual(packet["machine_error_code"], "BRIDGE_READY")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["port_alive"])
+        self.assertTrue(packet["responses_endpoint_available"])
+        self.assertTrue(packet["auth_token_consistent"])
+        self.assertTrue(packet["selected_mode_known"])
+        self.assertTrue(packet["bridge_session_matches_active_window"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["silent_fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_live_bridge_stability_classifies_auth_failure(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(
+                bridge_code="BRIDGE_AUTH_REJECTED",
+                upstream_status=401,
+                auth_ok=False,
+            ),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_AUTH_FAILED")
+        self.assertEqual(packet["machine_error_code"], "BRIDGE_AUTH_FAILED")
+        self.assertEqual(packet["last_http_status"], 401)
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["restart_attempted"])
+
+    def test_custom_live_bridge_stability_classifies_stream_disconnect(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(
+                bridge_code="BRIDGE_STREAM_DISCONNECTED",
+                stream_requested=True,
+                stream_completed=False,
+            ),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_STREAM_DISCONNECTED")
+        self.assertTrue(packet["recovery_required"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_custom_live_bridge_stability_classifies_stale_port(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(
+                bridge_code="BRIDGE_PORT_STALE",
+                stale_port_detected=True,
+            ),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_STALE_PORT")
+        self.assertTrue(packet["recovery_required"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_custom_live_bridge_stability_classifies_window_not_bound(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(trace_id="trace-current"),
+            bridge_trace_packet=self._live_bridge_trace_fixture(trace_id="trace-old"),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_WINDOW_NOT_BOUND")
+        self.assertFalse(packet["bridge_session_matches_active_window"])
+        self.assertFalse(packet["trace_id_matches_launch"])
+        self.assertTrue(packet["recovery_required"])
+
+    def test_custom_live_bridge_stability_exposes_fallback_without_green_status(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(fallback_used=True),
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_RECOVERY_REQUIRED")
+        self.assertTrue(packet["fallback_used"])
+        self.assertTrue(packet["fallback_attempted"])
+        self.assertFalse(packet["silent_fallback_used"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_NOT_PROVEN",
+        )
+
+    def test_custom_live_bridge_stability_rejects_browser_authority_fields(self) -> None:
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet={},
+            bridge_trace_packet={},
+            browser_payload={"trace_id": ["browser"], "api_key": ["sk-browser"]},
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(packet["forbidden_fields"], ["api_key", "trace_id"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["browser_trace_authority"])
+
+    def test_custom_live_bridge_stability_endpoint_reports_current_packet(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with NO_PROXY_OPENER.open(
+                f"{base}/api/codex/custom/live-bridge-stability",
+                timeout=2,
+            ) as response:
+                packet = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "custom_codex_live_bridge_stability")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_WINDOW_NOT_BOUND")
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_custom_bridge_failure_recovery_truth_endpoint_rejects_query_authority(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),

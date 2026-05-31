@@ -4674,6 +4674,203 @@ def build_custom_codex_stable_bridge_preflight_packet(
     )
 
 
+def build_custom_codex_live_bridge_stability_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    expected_bridge_port: int | None = None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_live_bridge_stability",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "bridge_status": "BRIDGE_RECOVERY_REQUIRED",
+            "final_status": "STOP_AND_DIAGNOSE_CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "fallback_used": False,
+            "fallback_attempted": False,
+            "silent_fallback_used": False,
+            "browser_trace_authority": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    health = (
+        trace.get("bridge_health_packet")
+        if isinstance(trace.get("bridge_health_packet"), dict)
+        else {}
+    )
+    request_trace = (
+        trace.get("bridge_request_trace_packet")
+        if isinstance(trace.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
+    record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    stable_packet = build_stable_bridge_preflight_packet(
+        last_launch_packet=launch,
+        bridge_trace_packet=trace,
+        expected_bridge_port=expected_bridge_port,
+    )
+    recovery_packet = build_bridge_failure_recovery_truth_packet(
+        last_launch_packet=launch,
+        bridge_trace_packet=trace,
+    )
+
+    launch_id = str(launch.get("launch_id") or "")
+    launch_trace_id = str(launch.get("trace_id") or "")
+    trace_launch_id = str(trace.get("launch_packet_id") or record.get("launch_packet_id") or "")
+    trace_id = str(trace.get("trace_id") or record.get("trace_id") or "")
+    trace_id_matches_launch = bool(launch_trace_id and trace_id and launch_trace_id == trace_id)
+    launch_id_matches_trace = bool(
+        launch_id and trace_launch_id and launch_id == trace_launch_id
+    )
+    bridge_session_matches_active_window = bool(
+        launch.get("native_window_observed") is True
+        and trace_id_matches_launch
+        and (not launch_id or not trace_launch_id or launch_id_matches_trace)
+    )
+    raw_bridge_machine_error_code = str(
+        trace.get("bridge_machine_error_code")
+        or health.get("machine_error_code")
+        or request_trace.get("machine_error_code")
+        or record.get("bridge_machine_error_code")
+        or stable_packet.get("bridge_machine_error_code")
+        or "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
+    )
+    last_http_status = int(
+        record.get("upstream_status")
+        or request_trace.get("upstream_status")
+        or stable_packet.get("last_http_status")
+        or 0
+    )
+    last_error_class = str(
+        stable_packet.get("last_error_class")
+        or recovery_packet.get("last_error_kind")
+        or ""
+    )
+    blocking_reasons = {
+        str(reason)
+        for reason in stable_packet.get("blocking_reasons", [])
+        if str(reason)
+    }
+    request_started = (
+        request_trace.get("request_started") is True
+        or record.get("request_seen_after_launch") is True
+    )
+    fallback_used = stable_packet.get("fallback_used") is True or recovery_packet.get(
+        "fallback_used"
+    ) is True
+    fallback_attempted = stable_packet.get(
+        "fallback_attempted"
+    ) is True or recovery_packet.get("fallback_attempted") is True
+    stream_failure = (
+        raw_bridge_machine_error_code in {"BRIDGE_STREAM_DISCONNECTED", "BRIDGE_STREAM_TIMEOUT"}
+        or last_error_class in {"stream_disconnected", "provider_timeout"}
+        or "stream_disconnected" in blocking_reasons
+        or "provider_timeout" in blocking_reasons
+    )
+    auth_failure = (
+        last_http_status == 401
+        or raw_bridge_machine_error_code in {"BRIDGE_AUTH_MISSING", "BRIDGE_AUTH_REJECTED"}
+        or last_error_class == "unauthorized"
+        or (request_started and "auth_mismatch" in blocking_reasons)
+        or (request_started and "http_401_unauthorized" in blocking_reasons)
+    )
+    stale_port = (
+        trace.get("stale_port_detected") is True
+        or raw_bridge_machine_error_code == "BRIDGE_PORT_STALE"
+        or last_error_class == "stale_port"
+        or "stale_port" in blocking_reasons
+    )
+    if stable_packet.get("status") == "ok" and bridge_session_matches_active_window:
+        bridge_status = "BRIDGE_READY"
+    elif auth_failure:
+        bridge_status = "BRIDGE_AUTH_FAILED"
+    elif stream_failure:
+        bridge_status = "BRIDGE_STREAM_DISCONNECTED"
+    elif not bridge_session_matches_active_window:
+        bridge_status = "BRIDGE_WINDOW_NOT_BOUND"
+    elif stale_port:
+        bridge_status = "BRIDGE_STALE_PORT"
+    else:
+        bridge_status = "BRIDGE_RECOVERY_REQUIRED"
+
+    bridge_ready = bridge_status == "BRIDGE_READY"
+    status = "ok" if bridge_ready else "blocked"
+    execution_mode = str(launch.get("execution_mode") or "")
+    selected_mode_known = execution_mode in {
+        "chatgpt_only",
+        "api_only",
+        "chatgpt_plus_api",
+    }
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_live_bridge_stability",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": bridge_status,
+        "bridge_status": bridge_status,
+        "raw_bridge_machine_error_code": raw_bridge_machine_error_code,
+        "human_message": (
+            "Live bridge ready."
+            if bridge_ready
+            else f"Live bridge not ready: {bridge_status}."
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_PROVEN_WITH_LIMITS"
+            if bridge_ready
+            else "STOP_AND_DIAGNOSE_CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_NOT_PROVEN"
+        ),
+        "port_alive": health.get("bridge_alive") is True or trace.get("bridge_alive") is True,
+        "responses_endpoint_available": (
+            health.get("responses_endpoint_ready") is True
+            or trace.get("responses_endpoint_alive") is True
+        ),
+        "auth_token_consistent": stable_packet.get("auth_matches") is True,
+        "selected_mode_known": selected_mode_known,
+        "execution_mode": execution_mode,
+        "bridge_session_matches_active_window": bridge_session_matches_active_window,
+        "trace_id_matches_launch": trace_id_matches_launch,
+        "launch_id_matches_trace": launch_id_matches_trace,
+        "trace_id": launch_trace_id,
+        "bridge_port": int(stable_packet.get("bridge_port") or expected_bridge_port or 0),
+        "last_http_status": last_http_status,
+        "last_error_class": last_error_class,
+        "fallback_used": fallback_used,
+        "fallback_attempted": fallback_attempted,
+        "silent_fallback_used": bool(fallback_used and not fallback_attempted),
+        "fallback_suppressed": True,
+        "recovery_required": not bridge_ready,
+        "restart_attempted": False,
+        "restart_admissible": recovery_packet.get("restart_admissible") is True,
+        "owner_action_required_for_live_restart": recovery_packet.get(
+            "owner_action_required_for_live_restart"
+        )
+        is True,
+        "stable_bridge_preflight_packet": stable_packet,
+        "bridge_failure_recovery_packet": recovery_packet,
+        "ui_label_counts_as_runtime_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "browser_trace_authority": False,
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "original_codex_touched": launch.get("original_codex_touched") is True,
+        "asar_touched": launch.get("asar_touched") is True,
+        "next_action": "none" if bridge_ready else "inspect_bridge_stability_packet",
+    }
+
+
 def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     *,
     last_launch_packet: dict[str, Any] | None,
@@ -8282,6 +8479,20 @@ def build_handler(
             if parsed.path == "/api/codex/custom/stable-bridge-preflight":
                 self._send_json(
                     build_custom_codex_stable_bridge_preflight_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        expected_bridge_port=custom_native_bridge_lease.bridge_port,
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/live-bridge-stability":
+                self._send_json(
+                    build_custom_codex_live_bridge_stability_packet(
                         last_launch_packet=custom_native_launch_state["last_packet"],
                         bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
                         expected_bridge_port=custom_native_bridge_lease.bridge_port,
