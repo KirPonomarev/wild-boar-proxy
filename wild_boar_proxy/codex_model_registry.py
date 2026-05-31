@@ -46,9 +46,13 @@ SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_FINAL_STATUS = (
 SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER = (
     "KNOWN_BLOCKER_CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_NOT_PROVEN"
 )
-CHATGPT_PLUS_API_SLOT_TRUTH_FINAL_STATUS = "CHATGPT_PLUS_API_SLOT_TRUTH_PROVEN_WITH_LIMITS"
+CHATGPT_PLUS_API_CODING_MODEL_REQUIRED = "wbp-deepseek-v4-pro-max"
+CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED = "deepseek"
+CHATGPT_PLUS_API_SLOT_TRUTH_FINAL_STATUS = (
+    "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS"
+)
 CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER = (
-    "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN"
+    "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_ROUTING_NOT_PROVEN"
 )
 API_ONLY_EXECUTOR_TRUTH_FINAL_STATUS = "API_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS"
 API_ONLY_EXECUTOR_TRUTH_BLOCKER = "STOP_AND_DIAGNOSE_API_ONLY_EXECUTOR_TRUTH_NOT_PROVEN"
@@ -750,6 +754,7 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
                 "source": "server_owned_external_route",
                 "source_class": "server_registry",
                 "provider_class": "external_route",
+                "provider": provider,
                 "provider_label": _provider_label(
                     route_id,
                     provider=provider,
@@ -872,6 +877,7 @@ def _catalog_model_entry(
         "source": str(entry.get("source") or entry.get("model_source_hint") or "unknown"),
         "source_class": str(entry.get("source_class") or _source_class(model_id)),
         "provider_class": str(entry.get("provider_class") or "unknown"),
+        "provider": str(entry.get("provider") or ""),
         "provider_label": str(
             entry.get("provider_label")
             or _provider_label(
@@ -1073,7 +1079,7 @@ def _current_catalog_model_rows(
             {
                 "model_id": str(model.get("model_id") or ""),
                 "display_name": str(model.get("display_name") or model.get("model_id") or ""),
-                "provider": str(model.get("physical_provider") or ""),
+                "provider": str(model.get("physical_provider") or model.get("provider") or ""),
                 "provider_label": str(model.get("provider_label") or ""),
                 "provider_model_id": str(model.get("provider_model_id") or ""),
                 "upstream_model": str(model.get("upstream_model") or model.get("provider_model_id") or ""),
@@ -2314,6 +2320,24 @@ def build_chatgpt_plus_api_slot_truth_packet(
         and str(coding_slot.get("model_id") or "")
         == str(server_truth_packet.get("selected_api_model") or "")
     )
+    coding_slot_provider_is_deepseek = (
+        str(coding_slot.get("provider") or "")
+        == CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED
+        == str(server_truth_packet.get("api_provider_id") or "")
+    )
+    coding_slot_model_is_required_deepseek = (
+        str(coding_slot.get("model_id") or "")
+        == CHATGPT_PLUS_API_CODING_MODEL_REQUIRED
+        == str(server_truth_packet.get("selected_api_model") or "")
+    )
+    slots_collapsed = (
+        primary_slot.get("slot_id") == coding_slot.get("slot_id")
+        or primary_slot.get("lane") == coding_slot.get("lane")
+        or (
+            bool(primary_slot.get("model_id"))
+            and primary_slot.get("model_id") == coding_slot.get("model_id")
+        )
+    )
     no_runtime_claims = all(
         server_truth_packet.get(field) is False
         for field in (
@@ -2345,6 +2369,9 @@ def build_chatgpt_plus_api_slot_truth_packet(
         and server_truth_packet.get("slots_coherent") is True
         and chatgpt_primary_slot_proven
         and api_coding_slot_proven
+        and coding_slot_provider_is_deepseek
+        and coding_slot_model_is_required_deepseek
+        and not slots_collapsed
         and server_truth_packet.get("api_reasoning_option_model_bound") is True
         and no_runtime_claims
         and no_browser_or_secret_exposure
@@ -2359,6 +2386,12 @@ def build_chatgpt_plus_api_slot_truth_packet(
             machine_error_code = "CHATGPT_PLUS_API_PRIMARY_SLOT_NOT_CHATGPT"
         elif not api_coding_slot_proven:
             machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_API"
+        elif not coding_slot_provider_is_deepseek:
+            machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK"
+        elif not coding_slot_model_is_required_deepseek:
+            machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_MAX"
+        elif slots_collapsed:
+            machine_error_code = "CHATGPT_PLUS_API_SLOTS_COLLAPSED"
         else:
             machine_error_code = CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER
     return {
@@ -2422,6 +2455,10 @@ def build_chatgpt_plus_api_slot_truth_packet(
         "coding_agent_model_slot": coding_slot,
         "chatgpt_primary_slot_proven": chatgpt_primary_slot_proven,
         "api_coding_slot_proven": api_coding_slot_proven,
+        "coding_slot_provider_is_deepseek": coding_slot_provider_is_deepseek,
+        "coding_slot_model_is_deepseek_v4_pro_max": coding_slot_model_is_required_deepseek,
+        "required_coding_api_provider_id": CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED,
+        "required_coding_api_model_id": CHATGPT_PLUS_API_CODING_MODEL_REQUIRED,
         "api_line_selected_as_coding_agent": api_coding_slot_proven,
         "api_line_used_as_coding_agent": api_coding_slot_proven,
         "chatgpt_line_used_as_executor": chatgpt_primary_slot_proven,
@@ -2429,6 +2466,7 @@ def build_chatgpt_plus_api_slot_truth_packet(
         "chatgpt_line_used_as_coding_agent": False,
         "dual_lane_slots_preserved": server_truth_packet.get("dual_lane_slots_preserved")
         is True,
+        "slots_collapsed": slots_collapsed,
         "slots_coherent": server_truth_packet.get("slots_coherent") is True,
         "fallback_used": False,
         "fallback_attempted": False,

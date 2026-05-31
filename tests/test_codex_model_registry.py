@@ -526,8 +526,8 @@ class CodexModelRegistryTests(unittest.TestCase):
             {
                 "execution_mode": "chatgpt_plus_api",
                 "chatgpt_model_id": "gpt-5.3-codex",
-                "api_model_id": "wbp-deepseek-v4-pro-high",
-                "api_reasoning_option_id": "provider_declared_high",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
             },
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot,
@@ -597,11 +597,11 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(chatgpt_only["chatgpt_only_calls_api"])
 
         self.assertEqual(chatgpt_api["selected_chatgpt_model"], "gpt-5.3-codex")
-        self.assertEqual(chatgpt_api["selected_api_model"], "wbp-deepseek-v4-pro-high")
+        self.assertEqual(chatgpt_api["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(chatgpt_api["primary_model_slot"]["lane"], "codex_account_lane")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["lane"], "api_route_lane")
         self.assertTrue(chatgpt_api["dual_lane_slots_preserved"])
-        self.assertEqual(chatgpt_api["api_reasoning_operator_level"], "high")
+        self.assertEqual(chatgpt_api["api_reasoning_operator_level"], "max")
 
         self.assertEqual(api_only["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(api_only["primary_model_slot"]["lane"], "api_route_lane")
@@ -705,8 +705,8 @@ class CodexModelRegistryTests(unittest.TestCase):
             {
                 "execution_mode": "chatgpt_plus_api",
                 "chatgpt_model_id": "gpt-5.3-codex",
-                "api_model_id": "wbp-deepseek-v4-pro-high",
-                "api_reasoning_option_id": "provider_declared_high",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
             },
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
@@ -715,12 +715,12 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(
             packet["final_status"],
-            "CHATGPT_PLUS_API_SLOT_TRUTH_PROVEN_WITH_LIMITS",
+            "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS",
         )
         self.assertTrue(packet["slot_truth_proven"])
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
         self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
-        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-high")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(packet["source"], "server_selection_truth")
         self.assertTrue(packet["server_selection_truth_used"])
         self.assertTrue(packet["server_catalog_source"])
@@ -743,14 +743,19 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
         self.assertEqual(
             packet["coding_agent_model_slot"]["model_id"],
-            "wbp-deepseek-v4-pro-high",
+            "wbp-deepseek-v4-pro-max",
         )
         self.assertTrue(packet["chatgpt_primary_slot_proven"])
         self.assertTrue(packet["api_coding_slot_proven"])
+        self.assertTrue(packet["coding_slot_provider_is_deepseek"])
+        self.assertTrue(packet["coding_slot_model_is_deepseek_v4_pro_max"])
+        self.assertEqual(packet["required_coding_api_provider_id"], "deepseek")
+        self.assertEqual(packet["required_coding_api_model_id"], "wbp-deepseek-v4-pro-max")
         self.assertTrue(packet["api_line_selected_as_coding_agent"])
         self.assertTrue(packet["api_line_used_as_coding_agent"])
         self.assertTrue(packet["chatgpt_line_used_as_executor"])
         self.assertTrue(packet["dual_lane_slots_preserved"])
+        self.assertFalse(packet["slots_collapsed"])
         self.assertFalse(packet["api_line_used_as_primary_executor"])
         self.assertFalse(packet["chatgpt_line_used_as_coding_agent"])
         self.assertFalse(packet["fallback_used"])
@@ -838,6 +843,34 @@ class CodexModelRegistryTests(unittest.TestCase):
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot,
         )
+        deepseek_not_max = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v3",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+        )
+        non_deepseek_api = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-claude-coder",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-claude-coder",
+                        "provider": "anthropic",
+                        "upstream_model": "claude-sonnet",
+                        "enabled": True,
+                        "secret_ref": "ANTHROPIC_API_KEY",
+                    }
+                ]
+            },
+        )
 
         for packet in (
             api_only,
@@ -846,11 +879,13 @@ class CodexModelRegistryTests(unittest.TestCase):
             unknown_api,
             raw_backend,
             reasoning_mismatch,
+            deepseek_not_max,
+            non_deepseek_api,
         ):
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(
                 packet["final_status"],
-                "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN",
+                "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_ROUTING_NOT_PROVEN",
             )
             self.assertFalse(packet["slot_truth_proven"])
             self.assertFalse(packet["live_call_attempted"])
@@ -902,6 +937,14 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(
             reasoning_mismatch["machine_error_code"],
             "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
+        )
+        self.assertEqual(
+            deepseek_not_max["machine_error_code"],
+            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_MAX",
+        )
+        self.assertEqual(
+            non_deepseek_api["machine_error_code"],
+            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK",
         )
 
     def test_api_only_executor_truth_proves_primary_api_without_live_claims(self) -> None:

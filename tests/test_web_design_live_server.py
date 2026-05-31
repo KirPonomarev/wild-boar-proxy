@@ -12165,8 +12165,68 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertNotIn('"secret_ref"', rejected_json)
 
     def test_codex_custom_chatgpt_plus_api_slot_truth_endpoint_is_non_live(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v4-pro-max",
+                        "display_name": "DeepSeek V4 Pro Max",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "compatibility": "openai_chat_completions",
+                        "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    }
+                ],
+            },
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": "wbp-deepseek-v4-pro-max",
+                        "display_name": "DeepSeek V4 Pro Max",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    }
+                ],
+            },
+        )
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
-            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(payloads)))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
@@ -12177,8 +12237,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         {
                             "execution_mode": "chatgpt_plus_api",
                             "chatgpt_model_id": "gpt-5.3-codex",
-                            "api_model_id": "wbp-deepseek-v3",
-                            "api_reasoning_option_id": "catalog_default",
+                            "api_model_id": "wbp-deepseek-v4-pro-max",
+                            "api_reasoning_option_id": "provider_declared_max",
                         },
                     )
                 )
@@ -12188,7 +12248,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         {
                             "execution_mode": "chatgpt_plus_api",
                             "chatgpt_model_id": "gpt-5.3-codex",
-                            "api_model_id": "wbp-deepseek-v3",
+                            "api_model_id": "wbp-deepseek-v4-pro-max",
                             "route_id": "browser-route",
                         },
                     )
@@ -12199,11 +12259,11 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 server.server_close()
 
         self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["final_status"], "CHATGPT_PLUS_API_SLOT_TRUTH_PROVEN_WITH_LIMITS")
+        self.assertEqual(packet["final_status"], "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS")
         self.assertTrue(packet["slot_truth_proven"])
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
         self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
-        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v3")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(packet["source"], "server_selection_truth")
         self.assertTrue(packet["server_selection_truth_used"])
         self.assertTrue(packet["server_catalog_source"])
@@ -12221,6 +12281,14 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertTrue(packet["dry_server_truth_only"])
         self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
         self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(packet["coding_agent_model_slot"]["provider"], "deepseek")
+        self.assertEqual(
+            packet["coding_agent_model_slot"]["model_id"],
+            "wbp-deepseek-v4-pro-max",
+        )
+        self.assertTrue(packet["coding_slot_provider_is_deepseek"])
+        self.assertTrue(packet["coding_slot_model_is_deepseek_v4_pro_max"])
+        self.assertFalse(packet["slots_collapsed"])
         self.assertTrue(packet["api_line_selected_as_coding_agent"])
         self.assertTrue(packet["api_line_used_as_coding_agent"])
         self.assertFalse(packet["api_line_used_as_primary_executor"])
@@ -12243,7 +12311,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "blocked")
         self.assertEqual(
             rejected["final_status"],
-            "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN",
+            "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_ROUTING_NOT_PROVEN",
         )
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], [])
