@@ -15015,6 +15015,9 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                 "api_reasoning_option_id": "provider_declared_max",
                 "custom_codex_window_deepseek_launch_proven_with_limits": True,
                 "real_codex_app_launched": True,
+                "stable_bridge_preflight_required": True,
+                "stable_bridge_preflight_status": "ok",
+                "stable_bridge_launch_allowed": True,
                 "persistent_profile_root": str(profile_root),
                 "original_codex_touched": False,
                 "asar_touched": False,
@@ -15068,8 +15071,15 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertEqual(packet["selected_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(packet["provider_id"], "deepseek")
         self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
+        self.assertEqual(packet["stable_bridge_preflight"], "ok")
+        self.assertTrue(packet["stable_bridge_preflight_ok"])
+        self.assertTrue(packet["stable_bridge_preflight_required"])
+        self.assertTrue(packet["stable_bridge_launch_allowed"])
         self.assertTrue(packet["file_edit_observed"])
+        self.assertTrue(packet["file_mutation_observed"])
         self.assertTrue(packet["file_content_matches_expected"])
+        self.assertEqual(packet["changed_files"], [".tmp/deepseek_live_probe.txt"])
+        self.assertTrue(packet["mutation_scope_allowed"])
         self.assertEqual(packet["file_size_bytes"], 25)
         self.assertEqual(
             packet["file_content_sha256"],
@@ -15081,8 +15091,27 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertFalse(packet["api_only_calls_chatgpt"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["response_text_counts_as_proof"])
+        self.assertFalse(packet["ui_label_counts_as_proof"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_missing_stable_preflight(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            launch_overrides={
+                "stable_bridge_preflight_status": "blocked",
+                "stable_bridge_launch_allowed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["stable_bridge_preflight_ok"])
+        self.assertTrue(packet["file_mutation_observed"])
+        self.assertTrue(packet["mutation_scope_allowed"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
 
     def test_api_only_deepseek_live_code_edit_truth_blocks_missing_file(self) -> None:
         packet = self._api_only_live_code_edit_truth_packet(file_text=None)
@@ -15102,7 +15131,24 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertTrue(packet["file_edit_observed"])
+        self.assertFalse(packet["file_mutation_observed"])
         self.assertFalse(packet["file_content_matches_expected"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_extra_changed_file(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "changed_files": [".tmp/deepseek_live_probe.txt", "README.md"],
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["changed_files"], [".tmp/deepseek_live_probe.txt", "README.md"])
+        self.assertFalse(packet["mutation_scope_allowed"])
+        self.assertTrue(packet["file_mutation_observed"])
         self.assertEqual(
             packet["final_status"],
             "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
@@ -15239,6 +15285,9 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
                     "real_codex_app_launched": True,
+                    "stable_bridge_preflight_required": True,
+                    "stable_bridge_preflight_status": "ok",
+                    "stable_bridge_launch_allowed": True,
                     "persistent_profile_root": str(profile_root),
                     "original_codex_touched": False,
                     "asar_touched": False,
@@ -15350,6 +15399,9 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
                     "real_codex_app_launched": True,
+                    "stable_bridge_preflight_required": True,
+                    "stable_bridge_preflight_status": "ok",
+                    "stable_bridge_launch_allowed": True,
                     "persistent_profile_root": str(profile_root),
                     "original_codex_touched": False,
                     "asar_touched": False,
@@ -15497,6 +15549,9 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
                     "real_codex_app_launched": True,
+                    "stable_bridge_preflight_required": True,
+                    "stable_bridge_preflight_status": "ok",
+                    "stable_bridge_launch_allowed": True,
                     "persistent_profile_root": str(profile_root),
                     "original_codex_touched": False,
                     "asar_touched": False,

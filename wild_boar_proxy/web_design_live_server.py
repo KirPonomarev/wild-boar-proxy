@@ -5415,6 +5415,37 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         and record.get("fallback_used") is not True
         and effective_route_model == selected_model
     )
+    trace_changed_files = record.get("changed_files")
+    if not isinstance(trace_changed_files, list):
+        trace_changed_files = request_trace.get("changed_files") if isinstance(request_trace, dict) else []
+    changed_files = [
+        str(item)
+        for item in (trace_changed_files if isinstance(trace_changed_files, list) else [])
+        if str(item)
+    ]
+    if not changed_files and file_created and file_content_exact:
+        changed_files = [expected_file]
+    mutation_scope_allowed = changed_files == [expected_file]
+    file_mutation_observed = bool(
+        file_created
+        and file_content_exact
+        and log_evidence.get("tool_call_seen") is True
+        and log_evidence.get("tool_result_success") is True
+    )
+    stable_bridge_preflight_status = str(
+        launch.get("stable_bridge_preflight_status")
+        or (
+            launch.get("stable_bridge_preflight_packet", {})
+            if isinstance(launch.get("stable_bridge_preflight_packet"), dict)
+            else {}
+        ).get("status")
+        or ""
+    )
+    stable_bridge_preflight_ok = bool(
+        launch.get("stable_bridge_preflight_required") is True
+        and launch.get("stable_bridge_launch_allowed") is True
+        and stable_bridge_preflight_status == "ok"
+    )
     git_probe = _git_probe_file_status(repo_root, expected_file)
     fallback_used = record.get("fallback_used") is True or bool(
         log_evidence.get("fallback_used_seen")
@@ -5431,11 +5462,14 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         launch_alive_enough
         and execution_mode == "api_only"
         and selected_model == "wbp-deepseek-v4-pro-max"
+        and stable_bridge_preflight_ok
         and thread_cwd == str(repo_root)
         and thread_model == selected_model
         and thread_provider == "wbp"
         and file_created
         and file_content_exact
+        and file_mutation_observed
+        and mutation_scope_allowed
         and log_evidence.get("tool_call_seen") is True
         and log_evidence.get("tool_result_success") is True
         and log_evidence.get("model_seen") is True
@@ -5477,10 +5511,17 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "thread_model": thread_model,
         "thread_model_provider": thread_provider,
         "window_launch_proven_with_limits": launch_alive_enough,
+        "stable_bridge_preflight": stable_bridge_preflight_status,
+        "stable_bridge_preflight_ok": stable_bridge_preflight_ok,
+        "stable_bridge_preflight_required": launch.get("stable_bridge_preflight_required") is True,
+        "stable_bridge_launch_allowed": launch.get("stable_bridge_launch_allowed") is True,
         "file_created": file_created,
         "file_content_exact": file_content_exact,
         "file_edit_observed": file_created,
+        "file_mutation_observed": file_mutation_observed,
         "file_content_matches_expected": file_content_exact,
+        "changed_files": changed_files,
+        "mutation_scope_allowed": mutation_scope_allowed,
         "file_size_bytes": len(file_content.encode("utf-8")) if file_created else 0,
         "file_content_sha256": file_content_sha256,
         "file_path": str(file_path),
@@ -5511,6 +5552,8 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "log_evidence": log_evidence,
         "profile_path_exposed": False,
         "raw_prompt_recorded": False,
+        "response_text_counts_as_proof": False,
+        "ui_label_counts_as_proof": False,
         "response_text_counts_as_model_truth": False,
         "model_self_report_counts_as_runtime_truth": False,
         "next_action": (
