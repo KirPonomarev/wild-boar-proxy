@@ -2860,6 +2860,29 @@ class CliTests(unittest.TestCase):
             (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
             "stable",
         )
+        self.assertEqual(
+            payload["managed_startup_owner"]["status"], "not_applicable"
+        )
+
+        result = self.run_cli("mode", "set", "managed", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["desired_mode"], "managed")
+        self.assertEqual(payload["effective_mode"], "stable")
+        startup_owner = payload["managed_startup_owner"]
+        self.assertEqual(startup_owner["status"], "blocked")
+        self.assertEqual(
+            startup_owner["machine_error_code"],
+            "MANAGED_STARTUP_OWNER_UNDEFINED",
+        )
+        self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertFalse(startup_owner["managed_listener_reachable"])
+        self.assertEqual(
+            (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "managed",
+        )
 
     def test_status_reports_listener_down_when_managed_port_is_absent(self) -> None:
         stable_port = free_port()
@@ -2872,6 +2895,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
         self.assertEqual(payload["liveness"], "down")
+        startup_owner = payload["managed_startup_owner"]
+        self.assertEqual(startup_owner["status"], "blocked")
+        self.assertEqual(
+            startup_owner["machine_error_code"],
+            "MANAGED_STARTUP_OWNER_UNDEFINED",
+        )
+        self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+        self.assertFalse(startup_owner["startup_attempted"])
         recovery = payload["stable_runtime_consumer"][
             "deterministic_stable_recovery_result"
         ]
@@ -17997,7 +18028,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "sync-promoted-managed")
 
     def test_mode_get_reports_stable_when_managed_listener_is_absent(self) -> None:
-        (self.profile_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")
+        (self.profile_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
         (self.profile_dir / "runtime-effective-mode.txt").write_text(
             "managed\n", encoding="utf-8"
         )
@@ -18009,8 +18040,53 @@ class CliTests(unittest.TestCase):
         result = self.run_cli("mode", "get", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["desired_mode"], "stable")
+        self.assertEqual(payload["desired_mode"], "managed")
         self.assertEqual(payload["effective_mode"], "stable")
+        startup_owner = payload["managed_startup_owner"]
+        self.assertEqual(startup_owner["status"], "blocked")
+        self.assertEqual(
+            startup_owner["machine_error_code"],
+            "MANAGED_STARTUP_OWNER_UNDEFINED",
+        )
+        self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertFalse(startup_owner["managed_listener_reachable"])
+
+    def test_mode_get_does_not_claim_startup_owner_when_managed_is_live(self) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "managed"
+        state["managed_port"] = port
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("mode", "get", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["desired_mode"], "managed")
+        self.assertEqual(payload["effective_mode"], "managed")
+        startup_owner = payload["managed_startup_owner"]
+        self.assertEqual(startup_owner["status"], "not_required")
+        self.assertEqual(startup_owner["machine_error_code"], "OK")
+        self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertTrue(startup_owner["managed_listener_reachable"])
 
     def test_mode_set_respects_serialized_lock(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
@@ -19285,6 +19361,17 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     launch_payload["attestation_summary"]["status"], "ok"
                 )
+                self.assertEqual(
+                    launch_payload["managed_startup_owner"]["machine_error_code"],
+                    "MANAGED_STARTUP_OWNER_UNDEFINED",
+                )
+                self.assertEqual(
+                    launch_payload["managed_startup_owner"]["owner_command_surface"],
+                    "status --json",
+                )
+                self.assertTrue(
+                    launch_payload["managed_startup_owner"]["delegated_from_status"]
+                )
 
                 status_result = self.run_cli_with_env(
                     {"PATH": "/definitely/missing"},
@@ -19299,6 +19386,18 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(status_payload["desired_mode"], "managed")
                 self.assertEqual(status_payload["effective_mode"], "stable")
                 self.assertEqual(status_payload["attestation_summary"]["status"], "ok")
+                startup_owner = status_payload["managed_startup_owner"]
+                self.assertEqual(startup_owner["status"], "blocked")
+                self.assertEqual(
+                    startup_owner["machine_error_code"],
+                    "MANAGED_STARTUP_OWNER_UNDEFINED",
+                )
+                self.assertEqual(
+                    startup_owner["owner_command_surface"], "status --json"
+                )
+                self.assertTrue(startup_owner["delegated_from_status"])
+                self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+                self.assertFalse(startup_owner["startup_attempted"])
         finally:
             server.shutdown()
             thread.join()

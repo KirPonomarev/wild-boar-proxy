@@ -873,6 +873,57 @@ def build_launch_readiness_surface(
     }
 
 
+def build_managed_startup_owner_surface(
+    paths: RuntimePaths,
+    *,
+    owner_command_surface: str,
+    delegated_from_status: bool,
+    desired_mode: str,
+    effective_mode: str,
+    reported_effective_mode: str,
+) -> dict[str, Any]:
+    managed_host, managed_port, managed_endpoint = get_endpoint(paths, "managed")
+    managed_listener_reachable = socket_is_listening(managed_host, managed_port)
+    startup_owner_required = (
+        desired_mode == "managed" and reported_effective_mode != "managed"
+    )
+    if desired_mode != "managed":
+        status = "not_applicable"
+    elif startup_owner_required:
+        status = "blocked"
+    else:
+        status = "not_required"
+    return {
+        "status": status,
+        "owner_command_surface": owner_command_surface,
+        "delegated_from_status": delegated_from_status,
+        "desired_mode": desired_mode,
+        "effective_mode": effective_mode,
+        "reported_effective_mode": reported_effective_mode,
+        "managed_listener_endpoint": managed_endpoint,
+        "managed_listener_reachable": managed_listener_reachable,
+        "startup_owner_required": startup_owner_required,
+        "repo_owned_startup_owner_path_defined": False,
+        "startup_attempted": False,
+        "machine_error_code": (
+            "MANAGED_STARTUP_OWNER_UNDEFINED" if startup_owner_required else "OK"
+        ),
+        "blocking_reason": (
+            "desired_managed_but_no_repo_owned_startup_owner"
+            if startup_owner_required
+            else ""
+        ),
+        "non_startup_owner_surfaces": [
+            "mode set --json",
+            "mode get --json",
+            "healthcheck --json",
+            "status --json",
+            "sync --json",
+            "launch smoke --json",
+        ],
+    }
+
+
 def build_runtime_guardrail_surface(
     paths: RuntimePaths,
     *,
@@ -7257,6 +7308,22 @@ def summarize_status(
         )
         runtime_guardrails["delegated_from_status"] = False
         runtime_guardrails["owner_command_surface"] = "status --json"
+    managed_startup_owner = health_payload.get("managed_startup_owner")
+    if isinstance(managed_startup_owner, dict):
+        managed_startup_owner = {
+            **managed_startup_owner,
+            "delegated_from_status": True,
+            "owner_command_surface": "status --json",
+        }
+    else:
+        managed_startup_owner = build_managed_startup_owner_surface(
+            paths,
+            owner_command_surface="status --json",
+            delegated_from_status=False,
+            desired_mode=desired_mode,
+            effective_mode=str(health_payload["effective_mode"]),
+            reported_effective_mode=str(health_payload["effective_mode"]),
+        )
 
     return build_command_payload(
         ok=health_payload["status"] == "ok",
@@ -7312,6 +7379,13 @@ def summarize_status(
                     "runtime_guardrails": runtime_guardrails,
                 }
                 if isinstance(runtime_guardrails, dict)
+                else {}
+            ),
+            **(
+                {
+                    "managed_startup_owner": managed_startup_owner,
+                }
+                if isinstance(managed_startup_owner, dict)
                 else {}
             ),
             "registry_identity_summary": summarize_registry_identity(registry_identity),
@@ -8126,6 +8200,14 @@ def run_healthcheck(
         auth_pool_hygiene=auth_pool_hygiene,
         recovery_result=recovery_result,
     )
+    managed_startup_owner = build_managed_startup_owner_surface(
+        paths,
+        owner_command_surface="healthcheck --json",
+        delegated_from_status=False,
+        desired_mode=desired_mode,
+        effective_mode=effective_mode,
+        reported_effective_mode=reported_effective_mode,
+    )
     reported_last_error = (
         successful_reconcile_detail
         if ok and successful_reconcile_detail
@@ -8153,6 +8235,7 @@ def run_healthcheck(
         "launch_readiness": launch_readiness,
         "native_auth_recovery_hint": native_auth_recovery_hint,
         "runtime_guardrails": runtime_guardrails,
+        "managed_startup_owner": managed_startup_owner,
         "last_error": reported_last_error,
     }
     if proxy_reprobe is not None:
@@ -8204,6 +8287,14 @@ def mode_get(paths: RuntimePaths) -> dict[str, Any]:
         extra={
             "desired_mode": desired_mode,
             "effective_mode": reported_effective_mode,
+            "managed_startup_owner": build_managed_startup_owner_surface(
+                paths,
+                owner_command_surface="mode get --json",
+                delegated_from_status=False,
+                desired_mode=desired_mode,
+                effective_mode=effective_mode,
+                reported_effective_mode=reported_effective_mode,
+            ),
         },
     )
 
@@ -8219,6 +8310,11 @@ def mode_set(paths: RuntimePaths, mode: str) -> dict[str, Any]:
         write_text_atomic(paths.runtime_mode_file, mode)
     state = read_json(paths.state_file, required=False)
     effective_mode = get_effective_mode(paths, state)
+    host, port, _ = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
     return build_command_payload(
         ok=True,
         human_message=f"Desired mode set to {mode}.",
@@ -8229,7 +8325,15 @@ def mode_set(paths: RuntimePaths, mode: str) -> dict[str, Any]:
         changed_files=[str(paths.runtime_mode_file)],
         extra={
             "desired_mode": mode,
-            "effective_mode": effective_mode,
+            "effective_mode": reported_effective_mode,
+            "managed_startup_owner": build_managed_startup_owner_surface(
+                paths,
+                owner_command_surface="mode set --json",
+                delegated_from_status=False,
+                desired_mode=mode,
+                effective_mode=effective_mode,
+                reported_effective_mode=reported_effective_mode,
+            ),
         },
     )
 
@@ -8422,6 +8526,7 @@ def run_launch_smoke(
             "auth_pool_hygiene": status_payload.get("auth_pool_hygiene", {}),
             "launch_readiness": status_payload.get("launch_readiness", {}),
             "runtime_guardrails": status_payload.get("runtime_guardrails", {}),
+            "managed_startup_owner": status_payload.get("managed_startup_owner", {}),
             "attestation_summary": status_payload.get("attestation_summary", {}),
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",
