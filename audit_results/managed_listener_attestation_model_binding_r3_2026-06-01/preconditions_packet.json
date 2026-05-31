@@ -1,0 +1,23 @@
+{
+  "auth_entry_names_redacted": true,
+  "cli_proxy_api": {
+    "executable": true,
+    "exists": true,
+    "path": "/Users/kirillponomarev/.local/bin/cli-proxy-api"
+  },
+  "configured_probe_model": "gpt-5.4",
+  "contour": "managed_listener_attestation_model_binding_r3",
+  "managed_target": {
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "host": "127.0.0.1",
+    "port": 8320
+  },
+  "observed_at_utc": "2026-05-31T23:06:54.286526+00:00",
+  "port_8320_initial": {
+    "listening": false
+  },
+  "probe_model_source": "config_toml",
+  "run_root_deleted_after_run": true,
+  "schema_version": 1,
+  "secrets_redacted": true
+}

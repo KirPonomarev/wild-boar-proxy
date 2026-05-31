@@ -2650,8 +2650,12 @@ class CliTests(unittest.TestCase):
         *,
         listen_on_configured_port: bool = True,
         responses_ok: bool = True,
+        model_ids: list[str] | None = None,
+        response_error_message: str = "fail",
         ignore_sigterm: bool = False,
     ) -> Path:
+        if model_ids is None:
+            model_ids = ["gpt-5.4"]
         response_status = 200 if responses_ok else 500
         path.write_text(
             "#!" + sys.executable + "\n"
@@ -2674,7 +2678,8 @@ class CliTests(unittest.TestCase):
             "class Handler(BaseHTTPRequestHandler):\n"
             "    def do_GET(self):\n"
             "        if self.path == '/v1/models':\n"
-            "            body = json.dumps({'data': [{'id': 'gpt-5.4'}]}).encode('utf-8')\n"
+            f"            model_ids = {model_ids!r}\n"
+            "            body = json.dumps({'data': [{'id': item} for item in model_ids]}).encode('utf-8')\n"
             "            self.send_response(200)\n"
             "            self.send_header('Content-Type', 'application/json')\n"
             "            self.send_header('Content-Length', str(len(body)))\n"
@@ -2687,7 +2692,8 @@ class CliTests(unittest.TestCase):
             "            length = int(self.headers.get('Content-Length', '0'))\n"
             "            _ = self.rfile.read(length)\n"
             f"            status = {response_status}\n"
-            "            payload = {'output_text': 'OK'} if status == 200 else {'error': {'message': 'fail'}}\n"
+            f"            error_message = {response_error_message!r}\n"
+            "            payload = {'output_text': 'OK'} if status == 200 else {'error': {'message': error_message}}\n"
             "            body = json.dumps(payload).encode('utf-8')\n"
             "            self.send_response(status)\n"
             "            self.send_header('Content-Type', 'application/json')\n"
@@ -18357,6 +18363,96 @@ class CliTests(unittest.TestCase):
             .read_text(encoding="utf-8")
             .strip(),
             "managed",
+        )
+
+    def test_managed_listener_start_reports_probe_model_unbound_when_models_empty(
+        self,
+    ) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            model_ids=[],
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_PROBE_MODEL_UNBOUND",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        self.assertEqual(startup_owner["blocking_reason"], "live_models_empty")
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertFalse(runtime_mod.process_is_alive(str(pid)))
+        self.assertEqual(payload["changed_files"], [])
+        attestation = payload["startup_attestation"]
+        self.assertTrue(attestation["listener_ok"])
+        self.assertTrue(attestation["models_ok"])
+        self.assertFalse(attestation["responses_ok"])
+        self.assertEqual(attestation["live_model_count"], 0)
+        self.assertFalse(attestation["live_model_available"])
+        self.assertEqual(attestation["live_model_sample"], [])
+        self.assertEqual(attestation["probe_model_source"], "config_toml")
+        self.assertFalse(attestation["probe_model_substitution_attempted"])
+        self.assertEqual(attestation["binding_failure_reason"], "live_models_empty")
+
+    def test_managed_listener_start_reports_probe_model_unbound_for_unknown_provider(
+        self,
+    ) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            responses_ok=False,
+            response_error_message="unknown provider for model gpt-5.4",
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_PROBE_MODEL_UNBOUND",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        self.assertEqual(
+            startup_owner["blocking_reason"],
+            "unknown_provider_for_probe_model",
+        )
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertFalse(runtime_mod.process_is_alive(str(pid)))
+        self.assertEqual(payload["changed_files"], [])
+        attestation = payload["startup_attestation"]
+        self.assertTrue(attestation["listener_ok"])
+        self.assertTrue(attestation["models_ok"])
+        self.assertFalse(attestation["responses_ok"])
+        self.assertEqual(attestation["live_model_count"], 1)
+        self.assertTrue(attestation["live_model_available"])
+        self.assertEqual(
+            attestation["binding_failure_reason"],
+            "unknown_provider_for_probe_model",
         )
 
     def test_mode_set_respects_serialized_lock(self) -> None:

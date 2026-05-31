@@ -1,0 +1,63 @@
+{
+  "contour": "managed_listener_attestation_model_binding_r3",
+  "observed_at_utc": "2026-05-31T23:06:56.981051+00:00",
+  "payload": {
+    "changed_files": [],
+    "exit_code": 1,
+    "human_message": "Managed listener startup blocked: live_models_empty.",
+    "last_error": "",
+    "liveness": "down",
+    "machine_error_code": "MANAGED_STARTUP_PROBE_MODEL_UNBOUND",
+    "managed_startup_owner": {
+      "blocking_reason": "live_models_empty",
+      "delegated_from_status": false,
+      "effective_mode_written": false,
+      "live_attestation_passed": false,
+      "machine_error_code": "MANAGED_STARTUP_PROBE_MODEL_UNBOUND",
+      "managed_listener_endpoint": "http://127.0.0.1:8320/v1",
+      "managed_listener_reachable": false,
+      "owner_command_surface": "managed listener start --json",
+      "pid_recorded": false,
+      "process_started": true,
+      "repo_owned_startup_owner_path_defined": true,
+      "started_pid": 88247,
+      "startup_attempted": true,
+      "startup_outcome": "attestation_failed",
+      "status": "blocked"
+    },
+    "next_action": "user_action",
+    "operator_action": "user_action",
+    "severity": "recoverable",
+    "startup_attestation": {
+      "attestation_source": "managed listener start --json",
+      "base_url_match": true,
+      "binding_failure_reason": "live_models_empty",
+      "configured_model": "gpt-5.4",
+      "configured_probe_model": "gpt-5.4",
+      "effective_mode_match": true,
+      "effective_probe_model": "gpt-5.4",
+      "listener_ok": true,
+      "live_model_available": false,
+      "live_model_count": 0,
+      "live_model_sample": [],
+      "machine_error_code": "MANAGED_STARTUP_PROBE_MODEL_UNBOUND",
+      "models_ok": true,
+      "observed_at_utc": "2026-05-31T23:06:54.850919+00:00",
+      "probe_model_source": "config_toml",
+      "probe_model_substitution_attempted": false,
+      "requested_model": "gpt-5.4",
+      "responses_ok": false,
+      "runtime_version": "unknown",
+      "selected_backends_digest": ""
+    },
+    "status": "error"
+  },
+  "process_after_startup_packet": {
+    "process_alive": false,
+    "started_pid": 88247
+  },
+  "returncode": 1,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "stderr": ""
+}

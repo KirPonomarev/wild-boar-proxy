@@ -1,0 +1,21 @@
+{
+  "contour": "managed_listener_attestation_model_binding_r3",
+  "endpoint": "http://127.0.0.1:8320/v1",
+  "listener_reachable": true,
+  "listener_reachable_after_cleanup": false,
+  "models_probe": {
+    "model_sample": [],
+    "models_count": 0,
+    "ok": true,
+    "status": 200
+  },
+  "observed_at_utc": "2026-05-31T23:06:54.286965+00:00",
+  "process_started_pid": 88245,
+  "responses_probe": {
+    "error_message": "Post \"https://chatgpt.com/backend-api/codex/responses\": proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused",
+    "ok": false,
+    "status": 500
+  },
+  "schema_version": 1,
+  "secrets_redacted": true
+}

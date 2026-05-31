@@ -1707,9 +1707,14 @@ Field meaning rules:
   - `MANAGED_STARTUP_PROCESS_FAILED`
   - `MANAGED_STARTUP_LISTENER_UNREACHABLE`
   - `MANAGED_STARTUP_ATTESTATION_FAILED`
+  - `MANAGED_STARTUP_PROBE_MODEL_UNBOUND`
   - `MANAGED_STARTUP_STALE_PID_CONFLICT`
   - `MANAGED_STARTUP_AMBIGUOUS_EXISTING_LISTENER`
   - `MANAGED_STARTUP_ROLLBACK_FAILED`
+- `MANAGED_STARTUP_PROBE_MODEL_UNBOUND` means the managed listener was reachable
+  but live model binding could not support the startup attestation probe. The
+  failure packet must expose `startup_attestation.binding_failure_reason` and
+  must not write managed truth surfaces or silently substitute a user model.
 - failure must not report stable fallback as managed startup success
 - ambient shell proxy env must not become the authoritative control-layer truth
   surface for current proxy selection
