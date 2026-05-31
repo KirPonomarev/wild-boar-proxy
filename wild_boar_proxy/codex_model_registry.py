@@ -29,15 +29,23 @@ CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS = {
     "api_reasoning_option_id",
 }
 CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT = "catalog_default"
+CUSTOM_CODEX_API_REASONING_OPTION_FAST = "provider_declared_fast"
 CUSTOM_CODEX_API_REASONING_OPTION_DISABLED = "provider_declared_disabled"
 CUSTOM_CODEX_API_REASONING_OPTION_HIGH = "provider_declared_high"
 CUSTOM_CODEX_API_REASONING_OPTION_MAX = "provider_declared_max"
 CUSTOM_CODEX_API_REASONING_OPTION_ALLOWED_IDS = {
     CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+    CUSTOM_CODEX_API_REASONING_OPTION_FAST,
     CUSTOM_CODEX_API_REASONING_OPTION_DISABLED,
     CUSTOM_CODEX_API_REASONING_OPTION_HIGH,
     CUSTOM_CODEX_API_REASONING_OPTION_MAX,
 }
+SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_FINAL_STATUS = (
+    "SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_PROVEN_WITH_LIMITS"
+)
+SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER = (
+    "STOP_AND_DIAGNOSE_MODEL_SELECTION_TRUTH_NOT_PROVEN"
+)
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_plus_api"
@@ -1640,6 +1648,25 @@ def _api_reasoning_option_from_selection(selection: dict[str, Any] | None) -> st
     return CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
 
 
+def _canonical_api_reasoning_option_id(option_id: str) -> str:
+    if option_id == CUSTOM_CODEX_API_REASONING_OPTION_FAST:
+        return CUSTOM_CODEX_API_REASONING_OPTION_DISABLED
+    return option_id
+
+
+def _api_reasoning_operator_level(option_id: str) -> str:
+    canonical = _canonical_api_reasoning_option_id(option_id)
+    if canonical == CUSTOM_CODEX_API_REASONING_OPTION_DISABLED:
+        return "fast"
+    if canonical == CUSTOM_CODEX_API_REASONING_OPTION_HIGH:
+        return "high"
+    if canonical == CUSTOM_CODEX_API_REASONING_OPTION_MAX:
+        return "max"
+    if canonical == CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT:
+        return "catalog_default"
+    return "unknown"
+
+
 def _api_reasoning_option_packet(
     *,
     raw_option_id: str,
@@ -1676,9 +1703,17 @@ def _api_reasoning_option_packet(
     return {
         "status": "ok",
         "option_id": option_id,
+        "canonical_option_id": _canonical_api_reasoning_option_id(option_id),
         "requested_option_id": raw_option_id,
+        "requested_operator_level": _api_reasoning_operator_level(raw_option_id),
         "effective_option_id": effective_option_id,
+        "canonical_effective_option_id": _canonical_api_reasoning_option_id(
+            effective_option_id
+        ),
         "selected_model_option_id": selected_model_option_id,
+        "selected_model_operator_level": _api_reasoning_operator_level(
+            selected_model_option_id
+        ),
         "source": (
             "server_catalog_selected_model"
             if option_id == CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
@@ -1783,8 +1818,10 @@ def build_custom_codex_execution_mode_selector_packet(
         api_required
         and raw_api_reasoning_option_id
         and raw_api_reasoning_option_id != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
-        and raw_api_reasoning_option_id
-        != api_reasoning_option_packet.get("selected_model_option_id")
+        and _canonical_api_reasoning_option_id(raw_api_reasoning_option_id)
+        != _canonical_api_reasoning_option_id(
+            str(api_reasoning_option_packet.get("selected_model_option_id") or "")
+        )
     ):
         status = "blocked"
         machine_error_code = "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL"
@@ -1903,6 +1940,10 @@ def build_custom_codex_execution_mode_selector_packet(
         "api_reasoning_option_ignored_for_mode": bool(raw_api_reasoning_option_id and not api_required),
         "api_reasoning_option_packet": api_reasoning_option_packet,
         "api_reasoning_option_runtime_mutation_claimed": False,
+        "api_reasoning_supported_operator_levels": ["fast", "high", "max"],
+        "api_reasoning_operator_level": str(
+            api_reasoning_option_packet.get("selected_model_operator_level") or ""
+        ),
         "api_reasoning_intelligence_measured": False,
         "api_reasoning_codex_parity_claimed": False,
         "primary_model_slot": primary_slot,
@@ -1922,6 +1963,199 @@ def build_custom_codex_execution_mode_selector_packet(
             "history_persistence_proven": False,
         },
         "next_action": next_action,
+    }
+
+
+def _slot_lane(packet: dict[str, Any], slot_name: str) -> str:
+    slot = packet.get(slot_name)
+    return str(slot.get("lane") or "") if isinstance(slot, dict) else ""
+
+
+def _slot_status(packet: dict[str, Any], slot_name: str) -> str:
+    slot = packet.get(slot_name)
+    return str(slot.get("status") or "") if isinstance(slot, dict) else ""
+
+
+def _server_model_selection_slots_are_coherent(selector_packet: dict[str, Any]) -> bool:
+    execution_mode = str(selector_packet.get("execution_mode") or "")
+    if execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY:
+        return (
+            _slot_lane(selector_packet, "primary_model_slot") == CODEX_ACCOUNT_MODEL_LANE
+            and _slot_status(selector_packet, "coding_agent_model_slot")
+            == "not_bound_for_mode"
+            and selector_packet.get("api_line_used_as_executor") is False
+            and selector_packet.get("chatgpt_only_calls_api") is False
+        )
+    if execution_mode == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY:
+        return (
+            _slot_lane(selector_packet, "primary_model_slot") == API_ROUTE_MODEL_LANE
+            and _slot_status(selector_packet, "coding_agent_model_slot")
+            == "not_bound_for_mode"
+            and selector_packet.get("chatgpt_line_used_as_executor") is False
+            and selector_packet.get("api_only_calls_chatgpt") is False
+        )
+    if execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API:
+        return (
+            _slot_lane(selector_packet, "primary_model_slot") == CODEX_ACCOUNT_MODEL_LANE
+            and _slot_lane(selector_packet, "coding_agent_model_slot")
+            == API_ROUTE_MODEL_LANE
+            and selector_packet.get("dual_lane_slots_preserved") is True
+            and selector_packet.get("chatgpt_executor_selected") is True
+            and selector_packet.get("api_executor_selected") is True
+        )
+    return False
+
+
+def build_server_model_selection_and_reasoning_truth_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    selector_packet = build_custom_codex_execution_mode_selector_packet(
+        payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    reasoning_packet = dict(selector_packet.get("api_reasoning_option_packet") or {})
+    forbidden = list(selector_packet.get("forbidden_fields") or [])
+    mode_ok = selector_packet.get("status") == "ok"
+    slots_coherent = _server_model_selection_slots_are_coherent(selector_packet)
+    no_runtime_claims = all(
+        selector_packet.get(field) is False
+        for field in (
+            "live_call_attempted",
+            "network_calls_made",
+            "provider_called",
+            "responses_called",
+            "chat_completions_called",
+            "runtime_execution_proven",
+            "original_codex_touched",
+            "asar_touched",
+            "wbp_patch_applier_used",
+            "api_reasoning_option_runtime_mutation_claimed",
+            "api_reasoning_intelligence_measured",
+            "api_reasoning_codex_parity_claimed",
+        )
+    )
+    no_secret_or_raw_exposure = all(
+        selector_packet.get(field) is False
+        for field in (
+            "raw_backend_details_exposed",
+            "route_or_backend_exposed",
+            "secret_value_exposed",
+            "browser_raw_backend_authority_widened",
+        )
+    )
+    api_required = selector_packet.get("api_line_used_as_executor") is True
+    reasoning_model_bound = True
+    if api_required:
+        requested = str(reasoning_packet.get("requested_option_id") or "")
+        selected = str(reasoning_packet.get("selected_model_option_id") or "")
+        reasoning_model_bound = (
+            reasoning_packet.get("status") == "ok"
+            and (
+                not requested
+                or requested == CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                or _canonical_api_reasoning_option_id(requested)
+                == _canonical_api_reasoning_option_id(selected)
+            )
+        )
+    model_selection_truth_proven = (
+        mode_ok
+        and slots_coherent
+        and no_runtime_claims
+        and no_secret_or_raw_exposure
+        and reasoning_model_bound
+        and selector_packet.get("selector_packet_truth_only") is True
+    )
+    status = "ok" if model_selection_truth_proven else "blocked"
+    machine_error_code = "OK" if model_selection_truth_proven else str(
+        selector_packet.get("machine_error_code")
+        or SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER
+    )
+    if not model_selection_truth_proven and machine_error_code == "OK":
+        machine_error_code = SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER
+    return {
+        "schema_version": 1,
+        "packet_kind": "server_model_selection_and_reasoning_truth",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": (
+            SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_FINAL_STATUS
+            if model_selection_truth_proven
+            else SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER
+        ),
+        "model_selection_truth_proven": model_selection_truth_proven,
+        "execution_mode": str(selector_packet.get("execution_mode") or ""),
+        "allowed_execution_modes": selector_packet.get("allowed_execution_modes", []),
+        "allowed_browser_fields": selector_packet.get("allowed_browser_fields", []),
+        "forbidden_browser_fields": selector_packet.get("forbidden_browser_fields", []),
+        "forbidden_fields": forbidden,
+        "selected_chatgpt_model": str(selector_packet.get("chatgpt_model_id") or ""),
+        "selected_api_model": str(selector_packet.get("api_model_id") or ""),
+        "api_provider_id": str(selector_packet.get("api_provider_id") or ""),
+        "api_reasoning_option_id": str(
+            selector_packet.get("api_reasoning_option_id") or ""
+        ),
+        "api_reasoning_operator_level": str(
+            selector_packet.get("api_reasoning_operator_level") or ""
+        ),
+        "api_reasoning_supported_operator_levels": [
+            str(level)
+            for level in selector_packet.get("api_reasoning_supported_operator_levels")
+            or []
+        ],
+        "api_reasoning_option_model_bound": reasoning_model_bound,
+        "api_reasoning_option_provider_parameter_sent": bool(
+            (reasoning_packet.get("provider_option") or {}).get("api_parameter_sent") is True
+        ),
+        "api_reasoning_option_declared_only": (
+            reasoning_packet.get("proof_level") == "provider_declared"
+        ),
+        "primary_model_slot": selector_packet.get("primary_model_slot", {}),
+        "coding_agent_model_slot": selector_packet.get("coding_agent_model_slot", {}),
+        "slots_coherent": slots_coherent,
+        "dual_lane_slots_preserved": selector_packet.get("dual_lane_slots_preserved")
+        is True,
+        "api_only_calls_chatgpt": selector_packet.get("api_only_calls_chatgpt") is True,
+        "chatgpt_only_calls_api": selector_packet.get("chatgpt_only_calls_api") is True,
+        "raw_backend_details_exposed": selector_packet.get("raw_backend_details_exposed")
+        is True,
+        "route_or_backend_exposed": selector_packet.get("route_or_backend_exposed") is True,
+        "secret_value_exposed": selector_packet.get("secret_value_exposed") is True,
+        "browser_raw_backend_authority_widened": selector_packet.get(
+            "browser_raw_backend_authority_widened"
+        )
+        is True,
+        "live_call_attempted": selector_packet.get("live_call_attempted") is True,
+        "provider_called": selector_packet.get("provider_called") is True,
+        "network_calls_made": selector_packet.get("network_calls_made") is True,
+        "runtime_execution_proven": selector_packet.get("runtime_execution_proven") is True,
+        "ui_work_attempted": False,
+        "custom_codex_launch_attempted": False,
+        "live_paid_call_attempted": False,
+        "original_codex_touched": selector_packet.get("original_codex_touched") is True,
+        "asar_touched": selector_packet.get("asar_touched") is True,
+        "measured_strength_claimed": False,
+        "measured_speed_claimed": False,
+        "api_reasoning_intelligence_measured": selector_packet.get(
+            "api_reasoning_intelligence_measured"
+        )
+        is True,
+        "api_reasoning_codex_parity_claimed": selector_packet.get(
+            "api_reasoning_codex_parity_claimed"
+        )
+        is True,
+        "selector_packet": selector_packet,
+        "next_action": "none" if model_selection_truth_proven else "stop_and_diagnose",
     }
 
 

@@ -10947,6 +10947,67 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         )
         self.assertFalse(unknown_mode["live_call_attempted"])
 
+    def test_codex_custom_server_model_selection_truth_endpoint_is_non_live(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/server-model-selection-truth",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/server-model-selection-truth",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "base_url": "https://browser.invalid/v1",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["model_selection_truth_proven"])
+        self.assertEqual(packet["execution_mode"], "api_only")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v3")
+        self.assertEqual(packet["primary_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(packet["coding_agent_model_slot"]["status"], "not_bound_for_mode")
+        self.assertFalse(packet["api_only_calls_chatgpt"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["ui_work_attempted"])
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["final_status"],
+            "STOP_AND_DIAGNOSE_MODEL_SELECTION_TRUTH_NOT_PROVEN",
+        )
+        self.assertIn("base_url", rejected["forbidden_fields"])
+        self.assertTrue(rejected["browser_raw_backend_authority_widened"])
+        self.assertFalse(rejected["live_call_attempted"])
+
     def test_codex_custom_api_only_deepseek_live_format_requires_owner_auth(self) -> None:
         runner = MappingRunner(live_payloads())
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
