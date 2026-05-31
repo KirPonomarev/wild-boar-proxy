@@ -3684,10 +3684,14 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             adoption_result["adoption_outcome"],
-            "sync_owner_path_live_reproof_failed",
+            "sync_owner_path_failed",
         )
-        self.assertEqual(adoption_result["sync_result_status"], "ok")
-        self.assertEqual(adoption_result["sync_result_machine_error_code"], "OK")
+        self.assertEqual(adoption_result["sync_result_status"], "error")
+        self.assertEqual(
+            adoption_result["sync_result_machine_error_code"],
+            "PROXY_PATH_BROKEN",
+        )
+        self.assertEqual(adoption_result["sync_result_exit_code"], 1)
         self.assertFalse(adoption_result["current_proxy_url_rewritten"])
         self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
         self.assertTrue(adoption_result["rollback_restored"])
@@ -8888,9 +8892,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
 
     def test_accounts_login_complete_codex_onboards_explicit_auth_to_reserve(self) -> None:
+        stable_port = free_port()
         auth_dir = self.managed_dir / "device-login-auth-complete"
         self.stable_dir.joinpath("config.yaml").write_text(
-            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "{auth_dir}"\n',
             encoding="utf-8",
         )
         fake_cli = self.bin_dir / "fake-device-cli-proxy-complete"
@@ -8926,24 +8931,30 @@ class CliTests(unittest.TestCase):
             if status_payload["login_result"]["status"] == "auth_materialized":
                 break
             time.sleep(0.05)
-        completed = self.run_cli_with_env(
-            {
-                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
-                    [
-                        self.build_backend(
-                            backend_id="backend-from-codex-device-login",
-                            auth_ref=str(auth_ref),
-                        )
-                    ]
-                )
-            },
-            "accounts",
-            "login",
-            "complete",
-            "--session",
-            session_id,
-            "--json",
-        )
+        server, thread = self.start_probe_server(stable_port)
+        try:
+            completed = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-from-codex-device-login",
+                                auth_ref=str(auth_ref),
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "login",
+                "complete",
+                "--session",
+                session_id,
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["status"], "ok")
@@ -17141,6 +17152,31 @@ class CliTests(unittest.TestCase):
         self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
         self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
 
+    def test_sync_requires_responses_attestation_before_green(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "NOT OK"
+        self.configure_stable_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+            ProbeHandler.response_text = "OK"
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertEqual(payload["liveness"], "degraded")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
+        self.assertFalse(payload["attestation"]["responses_ok"])
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertNotIn("selected_backend_snapshot", state)
+
     def test_sync_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
@@ -17569,19 +17605,6 @@ class CliTests(unittest.TestCase):
         sync_script = self.profile_dir / "sync-promotes-base-url.sh"
         sync_script.write_text(
             "#!/bin/sh\n"
-            "python3 - <<'PY' >/dev/null 2>&1 &\n"
-            "import os\n"
-            "import socket\n"
-            "import time\n"
-            "port = int(os.environ['WBP_TEST_MANAGED_PORT'])\n"
-            "sock = socket.socket()\n"
-            "sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
-            "sock.bind(('127.0.0.1', port))\n"
-            "sock.listen(1)\n"
-            "time.sleep(10)\n"
-            "sock.close()\n"
-            "PY\n"
-            "sleep 0.1\n"
             "python3 - <<'PY'\n"
             "import json\n"
             "import os\n"
@@ -17593,9 +17616,12 @@ class CliTests(unittest.TestCase):
             "state['status'] = 'healthy'\n"
             "state['last_error'] = ''\n"
             "state['managed_port'] = int(port)\n"
+            "state['current_proxy_url'] = 'http://127.0.0.1:10808'\n"
             "state_path.write_text(json.dumps(state) + '\\n')\n"
             "Path(os.environ['WBP_RUNTIME_EFFECTIVE_MODE_FILE']).write_text('managed\\n')\n"
-            "Path(os.environ['WBP_MANAGED_CONFIG_FILE']).write_text(f'host: 127.0.0.1\\nport: {port}\\n')\n"
+            "Path(os.environ['WBP_MANAGED_CONFIG_FILE']).write_text(\n"
+            "    f'host: 127.0.0.1\\nport: {port}\\nproxy-url: \"http://127.0.0.1:10808\"\\n'\n"
+            ")\n"
             "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
             "lines = config_path.read_text().splitlines()\n"
             "out = []\n"
@@ -17613,14 +17639,20 @@ class CliTests(unittest.TestCase):
         env = self.env()
         env["WBP_SYNC_SCRIPT"] = str(sync_script)
         env["WBP_TEST_MANAGED_PORT"] = str(port)
-        result = subprocess.run(
-            ["python3", "-m", "wild_boar_proxy", "sync", "--json"],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = subprocess.run(
+                ["python3", "-m", "wild_boar_proxy", "sync", "--json"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
@@ -18230,6 +18262,107 @@ class CliTests(unittest.TestCase):
         self.assertIn(
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
             self.default_launcher_script.read_text(encoding="utf-8"),
+        )
+
+    def test_launcher_lane_materializes_signed_legacy_repo_owned_default_launcher_file(
+        self,
+    ) -> None:
+        legacy_payload = (
+            "set -eu\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n"
+        )
+        legacy_text = runtime_mod.render_repo_owned_default_launcher_script_text(
+            legacy_payload
+        )
+        legacy_digest = runtime_mod.compute_repo_managed_default_launcher_digest(
+            legacy_payload
+        )
+        self.default_launcher_script.write_text(legacy_text + "\n", encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_LAUNCHER_SCRIPT": str(self.default_launcher_script),
+            },
+        ), mock.patch.object(
+            runtime_mod,
+            "LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS",
+            {legacy_digest},
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            lane_status = runtime_mod.get_current_proxy_launcher_lane_status(
+                paths,
+                materialize_absent_default=True,
+            )
+
+        self.assertTrue(lane_status["eligible"])
+        self.assertEqual(
+            lane_status["eligibility"],
+            "eligible_recognized_repo_owned_default_lane",
+        )
+        self.assertTrue(lane_status["prerequisite_materialized"])
+        self.assertTrue(
+            runtime_mod.repo_managed_default_launcher_recognized(
+                self.default_launcher_script
+            )
+        )
+
+    def test_launcher_lane_does_not_materialize_legacy_digest_on_non_default_path(
+        self,
+    ) -> None:
+        legacy_payload = (
+            "set -eu\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n"
+        )
+        legacy_text = runtime_mod.render_repo_owned_default_launcher_script_text(
+            legacy_payload
+        )
+        legacy_digest = runtime_mod.compute_repo_managed_default_launcher_digest(
+            legacy_payload
+        )
+        non_default_launcher = self.profile_dir / "custom-launcher.sh"
+        initial_text = legacy_text + "\n"
+        non_default_launcher.write_text(initial_text, encoding="utf-8")
+        non_default_launcher.chmod(0o755)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_LAUNCHER_SCRIPT": str(non_default_launcher),
+            },
+        ), mock.patch.object(
+            runtime_mod,
+            "LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS",
+            {legacy_digest},
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            lane_status = runtime_mod.get_current_proxy_launcher_lane_status(
+                paths,
+                materialize_absent_default=True,
+            )
+
+        self.assertFalse(lane_status["eligible"])
+        self.assertEqual(
+            lane_status["eligibility"],
+            "external_script_path_present_consumer_capability_unverified",
+        )
+        self.assertFalse(lane_status["prerequisite_materialized"])
+        self.assertEqual(
+            non_default_launcher.read_text(encoding="utf-8"),
+            initial_text,
+        )
+
+    def test_known_legacy_default_launcher_digest_is_whitelisted(self) -> None:
+        self.assertIn(
+            "bf1af536a574caa6e8006a17646d8447d632e676a0a16eca3e3e8a310f2cc6db",
+            runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 
     def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(

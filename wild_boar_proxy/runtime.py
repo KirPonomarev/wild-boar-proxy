@@ -53,6 +53,8 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
 LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     # Repo-owned v1 launcher before same-hash clean app copy selection.
     "074dff0a0796ccc0042238caa9e1001a64c3ca4074123d86fd184bb0ad93c52d",
+    # Repo-owned v1 launcher before isolated desktop/home/cache lanes.
+    "bf1af536a574caa6e8006a17646d8447d632e676a0a16eca3e3e8a310f2cc6db",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
@@ -1515,9 +1517,15 @@ def get_current_proxy_launcher_lane_status(
 ) -> dict[str, Any]:
     path_is_default = launcher_path_is_default(paths)
     prerequisite_materialized = False
-    if materialize_absent_default and path_is_default and not paths.launcher_script.exists():
-        ensure_repo_owned_default_launcher_consumer(paths)
-        prerequisite_materialized = paths.launcher_script.exists()
+    if materialize_absent_default and path_is_default:
+        launcher_missing = not paths.launcher_script.exists()
+        launcher_legacy = (
+            not launcher_missing
+            and repo_managed_default_launcher_legacy_recognized(paths.launcher_script)
+        )
+        if launcher_missing or launcher_legacy:
+            ensure_repo_owned_default_launcher_consumer(paths)
+            prerequisite_materialized = paths.launcher_script.exists()
     contract = build_current_proxy_adoption_contract(paths)
     path_surface = contract["external_launcher_path_surface"]
     readiness_status = str(contract["external_launcher_readiness_status"])
@@ -8817,6 +8825,37 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             exit_code=1,
         )
 
+    health_payload = run_healthcheck(
+        paths,
+        model=model,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=False,
+    )
+    if health_payload["status"] != "ok":
+        changed_files = detect_changed_files(before, changed_surface_candidates)
+        return build_command_payload(
+            ok=False,
+            human_message="Managed sync completed but live runtime attestation failed.",
+            machine_error_code=str(
+                health_payload.get("machine_error_code") or "SYNC_HEALTHCHECK_FAILED"
+            ),
+            liveness=str(health_payload.get("liveness") or "degraded"),
+            severity=str(health_payload.get("severity") or "recoverable"),
+            operator_action=str(health_payload.get("operator_action") or "retry"),
+            changed_files=changed_files,
+            extra={
+                "desired_mode": desired_mode,
+                "effective_mode": reported_effective_mode,
+                "endpoint": reported_endpoint,
+                "last_error": str(health_payload.get("last_error") or ""),
+                "attestation": health_payload.get("attestation", {}),
+                "launch_readiness": health_payload.get("launch_readiness", {}),
+            },
+            exit_code=1,
+        )
+
     materialize_selected_backend_snapshot_for_sync(paths)
     state = read_json(paths.state_file, required=False)
     changed_files = detect_changed_files(before, changed_surface_candidates)
@@ -12543,6 +12582,30 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
             "operator_action": "retry",
             "effective_mode": sync_reported_effective_mode,
             "endpoint": sync_reported_endpoint,
+        }
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=False,
+    )
+    if health_payload["status"] != "ok":
+        return {
+            "status": "error",
+            "machine_error_code": str(
+                health_payload.get("machine_error_code") or "SYNC_HEALTHCHECK_FAILED"
+            ),
+            "exit_code": 1,
+            "liveness": str(health_payload.get("liveness") or "degraded"),
+            "operator_action": str(health_payload.get("operator_action") or "retry"),
+            "effective_mode": str(
+                health_payload.get("effective_mode") or sync_reported_effective_mode
+            ),
+            "endpoint": str(health_payload.get("endpoint") or sync_reported_endpoint),
+            "last_error": str(health_payload.get("last_error") or ""),
+            "attestation": health_payload.get("attestation", {}),
+            "launch_readiness": health_payload.get("launch_readiness", {}),
         }
     return {
         "status": "ok",
