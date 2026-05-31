@@ -3223,6 +3223,19 @@ def _custom_native_launch_stability_guard_packet(
         "api_model_id": str(preflight_packet.get("api_model_id") or ""),
         "api_reasoning_option_id": str(preflight_packet.get("api_reasoning_option_id") or ""),
         "selected_model": str(preflight_packet.get("selected_model") or ""),
+        "stable_bridge_preflight_required": (
+            preflight_packet.get("stable_bridge_preflight_required") is True
+        ),
+        "stable_bridge_preflight_status": str(
+            preflight_packet.get("stable_bridge_preflight_status") or ""
+        ),
+        "stable_bridge_launch_allowed": (
+            preflight_packet.get("stable_bridge_launch_allowed") is True
+        ),
+        "stable_bridge_preflight_packet": preflight_packet.get(
+            "stable_bridge_preflight_packet",
+            {},
+        ),
         "selection_packet": preflight_packet.get("selection_packet", {}),
         "selection_digest": str(preflight_packet.get("selection_digest") or ""),
         "last_launch_selection_digest": str(
@@ -3278,6 +3291,70 @@ def _custom_native_launch_stability_guard_packet(
             if status == "ok"
             else "stop_and_diagnose_custom_launch_stability_guard"
         ),
+    }
+
+
+def _custom_native_stable_bridge_launch_gate_packet(
+    preflight_packet: dict[str, Any],
+    *,
+    native_bridge_lease: _CustomNativeBridgeLease,
+) -> dict[str, Any]:
+    execution_mode = str(preflight_packet.get("execution_mode") or "")
+    selection_packet = (
+        preflight_packet.get("selection_packet")
+        if isinstance(preflight_packet.get("selection_packet"), dict)
+        else {}
+    )
+    api_slot = (
+        selection_packet.get("coding_agent_model_slot")
+        if isinstance(selection_packet.get("coding_agent_model_slot"), dict)
+        else {}
+    )
+    api_model_id = str(preflight_packet.get("api_model_id") or "")
+    bridge_required = bool(
+        execution_mode in {"api_only", "chatgpt_plus_api"}
+        or preflight_packet.get("route_selected") is True
+        or (execution_mode == "chatgpt_plus_api" and api_slot.get("model_id"))
+        or (execution_mode == "api_only" and api_model_id)
+    )
+    if not bridge_required:
+        return {
+            "schema_version": 1,
+            "packet_kind": "stable_bridge_launch_gate",
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "machine_error_code": "OK",
+            "bridge_preflight_required": False,
+            "bridge_preflight_status": "not_required",
+            "launch_allowed": True,
+            "failure_reason": "",
+            "final_status": "STABLE_BRIDGE_PREFLIGHT_NOT_REQUIRED_NO_API_ROUTE",
+            "next_action": "launch_custom_codex",
+        }
+    stable_packet = build_custom_codex_stable_bridge_preflight_packet(
+        last_launch_packet=preflight_packet,
+        bridge_trace_packet=native_bridge_lease.trace_snapshot(),
+        expected_bridge_port=native_bridge_lease.bridge_port,
+    )
+    launch_allowed = stable_packet.get("launch_allowed") is True
+    return {
+        "schema_version": 1,
+        "packet_kind": "stable_bridge_launch_gate",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if launch_allowed else "blocked",
+        "machine_error_code": "OK" if launch_allowed else "STABLE_BRIDGE_PREFLIGHT_BLOCKED",
+        "bridge_preflight_required": True,
+        "bridge_preflight_status": str(stable_packet.get("status") or "blocked"),
+        "launch_allowed": launch_allowed,
+        "failure_reason": str(stable_packet.get("failure_reason") or ""),
+        "blocking_reasons": stable_packet.get("blocking_reasons", []),
+        "stable_bridge_preflight_packet": stable_packet,
+        "final_status": (
+            "STABLE_BRIDGE_PREFLIGHT_ENFORCED_ON_CUSTOM_CODEX_LAUNCH_WITH_LIMITS"
+            if launch_allowed
+            else "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREFLIGHT_NOT_PROVEN"
+        ),
+        "next_action": "launch_custom_codex" if launch_allowed else "repair_bridge_before_launch",
     }
 
 
@@ -8179,6 +8256,33 @@ def build_handler(
                     )
                     self._send_json(packet)
                     return
+                stable_bridge_gate = _custom_native_stable_bridge_launch_gate_packet(
+                    preflight_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                )
+                preflight_packet["stable_bridge_preflight_required"] = (
+                    stable_bridge_gate.get("bridge_preflight_required") is True
+                )
+                preflight_packet["stable_bridge_preflight_status"] = str(
+                    stable_bridge_gate.get("bridge_preflight_status") or ""
+                )
+                preflight_packet["stable_bridge_launch_allowed"] = (
+                    stable_bridge_gate.get("launch_allowed") is True
+                )
+                preflight_packet["stable_bridge_preflight_packet"] = (
+                    stable_bridge_gate.get("stable_bridge_preflight_packet", {})
+                )
+                if stable_bridge_gate.get("status") != "ok":
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status="blocked",
+                        machine_error_code="STABLE_BRIDGE_PREFLIGHT_BLOCKED",
+                        human_message="Custom native launch stopped because the stable WBP bridge preflight blocked this API-dependent mode.",
+                    )
+                    packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
+                    packet["final_status"] = str(stable_bridge_gate.get("final_status") or "")
+                    self._send_json(packet)
+                    return
                 if preflight_packet.get("existing_window_reuse_admissible") is True:
                     show_window_packet = show_custom_native_window_packet()
                     show_ok = (
@@ -8241,6 +8345,20 @@ def build_handler(
                     native_bridge_lease=custom_native_bridge_lease,
                 )
                 packet["launch_preflight_packet"] = preflight_packet
+                packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
+                packet["stable_bridge_preflight_required"] = (
+                    stable_bridge_gate.get("bridge_preflight_required") is True
+                )
+                packet["stable_bridge_preflight_status"] = str(
+                    stable_bridge_gate.get("bridge_preflight_status") or ""
+                )
+                packet["stable_bridge_launch_allowed"] = (
+                    stable_bridge_gate.get("launch_allowed") is True
+                )
+                packet["stable_bridge_preflight_packet"] = stable_bridge_gate.get(
+                    "stable_bridge_preflight_packet",
+                    {},
+                )
                 packet["launch_stability_guard_checked"] = True
                 packet["reused_existing_window"] = (
                     packet.get("reused_existing_window") is True
