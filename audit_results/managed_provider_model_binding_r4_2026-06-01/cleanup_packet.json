@@ -1,0 +1,14 @@
+{
+  "contour": "managed_provider_model_binding_r4",
+  "observed_at_utc": "2026-05-31T23:26:04.077487+00:00",
+  "port": 57818,
+  "port_after_process_cleanup_listening": false,
+  "port_before_cleanup_listening": true,
+  "port_final_listening": false,
+  "process_alive_after_cleanup": false,
+  "process_alive_before_cleanup": true,
+  "run_root_removed": true,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "started_pid": 16586
+}

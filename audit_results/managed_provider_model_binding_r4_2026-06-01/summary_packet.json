@@ -1,0 +1,31 @@
+{
+  "auth_codex_type_count": 28,
+  "auth_json_file_count": 28,
+  "cause_classification": "managed_startup_forced_empty_local_catalog_and_raced_remote_refresh",
+  "classification_confidence": "high",
+  "cleanup_ok": true,
+  "contour": "managed_provider_model_binding_r4",
+  "evidence_files": [
+    "cause_classification_packet.json",
+    "cleanup_packet.json",
+    "healthcheck_pass_packet.json",
+    "live_models_packet.json",
+    "oauth_alias_probe_packet.json",
+    "preconditions_packet.json",
+    "provider_inventory_packet.json",
+    "remote_catalog_refresh_packet.json",
+    "startup_pass_packet.json",
+    "summary_packet.json"
+  ],
+  "healthcheck_machine_error_code": "OK",
+  "healthcheck_status": "ok",
+  "live_models_non_empty_variant_count": 1,
+  "live_pass_configured_model": "gpt-5.4-mini",
+  "observed_at_utc": "2026-05-31T23:26:46.028757+00:00",
+  "outcome": "live_pass_with_available_probe_model",
+  "remote_catalog_model_count": 7,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "startup_model_catalog_retry_count": 1,
+  "startup_pass_machine_error_code": "OK"
+}

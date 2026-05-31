@@ -6544,6 +6544,17 @@ def managed_listener_start_wait_seconds() -> float:
     return max(0.0, value)
 
 
+def managed_startup_model_catalog_wait_seconds() -> float:
+    raw = os.environ.get(
+        "WBP_MANAGED_STARTUP_MODEL_CATALOG_WAIT_SECONDS", "3"
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 3.0
+    return max(0.0, value)
+
+
 def terminate_process_group_or_pid(pid: int, *, wait_seconds: float = 1.0) -> bool:
     if pid <= 0:
         return True
@@ -6714,12 +6725,21 @@ def probe_managed_listener_start_attestation(
     live_model_ids: list[str] = []
     binding_failure_reason = ""
     machine_error_code = "MANAGED_STARTUP_ATTESTATION_FAILED"
+    model_catalog_retry_count = 0
+    model_catalog_wait_seconds = managed_startup_model_catalog_wait_seconds()
     if listener_ok:
         try:
             api_key = read_api_key(paths.auth_file)
             models_payload = http_get_json(f"{endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
             live_model_ids = extract_model_ids_from_models_payload(models_payload)
+            deadline = time.monotonic() + model_catalog_wait_seconds
+            while models_ok and not live_model_ids and time.monotonic() < deadline:
+                model_catalog_retry_count += 1
+                time.sleep(0.25)
+                models_payload = http_get_json(f"{endpoint}/models", api_key)
+                models_ok = isinstance(models_payload.get("data"), list)
+                live_model_ids = extract_model_ids_from_models_payload(models_payload)
             if models_ok and not live_model_ids:
                 binding_failure_reason = "live_models_empty"
                 machine_error_code = "MANAGED_STARTUP_PROBE_MODEL_UNBOUND"
@@ -6760,6 +6780,8 @@ def probe_managed_listener_start_attestation(
         "live_model_count": len(live_model_ids),
         "live_model_available": configured_model in live_model_ids,
         "live_model_sample": live_model_ids[:5],
+        "model_catalog_retry_count": model_catalog_retry_count,
+        "model_catalog_wait_seconds": model_catalog_wait_seconds,
         "binding_failure_reason": binding_failure_reason,
         "machine_error_code": (
             "OK" if listener_ok and models_ok and responses_ok else machine_error_code
@@ -6886,7 +6908,6 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     str(cli_proxy_bin),
                     "-config",
                     str(paths.managed_config_file),
-                    "-local-model",
                 ]
                 startup_attempted = True
                 started_process = subprocess.Popen(

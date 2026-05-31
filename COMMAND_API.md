@@ -1715,6 +1715,10 @@ Field meaning rules:
   but live model binding could not support the startup attestation probe. The
   failure packet must expose `startup_attestation.binding_failure_reason` and
   must not write managed truth surfaces or silently substitute a user model.
+- managed listener startup must use the configured engine/provider model
+  inventory for live attestation. It may perform a bounded `/v1/models` retry
+  after the listener socket opens, and it must expose
+  `startup_attestation.model_catalog_retry_count` when retries are attempted.
 - failure must not report stable fallback as managed startup success
 - ambient shell proxy env must not become the authoritative control-layer truth
   surface for current proxy selection

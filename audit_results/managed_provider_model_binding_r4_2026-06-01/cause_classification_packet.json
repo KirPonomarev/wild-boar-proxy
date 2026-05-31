@@ -1,0 +1,22 @@
+{
+  "basis": {
+    "local_model_catalog_empty_in_prior_variants": true,
+    "remote_catalog_success_model": "gpt-5.4-mini",
+    "remote_catalog_without_local_model_count": 7,
+    "startup_live_model_count": 8,
+    "startup_model_catalog_retry_count": 1,
+    "startup_pass_machine_error_code": "OK"
+  },
+  "classification": "managed_startup_forced_empty_local_catalog_and_raced_remote_refresh",
+  "confidence": "high",
+  "contour": "managed_provider_model_binding_r4",
+  "notes": [
+    "Managed startup previously invoked CLIProxyAPI with -local-model, which produced an empty /v1/models catalog for Codex OAuth auth files.",
+    "Removing -local-model allowed remote provider model refresh to expose a non-empty catalog.",
+    "Startup attestation also needed a bounded /v1/models retry because the remote catalog may materialize after the listener socket opens.",
+    "No user/product model was silently changed; live PASS evidence uses an isolated temporary profile configured to gpt-5.4-mini."
+  ],
+  "observed_at_utc": "2026-05-31T23:26:46.028521+00:00",
+  "schema_version": 1,
+  "secrets_redacted": true
+}

@@ -1,0 +1,27 @@
+{
+  "attestation": {
+    "attestation_source": "healthcheck --json",
+    "base_url_match": true,
+    "configured_model": "gpt-5.4-mini",
+    "effective_mode_match": true,
+    "listener_ok": true,
+    "model_match": true,
+    "models_ok": true,
+    "proxy_url_match": true,
+    "requested_model": "gpt-5.4-mini",
+    "responses_ok": true,
+    "runtime_version": "2",
+    "selected_backends_digest": "6343691acc500ad5ffcc00a1c9195b4ab3c7d531f11d511603b528c26dbd108e"
+  },
+  "changed_files": [],
+  "configured_model": "gpt-5.4-mini",
+  "contour": "managed_provider_model_binding_r4",
+  "desired_mode": "managed",
+  "effective_mode": "managed",
+  "machine_error_code": "OK",
+  "observed_at_utc": "2026-05-31T23:26:46.028007+00:00",
+  "returncode": 0,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "status": "ok"
+}
