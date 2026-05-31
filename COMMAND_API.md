@@ -1659,6 +1659,22 @@ Field meaning rules:
   from nested `proxy_reprobe.working_candidate`
 - `current_proxy_url` remains separate from persisted
   `last_known_good_proxy.proxy_url`
+- owner-path packets may expose top-level `managed_startup_owner`
+- `managed_startup_owner` must remain a command packet truth surface, not a
+  persisted runtime-state field
+- when `desired_mode = managed` and the reported effective mode is not
+  `managed`, `managed_startup_owner` must report `status = blocked`,
+  `machine_error_code = MANAGED_STARTUP_OWNER_UNDEFINED`,
+  `repo_owned_startup_owner_path_defined = false`, and `startup_attempted =
+  false`
+- when `desired_mode = managed` and live command truth already reports
+  `effective_mode = managed`, `managed_startup_owner` must report
+  `status = not_required`; it must not imply that a repo-owned startup owner path
+  exists
+- `mode set --json`, `mode get --json`, `healthcheck --json`, `status --json`,
+  `sync --json`, and `launch smoke --json` must not imply that they own
+  long-running managed-listener startup unless a future contract explicitly adds
+  that owner path
 - ambient shell proxy env must not become the authoritative control-layer truth
   surface for current proxy selection
 - derived proxy env keys such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and
