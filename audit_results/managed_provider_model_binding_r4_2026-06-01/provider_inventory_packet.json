@@ -1,0 +1,20 @@
+{
+  "auth_dir_exists": true,
+  "auth_dir_label": "~/.cli-proxy-api",
+  "filenames_redacted": true,
+  "json_file_count": 28,
+  "json_parse_failure_count": 0,
+  "observed_at_utc": "2026-05-31T23:17:19.806881+00:00",
+  "redacted_auth_field_presence_counts": {
+    "codex_account_id_field_count": 28,
+    "codex_email_field_count": 28,
+    "codex_refresh_field_count": 28,
+    "codex_token_field_count": 28,
+    "codex_type_field_count": 28
+  },
+  "redacted_type_counts": {
+    "codex": 28
+  },
+  "schema_version": 1,
+  "secrets_redacted": true
+}

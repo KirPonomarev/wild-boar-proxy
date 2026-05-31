@@ -2652,6 +2652,8 @@ class CliTests(unittest.TestCase):
         responses_ok: bool = True,
         model_ids: list[str] | None = None,
         response_error_message: str = "fail",
+        argv_record_path: Path | None = None,
+        empty_model_responses_before_ready: int = 0,
         ignore_sigterm: bool = False,
     ) -> Path:
         if model_ids is None:
@@ -2664,6 +2666,9 @@ class CliTests(unittest.TestCase):
             "import sys\n"
             "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
             "from pathlib import Path\n"
+            f"argv_record_path = {str(argv_record_path) if argv_record_path else ''!r}\n"
+            "if argv_record_path:\n"
+            "    Path(argv_record_path).write_text(json.dumps(sys.argv) + '\\n')\n"
             f"if {ignore_sigterm!r}:\n"
             "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
             "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
@@ -2675,11 +2680,16 @@ class CliTests(unittest.TestCase):
             "        break\n"
             f"if not {listen_on_configured_port!r}:\n"
             "    port = port + 1\n"
+            "model_request_count = 0\n"
             "class Handler(BaseHTTPRequestHandler):\n"
             "    def do_GET(self):\n"
+            "        global model_request_count\n"
             "        if self.path == '/v1/models':\n"
+            "            model_request_count += 1\n"
             f"            model_ids = {model_ids!r}\n"
-            "            body = json.dumps({'data': [{'id': item} for item in model_ids]}).encode('utf-8')\n"
+            f"            empty_before_ready = {empty_model_responses_before_ready}\n"
+            "            visible_model_ids = [] if model_request_count <= empty_before_ready else model_ids\n"
+            "            body = json.dumps({'data': [{'id': item} for item in visible_model_ids]}).encode('utf-8')\n"
             "            self.send_response(200)\n"
             "            self.send_header('Content-Type', 'application/json')\n"
             "            self.send_header('Content-Length', str(len(body)))\n"
@@ -18271,6 +18281,36 @@ class CliTests(unittest.TestCase):
         finally:
             runtime_mod.terminate_process_group_or_pid(pid)
 
+    def test_managed_listener_start_uses_remote_model_catalog(self) -> None:
+        port = free_port()
+        argv_record = self.managed_dir / "fake-cli-argv.json"
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            argv_record_path=argv_record,
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        try:
+            argv = json.loads(argv_record.read_text(encoding="utf-8"))
+            self.assertIn("-config", argv)
+            self.assertNotIn("-local-model", argv)
+        finally:
+            runtime_mod.terminate_process_group_or_pid(pid)
+
     def test_managed_listener_start_rejects_ambiguous_existing_listener(self) -> None:
         port = free_port()
         (self.managed_dir / "managed-config.yaml").write_text(
@@ -18378,7 +18418,10 @@ class CliTests(unittest.TestCase):
         )
 
         result = self.run_cli_with_env(
-            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            {
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_MANAGED_STARTUP_MODEL_CATALOG_WAIT_SECONDS": "0",
+            },
             "managed",
             "listener",
             "start",
@@ -18407,6 +18450,43 @@ class CliTests(unittest.TestCase):
         self.assertEqual(attestation["probe_model_source"], "config_toml")
         self.assertFalse(attestation["probe_model_substitution_attempted"])
         self.assertEqual(attestation["binding_failure_reason"], "live_models_empty")
+
+    def test_managed_listener_start_waits_for_remote_model_catalog(self) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            empty_model_responses_before_ready=2,
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+
+        result = self.run_cli_with_env(
+            {
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_MANAGED_STARTUP_MODEL_CATALOG_WAIT_SECONDS": "2",
+            },
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        try:
+            self.assertEqual(payload["machine_error_code"], "OK")
+            startup_attestation = payload["startup_attestation"]
+            self.assertGreaterEqual(
+                startup_attestation["model_catalog_retry_count"],
+                2,
+            )
+            self.assertTrue(startup_attestation["responses_ok"])
+            self.assertTrue(startup_attestation["live_model_available"])
+        finally:
+            runtime_mod.terminate_process_group_or_pid(pid)
 
     def test_managed_listener_start_reports_probe_model_unbound_for_unknown_provider(
         self,

@@ -1,0 +1,39 @@
+{
+  "cli_proxy_api": {
+    "executable": true,
+    "exists": true,
+    "path": "/Users/kirillponomarev/.local/bin/cli-proxy-api"
+  },
+  "contour": "managed_provider_model_binding_r4",
+  "current_proxy_10808_listening": false,
+  "observed_at_utc": "2026-05-31T23:17:19.800211+00:00",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "stable_config_exists": true,
+  "stable_config_shape": {
+    "non_sensitive_keys_sample": [
+      "allow-remote",
+      "auth-dir",
+      "debug",
+      "disable-control-panel",
+      "error-logs-max-files",
+      "host",
+      "logging-to-file",
+      "logs-max-total-size-mb",
+      "port",
+      "proxy-url",
+      "quota-exceeded",
+      "remote-management",
+      "request-retry",
+      "request-timeout",
+      "routing",
+      "session-affinity",
+      "session-affinity-ttl",
+      "strategy",
+      "switch-preview-model",
+      "switch-project"
+    ],
+    "sensitive_key_names_redacted": true,
+    "top_level_key_count": 23
+  }
+}

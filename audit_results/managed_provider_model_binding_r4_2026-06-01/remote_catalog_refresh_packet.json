@@ -1,0 +1,98 @@
+{
+  "contour": "managed_provider_model_binding_r4",
+  "listener_reachable": true,
+  "listener_reachable_after_cleanup": false,
+  "model_refresh_observations": [
+    {
+      "after_delay_seconds": 0,
+      "count": 7,
+      "ok": true,
+      "sample": [
+        "gpt-image-2",
+        "gpt-5.2",
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.5",
+        "codex-auto-review"
+      ],
+      "status": 200
+    }
+  ],
+  "observed_at_utc": "2026-05-31T23:20:44.607496+00:00",
+  "port": 57235,
+  "responses": {
+    "gpt-5.2": {
+      "error_code": null,
+      "error_message": "",
+      "error_type": null,
+      "ok": false,
+      "payload_keys": [
+        "detail"
+      ],
+      "status": 402
+    },
+    "gpt-5.3-codex": {
+      "error_code": null,
+      "error_message": "",
+      "error_type": null,
+      "ok": false,
+      "payload_keys": [
+        "detail"
+      ],
+      "status": 402
+    },
+    "gpt-5.4": {
+      "error_code": null,
+      "error_message": "",
+      "error_type": null,
+      "ok": false,
+      "payload_keys": [
+        "detail"
+      ],
+      "status": 402
+    },
+    "gpt-5.4-mini": {
+      "error_code": null,
+      "error_message": "",
+      "error_type": null,
+      "ok": true,
+      "payload_keys": [
+        "background",
+        "completed_at",
+        "created_at",
+        "error",
+        "frequency_penalty",
+        "id",
+        "incomplete_details",
+        "instructions",
+        "max_output_tokens",
+        "max_tool_calls"
+      ],
+      "status": 200
+    },
+    "gpt-image-2": {
+      "error_code": "internal_server_error",
+      "error_message": "model gpt-image-2 is only supported on /v1/images/generations and /v1/images/edits",
+      "error_type": "server_error",
+      "ok": false,
+      "payload_keys": [
+        "error"
+      ],
+      "status": 503
+    }
+  },
+  "responses_probe_models": [
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+    "gpt-5.2",
+    "gpt-image-2",
+    "codex-auto-review"
+  ],
+  "run_root_removed": true,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "started_pid": 13067,
+  "variant": "remote_catalog_no_local_model_absolute_auth_no_proxy"
+}

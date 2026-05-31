@@ -1,0 +1,169 @@
+{
+  "contour": "managed_provider_model_binding_r4",
+  "observed_at_utc": "2026-05-31T23:17:21.583442+00:00",
+  "run_root_removed": true,
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "variant_results": [
+    {
+      "auth_dir_mode": "tilde",
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": true,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "shape": "dict",
+        "status": 200
+      },
+      "models_alt": {
+        "count": 0,
+        "ok": false,
+        "sample": [],
+        "shape": "dict",
+        "status": 404
+      },
+      "port": 56933,
+      "process_exit_code_before_cleanup": null,
+      "proxy_mode": "original",
+      "responses": {
+        "error_message": "unknown provider for model gpt-5.4",
+        "ok": false,
+        "status": 502
+      },
+      "started_pid": 9684,
+      "stderr_observed": false,
+      "stderr_prefix_redacted": "",
+      "variant": "local_model_tilde_auth_original_proxy"
+    },
+    {
+      "auth_dir_mode": "tilde",
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": false,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "shape": "dict",
+        "status": 200
+      },
+      "models_alt": {
+        "count": 0,
+        "ok": false,
+        "sample": [],
+        "shape": "dict",
+        "status": 404
+      },
+      "port": 56943,
+      "process_exit_code_before_cleanup": null,
+      "proxy_mode": "original",
+      "responses": {
+        "error_message": "unknown provider for model gpt-5.4",
+        "ok": false,
+        "status": 502
+      },
+      "started_pid": 9718,
+      "stderr_observed": false,
+      "stderr_prefix_redacted": "",
+      "variant": "no_local_model_tilde_auth_original_proxy"
+    },
+    {
+      "auth_dir_mode": "absolute",
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": true,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "shape": "dict",
+        "status": 200
+      },
+      "models_alt": {
+        "count": 0,
+        "ok": false,
+        "sample": [],
+        "shape": "dict",
+        "status": 404
+      },
+      "port": 56955,
+      "process_exit_code_before_cleanup": null,
+      "proxy_mode": "original",
+      "responses": {
+        "error_message": "unknown provider for model gpt-5.4",
+        "ok": false,
+        "status": 502
+      },
+      "started_pid": 9729,
+      "stderr_observed": false,
+      "stderr_prefix_redacted": "",
+      "variant": "local_model_absolute_auth_original_proxy"
+    },
+    {
+      "auth_dir_mode": "absolute",
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": true,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "shape": "dict",
+        "status": 200
+      },
+      "models_alt": {
+        "count": 0,
+        "ok": false,
+        "sample": [],
+        "shape": "dict",
+        "status": 404
+      },
+      "port": 56965,
+      "process_exit_code_before_cleanup": null,
+      "proxy_mode": "remove",
+      "responses": {
+        "error_message": "unknown provider for model gpt-5.4",
+        "ok": false,
+        "status": 502
+      },
+      "started_pid": 9780,
+      "stderr_observed": false,
+      "stderr_prefix_redacted": "",
+      "variant": "local_model_absolute_auth_no_proxy_key"
+    },
+    {
+      "auth_dir_mode": "absolute",
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": false,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "shape": "dict",
+        "status": 200
+      },
+      "models_alt": {
+        "count": 0,
+        "ok": false,
+        "sample": [],
+        "shape": "dict",
+        "status": 404
+      },
+      "port": 56975,
+      "process_exit_code_before_cleanup": null,
+      "proxy_mode": "remove",
+      "responses": {
+        "error_message": "unknown provider for model gpt-5.4",
+        "ok": false,
+        "status": 502
+      },
+      "started_pid": 9803,
+      "stderr_observed": false,
+      "stderr_prefix_redacted": "",
+      "variant": "no_local_model_absolute_auth_no_proxy_key"
+    }
+  ]
+}

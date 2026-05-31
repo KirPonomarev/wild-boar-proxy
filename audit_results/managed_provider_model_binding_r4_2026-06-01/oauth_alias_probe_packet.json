@@ -1,0 +1,186 @@
+{
+  "alias_probe_results": [
+    {
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": false,
+      "models": {
+        "count": 8,
+        "ok": true,
+        "sample": [
+          "gpt-image-2",
+          "gpt-5.3-codex-spark",
+          "gpt-5.2",
+          "gpt-5.3-codex",
+          "gpt-5.4",
+          "gpt-5.4-mini",
+          "gpt-5.5",
+          "codex-auto-review"
+        ],
+        "status": 200
+      },
+      "port": 57127,
+      "responses": {
+        "gpt-4o": {
+          "error_message": "unknown provider for model gpt-4o",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5": {
+          "error_message": "unknown provider for model gpt-5",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5-codex": {
+          "error_message": "unknown provider for model gpt-5-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.3-codex": {
+          "error_message": "",
+          "ok": false,
+          "status": 402
+        },
+        "gpt-5.4": {
+          "error_message": "",
+          "ok": false,
+          "status": 402
+        }
+      },
+      "started_pid": 12918,
+      "variant": "without_oauth_alias_remote_catalog",
+      "with_oauth_model_alias": false
+    },
+    {
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": true,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "status": 200
+      },
+      "port": 57174,
+      "responses": {
+        "gpt-4o": {
+          "error_message": "unknown provider for model gpt-4o",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5": {
+          "error_message": "unknown provider for model gpt-5",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5-codex": {
+          "error_message": "unknown provider for model gpt-5-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.3-codex": {
+          "error_message": "unknown provider for model gpt-5.3-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.4": {
+          "error_message": "unknown provider for model gpt-5.4",
+          "ok": false,
+          "status": 502
+        }
+      },
+      "started_pid": 12928,
+      "variant": "without_oauth_alias_local_catalog",
+      "with_oauth_model_alias": false
+    },
+    {
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": false,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "status": 200
+      },
+      "port": 57187,
+      "responses": {
+        "gpt-4o": {
+          "error_message": "unknown provider for model gpt-4o",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5": {
+          "error_message": "unknown provider for model gpt-5",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5-codex": {
+          "error_message": "unknown provider for model gpt-5-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.3-codex": {
+          "error_message": "unknown provider for model gpt-5.3-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.4": {
+          "error_message": "unknown provider for model gpt-5.4",
+          "ok": false,
+          "status": 502
+        }
+      },
+      "started_pid": 12930,
+      "variant": "with_oauth_alias_remote_catalog",
+      "with_oauth_model_alias": true
+    },
+    {
+      "listener_reachable": true,
+      "listener_reachable_after_cleanup": false,
+      "local_model_flag": true,
+      "models": {
+        "count": 0,
+        "ok": true,
+        "sample": [],
+        "status": 200
+      },
+      "port": 57203,
+      "responses": {
+        "gpt-4o": {
+          "error_message": "unknown provider for model gpt-4o",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5": {
+          "error_message": "unknown provider for model gpt-5",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5-codex": {
+          "error_message": "unknown provider for model gpt-5-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.3-codex": {
+          "error_message": "unknown provider for model gpt-5.3-codex",
+          "ok": false,
+          "status": 502
+        },
+        "gpt-5.4": {
+          "error_message": "unknown provider for model gpt-5.4",
+          "ok": false,
+          "status": 502
+        }
+      },
+      "started_pid": 12931,
+      "variant": "with_oauth_alias_local_catalog",
+      "with_oauth_model_alias": true
+    }
+  ],
+  "contour": "managed_provider_model_binding_r4",
+  "observed_at_utc": "2026-05-31T23:20:04.793159+00:00",
+  "run_root_removed": true,
+  "schema_version": 1,
+  "secrets_redacted": true
+}
