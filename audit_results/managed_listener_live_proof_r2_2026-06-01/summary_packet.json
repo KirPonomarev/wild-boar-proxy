@@ -1,0 +1,37 @@
+{
+  "cleanup_ok": true,
+  "contour": "managed_listener_live_proof_r2",
+  "evidence_files": [
+    "preconditions_packet.json",
+    "startup_packet.json",
+    "readback_packet.json",
+    "cleanup_packet.json",
+    "summary_packet.json"
+  ],
+  "managed_false_green": false,
+  "observed_at_utc": "2026-05-31T22:54:17.718638+00:00",
+  "outcome": "live_blocker",
+  "readback_ok": false,
+  "run_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-managed-live-r2-o6u8mit1",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "startup_machine_error_code": "MANAGED_STARTUP_ATTESTATION_FAILED",
+  "startup_owner": {
+    "blocking_reason": "live_attestation_failed",
+    "delegated_from_status": false,
+    "effective_mode_written": false,
+    "live_attestation_passed": false,
+    "machine_error_code": "MANAGED_STARTUP_ATTESTATION_FAILED",
+    "managed_listener_endpoint": "http://127.0.0.1:8320/v1",
+    "managed_listener_reachable": false,
+    "owner_command_surface": "managed listener start --json",
+    "pid_recorded": false,
+    "process_started": true,
+    "repo_owned_startup_owner_path_defined": true,
+    "started_pid": 55607,
+    "startup_attempted": true,
+    "startup_outcome": "attestation_failed",
+    "status": "blocked"
+  },
+  "status": "blocked"
+}

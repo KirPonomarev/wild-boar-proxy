@@ -1,0 +1,41 @@
+{
+  "cli_proxy_api": {
+    "executable": true,
+    "exists": true,
+    "help": {
+      "has_config_flag": true,
+      "has_local_model_flag": true,
+      "has_standalone_flag": true,
+      "returncode": 0,
+      "version_line": "CLIProxyAPI Version: 6.9.45, Commit: 6ba7c810, BuiltAt: 2026-04-30T04:43:17Z"
+    },
+    "path": "/Users/kirillponomarev/.local/bin/cli-proxy-api",
+    "which": "/Users/kirillponomarev/.local/bin/cli-proxy-api"
+  },
+  "contour": "managed_listener_live_proof_r2",
+  "managed_target": {
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "host": "127.0.0.1",
+    "port": 8320
+  },
+  "observed_at_utc": "2026-05-31T22:54:15.282459+00:00",
+  "port_8320_initial": {
+    "interpretation": "free_for_managed_start_attempt",
+    "listening": false
+  },
+  "precondition_verdict": "ready_for_start_attempt",
+  "run_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-managed-live-r2-o6u8mit1",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "stable_config": {
+    "auth_dir_exists": true,
+    "auth_dir_present": true,
+    "auth_entry_names_redacted": true,
+    "codex_auth_entry_count": 28,
+    "exists": true,
+    "host": "127.0.0.1",
+    "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+    "port": "8318"
+  },
+  "status": "ok"
+}
