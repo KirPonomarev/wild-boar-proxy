@@ -352,6 +352,9 @@ class CurrentProxyOwnerPathActivationAttempt:
     prerequisite_materialized: bool
     activation_attempted: bool
     activation_exit_code: int | None
+    activation_blocking_reason: str
+    managed_listener_endpoint: str
+    managed_listener_reachable: bool
     prior_current_proxy_url: str
     working_candidate: str
     rollback_surface_snapshots: dict[str, dict[str, Any]]
@@ -586,9 +589,17 @@ def read_stable_proxy_url(paths: RuntimePaths) -> str:
 
 def write_text_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(value + "\n", encoding="utf-8")
-    tmp_path.replace(path)
+    tmp_path = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        tmp_path.write_text(value + "\n", encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def write_executable_text_atomic(path: Path, value: str) -> None:
@@ -1551,9 +1562,12 @@ def run_current_proxy_owner_path_activation(
     launcher_env = build_launcher_subprocess_env(paths)
     launcher_env[CURRENT_PROXY_URL_HANDOFF_ENV] = working_candidate
     with serialized_lock(paths):
+        prior_state = read_json(paths.state_file, required=False)
         lane_status = get_current_proxy_launcher_lane_status(
             paths, materialize_absent_default=True
         )
+        managed_host, managed_port, managed_endpoint = get_endpoint(paths, "managed")
+        managed_listener_reachable = socket_is_listening(managed_host, managed_port)
         if not lane_status["eligible"]:
             return CurrentProxyOwnerPathActivationAttempt(
                 launcher_lane_eligibility=str(lane_status["eligibility"]),
@@ -1563,11 +1577,29 @@ def run_current_proxy_owner_path_activation(
                 ),
                 activation_attempted=False,
                 activation_exit_code=None,
-                prior_current_proxy_url="",
+                activation_blocking_reason="",
+                managed_listener_endpoint=managed_endpoint,
+                managed_listener_reachable=managed_listener_reachable,
+                prior_current_proxy_url=str(prior_state.get("current_proxy_url", "")),
                 working_candidate=working_candidate,
                 rollback_surface_snapshots={},
             )
-        prior_state = read_json(paths.state_file, required=False)
+        if not managed_listener_reachable:
+            return CurrentProxyOwnerPathActivationAttempt(
+                launcher_lane_eligibility=str(lane_status["eligibility"]),
+                launcher_readiness_status=str(lane_status["launcher_readiness_status"]),
+                prerequisite_materialized=bool(
+                    lane_status["prerequisite_materialized"]
+                ),
+                activation_attempted=False,
+                activation_exit_code=None,
+                activation_blocking_reason="managed_listener_unavailable",
+                managed_listener_endpoint=managed_endpoint,
+                managed_listener_reachable=False,
+                prior_current_proxy_url=str(prior_state.get("current_proxy_url", "")),
+                working_candidate=working_candidate,
+                rollback_surface_snapshots={},
+            )
         rollback_surface_snapshots = snapshot_current_proxy_owner_path_runtime_surfaces(
             paths
         )
@@ -1584,6 +1616,9 @@ def run_current_proxy_owner_path_activation(
         prerequisite_materialized=bool(lane_status["prerequisite_materialized"]),
         activation_attempted=True,
         activation_exit_code=result.returncode,
+        activation_blocking_reason="",
+        managed_listener_endpoint=managed_endpoint,
+        managed_listener_reachable=True,
         prior_current_proxy_url=str(prior_state.get("current_proxy_url", "")),
         working_candidate=working_candidate,
         rollback_surface_snapshots=rollback_surface_snapshots,
@@ -2829,9 +2864,17 @@ def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
         path.mkdir(parents=True, exist_ok=True)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(str(snapshot.get("text", "")), encoding="utf-8")
-    tmp_path.replace(path)
+    tmp_path = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        tmp_path.write_text(str(snapshot.get("text", "")), encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
     mode = snapshot.get("mode")
     if isinstance(mode, int):
         path.chmod(mode)
@@ -7758,8 +7801,15 @@ def run_healthcheck(
                 "prerequisite_materialized": activation_attempt.prerequisite_materialized,
                 "activation_attempted": activation_attempt.activation_attempted,
                 "activation_exit_code": activation_attempt.activation_exit_code,
+                "activation_blocking_reason": (
+                    activation_attempt.activation_blocking_reason
+                ),
+                "activation_surface_kind": "repo_owned_handoff_env_var",
+                "managed_listener_endpoint": activation_attempt.managed_listener_endpoint,
+                "managed_listener_reachable": activation_attempt.managed_listener_reachable,
                 "adoption_outcome": (
-                    "launcher_lane_ineligible"
+                    activation_attempt.activation_blocking_reason
+                    or "launcher_lane_ineligible"
                     if not activation_attempt.activation_attempted
                     else "activation_failed"
                 ),
@@ -7834,7 +7884,8 @@ def run_healthcheck(
                         "live_reproof_failed"
                     )
             elif (
-                paths.sync_script.exists()
+                not activation_attempt.activation_blocking_reason
+                and paths.sync_script.exists()
                 and activation_attempt.launcher_lane_eligibility
                 not in {
                     "default_path_present_repo_marker_invalid",

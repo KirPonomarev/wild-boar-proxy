@@ -124,6 +124,114 @@ def free_port() -> int:
 
 
 class CliTests(unittest.TestCase):
+    def test_write_text_atomic_uses_unique_temp_paths_under_concurrency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            barrier = threading.Barrier(2)
+            errors: list[BaseException] = []
+            replace_sources: list[str] = []
+            replace_lock = threading.Lock()
+            original_replace = Path.replace
+
+            def gated_replace(self: Path, target: Path) -> Path:
+                if target == path and self.name.startswith(".state.json."):
+                    with replace_lock:
+                        replace_sources.append(self.name)
+                    barrier.wait(timeout=5)
+                return original_replace(self, target)
+
+            def writer(value: str) -> None:
+                try:
+                    runtime_mod.write_text_atomic(path, value)
+                except BaseException as exc:  # pragma: no cover - surfaced below
+                    errors.append(exc)
+
+            with mock.patch.object(Path, "replace", gated_replace):
+                threads = [
+                    threading.Thread(target=writer, args=("one",)),
+                    threading.Thread(target=writer, args=("two",)),
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=10)
+
+            self.assertEqual(errors, [])
+            self.assertEqual(len(replace_sources), 2)
+            self.assertEqual(len(set(replace_sources)), 2)
+            self.assertIn(path.read_text(encoding="utf-8"), {"one\n", "two\n"})
+
+    def test_restore_path_state_uses_unique_temp_paths_under_concurrency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            barrier = threading.Barrier(2)
+            errors: list[BaseException] = []
+            replace_sources: list[str] = []
+            replace_lock = threading.Lock()
+            original_replace = Path.replace
+
+            def gated_replace(self: Path, target: Path) -> Path:
+                if target == path and self.name.startswith(".config.toml."):
+                    with replace_lock:
+                        replace_sources.append(self.name)
+                    barrier.wait(timeout=5)
+                return original_replace(self, target)
+
+            def writer(value: str) -> None:
+                try:
+                    runtime_mod.restore_path_state(
+                        path,
+                        {
+                            "state": "file",
+                            "text": value,
+                            "mode": 0o600,
+                        },
+                    )
+                except BaseException as exc:  # pragma: no cover - surfaced below
+                    errors.append(exc)
+
+            with mock.patch.object(Path, "replace", gated_replace):
+                threads = [
+                    threading.Thread(target=writer, args=("one",)),
+                    threading.Thread(target=writer, args=("two",)),
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=10)
+
+            self.assertEqual(errors, [])
+            self.assertEqual(len(replace_sources), 2)
+            self.assertEqual(len(set(replace_sources)), 2)
+            self.assertIn(path.read_text(encoding="utf-8"), {"one", "two"})
+
+    def test_atomic_helpers_remove_temp_file_when_replace_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text_path = root / "state.json"
+            restore_path = root / "config.toml"
+            original_replace = Path.replace
+
+            def failing_replace(self: Path, target: Path) -> Path:
+                if self.name.startswith((".state.json.", ".config.toml.")):
+                    raise RuntimeError("forced replace failure")
+                return original_replace(self, target)
+
+            with mock.patch.object(Path, "replace", failing_replace):
+                with self.assertRaises(RuntimeError):
+                    runtime_mod.write_text_atomic(text_path, "one")
+                with self.assertRaises(RuntimeError):
+                    runtime_mod.restore_path_state(
+                        restore_path,
+                        {
+                            "state": "file",
+                            "text": "two",
+                            "mode": 0o600,
+                        },
+                    )
+
+            self.assertEqual(sorted(root.glob(".*.tmp")), [])
+
     def setUp(self) -> None:
         ProbeHandler.response_text = "OK"
         ProbeHandler.response_status = 200
@@ -3712,6 +3820,106 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             payload["launch_readiness"]["blocking_reason"], "responses_probe_failed"
         )
+
+    def test_healthcheck_does_not_activate_current_proxy_when_managed_listener_missing(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        managed_port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                )
+            }
+        }
+        (self.stable_dir / "config.yaml").write_text(
+            f'host: 127.0.0.1\nport: {stable_port}\nproxy-url: "http://127.0.0.1:10808"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {managed_port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["current_proxy_url"] = ""
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        state["selected_backend_ids"] = []
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            thread.start()
+            result = self.run_cli_with_env(
+                {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    )
+                },
+                "healthcheck",
+                "--json",
+                include_launcher_override=False,
+            )
+        finally:
+            candidate_socket.close()
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        adoption_result = payload["proxy_reprobe_adoption_result"]
+        self.assertEqual(adoption_result["status"], "owner_path_emitted")
+        self.assertFalse(adoption_result["attempted"])
+        self.assertFalse(adoption_result["activation_attempted"])
+        self.assertEqual(
+            adoption_result["adoption_outcome"], "managed_listener_unavailable"
+        )
+        self.assertEqual(
+            adoption_result["activation_blocking_reason"],
+            "managed_listener_unavailable",
+        )
+        self.assertEqual(
+            adoption_result["managed_listener_endpoint"],
+            f"http://127.0.0.1:{managed_port}/v1",
+        )
+        self.assertFalse(adoption_result["managed_listener_reachable"])
+        self.assertFalse(adoption_result["current_proxy_url_rewritten"])
+        self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
+        self.assertIn(str(self.default_launcher_script), payload["changed_files"])
+        self.assertNotIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(
+                encoding="utf-8"
+            ),
+            "stable\n",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["current_proxy_url"], "")
 
     def test_healthcheck_adopts_working_candidate_after_live_reproof_on_repo_owned_default_lane(
         self,
