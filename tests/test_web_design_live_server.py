@@ -14459,6 +14459,238 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
 
 
 class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
+    def _api_only_live_code_edit_truth_packet(
+        self,
+        *,
+        file_text: str | None = "WBP_DEEPSEEK_CODE_EDIT_OK",
+        launch_overrides: dict[str, object] | None = None,
+        record_overrides: dict[str, object] | None = None,
+        write_logs: bool = True,
+    ) -> dict[str, object]:
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as profile_dir:
+            repo_root = Path(repo_dir)
+            profile_root = Path(profile_dir)
+            if file_text is not None:
+                probe_file = repo_root / ".tmp" / "deepseek_live_probe.txt"
+                probe_file.parent.mkdir(parents=True)
+                probe_file.write_text(file_text, encoding="utf-8")
+
+            with sqlite3.connect(profile_root / "state_5.sqlite") as connection:
+                connection.execute(
+                    "create table threads (id text, cwd text, model text, model_provider text, "
+                    "created_at integer, updated_at integer)"
+                )
+                connection.execute(
+                    "insert into threads values (?, ?, ?, ?, ?, ?)",
+                    (
+                        "thread-deepseek",
+                        str(repo_root),
+                        "wbp-deepseek-v4-pro-max",
+                        "wbp",
+                        1,
+                        2,
+                    ),
+                )
+
+            with sqlite3.connect(profile_root / "logs_2.sqlite") as connection:
+                connection.execute(
+                    "create table logs (id integer, thread_id text, feedback_log_body text)"
+                )
+                if write_logs:
+                    connection.execute(
+                        "insert into logs values (?, ?, ?)",
+                        (
+                            1,
+                            "thread-deepseek",
+                            "turn model=wbp-deepseek-v4-pro-max cwd="
+                            f"{repo_root}: ToolCall: exec_command .tmp/deepseek_live_probe.txt",
+                        ),
+                    )
+                    connection.execute(
+                        "insert into logs values (?, ?, ?)",
+                        (
+                            2,
+                            "thread-deepseek",
+                            ".tmp/deepseek_live_probe.txt success=true model=wbp-deepseek-v4-pro-max",
+                        ),
+                    )
+
+            launch: dict[str, object] = {
+                "launch_id": "launch-deepseek-code-edit",
+                "trace_id": "trace-deepseek-code-edit",
+                "status": "ok",
+                "execution_mode": "api_only",
+                "selected_model": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "custom_codex_window_deepseek_launch_proven_with_limits": True,
+                "real_codex_app_launched": True,
+                "persistent_profile_root": str(profile_root),
+                "original_codex_touched": False,
+                "asar_touched": False,
+            }
+            if launch_overrides:
+                launch.update(launch_overrides)
+            record: dict[str, object] = {
+                "launch_packet_id": "launch-deepseek-code-edit",
+                "trace_id": "trace-deepseek-code-edit",
+                "route_digest_matches_launch": True,
+                "request_seen_after_launch": True,
+                "provider_called": True,
+                "provider_id": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "effective_route_model": "wbp-deepseek-v4-pro-max",
+                "response_seen": True,
+                "forced_route_used": True,
+                "fallback_used": False,
+                "chatgpt_route_used": False,
+            }
+            if record_overrides:
+                record.update(record_overrides)
+
+            return live_server.build_api_only_deepseek_live_code_edit_truth_packet(
+                last_launch_packet=launch,
+                bridge_trace_packet={
+                    "bridge_request_trace_packet": {
+                        "route_unchanged": record.get("route_digest_matches_launch") is True,
+                        "fallback_used": record.get("fallback_used") is True,
+                    },
+                    "last_record": record,
+                },
+                browser_payload={
+                    "execution_mode": "api_only",
+                    "api_model_id": "wbp-deepseek-v4-pro-max",
+                    "api_reasoning_option_id": "provider_declared_max",
+                },
+                repo_root=repo_root,
+            )
+
+    def test_api_only_deepseek_live_code_edit_truth_proves_file_route_and_no_fallback(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "api_only_deepseek_live_code_edit_truth")
+        self.assertEqual(
+            packet["final_status"],
+            "API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["execution_mode"], "api_only")
+        self.assertEqual(packet["selected_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(packet["provider_id"], "deepseek")
+        self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
+        self.assertTrue(packet["file_edit_observed"])
+        self.assertTrue(packet["file_content_matches_expected"])
+        self.assertEqual(packet["file_size_bytes"], 25)
+        self.assertEqual(
+            packet["file_content_sha256"],
+            "e194b74cf6799b576df9de96415b4c55c7fd4cf89057e24e73d1529576391444",
+        )
+        self.assertTrue(packet["route_unchanged"])
+        self.assertTrue(packet["selected_route_preserved"])
+        self.assertFalse(packet["chatgpt_called"])
+        self.assertFalse(packet["api_only_calls_chatgpt"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_missing_file(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(file_text=None)
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+        self.assertFalse(packet["file_edit_observed"])
+        self.assertFalse(packet["file_content_matches_expected"])
+        self.assertTrue(packet["provider_called"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_content_mismatch(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(file_text="WRONG")
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["file_edit_observed"])
+        self.assertFalse(packet["file_content_matches_expected"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_route_or_trace_mismatch(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "provider_id": "openai",
+                "effective_route_model": "gpt-5.4",
+                "route_digest_matches_launch": False,
+                "forced_route_used": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertNotEqual(packet["provider_id"], "deepseek")
+        self.assertFalse(packet["route_unchanged"])
+        self.assertFalse(packet["selected_route_preserved"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_chatgpt_or_fallback(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "fallback_used": True,
+                "chatgpt_route_used": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["chatgpt_called"])
+        self.assertTrue(packet["api_only_calls_chatgpt"])
+        self.assertTrue(packet["fallback_used"])
+        self.assertFalse(packet["selected_route_preserved"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_endpoint_reports_blocked_without_live_call(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            packet = json.loads(
+                post_json(
+                    f"{base}/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth",
+                    {
+                        "execution_mode": "api_only",
+                        "api_model_id": "wbp-deepseek-v4-pro-max",
+                        "api_reasoning_option_id": "provider_declared_max",
+                    },
+                )
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "api_only_deepseek_live_code_edit_truth")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+        self.assertFalse(packet["commit_attempted"])
+        self.assertFalse(packet["push_attempted"])
+        self.assertFalse(packet["merge_attempted"])
+        self.assertFalse(packet["wbp_patch_applier_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_deepseek_code_edit_reproduction_packet_requires_file_thread_logs_and_trace(self) -> None:
         with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as profile_dir:
             repo_root = Path(repo_dir)

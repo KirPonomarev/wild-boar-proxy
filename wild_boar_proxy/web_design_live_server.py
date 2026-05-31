@@ -5272,6 +5272,11 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     file_content_exact = file_content == expected_text
     file_content_sha256 = hashlib.sha256(file_content.encode("utf-8")).hexdigest()
     route_digest_matches = record.get("route_digest_matches_launch") is True
+    request_trace = (
+        trace.get("bridge_request_trace_packet")
+        if isinstance(trace.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
     launch_id = str(launch.get("launch_id") or "")
     trace_id = str(launch.get("trace_id") or "")
     record_launch_id = str(record.get("launch_packet_id") or record.get("launch_id") or "")
@@ -5281,10 +5286,23 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     provider_called = record.get("provider_called") is True
     provider_id = str(record.get("provider_id") or "")
     upstream_model = str(record.get("upstream_model") or "")
+    effective_route_model = str(record.get("effective_route_model") or selected_model)
     request_seen = record.get("request_seen_after_launch") is True
     response_seen = record.get("response_seen") is True
     forced_route_used = record.get("forced_route_used") is True
     forced_route_counts_as_fallback = False
+    route_unchanged = (
+        request_trace.get("route_unchanged")
+        if "route_unchanged" in request_trace
+        else trace.get("route_unchanged")
+    ) is True
+    if not request_trace and "route_unchanged" not in trace:
+        route_unchanged = bool(route_digest_matches and forced_route_used)
+    selected_route_preserved = bool(
+        route_unchanged
+        and record.get("fallback_used") is not True
+        and effective_route_model == selected_model
+    )
     git_probe = _git_probe_file_status(repo_root, expected_file)
     fallback_used = record.get("fallback_used") is True or bool(
         log_evidence.get("fallback_used_seen")
@@ -5313,6 +5331,7 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         and provider_called
         and provider_id == "deepseek"
         and upstream_model == "deepseek-v4-pro"
+        and selected_route_preserved
         and request_seen
         and response_seen
         and route_digest_matches
@@ -5348,6 +5367,9 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "window_launch_proven_with_limits": launch_alive_enough,
         "file_created": file_created,
         "file_content_exact": file_content_exact,
+        "file_edit_observed": file_created,
+        "file_content_matches_expected": file_content_exact,
+        "file_size_bytes": len(file_content.encode("utf-8")) if file_created else 0,
         "file_content_sha256": file_content_sha256,
         "file_path": str(file_path),
         "file_path_relative": expected_file,
@@ -5358,9 +5380,12 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "provider_called": provider_called,
         "provider_id": provider_id,
         "upstream_model": upstream_model,
+        "effective_route_model": effective_route_model,
         "request_seen_after_launch": request_seen,
         "response_seen": response_seen,
         "route_digest_matches_launch": route_digest_matches,
+        "route_unchanged": route_unchanged,
+        "selected_route_preserved": selected_route_preserved,
         "launch_id": launch_id,
         "trace_id": trace_id,
         "trace_server_issued": bool(launch_id and trace_id),
@@ -5404,6 +5429,26 @@ def build_custom_codex_deepseek_route_bound_real_edit_packet(
         ok_final_status="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_PROVEN_WITH_LIMITS",
         blocked_final_status="KNOWN_BLOCKER_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
         blocked_machine_error_code="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
+    )
+
+
+def build_api_only_deepseek_live_code_edit_truth_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+    repo_root: Path = ROOT,
+) -> dict[str, Any]:
+    return build_custom_codex_deepseek_code_edit_reproduction_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=bridge_trace_packet,
+        browser_payload=browser_payload,
+        repo_root=repo_root,
+        packet_kind="api_only_deepseek_live_code_edit_truth",
+        quick_start_button_id="quickStartApiOnlyDeepSeekLiveCodeEditTruthAction",
+        ok_final_status="API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_PROVEN_WITH_LIMITS",
+        blocked_final_status="STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        blocked_machine_error_code="API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_NOT_PROVEN",
     )
 
 
@@ -7814,6 +7859,20 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth":
+                self._send_json(
+                    build_api_only_deepseek_live_code_edit_truth_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                        repo_root=ROOT,
+                    )
+                )
+                return
             if parsed.path == "/api/codex/custom/quick-start/deepseek-route-bound-edit-proof":
                 self._send_json(
                     build_custom_codex_deepseek_route_bound_real_edit_packet(
@@ -8340,6 +8399,16 @@ def build_handler(
             if parsed.path == "/api/codex/custom/quick-start/deepseek-code-edit-proof":
                 self._send_json(
                     build_custom_codex_deepseek_code_edit_reproduction_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=self._read_json_body(),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth":
+                self._send_json(
+                    build_api_only_deepseek_live_code_edit_truth_packet(
                         last_launch_packet=custom_native_launch_state["last_packet"],
                         bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
                         browser_payload=self._read_json_body(),
