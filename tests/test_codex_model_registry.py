@@ -554,14 +554,29 @@ class CodexModelRegistryTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertEqual(
                 packet["final_status"],
-                "SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_PROVEN_WITH_LIMITS",
+                "CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_PROVEN_WITH_LIMITS",
             )
             self.assertTrue(packet["model_selection_truth_proven"])
+            self.assertEqual(packet["source"], "server_catalog")
+            self.assertTrue(packet["server_catalog_source"])
+            self.assertFalse(packet["browser_route_authority"])
+            self.assertFalse(packet["browser_secret_authority"])
+            self.assertFalse(packet["browser_model_authority"])
+            self.assertFalse(packet["ui_label_counts_as_model_truth"])
+            self.assertFalse(packet["model_self_report_counts_as_model_truth"])
+            self.assertFalse(packet["codex_window_required"])
+            self.assertFalse(packet["codex_window_observed"])
+            self.assertTrue(packet["dry_server_truth_only"])
             self.assertEqual(
                 packet["allowed_browser_fields"],
                 ["api_model_id", "api_reasoning_option_id", "chatgpt_model_id", "execution_mode"],
             )
+            self.assertEqual(packet["forbidden_browser_fields"], [])
+            self.assertEqual(packet["forbidden_fields"], [])
+            self.assertTrue(packet["forbidden_browser_fields_redacted"])
+            self.assertTrue(packet["forbidden_fields_redacted"])
             self.assertFalse(packet["live_call_attempted"])
+            self.assertFalse(packet["live_api_call_attempted"])
             self.assertFalse(packet["provider_called"])
             self.assertFalse(packet["network_calls_made"])
             self.assertFalse(packet["runtime_execution_proven"])
@@ -652,7 +667,7 @@ class CodexModelRegistryTests(unittest.TestCase):
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(
                 packet["final_status"],
-                "STOP_AND_DIAGNOSE_MODEL_SELECTION_TRUTH_NOT_PROVEN",
+                "KNOWN_BLOCKER_CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_NOT_PROVEN",
             )
             self.assertFalse(packet["model_selection_truth_proven"])
             self.assertFalse(packet["live_call_attempted"])
@@ -666,9 +681,19 @@ class CodexModelRegistryTests(unittest.TestCase):
             unknown_reasoning["machine_error_code"],
             "CUSTOM_CODEX_API_REASONING_OPTION_NOT_ADMITTED",
         )
-        self.assertIn("base_url", raw_backend["forbidden_fields"])
-        self.assertIn("secret_ref", raw_backend["forbidden_fields"])
+        self.assertEqual(raw_backend["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(raw_backend["forbidden_fields"], [])
+        self.assertEqual(raw_backend["forbidden_browser_fields"], [])
+        self.assertEqual(raw_backend["forbidden_field_count"], 2)
+        self.assertTrue(raw_backend["forbidden_fields_redacted"])
+        self.assertTrue(raw_backend["forbidden_browser_fields_redacted"])
         self.assertTrue(raw_backend["browser_raw_backend_authority_widened"])
+        raw_backend_json = json.dumps(raw_backend, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", raw_backend_json)
+        self.assertNotIn("BROWSER_SECRET_REF", raw_backend_json)
+        self.assertNotIn('"base_url"', raw_backend_json)
+        self.assertNotIn('"secret_ref"', raw_backend_json)
+        self.assertNotIn('"route_id"', raw_backend_json)
         self.assertEqual(
             invented_model["machine_error_code"],
             "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
@@ -801,10 +826,10 @@ class CodexModelRegistryTests(unittest.TestCase):
             unknown_chatgpt["machine_error_code"],
             "CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_MODEL_NOT_SERVER_ISSUED",
         )
-        self.assertIn("fallback_used", raw_backend["forbidden_fields"])
-        self.assertIn("route_id", raw_backend["forbidden_fields"])
-        self.assertIn("base_url", raw_backend["forbidden_fields"])
-        self.assertIn("api_key", raw_backend["forbidden_fields"])
+        self.assertEqual(raw_backend["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(raw_backend["forbidden_fields"], [])
+        self.assertEqual(raw_backend["forbidden_field_count"], 4)
+        self.assertTrue(raw_backend["forbidden_fields_redacted"])
         self.assertTrue(raw_backend["browser_raw_backend_authority_widened"])
         self.assertEqual(
             reasoning_mismatch["machine_error_code"],

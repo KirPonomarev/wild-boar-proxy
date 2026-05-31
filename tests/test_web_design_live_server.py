@@ -12037,9 +12037,18 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(
             packet["final_status"],
-            "SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_PROVEN_WITH_LIMITS",
+            "CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_PROVEN_WITH_LIMITS",
         )
         self.assertTrue(packet["model_selection_truth_proven"])
+        self.assertEqual(packet["source"], "server_catalog")
+        self.assertTrue(packet["server_catalog_source"])
+        self.assertFalse(packet["browser_route_authority"])
+        self.assertFalse(packet["browser_secret_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["ui_label_counts_as_model_truth"])
+        self.assertFalse(packet["model_self_report_counts_as_model_truth"])
+        self.assertFalse(packet["codex_window_required"])
+        self.assertTrue(packet["dry_server_truth_only"])
         self.assertEqual(packet["execution_mode"], "api_only")
         self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_model_slot"]["lane"], "api_route_lane")
@@ -12057,11 +12066,21 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "blocked")
         self.assertEqual(
             rejected["final_status"],
-            "STOP_AND_DIAGNOSE_MODEL_SELECTION_TRUTH_NOT_PROVEN",
+            "KNOWN_BLOCKER_CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_NOT_PROVEN",
         )
-        self.assertIn("base_url", rejected["forbidden_fields"])
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], [])
+        self.assertEqual(rejected["forbidden_browser_fields"], [])
+        self.assertEqual(rejected["forbidden_field_count"], 1)
+        self.assertTrue(rejected["forbidden_fields_redacted"])
+        self.assertTrue(rejected["forbidden_browser_fields_redacted"])
         self.assertTrue(rejected["browser_raw_backend_authority_widened"])
         self.assertFalse(rejected["live_call_attempted"])
+        rejected_json = json.dumps(rejected, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", rejected_json)
+        self.assertNotIn('"base_url"', rejected_json)
+        self.assertNotIn('"route_id"', rejected_json)
+        self.assertNotIn('"secret_ref"', rejected_json)
 
     def test_codex_custom_chatgpt_plus_api_slot_truth_endpoint_is_non_live(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
@@ -12120,7 +12139,13 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             rejected["final_status"],
             "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_TRUTH_NOT_PROVEN",
         )
-        self.assertIn("route_id", rejected["forbidden_fields"])
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], [])
+        self.assertEqual(rejected["forbidden_field_count"], 1)
+        self.assertTrue(rejected["forbidden_fields_redacted"])
+        rejected_json = json.dumps(rejected, ensure_ascii=False)
+        self.assertNotIn("browser-route", rejected_json)
+        self.assertNotIn('"route_id"', rejected_json)
         self.assertTrue(rejected["browser_raw_backend_authority_widened"])
         self.assertFalse(rejected["fallback_used"])
         self.assertFalse(rejected["live_call_attempted"])
