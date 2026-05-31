@@ -16,6 +16,8 @@ import mimetypes
 import os
 from pathlib import Path
 from queue import Empty, Queue
+import socket
+import sqlite3
 import subprocess
 from threading import RLock, Thread
 from typing import Any, Callable
@@ -70,8 +72,14 @@ from wild_boar_proxy.model_availability import (
     build_model_direct_preflight_packet,
 )
 from wild_boar_proxy.native_window_probe import (
+    DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     OWNER_STANDING_AUTHORIZATION_PHRASE,
     launch_custom_native_app_packet,
+    show_custom_native_window_packet,
+)
+from wild_boar_proxy.native_filesystem_probe import (
+    collect_codex_process_inventory,
+    default_persistent_custom_profile_paths,
 )
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
@@ -121,12 +129,57 @@ from wild_boar_proxy.operator_surface import (
     DEFAULT_RUNTIME_CONFIG,
     HybridOpenAICompatAdapter,
     OperatorSurfaceSession,
+    _safe_route_digest,
     clean_env,
     compare_snapshots,
     extract_local_api_key,
     protected_snapshot,
     protected_surfaces_unchanged,
 )
+
+DEEPSEEK_CODE_EDIT_PROBE_FILE = ".tmp/deepseek_live_probe.txt"
+DEEPSEEK_CODE_EDIT_EXPECTED_TEXT = "WBP_DEEPSEEK_CODE_EDIT_OK"
+DEEPSEEK_ROUTE_BOUND_EDIT_PROBE_FILE = ".tmp/deepseek_route_bound_edit.txt"
+DEEPSEEK_ROUTE_BOUND_EDIT_EXPECTED_TEXT = "WBP_DEEPSEEK_ROUTE_BOUND_EDIT_OK"
+MIXED_MODE_CODE_EDIT_PROBE_FILE = ".tmp/mixed_mode_probe.txt"
+MIXED_MODE_CODE_EDIT_EXPECTED_TEXT = "WBP_CHATGPT_PLUS_DEEPSEEK_OK"
+QUICK_START_DEEPSEEK_CODE_EDIT_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "execution_mode",
+        "api_model_id",
+        "api_reasoning_option_id",
+    }
+)
+QUICK_START_MIXED_MODE_CODE_EDIT_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "execution_mode",
+        "chatgpt_model_id",
+        "api_model_id",
+        "api_reasoning_option_id",
+    }
+)
+STABLE_PROFILE_HISTORY_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "action",
+        "history_marker",
+    }
+)
+DEFAULT_STABLE_PROFILE_HISTORY_MARKER = "WBP_STABLE_HISTORY_MARKER"
+CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_ENV = "WBP_CUSTOM_CODEX_BRIDGE_PORT"
+DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT = 50555
+
+
+def _custom_codex_stable_wbp_bridge_port() -> int:
+    raw_value = os.environ.get(CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_ENV, "").strip()
+    if not raw_value:
+        return DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT
+    try:
+        port = int(raw_value)
+    except ValueError:
+        return DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT
+    if 1 <= port <= 65535:
+        return port
+    return DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -203,7 +256,42 @@ SESSION_ID_UI_ACTIONS = frozenset(
 )
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
 CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS = 2.0
+CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS = 0.75
 CUSTOM_CODEX_READONLY_TIMEOUT_CODE = "CUSTOM_CODEX_READONLY_TIMEOUT"
+CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE = "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY"
+VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
+VISIBLE_HISTORY_CONFIRMED_STATUS = "VISIBLE_THREAD_HISTORY_RESTORE_OWNER_CONFIRMED_WITH_LIMITS"
+VISIBLE_HISTORY_NOT_PROVEN_STATUS = "VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY"
+VISIBLE_HISTORY_RELAUNCH_CONFIRMED_STATUS = (
+    "CUSTOM_CODEX_VISIBLE_HISTORY_RELAUNCH_OWNER_CONFIRMED_WITH_LIMITS"
+)
+VISIBLE_HISTORY_RELAUNCH_NOT_CONFIRMED_STATUS = (
+    "CUSTOM_CODEX_RELAUNCH_PROFILE_PROVEN_VISIBLE_HISTORY_NOT_CONFIRMED"
+)
+VISIBLE_HISTORY_RELAUNCH_SMOKE_CONFIRMED_STATUS = (
+    "CUSTOM_CODEX_VISIBLE_HISTORY_SMOKE_CONFIRMED_WITH_LIMITS"
+)
+VISIBLE_HISTORY_ALLOWED_OWNER_FIELDS = frozenset(
+    {
+        "custom_codex_open",
+        "old_chat_visible",
+        "chat_not_empty",
+        "not_original_codex",
+        "raw_thread_content_not_recorded",
+    }
+)
+VISIBLE_HISTORY_RELAUNCH_ALLOWED_OWNER_FIELDS = frozenset(
+    {
+        "custom_codex_open",
+        "old_chat_visible",
+        "chat_not_empty",
+        "not_original_codex",
+        "owner_confirmed_after_relaunch",
+        "raw_thread_content_not_recorded",
+        "smoke_phrase_required",
+        "smoke_phrase_visible",
+    }
+)
 
 
 def owner_authorization_phrase_present(value: str | None) -> bool:
@@ -212,6 +300,21 @@ def owner_authorization_phrase_present(value: str | None) -> bool:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_utc_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _custom_codex_readonly_timeout_packet(
@@ -273,6 +376,107 @@ def _run_custom_codex_readonly_snapshot(
     if status == "error":
         raise value
     return value
+
+
+def _operator_status_timeout_fallback_packet() -> dict[str, Any]:
+    return {
+        "status": {
+            "configured_model": "",
+            "machine_error_code": CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE,
+        },
+        "claim_gate": {"status": "not_reported"},
+        "models": {
+            "ok": False,
+            "server_issued": True,
+            "model_ids": [],
+            "model_entries": [],
+        },
+    }
+
+
+def _bounded_operator_models_payload(
+    operator_surface_session: Any,
+    *,
+    timeout_seconds: float = 3.0,
+) -> dict[str, Any] | None:
+    results: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            results.put(("ok", operator_surface_session.probe_models()), block=False)
+        except Exception as exc:
+            results.put(("error", exc), block=False)
+
+    thread = Thread(
+        target=worker,
+        name="custom-codex-operator-models-readonly",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        return None
+    try:
+        status, value = results.get_nowait()
+    except Empty:
+        return None
+    if status != "ok" or not isinstance(value, dict):
+        return None
+    return value
+
+
+def _bounded_operator_status_payload(operator_surface_session: Any) -> tuple[dict[str, Any], bool]:
+    results: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            results.put(("ok", operator_surface_session.status_payload()), block=False)
+        except Exception as exc:
+            results.put(("error", exc), block=False)
+
+    thread = Thread(
+        target=worker,
+        name="custom-codex-operator-status-readonly",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS)
+    if thread.is_alive():
+        packet = _operator_status_timeout_fallback_packet()
+        models = _bounded_operator_models_payload(operator_surface_session)
+        if isinstance(models, dict) and models.get("model_ids"):
+            packet["models"] = models
+        return packet, True
+    try:
+        status, value = results.get_nowait()
+    except Empty:
+        return _operator_status_timeout_fallback_packet(), True
+    if status == "error":
+        raise value
+    return value if isinstance(value, dict) else _operator_status_timeout_fallback_packet(), False
+
+
+def _mark_operator_status_timeout_fallback(packet: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(packet, dict):
+        return packet
+    api_lane = packet.get("api_lane") if isinstance(packet.get("api_lane"), dict) else {}
+    api_model_count = int(api_lane.get("model_count") or 0) if isinstance(api_lane, dict) else 0
+    model_count = int(packet.get("model_count") or 0)
+    has_api_catalog = api_model_count > 0 or model_count > 0
+    if not has_api_catalog:
+        return _custom_codex_readonly_timeout_packet(
+            endpoint=str(packet.get("endpoint") or ""),
+            timeout_scope="custom_operator_status_readonly_snapshot",
+        )
+    packet["status"] = "degraded"
+    packet["machine_error_code"] = CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE
+    packet["operator_status_timeout"] = True
+    packet["native_lane_catalog_incomplete"] = True
+    packet["api_lane_catalog_available"] = True
+    packet["fallback_used"] = True
+    packet["model_auto_selected"] = False
+    packet["selector_runtime_readiness_claimed"] = False
+    return packet
 
 
 UI_ACTION_ALLOWLIST = {
@@ -631,6 +835,17 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "только Custom native app/window launch proof; это не prompt, route trace или egress truth",
         "display_name": "Запустить Custom Codex",
         "human_meaning": "Запустить Custom Codex через server-owned native launch lane и подтвердить процесс плюс окно.",
+    },
+    "show_custom_client_native": {
+        "adapter_command_id": "codex_custom_native_show_window",
+        "action_role": "custom_native_window_visibility_repair",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только показать уже запущенное Custom Codex окно; это не запуск, prompt или route truth",
+        "display_name": "Показать окно Codex Custom",
+        "human_meaning": "Поднять и переместить уже запущенное окно Custom Codex без трогания Original Codex.",
     },
     "setup_discovery": {
         "adapter_command_id": "installer_init",
@@ -1824,8 +2039,13 @@ def _build_live_native_availability_lattice_packet(
 
 @dataclass
 class _CustomNativeBridgeLease:
+    bridge_port: int = DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT
     signature: str = ""
     bridge: HybridOpenAICompatAdapter | None = None
+
+    @property
+    def stable_endpoint(self) -> str:
+        return f"http://127.0.0.1:{self.bridge_port}/v1"
 
     def ensure(
         self,
@@ -1833,6 +2053,7 @@ class _CustomNativeBridgeLease:
         downstream_endpoint: str,
         routes_packet: dict[str, Any] | None,
         hidden_native_model_ids: list[str] | None = None,
+        forced_route_model_id: str = "",
     ) -> str:
         route_records = _enabled_external_route_records(routes_packet)
         if not route_records:
@@ -1845,6 +2066,7 @@ class _CustomNativeBridgeLease:
             return downstream_endpoint
         signature_source = {
             "downstream_endpoint": downstream_endpoint,
+            "stable_bridge_port": self.bridge_port,
             "expected_api_key_present": bool(expected_api_key),
             "routes": [
                 {
@@ -1870,6 +2092,7 @@ class _CustomNativeBridgeLease:
                 for model_id in (hidden_native_model_ids or [])
                 if str(model_id).strip()
             ),
+            "forced_route_model_id": str(forced_route_model_id or "").strip(),
         }
         signature = hashlib.sha256(
             json.dumps(signature_source, ensure_ascii=True, sort_keys=True).encode("utf-8")
@@ -1882,11 +2105,36 @@ class _CustomNativeBridgeLease:
             expected_api_key=expected_api_key,
             routes=route_records,
             hidden_downstream_model_ids=hidden_native_model_ids,
+            forced_route_model_id=str(forced_route_model_id or "").strip(),
+            listen_port=self.bridge_port,
+            allow_missing_auth_from_loopback=True,
         )
         bridge.__enter__()
         self.bridge = bridge
         self.signature = signature
         return bridge.listen_endpoint
+
+    def set_trace_context(self, context: dict[str, Any]) -> None:
+        if self.bridge is not None:
+            self.bridge.set_trace_context(context)
+
+    def trace_snapshot(self) -> dict[str, Any]:
+        if self.bridge is None:
+            return {
+                "schema_version": 1,
+                "packet_kind": "hybrid_openai_compat_prompt_trace",
+                "captured_at_utc": utc_now(),
+                "trace_context": {},
+                "request_count": 0,
+                "last_record": {},
+                "records": [],
+                "raw_prompt_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+        return self.bridge.trace_snapshot()
 
     def close(self) -> None:
         if self.bridge is not None:
@@ -2478,19 +2726,800 @@ def _manual_custom_model_selection_required_packet(
     }
 
 
+CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "model_id",
+        "execution_mode",
+        "chatgpt_model_id",
+        "api_model_id",
+        "api_reasoning_option_id",
+    }
+)
+
+
+QUICK_START_DEEPSEEK_SAFE_WORKTREE_ALLOWED_BROWSER_FIELDS = frozenset(
+    {
+        "execution_mode",
+        "api_model_id",
+        "api_reasoning_option_id",
+    }
+)
+
+
 def _forbidden_custom_live_launch_fields(payload: Any, prefix: str = "") -> list[str]:
     findings: list[str] = []
     if isinstance(payload, dict):
         for key, value in payload.items():
             key_text = str(key)
             key_path = f"{prefix}.{key_text}" if prefix else key_text
-            if prefix or key_text != "model_id":
+            if prefix or key_text not in CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS:
                 findings.append(key_path)
             findings.extend(_forbidden_custom_live_launch_fields(value, key_path))
     elif isinstance(payload, list):
         for index, value in enumerate(payload):
             findings.extend(_forbidden_custom_live_launch_fields(value, f"{prefix}[{index}]"))
     return findings
+
+
+def _forbidden_quick_start_deepseek_safe_worktree_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in QUICK_START_DEEPSEEK_SAFE_WORKTREE_ALLOWED_BROWSER_FIELDS:
+                findings.append(key_path)
+            findings.extend(_forbidden_quick_start_deepseek_safe_worktree_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_quick_start_deepseek_safe_worktree_fields(
+                    value,
+                    f"{prefix}[{index}]",
+                )
+            )
+    return findings
+
+
+def _api_snapshot_route_for_model(
+    api_snapshot: dict[str, Any] | None,
+    model_id: str,
+) -> dict[str, Any] | None:
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else None
+    if not isinstance(routes, list):
+        return None
+    for route in routes:
+        if isinstance(route, dict) and str(route.get("route_id") or "").strip() == model_id:
+            return route
+    return None
+
+
+def _route_targets_deepseek(route: dict[str, Any] | None, model_id: str) -> bool:
+    if not isinstance(route, dict):
+        return "deepseek" in model_id.lower()
+    fields = (
+        model_id,
+        route.get("route_id"),
+        route.get("display_name"),
+        route.get("provider"),
+        route.get("provider_label"),
+        route.get("upstream_model"),
+        route.get("effective_model"),
+    )
+    return any("deepseek" in str(value or "").lower() for value in fields)
+
+
+def _custom_native_launch_mode_selection_packet(
+    payload: dict[str, Any],
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    execution_mode = str(payload.get("execution_mode") or "").strip()
+    api_model_id = str(payload.get("api_model_id") or "").strip()
+    chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
+    api_reasoning_option_id = str(payload.get("api_reasoning_option_id") or "").strip()
+    if not execution_mode and not api_model_id and not chatgpt_model_id and not api_reasoning_option_id:
+        return {}
+    return build_custom_codex_execution_mode_selector_packet(
+        {
+            "execution_mode": execution_mode,
+            "chatgpt_model_id": chatgpt_model_id,
+            "api_model_id": api_model_id,
+            "api_reasoning_option_id": api_reasoning_option_id,
+        },
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+
+
+def _custom_native_launch_selected_model_id(
+    payload: dict[str, Any],
+    execution_packet: dict[str, Any],
+) -> str:
+    if execution_packet:
+        slot = execution_packet.get("primary_model_slot")
+        if isinstance(slot, dict):
+            return str(slot.get("model_id") or "").strip()
+        return ""
+    return str(payload.get("model_id") or "").strip()
+
+
+def _quick_start_launch_selection_digest(fields: dict[str, Any]) -> str:
+    safe_fields = {
+        "execution_mode": str(fields.get("execution_mode") or ""),
+        "chatgpt_model_id": str(fields.get("chatgpt_model_id") or ""),
+        "api_model_id": str(fields.get("api_model_id") or ""),
+        "api_reasoning_option_id": str(fields.get("api_reasoning_option_id") or ""),
+        "selected_model": str(fields.get("selected_model") or ""),
+    }
+    return hashlib.sha256(
+        json.dumps(safe_fields, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:24]
+
+
+def _quick_start_launch_selection_fields(
+    *,
+    execution_packet: dict[str, Any] | None,
+    selected_model: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    source = execution_packet if execution_packet else (payload or {})
+    return {
+        "execution_mode": str(source.get("execution_mode") or ""),
+        "chatgpt_model_id": str(source.get("chatgpt_model_id") or ""),
+        "api_model_id": str(source.get("api_model_id") or ""),
+        "api_reasoning_option_id": str(source.get("api_reasoning_option_id") or ""),
+        "selected_model": selected_model,
+    }
+
+
+def _quick_start_launch_fields_from_packet(packet: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(packet, dict):
+        return {
+            "execution_mode": "",
+            "chatgpt_model_id": "",
+            "api_model_id": "",
+            "api_reasoning_option_id": "",
+            "selected_model": "",
+        }
+    return {
+        "execution_mode": str(packet.get("execution_mode") or ""),
+        "chatgpt_model_id": str(packet.get("chatgpt_model_id") or ""),
+        "api_model_id": str(packet.get("api_model_id") or ""),
+        "api_reasoning_option_id": str(packet.get("api_reasoning_option_id") or ""),
+        "selected_model": str(packet.get("selected_model") or packet.get("model") or ""),
+    }
+
+
+def _custom_native_process_inventory_summary() -> dict[str, Any]:
+    paths = default_persistent_custom_profile_paths(
+        profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+    )
+    user_data_dir = str(paths.get("user_data_dir") or "")
+    try:
+        inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
+    except OSError as exc:
+        return {
+            "window_inventory_status": "unavailable",
+            "window_inventory_error_class": type(exc).__name__,
+            "custom_process_observed": False,
+            "custom_process_count": 0,
+            "profile_id": DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+            "raw_process_lines_exposed": False,
+            "raw_path_exposed": False,
+        }
+    custom_process_count = int(inventory.get("custom_process_count") or 0)
+    return {
+        "window_inventory_status": "ok",
+        "custom_process_observed": custom_process_count > 0,
+        "custom_process_count": custom_process_count,
+        "default_process_count": int(inventory.get("default_process_count") or 0),
+        "profile_id": DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+        "raw_process_lines_exposed": False,
+        "raw_path_exposed": False,
+    }
+
+
+def _custom_native_launch_preflight_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    external_routes_packet: dict[str, Any] | None = None,
+    native_bridge_lease: _CustomNativeBridgeLease | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_live_launch_fields(payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_launch_preflight",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Custom native launch preflight accepts no browser-controlled route, backend, auth, path, or home fields.",
+            "forbidden_fields": forbidden,
+            "owner_authorization_phrase_present": owner_authorized,
+            "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+            "show_window_attempted": False,
+            "new_launch_started": False,
+            "live_provider_called": False,
+            "browser_raw_backend_authority_widened": True,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_path_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "final_status": "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not owner_authorized:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_launch_preflight",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+            **_owner_authorization_required_packet(
+                mode_id="codex_custom",
+                next_action="provide_exact_owner_authorization_phrase",
+            ),
+            "show_window_attempted": False,
+            "new_launch_started": False,
+            "live_provider_called": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_path_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "final_status": "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+        }
+
+    execution_packet = _custom_native_launch_mode_selection_packet(
+        payload,
+        operator_status,
+        api_snapshot,
+    )
+    if execution_packet and payload.get("model_id"):
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_launch_preflight",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "rejected",
+            "machine_error_code": "CUSTOM_NATIVE_LAUNCH_AMBIGUOUS_MODEL_FIELDS",
+            "human_message": "Custom native launch preflight accepts either legacy model_id or execution-mode fields, not both.",
+            "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+            "execution_mode": str(payload.get("execution_mode") or ""),
+            "show_window_attempted": False,
+            "new_launch_started": False,
+            "live_provider_called": False,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "browser_raw_backend_authority_widened": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_path_exposed": False,
+            "final_status": "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+            "next_action": "remove_model_id_or_use_legacy_launch_payload",
+        }
+    selected_model = _custom_native_launch_selected_model_id(payload, execution_packet)
+    if execution_packet and execution_packet.get("status") != "ok":
+        selected_model = selected_model or str(
+            (execution_packet.get("primary_model_slot") or {}).get("model_id") or ""
+        )
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_launch_preflight",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": execution_packet.get("status"),
+            "machine_error_code": execution_packet.get("machine_error_code"),
+            "human_message": "Custom native launch preflight blocked by execution-mode selection packet.",
+            "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+            "execution_mode": execution_packet.get("execution_mode"),
+            "api_model_id": execution_packet.get("api_model_id"),
+            "api_reasoning_option_id": execution_packet.get("api_reasoning_option_id"),
+            "chatgpt_model_id": execution_packet.get("chatgpt_model_id"),
+            "selected_model": selected_model,
+            "selection_packet": execution_packet,
+            "show_window_attempted": False,
+            "new_launch_started": False,
+            "live_provider_called": False,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "browser_raw_backend_authority_widened": bool(
+                execution_packet.get("browser_raw_backend_authority_widened")
+            ),
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_path_exposed": False,
+            "final_status": "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+            "next_action": execution_packet.get("next_action", "repair_execution_mode_selection"),
+        }
+    if not selected_model:
+        packet = _manual_custom_model_selection_required_packet(
+            owner_authorized=owner_authorized,
+            launch_claim_scope="quick_start_launch_guard_no_live_mutation",
+        )
+        packet.update(
+            {
+                "packet_kind": "custom_native_launch_preflight",
+                "show_window_attempted": False,
+                "new_launch_started": False,
+                "live_provider_called": False,
+                "raw_path_exposed": False,
+                "final_status": "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+            }
+        )
+        return packet
+
+    registry = build_custom_model_registry_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+    endpoint = str(registry.get("endpoint") or "")
+    route_record = _external_route_record_for_model(external_routes_packet, selected_model)
+    route_selected = bool(route_record)
+    bridge_port = (
+        native_bridge_lease.bridge_port
+        if native_bridge_lease is not None
+        else (_openai_compat_endpoint_port(endpoint) or 0)
+    )
+    bridge_alive = bool(
+        (native_bridge_lease is not None and native_bridge_lease.bridge is not None)
+        or (bridge_port and _loopback_port_accepts_connection(int(bridge_port)))
+    )
+    if not route_selected:
+        bridge_status = "not_required"
+        bridge_next_action = "launch_custom_codex"
+    elif bridge_alive:
+        bridge_status = "alive"
+        bridge_next_action = "launch_or_reuse_custom_codex"
+    else:
+        bridge_status = "not_started_or_down"
+        bridge_next_action = "launch_custom_codex_to_create_bridge"
+
+    window_inventory = _custom_native_process_inventory_summary()
+    custom_process_observed = window_inventory.get("custom_process_observed") is True
+    current_fields = _quick_start_launch_selection_fields(
+        execution_packet=execution_packet,
+        selected_model=selected_model,
+        payload=payload,
+    )
+    current_digest = _quick_start_launch_selection_digest(current_fields)
+    last_fields = _quick_start_launch_fields_from_packet(last_launch_packet)
+    last_digest = _quick_start_launch_selection_digest(last_fields) if last_launch_packet else ""
+    last_packet_ok = (
+        isinstance(last_launch_packet, dict) and last_launch_packet.get("status") == "ok"
+    )
+    selection_matches_last = bool(
+        last_packet_ok and last_digest and current_digest == last_digest
+    )
+    if not isinstance(last_launch_packet, dict):
+        config_status = "no_previous_launch"
+    elif selection_matches_last:
+        config_status = "matches_last_launch"
+    else:
+        config_status = "changed"
+    reuse_admissible = bool(custom_process_observed and selection_matches_last)
+    new_launch_required = not reuse_admissible
+    next_action = (
+        "show_existing_window"
+        if reuse_admissible
+        else (
+            "block_existing_window_without_matching_launch_packet"
+            if custom_process_observed and not selection_matches_last
+            else bridge_next_action
+        )
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_launch_preflight",
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Custom native launch preflight classified current bridge, window, and launch selection without live mutation.",
+        "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+        "owner_authorization_phrase_present": owner_authorized,
+        "execution_mode": current_fields["execution_mode"],
+        "chatgpt_model_id": current_fields["chatgpt_model_id"],
+        "api_model_id": current_fields["api_model_id"],
+        "api_reasoning_option_id": current_fields["api_reasoning_option_id"],
+        "selected_model": selected_model,
+        "selection_packet": execution_packet or {},
+        "selection_digest": current_digest,
+        "last_launch_packet_present": isinstance(last_launch_packet, dict),
+        "last_launch_selection_digest": last_digest,
+        "selection_matches_last_launch": selection_matches_last,
+        "config_status": config_status,
+        "custom_process_observed": custom_process_observed,
+        "custom_process_count": int(window_inventory.get("custom_process_count") or 0),
+        "window_status": "found" if custom_process_observed else "not_found",
+        "window_inventory_status": str(window_inventory.get("window_inventory_status") or ""),
+        "existing_window_reuse_admissible": reuse_admissible,
+        "new_launch_required": new_launch_required,
+        "show_window_attempted": False,
+        "new_launch_started": False,
+        "live_provider_called": False,
+        "bridge_required": route_selected,
+        "bridge_alive": bridge_alive,
+        "bridge_status": bridge_status,
+        "bridge_owner": (
+            "wbp_current_process"
+            if native_bridge_lease is not None and native_bridge_lease.bridge is not None
+            else ("unknown_or_foreign" if bridge_alive else "none")
+        ),
+        "route_selected": route_selected,
+        "api_provider_id": str(route_record.get("provider") or ""),
+        "server_issued_model_list": bool(registry.get("available_models")),
+        "model_auto_selected": False,
+        "fallback_used": False,
+        "visible_window_counts_as_model_truth": False,
+        "bridge_alive_counts_as_model_truth": False,
+        "response_text_counts_as_route_truth": False,
+        "launch_packet_is_truth_source": True,
+        "browser_raw_backend_authority_widened": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "raw_path_exposed": False,
+        "raw_process_lines_exposed": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "quick_start_live_bridge_and_window_reuse_guarded_with_limits": True,
+        "final_status": "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
+        "next_action": next_action,
+    }
+
+
+def _custom_native_launch_stability_guard_packet(
+    preflight_packet: dict[str, Any],
+    *,
+    status: str,
+    machine_error_code: str,
+    human_message: str,
+    show_window_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    show_window_attempted = show_window_packet is not None
+    window_visible = bool(
+        isinstance(show_window_packet, dict)
+        and show_window_packet.get("custom_window_visible") is True
+    )
+    show_window_ok = bool(
+        isinstance(show_window_packet, dict) and show_window_packet.get("status") == "ok"
+    )
+    window_unresponsive = bool(show_window_attempted and (not show_window_ok or not window_visible))
+    show_window_machine_error = str(
+        show_window_packet.get("machine_error_code") if isinstance(show_window_packet, dict) else ""
+    )
+    window_response_timeout = bool(
+        window_unresponsive and "TIMEOUT" in show_window_machine_error.upper()
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_launch_stability_guard",
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "launch_claim_scope": "custom_codex_launch_stability_and_recovery",
+        "preflight_packet": preflight_packet,
+        "owner_authorization_phrase_present": (
+            preflight_packet.get("owner_authorization_phrase_present") is True
+        ),
+        "execution_mode": str(preflight_packet.get("execution_mode") or ""),
+        "chatgpt_model_id": str(preflight_packet.get("chatgpt_model_id") or ""),
+        "api_model_id": str(preflight_packet.get("api_model_id") or ""),
+        "api_reasoning_option_id": str(preflight_packet.get("api_reasoning_option_id") or ""),
+        "selected_model": str(preflight_packet.get("selected_model") or ""),
+        "selection_packet": preflight_packet.get("selection_packet", {}),
+        "selection_digest": str(preflight_packet.get("selection_digest") or ""),
+        "last_launch_selection_digest": str(
+            preflight_packet.get("last_launch_selection_digest") or ""
+        ),
+        "selection_matches_last_launch": (
+            preflight_packet.get("selection_matches_last_launch") is True
+        ),
+        "config_status": str(preflight_packet.get("config_status") or ""),
+        "custom_process_observed": preflight_packet.get("custom_process_observed") is True,
+        "custom_process_count": int(preflight_packet.get("custom_process_count") or 0),
+        "existing_window_reuse_admissible": (
+            preflight_packet.get("existing_window_reuse_admissible") is True
+        ),
+        "reused_existing_window": bool(
+            status == "ok" and preflight_packet.get("existing_window_reuse_admissible") is True
+        ),
+        "new_launch_required": preflight_packet.get("new_launch_required") is True,
+        "launch_blocked": status != "ok",
+        "show_window_attempted": show_window_attempted,
+        "show_window_packet": show_window_packet or {},
+        "custom_window_visible": window_visible,
+        "custom_window_frontmost": bool(
+            isinstance(show_window_packet, dict)
+            and show_window_packet.get("custom_window_frontmost") is True
+        ),
+        "window_response_timeout": window_response_timeout,
+        "window_unresponsive_with_limits": window_unresponsive,
+        "new_launch_started": False,
+        "process_started": False,
+        "native_window_observed": window_visible,
+        "native_app_usable": window_visible,
+        "live_provider_called": False,
+        "model_auto_selected": False,
+        "fallback_used": False,
+        "api_only_calls_chatgpt": False,
+        "chatgpt_only_calls_api": False,
+        "visible_window_counts_as_model_truth": False,
+        "response_text_counts_as_route_truth": False,
+        "bridge_alive_counts_as_model_truth": False,
+        "launch_packet_is_truth_source": True,
+        "browser_raw_backend_authority_widened": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "raw_path_exposed": False,
+        "raw_process_lines_exposed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "final_status": "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS",
+        "next_action": (
+            "continue_in_existing_custom_window"
+            if status == "ok"
+            else "stop_and_diagnose_custom_launch_stability_guard"
+        ),
+    }
+
+
+def _quick_start_deepseek_safe_worktree_check_packet(
+    payload: dict[str, Any],
+    *,
+    session_manager: CodexCustomSessionManager,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+    owner_authorized: bool,
+    repo_root: Path,
+) -> dict[str, Any]:
+    base = {
+        "schema_version": 1,
+        "packet_kind": "quick_start_deepseek_safe_worktree_check",
+        "captured_at_utc": utc_now(),
+        "quick_start_button_id": "quickStartDeepSeekCoderCheckAction",
+        "quick_start_button_claim_scope": "api_only_deepseek_safe_worktree_edit_with_limits",
+        "allowed_browser_fields": sorted(
+            QUICK_START_DEEPSEEK_SAFE_WORKTREE_ALLOWED_BROWSER_FIELDS
+        ),
+        "execution_mode": str(payload.get("execution_mode") or "").strip(),
+        "api_model_id": str(payload.get("api_model_id") or "").strip(),
+        "api_reasoning_option_id": str(payload.get("api_reasoning_option_id") or "").strip(),
+        "server_issued_catalog_used": False,
+        "browser_raw_backend_authority_widened": False,
+        "raw_backend_details_exposed": False,
+        "route_or_backend_exposed": False,
+        "secret_value_exposed": False,
+        "fallback_attempted": False,
+        "no_fallback": True,
+        "parallel_fanout_attempted": False,
+        "original_codex_touched": False,
+        "original_codex_profile_touched": False,
+        "asar_touched": False,
+        "wbp_patch_applier_used": False,
+        "no_patch_applier": True,
+        "commit_attempted": False,
+        "push_attempted": False,
+        "merge_attempted": False,
+        "main_worktree_mutated_by_probe": False,
+        "main_tree_untouched": True,
+    }
+    forbidden = _forbidden_quick_start_deepseek_safe_worktree_fields(payload)
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_forbidden_browser_fields",
+        }
+    if not owner_authorized:
+        return {
+            **base,
+            **_owner_authorization_required_packet(
+                mode_id="codex_custom",
+                next_action="provide_exact_owner_authorization_phrase",
+            ),
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "safe_worktree_used": False,
+        }
+    if base["execution_mode"] != "api_only":
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "QUICK_START_DEEPSEEK_REQUIRES_API_ONLY_MODE",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "next_action": "select_api_only_execution_mode",
+        }
+    if not base["api_model_id"]:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "QUICK_START_DEEPSEEK_API_MODEL_REQUIRED",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "next_action": "select_deepseek_model_from_server_catalog",
+        }
+
+    selector_packet = build_custom_codex_execution_mode_selector_packet(
+        {
+            "execution_mode": base["execution_mode"],
+            "api_model_id": base["api_model_id"],
+            "api_reasoning_option_id": base["api_reasoning_option_id"],
+        },
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+    if selector_packet.get("status") != "ok":
+        return {
+            **base,
+            "status": selector_packet.get("status", "blocked"),
+            "machine_error_code": selector_packet.get(
+                "machine_error_code",
+                "QUICK_START_DEEPSEEK_SELECTOR_NOT_PROVEN",
+            ),
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "selector_packet": selector_packet,
+            "server_issued_catalog_used": selector_packet.get("server_issued_catalog_used") is True,
+            "browser_raw_backend_authority_widened": selector_packet.get(
+                "browser_raw_backend_authority_widened"
+            )
+            is True,
+            "next_action": selector_packet.get("next_action", "repair_selector_packet"),
+        }
+    primary_slot = selector_packet.get("primary_model_slot")
+    primary_model_id = str(
+        primary_slot.get("model_id") if isinstance(primary_slot, dict) else ""
+    ).strip()
+    if primary_model_id != base["api_model_id"]:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "QUICK_START_DEEPSEEK_PRIMARY_SLOT_MISMATCH",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "selector_packet": selector_packet,
+            "server_issued_catalog_used": True,
+            "next_action": "repair_primary_slot_binding",
+        }
+    route = _api_snapshot_route_for_model(api_snapshot, primary_model_id)
+    if not _route_targets_deepseek(route, primary_model_id):
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "QUICK_START_DEEPSEEK_MODEL_REQUIRED",
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "selector_packet": selector_packet,
+            "server_issued_catalog_used": True,
+            "next_action": "select_deepseek_model_from_server_catalog",
+        }
+
+    created = session_manager.create_packet(
+        {"primary_model_id": primary_model_id},
+        {},
+        operator_status,
+        api_snapshot=api_snapshot,
+    )
+    session = created.get("session") if isinstance(created.get("session"), dict) else {}
+    session_id = str(session.get("session_id") or "")
+    if created.get("status") != "ok" or not session_id:
+        return {
+            **base,
+            "status": created.get("status", "blocked"),
+            "machine_error_code": created.get(
+                "machine_error_code",
+                "QUICK_START_DEEPSEEK_SESSION_NOT_CREATED",
+            ),
+            "final_status": "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_ADMITTED",
+            "selector_packet": selector_packet,
+            "session_created": False,
+            "server_issued_catalog_used": True,
+            "next_action": created.get("next_action", "repair_session_creation"),
+        }
+
+    proof = session_manager.safe_worktree_edit_probe_packet(
+        session_id,
+        {"api_model_id": primary_model_id},
+        prompt_runner,
+        owner_authorized=True,
+        repo_root=repo_root,
+    )
+    success = proof.get("final_status") == "API_ONLY_DEEPSEEK_SAFE_WORKTREE_EDIT_PROVEN_WITH_LIMITS"
+    return {
+        **base,
+        "status": "ok" if success else proof.get("status", "blocked"),
+        "machine_error_code": "OK" if success else proof.get("machine_error_code", "UNKNOWN"),
+        "final_status": (
+            "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS"
+            if success
+            else "KNOWN_BLOCKER_DEEPSEEK_LIVE_EXECUTOR_PACKET"
+        ),
+        "legacy_quick_start_final_status": (
+            "QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS"
+            if success
+            else "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_PROVEN"
+        ),
+        "deepseek_live_executor_packet_proven_with_limits": success,
+        "api_reasoning_option_packet": selector_packet.get("api_reasoning_option_packet", {}),
+        "api_reasoning_option_runtime_mutation_claimed": (
+            selector_packet.get("api_reasoning_option_runtime_mutation_claimed") is True
+        ),
+        "api_reasoning_intelligence_measured": (
+            selector_packet.get("api_reasoning_intelligence_measured") is True
+        ),
+        "api_reasoning_codex_parity_claimed": (
+            selector_packet.get("api_reasoning_codex_parity_claimed") is True
+        ),
+        "session_created": True,
+        "session_id": session_id,
+        "model_id": primary_model_id,
+        "selected_model": primary_model_id,
+        "provider_id": proof.get("provider_id", "deepseek"),
+        "selector_packet": selector_packet,
+        "server_issued_catalog_used": selector_packet.get("server_issued_catalog_used") is True
+        and proof.get("selected_from_server_catalog") is True,
+        "primary_model_slot": selector_packet.get("primary_model_slot", {}),
+        "coding_agent_model_slot": selector_packet.get("coding_agent_model_slot", {}),
+        "chatgpt_line_used_as_executor": False,
+        "api_line_used_as_executor": True,
+        "api_only_calls_chatgpt": False,
+        "no_chatgpt": True,
+        "provider_response_proven": proof.get("provider_response_proven") is True,
+        "tool_loop_proven": proof.get("tool_loop_proven") is True,
+        "request_count": proof.get("request_count") if isinstance(proof.get("request_count"), int) else 0,
+        "safe_worktree_used": proof.get("safe_worktree_used") is True,
+        "write_surface": proof.get("write_surface", "safe_worktree_only"),
+        "workspace_write_admitted": proof.get("workspace_write_admitted") is True,
+        "file_changed_by_codex_tool": proof.get("file_changed_by_codex_tool") is True,
+        "git_diff_observed": proof.get("git_diff_observed") is True,
+        "expected_diff_observed": proof.get("expected_diff_observed") is True,
+        "main_worktree_mutated_by_probe": proof.get("main_worktree_mutated_by_probe") is True,
+        "main_tree_untouched": proof.get("main_worktree_mutated_by_probe") is not True,
+        "secret_value_recorded": proof.get("secret_value_recorded") is True,
+        "secret_in_diff": proof.get("secret_in_diff") is True,
+        "original_codex_touched": proof.get("original_codex_touched") is True,
+        "original_codex_profile_touched": proof.get("original_codex_profile_touched") is True,
+        "current_codex_touched": proof.get("current_codex_touched") is True,
+        "wbp_patch_applier_used": proof.get("wbp_patch_applier_used") is True,
+        "no_patch_applier": proof.get("wbp_patch_applier_used") is not True,
+        "commit_attempted": proof.get("commit_attempted") is True,
+        "push_attempted": proof.get("push_attempted") is True,
+        "merge_attempted": proof.get("merge_attempted") is True,
+        "no_fallback": proof.get("fallback_attempted") is not True,
+        "worktree_removed_after_probe": proof.get("worktree_removed_after_probe") is True,
+        "danger_full_access_admitted": proof.get("danger_full_access_admitted") is True,
+        "response_preview_bounded": proof.get("response_preview_bounded", ""),
+        "git_diff_sha256": proof.get("git_diff_sha256", ""),
+        "trace_observer_packet": proof.get("trace_observer_packet", {}),
+        "safe_worktree_probe_packet": {
+            "final_status": proof.get("final_status"),
+            "machine_error_code": proof.get("machine_error_code"),
+            "model_id": proof.get("model_id"),
+            "provider_response_proven": proof.get("provider_response_proven") is True,
+            "tool_loop_proven": proof.get("tool_loop_proven") is True,
+            "file_changed_by_codex_tool": proof.get("file_changed_by_codex_tool") is True,
+            "git_diff_observed": proof.get("git_diff_observed") is True,
+            "expected_diff_observed": proof.get("expected_diff_observed") is True,
+            "main_worktree_mutated_by_probe": proof.get("main_worktree_mutated_by_probe") is True,
+            "secret_in_diff": proof.get("secret_in_diff") is True,
+            "worktree_removed_after_probe": proof.get("worktree_removed_after_probe") is True,
+            "wbp_patch_applier_used": proof.get("wbp_patch_applier_used") is True,
+        },
+        "next_action": "manual_review_packet" if success else proof.get("next_action", "inspect_probe_packet"),
+    }
 
 
 def _launch_original_codex_packet(
@@ -2737,6 +3766,96 @@ def _native_ui_action_result(packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _openai_compat_endpoint_port(endpoint: str) -> int | None:
+    try:
+        parsed = urlparse(endpoint)
+        return int(parsed.port) if parsed.port is not None else None
+    except ValueError:
+        return None
+
+
+def _loopback_port_accepts_connection(port: int, *, timeout_seconds: float = 0.15) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
+def _custom_native_bridge_truth_fields(
+    *,
+    native_bridge_lease: _CustomNativeBridgeLease | None,
+    bridge_endpoint: str,
+    downstream_endpoint: str,
+    route_record: dict[str, Any],
+    selected_model: str,
+    status: str = "ok",
+    machine_error_code: str = "OK",
+) -> dict[str, Any]:
+    route_selected = bool(route_record)
+    stable_endpoint = (
+        native_bridge_lease.stable_endpoint
+        if native_bridge_lease is not None
+        else bridge_endpoint
+    )
+    bridge_port = (
+        native_bridge_lease.bridge_port
+        if native_bridge_lease is not None
+        else (_openai_compat_endpoint_port(bridge_endpoint) or 0)
+    )
+    bridge_alive = (
+        bool(native_bridge_lease and native_bridge_lease.bridge is not None)
+        or (bool(bridge_port) and _loopback_port_accepts_connection(int(bridge_port)))
+    )
+    config_points_to_stable_bridge = bool(
+        route_selected and bridge_endpoint == stable_endpoint and status == "ok"
+    )
+    random_port_used = bool(
+        route_selected
+        and bridge_endpoint.startswith("http://127.0.0.1:")
+        and bridge_endpoint != stable_endpoint
+    )
+    bridge_owner = "not_required_no_api_route"
+    if route_selected and status == "ok" and native_bridge_lease is not None:
+        bridge_owner = (
+            "wbp_current_process"
+            if native_bridge_lease.bridge is not None and bridge_endpoint == stable_endpoint
+            else "unknown_or_foreign"
+        )
+    elif route_selected and status != "ok":
+        bridge_owner = "foreign_or_unavailable"
+    if not route_selected:
+        final_status = "STABLE_CUSTOM_CODEX_WBP_BRIDGE_NOT_REQUIRED_NO_API_ROUTE"
+    elif (
+        status == "ok"
+        and bridge_alive
+        and config_points_to_stable_bridge
+        and not random_port_used
+        and machine_error_code == "OK"
+    ):
+        final_status = "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS"
+    else:
+        final_status = "KNOWN_BLOCKER_STABLE_WBP_BRIDGE_UNAVAILABLE"
+    return {
+        "bridge_url": stable_endpoint,
+        "bridge_port": bridge_port,
+        "bridge_alive": bridge_alive,
+        "bridge_owner": bridge_owner,
+        "downstream_wbp_url": downstream_endpoint,
+        "config_points_to_stable_bridge": config_points_to_stable_bridge,
+        "random_port_used": random_port_used,
+        "route_selected": route_selected,
+        "provider_id": str(route_record.get("provider") or ""),
+        "selected_model": selected_model,
+        "fallback_used": False,
+        "paid_provider_called": False,
+        "secret_exposed": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+        "stable_custom_codex_wbp_bridge_final_status": final_status,
+    }
+
+
 def _launch_custom_native_codex_packet(
     payload: dict[str, Any],
     *,
@@ -2760,6 +3879,11 @@ def _launch_custom_native_codex_packet(
             "owner_authorization_phrase_present": owner_authorized,
             "launch_claim_scope": "custom_native_app_window_launch_only",
             "next_action": "remove_browser_payload_fields",
+            "browser_raw_backend_authority_widened": True,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
         }
     if not owner_authorized:
         return {
@@ -2772,20 +3896,69 @@ def _launch_custom_native_codex_packet(
                 next_action="provide_exact_owner_authorization_phrase",
             ),
         }
-    model_id = payload.get("model_id")
+    execution_packet = _custom_native_launch_mode_selection_packet(
+        payload,
+        operator_status,
+        api_snapshot,
+    )
+    if execution_packet and payload.get("model_id"):
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "rejected",
+            "machine_error_code": "CUSTOM_NATIVE_LAUNCH_AMBIGUOUS_MODEL_FIELDS",
+            "human_message": "Custom native launch accepts either legacy model_id or execution-mode fields, not both.",
+            "owner_authorization_phrase_present": owner_authorized,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            "execution_mode": str(payload.get("execution_mode") or ""),
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "browser_raw_backend_authority_widened": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_model_id_or_use_legacy_launch_payload",
+        }
+    if execution_packet and execution_packet.get("status") != "ok":
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": execution_packet.get("status"),
+            "machine_error_code": execution_packet.get("machine_error_code"),
+            "human_message": "Custom native launch blocked by execution-mode selection packet.",
+            "owner_authorization_phrase_present": owner_authorized,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            "launch_route_truth_final_status": "KNOWN_BLOCKER_QUICK_START_LAUNCH_ROUTE_TRUTH",
+            "execution_mode": execution_packet.get("execution_mode"),
+            "api_model_id": execution_packet.get("api_model_id"),
+            "api_reasoning_option_id": execution_packet.get("api_reasoning_option_id"),
+            "api_reasoning_option_packet": execution_packet.get("api_reasoning_option_packet", {}),
+            "chatgpt_model_id": execution_packet.get("chatgpt_model_id"),
+            "selection_packet": execution_packet,
+            "execution_mode_packet": execution_packet,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "route_packet_matches_selection_packet": False,
+            "quick_start_launch_route_truth_proven_with_limits": False,
+            "browser_raw_backend_authority_widened": bool(
+                execution_packet.get("browser_raw_backend_authority_widened")
+            ),
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": execution_packet.get("next_action", "repair_execution_mode_selection"),
+        }
+    model_id = _custom_native_launch_selected_model_id(payload, execution_packet)
     if not isinstance(model_id, str) or not model_id:
         return _manual_custom_model_selection_required_packet(
             owner_authorized=owner_authorized,
             launch_claim_scope="custom_native_app_window_launch_only",
         )
-    availability_lattice_packet = _build_live_native_availability_lattice_packet(
-        operator_status,
-        api_snapshot=api_snapshot,
-    )
     registry = build_custom_model_registry_packet(
         operator_status,
         api_snapshot=api_snapshot,
-        availability_lattice_packet=availability_lattice_packet,
     )
     endpoint = str(registry.get("endpoint") or "")
     hidden_native_model_ids = [
@@ -2795,15 +3968,58 @@ def _launch_custom_native_codex_packet(
         and str(entry.get("lane") or "") == "codex_native"
         and entry.get("selection_enabled") is not True
     ]
-    bridge_endpoint = (
-        native_bridge_lease.ensure(
-            downstream_endpoint=endpoint,
-            routes_packet=external_routes_packet,
-            hidden_native_model_ids=hidden_native_model_ids,
+    route_record = _external_route_record_for_model(external_routes_packet, model_id)
+    try:
+        bridge_endpoint = (
+            native_bridge_lease.ensure(
+                downstream_endpoint=endpoint,
+                routes_packet=external_routes_packet,
+                hidden_native_model_ids=hidden_native_model_ids,
+                forced_route_model_id=model_id,
+            )
+            if native_bridge_lease is not None and route_record
+            else endpoint
         )
-        if native_bridge_lease is not None
-        else endpoint
-    )
+    except OSError as exc:
+        bridge_fields = _custom_native_bridge_truth_fields(
+            native_bridge_lease=native_bridge_lease,
+            bridge_endpoint=(
+                native_bridge_lease.stable_endpoint
+                if native_bridge_lease is not None
+                else endpoint
+            ),
+            downstream_endpoint=endpoint,
+            route_record=route_record,
+            selected_model=model_id,
+            status="blocked",
+            machine_error_code="CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+        )
+        return {
+            "schema_version": 1,
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+            "human_message": "Custom Codex stable WBP bridge port is unavailable.",
+            "owner_authorization_phrase_present": owner_authorized,
+            "launch_claim_scope": "custom_native_app_window_launch_only",
+            "execution_mode": execution_packet.get("execution_mode") if execution_packet else "",
+            "api_model_id": execution_packet.get("api_model_id") if execution_packet else "",
+            "chatgpt_model_id": execution_packet.get("chatgpt_model_id") if execution_packet else "",
+            "selection_packet": execution_packet or {},
+            "selected_model": model_id,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "browser_raw_backend_authority_widened": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "bridge_exception_class": type(exc).__name__,
+            "bridge_exception_message_bounded": str(exc)[:240],
+            "next_action": "stop_and_diagnose_stable_wbp_bridge_port_conflict",
+            **bridge_fields,
+        }
     packet = launch_custom_native_app_packet(
         repo_root=ROOT,
         endpoint=bridge_endpoint,
@@ -2811,18 +4027,2373 @@ def _launch_custom_native_codex_packet(
         owner_authorization_phrase=(
             OWNER_STANDING_AUTHORIZATION_PHRASE if owner_authorized else None
         ),
+        keep_running_on_window_observed=True,
+        reuse_existing_window_if_present=True,
     )
-    packet["selection_packet"] = _codex_custom_selection_packet(
+    legacy_selection = _codex_custom_selection_packet(
         model_id=model_id,
         commands=commands,
         operator_status=operator_status,
         api_snapshot=api_snapshot,
     )
+    packet["selection_packet"] = execution_packet or legacy_selection
+    if execution_packet:
+        packet["execution_mode_packet"] = execution_packet
+        packet["execution_mode"] = str(execution_packet.get("execution_mode") or "")
+        packet["api_model_id"] = str(execution_packet.get("api_model_id") or "")
+        packet["api_reasoning_option_id"] = str(
+            execution_packet.get("api_reasoning_option_id") or ""
+        )
+        packet["api_reasoning_option_packet"] = execution_packet.get(
+            "api_reasoning_option_packet",
+            {},
+        )
+        packet["api_reasoning_option_runtime_mutation_claimed"] = (
+            execution_packet.get("api_reasoning_option_runtime_mutation_claimed") is True
+        )
+        packet["chatgpt_model_id"] = str(execution_packet.get("chatgpt_model_id") or "")
+        packet["primary_model_slot"] = execution_packet.get("primary_model_slot", {})
+        packet["coding_agent_model_slot"] = execution_packet.get("coding_agent_model_slot", {})
+        packet["chatgpt_line_used_as_executor"] = (
+            execution_packet.get("chatgpt_line_used_as_executor") is True
+        )
+        packet["api_line_used_as_executor"] = (
+            execution_packet.get("api_line_used_as_executor") is True
+        )
+        packet["api_only_calls_chatgpt"] = execution_packet.get("api_only_calls_chatgpt") is True
+        packet["chatgpt_only_calls_api"] = execution_packet.get("chatgpt_only_calls_api") is True
+        packet["server_issued_catalog_used"] = execution_packet.get("server_issued_catalog_used") is True
+    else:
+        packet["execution_mode"] = "legacy_model_id_launch"
+        packet["server_issued_catalog_used"] = False
     packet["server_issued_model_list"] = bool(registry.get("available_models"))
     packet["wbp_endpoint_configured"] = endpoint.startswith("http://127.0.0.1:")
     packet["bridge_endpoint_configured"] = bridge_endpoint != endpoint
     packet["configured_bridge_endpoint"] = bridge_endpoint
+    packet["selected_model"] = model_id
+    packet["model_auto_selected"] = False
+    packet["fallback_used"] = False
+    packet["route_packet_matches_selection_packet"] = bool(
+        execution_packet
+        and str(packet.get("execution_mode") or "")
+        == str((packet.get("execution_mode_packet") or {}).get("execution_mode") or "")
+        and str(packet.get("selected_model") or "")
+        == str((packet.get("primary_model_slot") or {}).get("model_id") or "")
+    )
+    packet["quick_start_launch_route_truth_proven_with_limits"] = bool(
+        execution_packet
+        and packet.get("route_packet_matches_selection_packet") is True
+        and packet.get("model_auto_selected") is False
+        and packet.get("fallback_used") is False
+        and packet.get("browser_raw_backend_authority_widened") is not True
+        and packet.get("raw_backend_details_exposed") is not True
+        and packet.get("secret_value_exposed") is not True
+        and packet.get("original_codex_touched") is not True
+        and packet.get("asar_touched") is not True
+    )
+    packet["launch_route_truth_final_status"] = (
+        "QUICK_START_LAUNCH_ROUTE_TRUTH_PROVEN_WITH_LIMITS"
+        if packet["quick_start_launch_route_truth_proven_with_limits"]
+        else "KNOWN_BLOCKER_QUICK_START_LAUNCH_ROUTE_TRUTH"
+    )
+    packet["browser_raw_backend_authority_widened"] = False
+    packet["raw_backend_details_exposed"] = False
+    packet["secret_value_exposed"] = False
+    packet["original_codex_touched"] = False
+    packet["asar_touched"] = False
+    packet["external_route_selected"] = bool(
+        any(
+            str(route.get("route_id") or "").strip() == model_id
+            for route in _enabled_external_route_records(external_routes_packet)
+        )
+    )
+    packet.update(
+        _custom_native_bridge_truth_fields(
+            native_bridge_lease=native_bridge_lease,
+            bridge_endpoint=bridge_endpoint,
+            downstream_endpoint=endpoint,
+            route_record=route_record,
+            selected_model=model_id,
+            status=str(packet.get("status") or ""),
+            machine_error_code=str(packet.get("machine_error_code") or ""),
+        )
+    )
+    _add_custom_codex_window_launch_trace_context(packet, route_record=route_record)
+    if native_bridge_lease is not None:
+        native_bridge_lease.set_trace_context(
+            {
+                "launch_id": packet.get("launch_id"),
+                "trace_id": packet.get("trace_id"),
+                "selected_model": packet.get("selected_model"),
+                "api_reasoning_option_id": packet.get("api_reasoning_option_id"),
+                "launch_route_digest": packet.get("launch_route_digest"),
+            }
+        )
+    _add_custom_codex_window_deepseek_smoke_truth(packet)
+    _add_quick_start_stable_custom_launch_profile_truth(packet)
     return packet
+
+
+def _add_quick_start_stable_custom_launch_profile_truth(packet: dict[str, Any]) -> None:
+    profile_packet = build_custom_codex_persistent_profile_packet(
+        last_launch_packet=packet,
+    )
+    profile_proven = profile_packet.get("profile_persistence_proven") is True
+    route_truth_proven = packet.get("quick_start_launch_route_truth_proven_with_limits") is True
+    stable_launch_proven = bool(
+        packet.get("status") == "ok"
+        and route_truth_proven
+        and profile_proven
+        and packet.get("temp_profile_used") is False
+        and packet.get("current_codex_touched") is False
+        and packet.get("original_codex_touched") is False
+        and packet.get("asar_touched") is False
+        and packet.get("browser_raw_backend_authority_widened") is False
+        and packet.get("raw_backend_details_exposed") is False
+        and packet.get("secret_value_exposed") is False
+    )
+    packet["profile_final_status"] = str(profile_packet.get("profile_final_status") or "")
+    packet["session_storage_final_status"] = str(
+        profile_packet.get("session_storage_final_status") or ""
+    )
+    packet["profile_persistence_proven"] = profile_proven
+    packet["persistent_profile_reused"] = profile_packet.get("persistent_profile_reused") is True
+    packet["codex_home_reused"] = profile_packet.get("codex_home_reused") is True
+    packet["electron_user_data_reused"] = (
+        profile_packet.get("electron_user_data_reused") is True
+    )
+    packet["profile_path_stable"] = profile_packet.get("profile_path_stable") is True
+    packet["persistent_profile_root_is_tmp"] = (
+        profile_packet.get("persistent_profile_root_is_tmp") is True
+    )
+    packet["persistent_codex_home_is_tmp"] = (
+        profile_packet.get("persistent_codex_home_is_tmp") is True
+    )
+    packet["persistent_user_data_dir_is_tmp"] = (
+        profile_packet.get("persistent_user_data_dir_is_tmp") is True
+    )
+    packet["session_storage_observed"] = profile_packet.get("session_storage_observed") is True
+    packet["persistent_profile_path_exposed"] = False
+    packet["persistent_codex_home_exposed"] = False
+    packet["persistent_user_data_dir_exposed"] = False
+    packet["profile_relaunch_required_for_strong_history_claim"] = True
+    packet["visible_history_restore"] = "not_claimed"
+    packet["full_history_restoration_claimed"] = False
+    packet["quick_start_stable_custom_launch_profile_reuse_proven_with_limits"] = (
+        stable_launch_proven
+    )
+    packet["quick_start_stable_custom_launch_final_status"] = (
+        "QUICK_START_STABLE_CUSTOM_LAUNCH_WITH_PROFILE_REUSE_PROVEN_WITH_LIMITS"
+        if stable_launch_proven
+        else "KNOWN_BLOCKER_CUSTOM_LAUNCH_PROFILE_OR_ROUTE_NOT_PROVEN"
+    )
+
+
+def _external_route_record_for_model(
+    packet: dict[str, Any] | None,
+    model_id: str,
+) -> dict[str, Any]:
+    for route in _enabled_external_route_records(packet):
+        if str(route.get("route_id") or "").strip() == str(model_id or "").strip():
+            return route
+    return {}
+
+
+def _add_custom_codex_window_launch_trace_context(
+    packet: dict[str, Any],
+    *,
+    route_record: dict[str, Any],
+) -> None:
+    selected_model = str(packet.get("selected_model") or "")
+    captured_at = str(packet.get("captured_at_utc") or utc_now())
+    bridge_endpoint = str(packet.get("configured_bridge_endpoint") or "")
+    route_digest = _safe_route_digest(route_record) if route_record else ""
+    launch_seed = {
+        "captured_at_utc": captured_at,
+        "selected_model": selected_model,
+        "bridge_endpoint_configured": bool(bridge_endpoint),
+        "route_digest": route_digest,
+    }
+    launch_id = hashlib.sha256(
+        json.dumps(launch_seed, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:24]
+    trace_id = hashlib.sha256(f"trace:{launch_id}".encode("utf-8")).hexdigest()[:24]
+    packet["launch_id"] = launch_id
+    packet["trace_id"] = trace_id
+    packet["launch_route_digest"] = route_digest
+    packet["launch_trace_server_issued"] = True
+    packet["browser_trace_authority"] = False
+    packet["prompt_route_trace_claimed"] = False
+
+
+def _add_custom_codex_window_deepseek_smoke_truth(packet: dict[str, Any]) -> None:
+    execution_mode = str(packet.get("execution_mode") or "")
+    selected_model = str(packet.get("selected_model") or "")
+    api_model_id = str(packet.get("api_model_id") or "")
+    deepseek_api_only_selected = (
+        execution_mode == "api_only"
+        and selected_model.startswith("wbp-deepseek-")
+        and (not api_model_id or api_model_id == selected_model)
+        and packet.get("external_route_selected") is True
+    )
+    window_launch_proven = bool(
+        deepseek_api_only_selected
+        and packet.get("status") == "ok"
+        and packet.get("process_started") is True
+        and packet.get("expected_custom_identity_observed") is True
+        and packet.get("native_window_observed") is True
+        and packet.get("real_codex_app_launched") is True
+        and packet.get("route_packet_matches_selection_packet") is True
+        and packet.get("quick_start_launch_route_truth_proven_with_limits") is True
+        and packet.get("fallback_used") is False
+        and packet.get("api_only_calls_chatgpt") is False
+        and packet.get("raw_backend_details_exposed") is False
+        and packet.get("secret_value_exposed") is False
+        and packet.get("original_codex_touched") is False
+        and packet.get("asar_touched") is False
+    )
+    packet["custom_codex_window_deepseek_launch_proven_with_limits"] = window_launch_proven
+    packet["manual_prompt_smoke_attempted"] = False
+    packet["manual_prompt_smoke_proven"] = False
+    packet["manual_prompt_smoke_counts_as_model_truth"] = False
+    packet["manual_prompt_smoke_blocked_reason"] = (
+        "manual_native_window_prompt_not_automated"
+        if window_launch_proven
+        else "window_launch_not_proven"
+    )
+    packet["model_self_report_counts_as_runtime_truth"] = False
+    packet["deepseek_window_prompt_runtime_truth_proven"] = False
+    packet["history_persistence_claimed"] = False
+    packet["visible_thread_history_restored_claimed"] = False
+    packet["custom_codex_window_deepseek_smoke_final_status"] = (
+        "CUSTOM_CODEX_WINDOW_DEEPSEEK_LAUNCH_PROVEN_PROMPT_SMOKE_BLOCKED_WITH_LIMITS"
+        if window_launch_proven
+        else "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_DEEPSEEK_SMOKE"
+    )
+
+
+def build_custom_codex_window_prompt_trace_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_window_deepseek_prompt_trace",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "browser_trace_authority": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_prompt_recorded": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    launch_proven = (
+        launch.get("custom_codex_window_deepseek_launch_proven_with_limits") is True
+        and launch.get("status") == "ok"
+        and launch.get("native_window_observed") is True
+        and launch.get("real_codex_app_launched") is True
+    )
+    selected_model = str(launch.get("selected_model") or "")
+    api_reasoning_option_id = str(launch.get("api_reasoning_option_id") or "")
+    launch_id = str(launch.get("launch_id") or "")
+    trace_id = str(launch.get("trace_id") or "")
+    route_digest_matches = record.get("route_digest_matches_launch") is True
+    request_seen = record.get("request_seen_after_launch") is True
+    provider_called = record.get("provider_called") is True
+    provider_id = str(record.get("provider_id") or "")
+    upstream_model = str(record.get("upstream_model") or "")
+    prompt_trace_proven = bool(
+        launch_proven
+        and request_seen
+        and route_digest_matches
+        and provider_called
+        and provider_id == "deepseek"
+        and upstream_model == "deepseek-v4-pro"
+        and str(record.get("selected_model") or "") == selected_model
+        and selected_model == "wbp-deepseek-v4-pro-max"
+        and str(record.get("api_reasoning_option_id") or "") == api_reasoning_option_id
+        and api_reasoning_option_id == "provider_declared_max"
+        and record.get("known_smoke_phrase_matched") is True
+        and record.get("response_seen") is True
+        and record.get("chatgpt_route_used") is False
+        and record.get("api_only_calls_chatgpt") is False
+        and record.get("fallback_used") is False
+        and record.get("raw_backend_details_exposed") is False
+        and record.get("secret_value_exposed") is False
+        and launch.get("original_codex_touched") is False
+        and launch.get("asar_touched") is False
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_window_deepseek_prompt_trace",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if prompt_trace_proven else "blocked",
+        "machine_error_code": "OK" if prompt_trace_proven else "WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN",
+        "final_status": (
+            "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
+            if prompt_trace_proven
+            else "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
+        ),
+        "window_launch_proven_with_limits": launch_proven,
+        "launch_id": launch_id,
+        "trace_id": trace_id,
+        "trace_server_issued": bool(launch_id and trace_id),
+        "browser_trace_authority": False,
+        "request_seen_after_launch": request_seen,
+        "request_count": int(trace.get("request_count") or 0),
+        "path": str(record.get("path") or ""),
+        "selected_model": selected_model,
+        "requested_model": str(record.get("requested_model") or ""),
+        "effective_route_model": str(record.get("effective_route_model") or ""),
+        "forced_route_used": record.get("forced_route_used") is True,
+        "provider_called": provider_called,
+        "provider_id": provider_id,
+        "upstream_model": upstream_model,
+        "api_reasoning_option_id": api_reasoning_option_id,
+        "launch_route_digest": str(launch.get("launch_route_digest") or ""),
+        "trace_route_digest": str(record.get("route_digest") or ""),
+        "route_digest_matches_launch": route_digest_matches,
+        "prompt_hash": str(record.get("prompt_hash") or ""),
+        "known_smoke_phrase_matched": record.get("known_smoke_phrase_matched") is True,
+        "response_seen": record.get("response_seen") is True,
+        "upstream_status": int(record.get("upstream_status") or 0),
+        "response_body_sha256": str(record.get("response_body_sha256") or ""),
+        "chatgpt_route_used": record.get("chatgpt_route_used") is True,
+        "api_only_calls_chatgpt": record.get("api_only_calls_chatgpt") is True,
+        "fallback_used": record.get("fallback_used") is True,
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "response_text_counts_as_model_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "original_codex_touched": launch.get("original_codex_touched") is True,
+        "asar_touched": launch.get("asar_touched") is True,
+        "history_persistence_claimed": False,
+        "live_coding_claimed": False,
+        "next_action": (
+            "none"
+            if prompt_trace_proven
+            else "send_window_smoke_prompt_and_refresh_trace_packet"
+        ),
+    }
+
+
+def build_custom_codex_window_input_route_trace_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_window_input_route_trace",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "browser_trace_authority": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_prompt_recorded": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    route_packet = build_custom_codex_window_prompt_trace_packet(
+        last_launch_packet=launch,
+        bridge_trace_packet=bridge_trace_packet,
+    )
+    window_bounds = (
+        launch.get("custom_window_bounds")
+        if isinstance(launch.get("custom_window_bounds"), dict)
+        else {}
+    )
+    window_prompt_seen = route_packet.get("request_seen_after_launch") is True
+    input_surface_observed = (
+        launch.get("native_window_observed") is True
+        or launch.get("custom_window_observed") is True
+        or launch.get("custom_window_visible") is True
+    )
+    input_proven = bool(
+        route_packet.get("window_launch_proven_with_limits") is True
+        and window_prompt_seen
+        and bool(str(route_packet.get("prompt_hash") or ""))
+    )
+    route_trace_proven = (
+        route_packet.get("final_status")
+        == "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
+    )
+    full_success = input_proven and route_trace_proven
+    if not input_proven:
+        next_action = "send_window_prompt_and_refresh_trace_packet"
+    elif not route_trace_proven:
+        next_action = "repair_route_trace_or_refresh_deepseek_trace_packet"
+    else:
+        next_action = "none"
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_window_input_route_trace",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if full_success else "blocked",
+        "machine_error_code": "OK" if full_success else "CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN",
+        "final_status": (
+            "CUSTOM_CODEX_INPUT_AND_DEEPSEEK_ROUTE_PROVEN_WITH_LIMITS"
+            if full_success
+            else "KNOWN_BLOCKER_CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN"
+        ),
+        "launch_id": str(route_packet.get("launch_id") or ""),
+        "trace_id": str(route_packet.get("trace_id") or ""),
+        "trace_server_issued": route_packet.get("trace_server_issued") is True,
+        "browser_trace_authority": False,
+        "input_surface_observed": input_surface_observed,
+        "input_surface_method": (
+            "window_prompt_trace"
+            if input_proven
+            else str(launch.get("native_app_usability_source") or "")
+        ),
+        "input_surface_bounds": window_bounds,
+        "input_focus_attempted": launch.get("window_focus_action_attempted") is True,
+        "input_focus_succeeded": launch.get("window_focus_action_succeeded") is True,
+        "input_text_insert_attempted": False,
+        "input_text_insert_succeeded": False,
+        "send_attempted": window_prompt_seen,
+        "send_succeeded": input_proven,
+        "input_proven": input_proven,
+        "window_prompt_seen": window_prompt_seen,
+        "route_trace_proven": route_trace_proven,
+        "provider_called": route_packet.get("provider_called") is True,
+        "provider_id": str(route_packet.get("provider_id") or ""),
+        "selected_model": str(route_packet.get("selected_model") or ""),
+        "upstream_model": str(route_packet.get("upstream_model") or ""),
+        "execution_mode": str(launch.get("execution_mode") or ""),
+        "api_reasoning_option_id": str(route_packet.get("api_reasoning_option_id") or ""),
+        "route_digest_matches_launch": route_packet.get("route_digest_matches_launch") is True,
+        "known_smoke_phrase_matched": route_packet.get("known_smoke_phrase_matched") is True,
+        "response_seen": route_packet.get("response_seen") is True,
+        "fallback_used": route_packet.get("fallback_used") is True,
+        "chatgpt_route_used": route_packet.get("chatgpt_route_used") is True,
+        "api_only_calls_chatgpt": route_packet.get("api_only_calls_chatgpt") is True,
+        "chatgpt_only_calls_api": launch.get("chatgpt_only_calls_api") is True,
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "response_text_counts_as_model_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "original_codex_touched": launch.get("original_codex_touched") is True,
+        "asar_touched": launch.get("asar_touched") is True,
+        "history_persistence_claimed": False,
+        "live_coding_claimed": False,
+        "route_trace_packet": route_packet,
+        "next_action": next_action,
+    }
+
+
+def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any],
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_window_prompt_trace_fields(browser_payload)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+            "forbidden_fields": forbidden,
+            "browser_trace_authority": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_prompt_recorded": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    records = [
+        record
+        for record in trace.get("records") or []
+        if isinstance(record, dict)
+    ]
+    last_record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    if last_record and last_record not in records:
+        records.append(last_record)
+    execution_packet = (
+        launch.get("execution_mode_packet")
+        if isinstance(launch.get("execution_mode_packet"), dict)
+        else {}
+    )
+    primary_slot = (
+        launch.get("primary_model_slot")
+        if isinstance(launch.get("primary_model_slot"), dict)
+        else execution_packet.get("primary_model_slot")
+        if isinstance(execution_packet.get("primary_model_slot"), dict)
+        else {}
+    )
+    coding_slot = (
+        launch.get("coding_agent_model_slot")
+        if isinstance(launch.get("coding_agent_model_slot"), dict)
+        else execution_packet.get("coding_agent_model_slot")
+        if isinstance(execution_packet.get("coding_agent_model_slot"), dict)
+        else {}
+    )
+    execution_mode = str(launch.get("execution_mode") or execution_packet.get("execution_mode") or "")
+    primary_model_id = str(primary_slot.get("model_id") or "")
+    coding_model_id = str(coding_slot.get("model_id") or "")
+    launch_id = str(launch.get("launch_id") or "")
+    trace_id = str(launch.get("trace_id") or "")
+
+    def record_matches_launch(record: dict[str, Any]) -> bool:
+        record_launch_id = str(record.get("launch_packet_id") or record.get("launch_id") or "")
+        record_trace_id = str(record.get("trace_id") or "")
+        return bool(launch_id and trace_id and record_launch_id == launch_id and record_trace_id == trace_id)
+
+    launch_proven = (
+        launch.get("status") == "ok"
+        and launch.get("native_window_observed") is True
+        and launch.get("real_codex_app_launched") is True
+    )
+    slot_binding_proven = bool(
+        launch_proven
+        and execution_mode == "chatgpt_plus_api"
+        and primary_slot.get("status") == "bound"
+        and primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
+        and coding_slot.get("status") == "bound"
+        and coding_slot.get("lane") == API_ROUTE_MODEL_LANE
+        and str(coding_slot.get("provider") or "") == "deepseek"
+        and coding_model_id
+        and coding_slot.get("server_issued") is True
+        and launch.get("raw_backend_details_exposed") is not True
+        and launch.get("secret_value_exposed") is not True
+        and launch.get("original_codex_touched") is not True
+        and launch.get("asar_touched") is not True
+    )
+    prompt_record = next(
+        (
+            record
+            for record in reversed(records)
+            if record.get("request_seen_after_launch") is True
+            and record.get("path") == "/v1/responses"
+            and record_matches_launch(record)
+            and record.get("chatgpt_route_used") is True
+            and record.get("provider_called") is not True
+            and record.get("raw_prompt_recorded") is not True
+            and record.get("secret_value_recorded") is not True
+        ),
+        {},
+    )
+    deepseek_record = next(
+        (
+            record
+            for record in reversed(records)
+            if record.get("request_seen_after_launch") is True
+            and record.get("path") == "/v1/responses"
+            and record_matches_launch(record)
+            and record.get("provider_called") is True
+            and str(record.get("provider_id") or "") == "deepseek"
+            and str(record.get("effective_route_model") or record.get("requested_model") or "")
+            == coding_model_id
+            and record.get("fallback_used") is False
+            and record.get("chatgpt_route_used") is False
+        ),
+        {},
+    )
+    prompt_seen = bool(slot_binding_proven and prompt_record)
+    coder_dispatch_proven = bool(slot_binding_proven and deepseek_record)
+    fallback_seen = any(record.get("fallback_used") is True for record in records)
+    trace_launch_packet_matches = bool(
+        prompt_record
+        and deepseek_record
+        and record_matches_launch(prompt_record)
+        and record_matches_launch(deepseek_record)
+    )
+    trace_id_matches_launch = trace_launch_packet_matches
+    coder_work_result_proven = bool(
+        coder_dispatch_proven
+        and deepseek_record.get("response_seen") is True
+        and deepseek_record.get("known_smoke_phrase_matched") is True
+        and int(deepseek_record.get("upstream_status") or 0) == 200
+    )
+    full_success = bool(
+        prompt_seen
+        and coder_dispatch_proven
+        and coder_work_result_proven
+        and trace_launch_packet_matches
+        and not fallback_seen
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if full_success else "blocked",
+        "machine_error_code": (
+            "OK" if full_success else "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_CHATGPT_PLUS_DEEPSEEK_CODER_ROUTE_PROVEN_WITH_LIMITS"
+            if full_success
+            else "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
+        ),
+        "stage_statuses": {
+            "slot_binding": (
+                "CHATGPT_PLUS_API_SLOT_BINDING_PROVEN"
+                if slot_binding_proven
+                else "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
+            ),
+            "prompt_seen": (
+                "CHATGPT_PLUS_API_PROMPT_SEEN"
+                if prompt_seen
+                else "KNOWN_BLOCKER_CHATGPT_PLUS_API_PROMPT_NOT_SEEN"
+            ),
+            "coder_dispatch": (
+                "DEEPSEEK_CODER_SLOT_DISPATCH_PROVEN"
+                if coder_dispatch_proven
+                else "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
+            ),
+            "coder_work_result": (
+                "DEEPSEEK_CODER_WORK_RESULT_PROVEN_WITH_LIMITS"
+                if coder_work_result_proven
+                else "KNOWN_BLOCKER_DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
+            ),
+        },
+        "slot_binding_proven": slot_binding_proven,
+        "primary_slot_bound": primary_slot.get("status") == "bound",
+        "coding_slot_bound": coding_slot.get("status") == "bound",
+        "prompt_seen": prompt_seen,
+        "chatgpt_route_observed": bool(prompt_record),
+        "deepseek_route_observed": bool(deepseek_record),
+        "coder_dispatch_proven": coder_dispatch_proven,
+        "coder_work_result_proven_with_limits": coder_work_result_proven,
+        "launch_id": launch_id,
+        "trace_id": trace_id,
+        "trace_server_issued": bool(launch_id and trace_id),
+        "trace_launch_packet_matches": trace_launch_packet_matches,
+        "trace_id_matches_launch": trace_id_matches_launch,
+        "execution_mode": execution_mode,
+        "primary_model_slot": primary_slot,
+        "coding_agent_model_slot": coding_slot,
+        "primary_model_id": primary_model_id,
+        "coding_agent_model_id": coding_model_id,
+        "primary_provider": "chatgpt",
+        "coding_slot_provider": str(coding_slot.get("provider") or ""),
+        "coding_slot_model": coding_model_id,
+        "request_count": int(trace.get("request_count") or 0),
+        "chatgpt_prompt_record_seen": bool(prompt_record),
+        "chatgpt_requested_model": str(prompt_record.get("requested_model") or ""),
+        "deepseek_record_seen": bool(deepseek_record),
+        "deepseek_requested_model": str(deepseek_record.get("requested_model") or ""),
+        "deepseek_effective_route_model": str(deepseek_record.get("effective_route_model") or ""),
+        "provider_called": deepseek_record.get("provider_called") is True,
+        "provider_id": str(deepseek_record.get("provider_id") or ""),
+        "upstream_model": str(deepseek_record.get("upstream_model") or ""),
+        "upstream_status": int(deepseek_record.get("upstream_status") or 0),
+        "known_smoke_phrase_matched": deepseek_record.get("known_smoke_phrase_matched") is True,
+        "fallback_used": fallback_seen,
+        "api_only_mode": execution_mode == "api_only",
+        "chatgpt_replaced_by_api": False,
+        "browser_trace_authority": False,
+        "raw_prompt_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "response_text_counts_as_model_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "wbp_patch_applier_used": False,
+        "live_file_mutation_claimed": False,
+        "next_action": (
+            "none"
+            if full_success
+            else "confirm_runtime_can_dispatch_coding_agent_model_slot"
+        ),
+    }
+
+
+def _forbidden_quick_start_mixed_mode_code_edit_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    if payload in (None, {}, ""):
+        return []
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in QUICK_START_MIXED_MODE_CODE_EDIT_ALLOWED_BROWSER_FIELDS:
+                findings.append(key_path)
+            if isinstance(value, (dict, list)):
+                findings.extend(
+                    _forbidden_quick_start_mixed_mode_code_edit_fields(value, key_path)
+                )
+        return sorted(dict.fromkeys(findings))
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_quick_start_mixed_mode_code_edit_fields(
+                    value,
+                    f"{prefix}[{index}]",
+                )
+            )
+    return sorted(dict.fromkeys(findings))
+
+
+def build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+    repo_root: Path = ROOT,
+    expected_file: str = MIXED_MODE_CODE_EDIT_PROBE_FILE,
+    expected_text: str = MIXED_MODE_CODE_EDIT_EXPECTED_TEXT,
+) -> dict[str, Any]:
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    forbidden = _forbidden_quick_start_mixed_mode_code_edit_fields(browser_payload)
+    base = {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_chatgpt_plus_deepseek_file_edit",
+        "captured_at_utc": utc_now(),
+        "expected_file": expected_file,
+        "expected_content_sha256": hashlib.sha256(
+            expected_text.encode("utf-8")
+        ).hexdigest(),
+        "manual_prompt_required": (
+            "Сначала сам составь короткий план.\n"
+            "Кодовую часть выполни через API-кодера DeepSeek.\n"
+            f"Создай файл {expected_file} и запиши туда ровно:\n"
+            f"{expected_text}\n\n"
+            "Больше ничего в репозитории не меняй."
+        ),
+        "browser_raw_backend_authority_widened": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "chatgpt_patch_applier_used": False,
+        "wbp_patch_applier_used": False,
+        "commit_attempted": False,
+        "push_attempted": False,
+        "merge_attempted": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "KNOWN_BLOCKER_CHATGPT_PLUS_DEEPSEEK_FILE_EDIT_NOT_PROVEN",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_forbidden_browser_payload_fields",
+        }
+
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    route_packet = build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+        last_launch_packet=launch,
+        bridge_trace_packet=bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {},
+        browser_payload=None,
+    )
+    profile_root_value = str(launch.get("persistent_profile_root") or "")
+    profile_root = Path(profile_root_value).expanduser() if profile_root_value else Path()
+    thread = _latest_custom_codex_thread(profile_root) if profile_root_value else {}
+    thread_id = str(thread.get("id") or "")
+    thread_cwd = str(thread.get("cwd") or "")
+    thread_provider = str(thread.get("model_provider") or "")
+    coding_model_id = str(route_packet.get("coding_slot_model") or "")
+    log_evidence = (
+        _custom_codex_log_evidence(
+            profile_root,
+            thread_id=thread_id,
+            selected_model=coding_model_id,
+            repo_root=repo_root,
+            probe_file=expected_file,
+        )
+        if profile_root_value
+        else {}
+    )
+    file_path = repo_root / expected_file
+    try:
+        file_content = file_path.read_text(encoding="utf-8")
+        file_created = True
+    except OSError:
+        file_content = ""
+        file_created = False
+    file_content_exact = file_content == expected_text
+    git_probe = _git_probe_file_status(repo_root, expected_file)
+    fallback_used = route_packet.get("fallback_used") is True or bool(
+        log_evidence.get("fallback_used_seen")
+    )
+    success = bool(
+        route_packet.get("status") == "ok"
+        and route_packet.get("execution_mode") == "chatgpt_plus_api"
+        and route_packet.get("coding_slot_provider") == "deepseek"
+        and route_packet.get("deepseek_route_observed") is True
+        and thread_cwd == str(repo_root)
+        and thread_provider == "wbp"
+        and file_created
+        and file_content_exact
+        and log_evidence.get("tool_call_seen") is True
+        and log_evidence.get("tool_result_success") is True
+        and log_evidence.get("model_seen") is True
+        and log_evidence.get("cwd_seen") is True
+        and not fallback_used
+        and launch.get("original_codex_touched") is False
+        and launch.get("asar_touched") is False
+    )
+    return {
+        **base,
+        "status": "ok" if success else "blocked",
+        "machine_error_code": (
+            "OK" if success else "CHATGPT_PLUS_DEEPSEEK_FILE_EDIT_NOT_PROVEN"
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_CHATGPT_PLUS_DEEPSEEK_CODING_SLOT_FILE_EDIT_PROVEN_WITH_LIMITS"
+            if success
+            else "KNOWN_BLOCKER_CHATGPT_PLUS_DEEPSEEK_FILE_EDIT_NOT_PROVEN"
+        ),
+        "execution_mode": str(route_packet.get("execution_mode") or ""),
+        "chatgpt_model_id": str(payload.get("chatgpt_model_id") or ""),
+        "api_model_id": str(payload.get("api_model_id") or ""),
+        "api_reasoning_option_id": str(
+            payload.get("api_reasoning_option_id")
+            or route_packet.get("api_reasoning_option_id")
+            or ""
+        ),
+        "launch_id": str(route_packet.get("launch_id") or ""),
+        "trace_id": str(route_packet.get("trace_id") or ""),
+        "trace_launch_packet_matches": route_packet.get("trace_launch_packet_matches") is True,
+        "trace_id_matches_launch": route_packet.get("trace_id_matches_launch") is True,
+        "mixed_route_trace_packet": route_packet,
+        "coding_slot_provider": str(route_packet.get("coding_slot_provider") or ""),
+        "coding_slot_model": coding_model_id,
+        "file_created": file_created,
+        "file_content_exact": file_content_exact,
+        "file_content_sha256": hashlib.sha256(file_content.encode("utf-8")).hexdigest(),
+        "file_path": str(file_path),
+        "file_path_relative": expected_file,
+        "probe_file_ignored_by_git": git_probe["probe_file_ignored_by_git"],
+        "probe_file_visible_to_git_status": git_probe["probe_file_visible_to_git_status"],
+        "git_diff_name_status_only_expected": git_probe["git_diff_name_status_only_expected"],
+        "git_status_short_for_probe_file": git_probe["git_status_short_for_probe_file"],
+        "cwd": thread_cwd,
+        "thread_id": thread_id,
+        "thread_model_provider": thread_provider,
+        "log_evidence": log_evidence,
+        "fallback_used": fallback_used,
+        "chatgpt_patch_applier_used": False,
+        "wbp_patch_applier_used": False,
+        "response_text_counts_as_model_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "next_action": (
+            "none"
+            if success
+            else "enter_manual_prompt_then_refresh_mixed_mode_file_edit_proof"
+        ),
+    }
+
+
+def _forbidden_custom_window_prompt_trace_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    if payload in (None, {}, ""):
+        return []
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            findings.append(key_path)
+            if isinstance(value, (dict, list)):
+                findings.extend(_forbidden_custom_window_prompt_trace_fields(value, key_path))
+        return sorted(dict.fromkeys(findings))
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_custom_window_prompt_trace_fields(value, f"{prefix}[{index}]")
+            )
+    return sorted(dict.fromkeys(findings))
+
+
+def _forbidden_quick_start_deepseek_code_edit_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    if payload in (None, {}, ""):
+        return []
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in QUICK_START_DEEPSEEK_CODE_EDIT_ALLOWED_BROWSER_FIELDS:
+                findings.append(key_path)
+            if isinstance(value, (dict, list)):
+                findings.extend(
+                    _forbidden_quick_start_deepseek_code_edit_fields(value, key_path)
+                )
+        return sorted(dict.fromkeys(findings))
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_quick_start_deepseek_code_edit_fields(
+                    value,
+                    f"{prefix}[{index}]",
+                )
+            )
+    return sorted(dict.fromkeys(findings))
+
+
+def _latest_custom_codex_thread(profile_root: Path) -> dict[str, Any]:
+    state_dbs = sorted(profile_root.glob("state*.sqlite"))
+    latest: dict[str, Any] = {}
+    for db_path in state_dbs:
+        try:
+            with sqlite3.connect(db_path) as connection:
+                connection.row_factory = sqlite3.Row
+                tables = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "select name from sqlite_master where type='table'"
+                    )
+                }
+                if "threads" not in tables:
+                    continue
+                row = connection.execute(
+                    "select * from threads order by updated_at desc, created_at desc limit 1"
+                ).fetchone()
+                if row is None:
+                    continue
+                candidate = dict(row)
+                candidate["state_db"] = str(db_path)
+                if not latest or int(candidate.get("updated_at") or 0) >= int(
+                    latest.get("updated_at") or 0
+                ):
+                    latest = candidate
+        except (OSError, sqlite3.Error):
+            continue
+    return latest
+
+
+def _custom_codex_log_evidence(
+    profile_root: Path,
+    *,
+    thread_id: str,
+    selected_model: str,
+    repo_root: Path,
+    probe_file: str = DEEPSEEK_CODE_EDIT_PROBE_FILE,
+) -> dict[str, Any]:
+    evidence = {
+        "log_db_seen": False,
+        "session_jsonl_seen": False,
+        "tool_call_seen": False,
+        "tool_result_success": False,
+        "model_seen": False,
+        "cwd_seen": False,
+        "chatgpt_model_seen": False,
+        "fallback_used_seen": False,
+    }
+    if not thread_id:
+        return evidence
+    repo_root_text = str(repo_root)
+    for db_path in sorted(profile_root.glob("logs*.sqlite")):
+        try:
+            with sqlite3.connect(db_path) as connection:
+                connection.row_factory = sqlite3.Row
+                tables = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "select name from sqlite_master where type='table'"
+                    )
+                }
+                if "logs" not in tables:
+                    continue
+                evidence["log_db_seen"] = True
+                rows = connection.execute(
+                    "select feedback_log_body from logs where thread_id = ? order by id desc limit 250",
+                    (thread_id,),
+                ).fetchall()
+                for row in rows:
+                    body = str(row["feedback_log_body"] or "")
+                    if selected_model and f"model={selected_model}" in body:
+                        evidence["model_seen"] = True
+                    if repo_root_text and f"cwd={repo_root_text}" in body:
+                        evidence["cwd_seen"] = True
+                    if probe_file in body and "ToolCall: exec_command" in body:
+                        evidence["tool_call_seen"] = True
+                    if probe_file in body and "success=true" in body:
+                        evidence["tool_result_success"] = True
+                    if "fallback_used\": true" in body or "fallback_used=true" in body:
+                        evidence["fallback_used_seen"] = True
+                    if "model=gpt-" in body or "slug=gpt-" in body:
+                        evidence["chatgpt_model_seen"] = True
+        except (OSError, sqlite3.Error):
+            continue
+    sessions_dir = profile_root / "sessions"
+    try:
+        session_paths = sorted(
+            sessions_dir.rglob("*.jsonl"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )[:50]
+    except OSError:
+        session_paths = []
+    for session_path in session_paths:
+        try:
+            session_text = session_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if thread_id and thread_id not in session_text:
+            continue
+        evidence["session_jsonl_seen"] = True
+        pending_probe_tool_call = False
+        for line in session_text.splitlines():
+            if selected_model and selected_model in line:
+                evidence["model_seen"] = True
+            if repo_root_text and repo_root_text in line:
+                evidence["cwd_seen"] = True
+            if probe_file in line and (
+                '"name":"exec_command"' in line
+                or '"name": "exec_command"' in line
+                or "ToolCall: exec_command" in line
+            ):
+                evidence["tool_call_seen"] = True
+                pending_probe_tool_call = True
+            if pending_probe_tool_call and "function_call_output" in line:
+                if "Process exited with code 0" in line:
+                    evidence["tool_result_success"] = True
+                pending_probe_tool_call = False
+            if "fallback_used\": true" in line or "fallback_used=true" in line:
+                evidence["fallback_used_seen"] = True
+            if "model=gpt-" in line or '"model":"gpt-' in line or '"model": "gpt-' in line:
+                evidence["chatgpt_model_seen"] = True
+    return evidence
+
+
+def _git_probe_file_status(repo_root: Path, expected_file: str) -> dict[str, Any]:
+    status = {
+        "git_probe_attempted": False,
+        "probe_file_ignored_by_git": False,
+        "probe_file_visible_to_git_status": False,
+        "git_diff_name_status_only_expected": False,
+        "git_status_short_for_probe_file": "",
+    }
+    git_dir = repo_root / ".git"
+    if not git_dir.exists():
+        return status
+    status["git_probe_attempted"] = True
+    try:
+        ignored = subprocess.run(
+            ["git", "check-ignore", "-q", "--", expected_file],
+            cwd=str(repo_root),
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+        status["probe_file_ignored_by_git"] = ignored.returncode == 0
+        visible = subprocess.run(
+            ["git", "status", "--short", "--", expected_file],
+            cwd=str(repo_root),
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+        probe_status = visible.stdout.strip() if visible.returncode == 0 else ""
+        status["git_status_short_for_probe_file"] = probe_status
+        status["probe_file_visible_to_git_status"] = bool(probe_status)
+        status["git_diff_name_status_only_expected"] = (
+            status["probe_file_ignored_by_git"] is True
+            and status["probe_file_visible_to_git_status"] is False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return status
+    return status
+
+
+def build_custom_codex_deepseek_code_edit_reproduction_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+    repo_root: Path = ROOT,
+    expected_file: str = DEEPSEEK_CODE_EDIT_PROBE_FILE,
+    expected_text: str = DEEPSEEK_CODE_EDIT_EXPECTED_TEXT,
+    packet_kind: str = "custom_codex_deepseek_code_edit_reproduction",
+    quick_start_button_id: str = "quickStartDeepSeekCodeEditProofAction",
+    ok_final_status: str = "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS",
+    blocked_final_status: str = "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
+    blocked_machine_error_code: str = "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_NOT_PROVEN",
+) -> dict[str, Any]:
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    forbidden = _forbidden_quick_start_deepseek_code_edit_fields(browser_payload)
+    base = {
+        "schema_version": 1,
+        "packet_kind": packet_kind,
+        "captured_at_utc": utc_now(),
+        "quick_start_button_id": quick_start_button_id,
+        "expected_file": expected_file,
+        "expected_content_sha256": hashlib.sha256(
+            expected_text.encode("utf-8")
+        ).hexdigest(),
+        "manual_prompt_required": (
+            f"Создай файл {expected_file} и запиши туда ровно:\n"
+            f"{expected_text}\n\n"
+            "Больше ничего в репозитории не меняй."
+        ),
+        "browser_raw_backend_authority_widened": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "wbp_patch_applier_used": False,
+        "commit_attempted": False,
+        "push_attempted": False,
+        "merge_attempted": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": blocked_final_status,
+            "forbidden_fields": forbidden,
+            "next_action": "remove_forbidden_browser_payload_fields",
+        }
+
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
+    record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    selected_model = str(launch.get("selected_model") or payload.get("api_model_id") or "")
+    execution_mode = str(launch.get("execution_mode") or payload.get("execution_mode") or "")
+    api_reasoning_option_id = str(
+        launch.get("api_reasoning_option_id") or payload.get("api_reasoning_option_id") or ""
+    )
+    profile_root_value = str(launch.get("persistent_profile_root") or "")
+    profile_root = Path(profile_root_value).expanduser() if profile_root_value else Path()
+    thread = _latest_custom_codex_thread(profile_root) if profile_root_value else {}
+    thread_id = str(thread.get("id") or "")
+    thread_cwd = str(thread.get("cwd") or "")
+    thread_model = str(thread.get("model") or "")
+    thread_provider = str(thread.get("model_provider") or "")
+    log_evidence = (
+        _custom_codex_log_evidence(
+            profile_root,
+            thread_id=thread_id,
+            selected_model=selected_model,
+            repo_root=repo_root,
+            probe_file=expected_file,
+        )
+        if profile_root_value
+        else {}
+    )
+    file_path = repo_root / expected_file
+    try:
+        file_content = file_path.read_text(encoding="utf-8")
+        file_created = True
+    except OSError:
+        file_content = ""
+        file_created = False
+    file_content_exact = file_content == expected_text
+    file_content_sha256 = hashlib.sha256(file_content.encode("utf-8")).hexdigest()
+    route_digest_matches = record.get("route_digest_matches_launch") is True
+    launch_id = str(launch.get("launch_id") or "")
+    trace_id = str(launch.get("trace_id") or "")
+    record_launch_id = str(record.get("launch_packet_id") or record.get("launch_id") or "")
+    record_trace_id = str(record.get("trace_id") or "")
+    trace_launch_packet_matches = bool(launch_id and record_launch_id == launch_id)
+    trace_id_matches_launch = bool(trace_id and record_trace_id == trace_id)
+    provider_called = record.get("provider_called") is True
+    provider_id = str(record.get("provider_id") or "")
+    upstream_model = str(record.get("upstream_model") or "")
+    request_seen = record.get("request_seen_after_launch") is True
+    response_seen = record.get("response_seen") is True
+    forced_route_used = record.get("forced_route_used") is True
+    forced_route_counts_as_fallback = False
+    git_probe = _git_probe_file_status(repo_root, expected_file)
+    fallback_used = record.get("fallback_used") is True or bool(
+        log_evidence.get("fallback_used_seen")
+    )
+    chatgpt_called = record.get("chatgpt_route_used") is True or bool(
+        log_evidence.get("chatgpt_model_seen")
+    )
+    launch_alive_enough = (
+        launch.get("status") == "ok"
+        and launch.get("custom_codex_window_deepseek_launch_proven_with_limits") is True
+        and launch.get("real_codex_app_launched") is True
+    )
+    success = bool(
+        launch_alive_enough
+        and execution_mode == "api_only"
+        and selected_model == "wbp-deepseek-v4-pro-max"
+        and thread_cwd == str(repo_root)
+        and thread_model == selected_model
+        and thread_provider == "wbp"
+        and file_created
+        and file_content_exact
+        and log_evidence.get("tool_call_seen") is True
+        and log_evidence.get("tool_result_success") is True
+        and log_evidence.get("model_seen") is True
+        and log_evidence.get("cwd_seen") is True
+        and provider_called
+        and provider_id == "deepseek"
+        and upstream_model == "deepseek-v4-pro"
+        and request_seen
+        and response_seen
+        and route_digest_matches
+        and trace_launch_packet_matches
+        and trace_id_matches_launch
+        and not chatgpt_called
+        and not fallback_used
+        and launch.get("original_codex_touched") is False
+        and launch.get("asar_touched") is False
+    )
+    return {
+        **base,
+        "status": "ok" if success else "blocked",
+        "machine_error_code": (
+            "OK"
+            if success
+            else blocked_machine_error_code
+        ),
+        "final_status": (
+            ok_final_status
+            if success
+            else blocked_final_status
+        ),
+        "execution_mode": execution_mode,
+        "selected_model": selected_model,
+        "api_model_id": str(payload.get("api_model_id") or ""),
+        "api_reasoning_option_id": api_reasoning_option_id,
+        "cwd": thread_cwd,
+        "repo_root": str(repo_root),
+        "thread_id": thread_id,
+        "thread_model": thread_model,
+        "thread_model_provider": thread_provider,
+        "window_launch_proven_with_limits": launch_alive_enough,
+        "file_created": file_created,
+        "file_content_exact": file_content_exact,
+        "file_content_sha256": file_content_sha256,
+        "file_path": str(file_path),
+        "file_path_relative": expected_file,
+        "probe_file_ignored_by_git": git_probe["probe_file_ignored_by_git"],
+        "probe_file_visible_to_git_status": git_probe["probe_file_visible_to_git_status"],
+        "git_diff_name_status_only_expected": git_probe["git_diff_name_status_only_expected"],
+        "git_status_short_for_probe_file": git_probe["git_status_short_for_probe_file"],
+        "provider_called": provider_called,
+        "provider_id": provider_id,
+        "upstream_model": upstream_model,
+        "request_seen_after_launch": request_seen,
+        "response_seen": response_seen,
+        "route_digest_matches_launch": route_digest_matches,
+        "launch_id": launch_id,
+        "trace_id": trace_id,
+        "trace_server_issued": bool(launch_id and trace_id),
+        "trace_launch_packet_matches": trace_launch_packet_matches,
+        "trace_id_matches_launch": trace_id_matches_launch,
+        "forced_route_used": forced_route_used,
+        "forced_route_counts_as_fallback": forced_route_counts_as_fallback,
+        "chatgpt_called": chatgpt_called,
+        "api_only_calls_chatgpt": chatgpt_called,
+        "fallback_used": fallback_used,
+        "log_evidence": log_evidence,
+        "profile_path_exposed": False,
+        "raw_prompt_recorded": False,
+        "response_text_counts_as_model_truth": False,
+        "model_self_report_counts_as_runtime_truth": False,
+        "next_action": (
+            "none"
+            if success
+            else "enter_manual_prompt_then_refresh_deepseek_code_edit_proof"
+        ),
+        "small_real_edit_probe_supported": True,
+    }
+
+
+def build_custom_codex_deepseek_route_bound_real_edit_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    bridge_trace_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+    repo_root: Path = ROOT,
+) -> dict[str, Any]:
+    return build_custom_codex_deepseek_code_edit_reproduction_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=bridge_trace_packet,
+        browser_payload=browser_payload,
+        repo_root=repo_root,
+        expected_file=DEEPSEEK_ROUTE_BOUND_EDIT_PROBE_FILE,
+        expected_text=DEEPSEEK_ROUTE_BOUND_EDIT_EXPECTED_TEXT,
+        packet_kind="custom_codex_deepseek_route_bound_real_edit",
+        quick_start_button_id="quickStartDeepSeekRouteBoundEditProofAction",
+        ok_final_status="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_PROVEN_WITH_LIMITS",
+        blocked_final_status="KNOWN_BLOCKER_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
+        blocked_machine_error_code="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
+    )
+
+
+def _forbidden_visible_history_owner_confirmation_fields(
+    payload: Any,
+    prefix: str = "",
+    allowed_fields: frozenset[str] = VISIBLE_HISTORY_ALLOWED_OWNER_FIELDS,
+) -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in allowed_fields:
+                findings.append(key_path)
+            findings.extend(
+                _forbidden_visible_history_owner_confirmation_fields(
+                    value,
+                    key_path,
+                    allowed_fields=allowed_fields,
+                )
+            )
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_visible_history_owner_confirmation_fields(
+                    value,
+                    f"{prefix}[{index}]",
+                    allowed_fields=allowed_fields,
+                )
+            )
+    return findings
+
+
+def _visible_history_session_storage_summary(
+    last_launch_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(last_launch_packet, dict):
+        return {
+            "session_storage_probe_attempted": False,
+            "session_storage_observed": False,
+            "session_file_content_read": False,
+        }
+    profile_root_value = last_launch_packet.get("persistent_profile_root")
+    if not isinstance(profile_root_value, str) or not profile_root_value.strip():
+        return {
+            "session_storage_probe_attempted": False,
+            "session_storage_observed": False,
+            "session_file_content_read": False,
+        }
+    profile_root = Path(profile_root_value).expanduser()
+    if not profile_root.exists():
+        return {
+            "session_storage_probe_attempted": True,
+            "session_storage_observed": False,
+            "session_file_content_read": False,
+        }
+    session_files = sorted(
+        (
+            path
+            for path in profile_root.rglob("*.jsonl")
+            if path.is_file() and "sessions" in {part.lower() for part in path.parts}
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if not session_files:
+        return {
+            "session_storage_probe_attempted": True,
+            "session_storage_observed": False,
+            "session_file_content_read": False,
+        }
+    latest = session_files[0]
+    stat = latest.stat()
+    return {
+        "session_storage_probe_attempted": True,
+        "session_storage_observed": True,
+        "latest_session_file_relative": str(latest.relative_to(profile_root)),
+        "latest_session_file_size_bytes": stat.st_size,
+        "latest_session_file_mtime_utc": datetime.fromtimestamp(
+            stat.st_mtime,
+            timezone.utc,
+        ).isoformat().replace("+00:00", "Z"),
+        "session_file_content_read": False,
+    }
+
+
+def _payload_first_text(payload: Any, key: str, default: str = "") -> str:
+    if not isinstance(payload, dict):
+        return default
+    value = payload.get(key)
+    if isinstance(value, list):
+        if not value:
+            return default
+        value = value[0]
+    text = str(value or "").strip()
+    return text if text else default
+
+
+def _forbidden_stable_profile_history_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    if payload in (None, {}, ""):
+        return []
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text not in STABLE_PROFILE_HISTORY_ALLOWED_BROWSER_FIELDS:
+                findings.append(key_path)
+            if isinstance(value, (dict, list)):
+                findings.extend(_forbidden_stable_profile_history_fields(value, key_path))
+        return sorted(dict.fromkeys(findings))
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(
+                _forbidden_stable_profile_history_fields(value, f"{prefix}[{index}]")
+            )
+    return sorted(dict.fromkeys(findings))
+
+
+def _stable_profile_history_storage_snapshot(
+    profile_root: Path | None,
+    *,
+    history_marker: str,
+) -> dict[str, Any]:
+    marker = str(history_marker or "")
+    marker_sha256 = hashlib.sha256(marker.encode("utf-8")).hexdigest() if marker else ""
+    snapshot: dict[str, Any] = {
+        "snapshot_captured_at_utc": utc_now(),
+        "profile_root_available": profile_root is not None,
+        "profile_root_exists": False,
+        "thread_count": 0,
+        "session_file_count": 0,
+        "log_record_count": 0,
+        "history_marker_sha256": marker_sha256,
+        "history_marker_seen": False,
+        "state_db_seen": False,
+        "log_db_seen": False,
+        "session_jsonl_seen": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "raw_profile_path_exposed": False,
+    }
+    if profile_root is None:
+        return snapshot
+    snapshot["profile_root_exists"] = profile_root.exists()
+    if not profile_root.exists():
+        return snapshot
+
+    try:
+        state_dbs = sorted(profile_root.glob("state*.sqlite"))
+    except OSError:
+        state_dbs = []
+    for db_path in state_dbs:
+        try:
+            with sqlite3.connect(db_path) as connection:
+                tables = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "select name from sqlite_master where type='table'"
+                    )
+                }
+                if "threads" in tables:
+                    snapshot["state_db_seen"] = True
+                    row = connection.execute("select count(*) from threads").fetchone()
+                    snapshot["thread_count"] = int(snapshot["thread_count"]) + int(row[0] or 0)
+                if "logs" in tables:
+                    snapshot["log_db_seen"] = True
+                    row = connection.execute("select count(*) from logs").fetchone()
+                    snapshot["log_record_count"] = int(snapshot["log_record_count"]) + int(row[0] or 0)
+                    if marker:
+                        for body_row in connection.execute(
+                            "select feedback_log_body from logs order by id desc limit 500"
+                        ):
+                            if marker in str(body_row[0] or ""):
+                                snapshot["history_marker_seen"] = True
+                                break
+        except (OSError, sqlite3.Error):
+            continue
+
+    sessions_dir = profile_root / "sessions"
+    try:
+        session_paths = sorted(sessions_dir.rglob("*.jsonl")) if sessions_dir.exists() else []
+    except OSError:
+        session_paths = []
+    snapshot["session_file_count"] = len(session_paths)
+    snapshot["session_jsonl_seen"] = bool(session_paths)
+    if marker and not snapshot["history_marker_seen"]:
+        for session_path in session_paths[-500:]:
+            try:
+                text = session_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if marker in text:
+                snapshot["history_marker_seen"] = True
+                break
+    return snapshot
+
+
+def build_custom_codex_persistent_profile_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_persistent_profile_fields(browser_payload)
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_persistent_profile",
+        "profile_final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN",
+        "session_storage_final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_SESSION_STORAGE_NOT_OBSERVED",
+        "profile_persistence_proven": False,
+        "session_storage_observed": False,
+        "visible_history_restore": "not_claimed",
+        "visible_thread_history_owner_confirmed": False,
+        "relaunch_continuity_proven": False,
+        "profile_relaunch_required_for_strong_history_claim": True,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "browser_client_path_authority": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "history_persistence_claimed": False,
+        "full_history_restoration_claimed": False,
+        "cloud_history_restoration_claimed": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not isinstance(last_launch_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_FRESH_LAUNCH_PACKET_REQUIRED",
+            "next_action": "launch_custom_codex_with_stable_profile",
+        }
+
+    profile_id = str(last_launch_packet.get("persistent_profile_id") or "")
+    profile_root_value = str(last_launch_packet.get("persistent_profile_root") or "")
+    codex_home_value = str(last_launch_packet.get("persistent_codex_home") or "")
+    user_data_value = str(last_launch_packet.get("persistent_user_data_dir") or "")
+    runtime_tmp_value = str(last_launch_packet.get("persistent_runtime_tmp_dir") or "")
+    profile_root = Path(profile_root_value).expanduser() if profile_root_value else None
+    codex_home = Path(codex_home_value).expanduser() if codex_home_value else None
+    user_data_dir = Path(user_data_value).expanduser() if user_data_value else None
+    runtime_tmp_dir = Path(runtime_tmp_value).expanduser() if runtime_tmp_value else None
+    persistent_root_tmp = _path_is_tmp(profile_root) if profile_root is not None else True
+    codex_home_tmp = _path_is_tmp(codex_home) if codex_home is not None else True
+    user_data_tmp = _path_is_tmp(user_data_dir) if user_data_dir is not None else True
+    profile_path_stable = bool(
+        profile_id == "wbp-custom-main"
+        and profile_root is not None
+        and codex_home is not None
+        and user_data_dir is not None
+        and not persistent_root_tmp
+        and not codex_home_tmp
+        and not user_data_tmp
+        and str(codex_home) == str(profile_root)
+        and str(user_data_dir).startswith(str(profile_root))
+    )
+    profile_persistence_proven = bool(
+        last_launch_packet.get("status") == "ok"
+        and last_launch_packet.get("profile_mode") == "persistent_custom"
+        and last_launch_packet.get("temp_profile_used") is False
+        and profile_path_stable
+        and last_launch_packet.get("cleanup_deletes_persistent_profile_by_default") is False
+        and str(last_launch_packet.get("cleanup_scope") or "")
+        == "runtime_tmp_only_or_deferred_running_process"
+        and last_launch_packet.get("original_codex_touched") is False
+        and last_launch_packet.get("asar_touched") is False
+        and last_launch_packet.get("original_codex_profile_runtime_dependency") is False
+    )
+    session_summary = _visible_history_session_storage_summary(last_launch_packet)
+    session_storage_observed = session_summary.get("session_storage_observed") is True
+    return {
+        **base,
+        **session_summary,
+        "status": "ok" if profile_persistence_proven else "blocked",
+        "machine_error_code": "OK" if profile_persistence_proven else "CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN",
+        "profile_final_status": (
+            "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS"
+            if profile_persistence_proven
+            else "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_PROFILE_NOT_PROVEN"
+        ),
+        "session_storage_final_status": (
+            "CUSTOM_CODEX_SESSION_STORAGE_OBSERVED_WITH_LIMITS"
+            if session_storage_observed
+            else "KNOWN_BLOCKER_CUSTOM_CODEX_SESSION_STORAGE_NOT_OBSERVED"
+        ),
+        "profile_persistence_proven": profile_persistence_proven,
+        "persistent_profile_id": profile_id,
+        "persistent_profile_reused": profile_persistence_proven,
+        "codex_home_reused": profile_persistence_proven,
+        "electron_user_data_reused": profile_persistence_proven,
+        "temp_profile_used": last_launch_packet.get("temp_profile_used") is True,
+        "profile_mode": str(last_launch_packet.get("profile_mode") or ""),
+        "profile_path_stable": profile_path_stable,
+        "persistent_profile_root_is_tmp": persistent_root_tmp,
+        "persistent_codex_home_is_tmp": codex_home_tmp,
+        "persistent_user_data_dir_is_tmp": user_data_tmp,
+        "persistent_runtime_tmp_dir_is_tmp": _path_is_tmp(runtime_tmp_dir)
+        if runtime_tmp_dir is not None
+        else False,
+        "persistent_profile_path_exposed": False,
+        "persistent_codex_home_exposed": False,
+        "persistent_user_data_dir_exposed": False,
+        "session_storage_observed": session_storage_observed,
+        "session_storage_path_stable": profile_path_stable,
+        "session_files_observed": session_storage_observed,
+        "cleanup_deletes_persistent_profile_by_default": last_launch_packet.get(
+            "cleanup_deletes_persistent_profile_by_default"
+        )
+        is True,
+        "cleanup_scope": str(last_launch_packet.get("cleanup_scope") or ""),
+        "persistent_history_delete_requires_explicit_owner_action": True,
+        "cleanup_target_is_persistent_profile_root": False,
+        "cleanup_scope_runtime_tmp_only_or_deferred": str(
+            last_launch_packet.get("cleanup_scope") or ""
+        )
+        == "runtime_tmp_only_or_deferred_running_process",
+        "original_codex_touched": last_launch_packet.get("original_codex_touched") is True,
+        "asar_touched": last_launch_packet.get("asar_touched") is True,
+        "original_codex_profile_runtime_dependency": last_launch_packet.get(
+            "original_codex_profile_runtime_dependency"
+        )
+        is True,
+        "next_action": (
+            "none"
+            if profile_persistence_proven and session_storage_observed
+            else "observe_session_storage_or_confirm_visible_history_separately"
+        ),
+    }
+
+
+def build_custom_codex_persistent_relaunch_profile_packet(
+    *,
+    first_launch_packet: dict[str, Any] | None,
+    second_launch_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_persistent_profile_fields(browser_payload)
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_persistent_relaunch_profile",
+        "final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_NOT_PROVEN",
+        "profile_relaunch_proven": False,
+        "same_persistent_profile_id": False,
+        "same_persistent_codex_home": False,
+        "same_user_data_dir": False,
+        "session_storage_survived_relaunch": False,
+        "cleanup_deleted_persistent_profile": False,
+        "cleanup_deletes_persistent_profile_by_default": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "visible_history_owner_confirmed": False,
+        "visible_history_restore_claimed": False,
+        "full_history_restoration_claimed": False,
+        "browser_client_path_authority": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not isinstance(first_launch_packet, dict) or not isinstance(second_launch_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "TWO_CUSTOM_CODEX_LAUNCH_PACKETS_REQUIRED",
+            "next_action": "launch_custom_codex_twice_with_stable_profile",
+        }
+
+    first_profile = build_custom_codex_persistent_profile_packet(
+        last_launch_packet=first_launch_packet,
+    )
+    second_profile = build_custom_codex_persistent_profile_packet(
+        last_launch_packet=second_launch_packet,
+    )
+    for profile_packet in (first_profile, second_profile):
+        profile_packet.pop("latest_session_file_relative", None)
+        profile_packet.pop("latest_session_file_size_bytes", None)
+        profile_packet.pop("latest_session_file_mtime_utc", None)
+    first_ok = first_profile.get("profile_persistence_proven") is True
+    second_ok = second_profile.get("profile_persistence_proven") is True
+    first_profile_id = str(first_launch_packet.get("persistent_profile_id") or "")
+    second_profile_id = str(second_launch_packet.get("persistent_profile_id") or "")
+    first_codex_home = str(first_launch_packet.get("persistent_codex_home") or "")
+    second_codex_home = str(second_launch_packet.get("persistent_codex_home") or "")
+    first_user_data_dir = str(first_launch_packet.get("persistent_user_data_dir") or "")
+    second_user_data_dir = str(second_launch_packet.get("persistent_user_data_dir") or "")
+    same_profile_id = bool(
+        first_profile_id and second_profile_id and first_profile_id == second_profile_id
+    )
+    same_codex_home = bool(
+        first_codex_home and second_codex_home and first_codex_home == second_codex_home
+    )
+    same_user_data_dir = bool(
+        first_user_data_dir
+        and second_user_data_dir
+        and first_user_data_dir == second_user_data_dir
+    )
+    cleanup_deleted_persistent_profile = bool(
+        first_launch_packet.get("cleanup_deletes_persistent_profile_by_default") is True
+        or second_launch_packet.get("cleanup_deletes_persistent_profile_by_default") is True
+    )
+    original_codex_touched = bool(
+        first_launch_packet.get("original_codex_touched") is True
+        or second_launch_packet.get("original_codex_touched") is True
+    )
+    asar_touched = bool(
+        first_launch_packet.get("asar_touched") is True
+        or second_launch_packet.get("asar_touched") is True
+    )
+    session_storage_survived = bool(
+        first_profile.get("session_storage_observed") is True
+        and second_profile.get("session_storage_observed") is True
+    )
+    profile_relaunch_proven = bool(
+        first_ok
+        and second_ok
+        and same_profile_id
+        and same_codex_home
+        and same_user_data_dir
+        and not cleanup_deleted_persistent_profile
+        and not original_codex_touched
+        and not asar_touched
+    )
+    if profile_relaunch_proven and session_storage_survived:
+        final_status = "CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_PROVEN_WITH_LIMITS"
+        machine_error_code = "OK"
+        next_action = "confirm_visible_history_separately_if_needed"
+    elif profile_relaunch_proven:
+        final_status = "CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_PROVEN_SESSION_STORAGE_NOT_OBSERVED"
+        machine_error_code = "SESSION_STORAGE_NOT_OBSERVED"
+        next_action = "observe_session_storage_or_confirm_visible_history_separately"
+    else:
+        final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_NOT_PROVEN"
+        machine_error_code = "CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_NOT_PROVEN"
+        next_action = "diagnose_launch_profile_drift"
+
+    return {
+        **base,
+        "status": "ok" if profile_relaunch_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "profile_relaunch_proven": profile_relaunch_proven,
+        "first_profile_final_status": str(first_profile.get("profile_final_status") or ""),
+        "second_profile_final_status": str(second_profile.get("profile_final_status") or ""),
+        "first_session_storage_final_status": str(
+            first_profile.get("session_storage_final_status") or ""
+        ),
+        "second_session_storage_final_status": str(
+            second_profile.get("session_storage_final_status") or ""
+        ),
+        "same_persistent_profile_id": same_profile_id,
+        "same_persistent_codex_home": same_codex_home,
+        "same_user_data_dir": same_user_data_dir,
+        "first_temp_profile_used": first_launch_packet.get("temp_profile_used") is True,
+        "second_temp_profile_used": second_launch_packet.get("temp_profile_used") is True,
+        "first_profile_mode": str(first_launch_packet.get("profile_mode") or ""),
+        "second_profile_mode": str(second_launch_packet.get("profile_mode") or ""),
+        "session_storage_survived_relaunch": session_storage_survived,
+        "first_session_storage_observed": first_profile.get("session_storage_observed") is True,
+        "second_session_storage_observed": second_profile.get("session_storage_observed") is True,
+        "cleanup_deleted_persistent_profile": cleanup_deleted_persistent_profile,
+        "cleanup_deletes_persistent_profile_by_default": cleanup_deleted_persistent_profile,
+        "cleanup_target_is_persistent_profile_root": False,
+        "original_codex_touched": original_codex_touched,
+        "asar_touched": asar_touched,
+        "next_action": next_action,
+    }
+
+
+def build_custom_codex_stable_profile_history_persistence_packet(
+    *,
+    first_launch_packet: dict[str, Any] | None,
+    second_launch_packet: dict[str, Any] | None,
+    before_history_snapshot: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_stable_profile_history_fields(browser_payload)
+    history_marker = _payload_first_text(
+        browser_payload,
+        "history_marker",
+        DEFAULT_STABLE_PROFILE_HISTORY_MARKER,
+    )
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_stable_profile_history_persistence",
+        "final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_STABLE_PROFILE_HISTORY_PERSISTENCE_NOT_PROVEN",
+        "profile_id": "",
+        "stable_profile_root": "server_owned_redacted",
+        "stable_profile_root_exposed": False,
+        "stable_profile_root_sha256": "",
+        "stable_profile_used": False,
+        "temporary_profile_used": False,
+        "same_profile_after_relaunch": False,
+        "thread_count_before": 0,
+        "thread_count_after": 0,
+        "history_marker_sha256": hashlib.sha256(
+            history_marker.encode("utf-8")
+        ).hexdigest(),
+        "history_marker_seen_before": False,
+        "history_marker_seen_after": False,
+        "visible_history_restored": False,
+        "browser_profile_authority": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "secret_value_exposed": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "full_history_restoration_claimed": False,
+        "cloud_history_restoration_claimed": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_forbidden_browser_payload_fields",
+        }
+    if not isinstance(first_launch_packet, dict) or not isinstance(second_launch_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "TWO_CUSTOM_CODEX_LAUNCH_PACKETS_REQUIRED",
+            "next_action": "launch_custom_codex_twice_with_stable_profile",
+        }
+    if not isinstance(before_history_snapshot, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "STABLE_PROFILE_HISTORY_BEFORE_SNAPSHOT_REQUIRED",
+            "next_action": "capture_stable_profile_history_before_relaunch",
+        }
+
+    relaunch_profile_packet = build_custom_codex_persistent_relaunch_profile_packet(
+        first_launch_packet=first_launch_packet,
+        second_launch_packet=second_launch_packet,
+    )
+    profile_id = str(second_launch_packet.get("persistent_profile_id") or "")
+    profile_root_value = str(second_launch_packet.get("persistent_profile_root") or "")
+    profile_root = Path(profile_root_value).expanduser() if profile_root_value else None
+    after_history_snapshot = _stable_profile_history_storage_snapshot(
+        profile_root,
+        history_marker=history_marker,
+    )
+    stable_profile_root_sha256 = (
+        hashlib.sha256(profile_root_value.encode("utf-8")).hexdigest()
+        if profile_root_value
+        else ""
+    )
+    stable_profile_used = bool(
+        relaunch_profile_packet.get("profile_relaunch_proven") is True
+        and profile_id == DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+        and second_launch_packet.get("temp_profile_used") is False
+        and relaunch_profile_packet.get("second_temp_profile_used") is False
+    )
+    temporary_profile_used = bool(
+        first_launch_packet.get("temp_profile_used") is True
+        or second_launch_packet.get("temp_profile_used") is True
+    )
+    same_profile_after_relaunch = bool(
+        relaunch_profile_packet.get("same_persistent_profile_id") is True
+        and relaunch_profile_packet.get("same_persistent_codex_home") is True
+        and relaunch_profile_packet.get("same_user_data_dir") is True
+    )
+    thread_count_before = int(before_history_snapshot.get("thread_count") or 0)
+    thread_count_after = int(after_history_snapshot.get("thread_count") or 0)
+    history_marker_seen_before = before_history_snapshot.get("history_marker_seen") is True
+    history_marker_seen_after = after_history_snapshot.get("history_marker_seen") is True
+    original_codex_touched = relaunch_profile_packet.get("original_codex_touched") is True
+    asar_touched = relaunch_profile_packet.get("asar_touched") is True
+    success = bool(
+        stable_profile_used
+        and not temporary_profile_used
+        and same_profile_after_relaunch
+        and thread_count_before > 0
+        and thread_count_after >= thread_count_before
+        and history_marker_seen_before
+        and history_marker_seen_after
+        and not original_codex_touched
+        and not asar_touched
+    )
+    return {
+        **base,
+        "status": "ok" if success else "blocked",
+        "machine_error_code": (
+            "OK"
+            if success
+            else "CUSTOM_CODEX_STABLE_PROFILE_HISTORY_PERSISTENCE_NOT_PROVEN"
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_STABLE_PROFILE_HISTORY_PERSISTENCE_PROVEN_WITH_LIMITS"
+            if success
+            else "KNOWN_BLOCKER_CUSTOM_CODEX_STABLE_PROFILE_HISTORY_PERSISTENCE_NOT_PROVEN"
+        ),
+        "profile_id": profile_id,
+        "stable_profile_root_sha256": stable_profile_root_sha256,
+        "stable_profile_used": stable_profile_used,
+        "temporary_profile_used": temporary_profile_used,
+        "same_profile_after_relaunch": same_profile_after_relaunch,
+        "thread_count_before": thread_count_before,
+        "thread_count_after": thread_count_after,
+        "history_marker_seen_before": history_marker_seen_before,
+        "history_marker_seen_after": history_marker_seen_after,
+        "visible_history_restored": history_marker_seen_after,
+        "session_file_count_before": int(before_history_snapshot.get("session_file_count") or 0),
+        "session_file_count_after": int(after_history_snapshot.get("session_file_count") or 0),
+        "session_storage_survived_relaunch": (
+            relaunch_profile_packet.get("session_storage_survived_relaunch") is True
+        ),
+        "before_snapshot_captured": True,
+        "after_snapshot_captured": True,
+        "before_snapshot_source": str(before_history_snapshot.get("snapshot_source") or ""),
+        "after_snapshot_source": "current_stable_profile_storage",
+        "relaunch_profile_packet": relaunch_profile_packet,
+        "original_codex_touched": original_codex_touched,
+        "asar_touched": asar_touched,
+        "next_action": (
+            "none"
+            if success
+            else "capture_marker_before_relaunch_then_relaunch_and_prove_after",
+        ),
+    }
+
+
+def build_custom_codex_stable_profile_history_before_snapshot_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_stable_profile_history_fields(browser_payload)
+    history_marker = _payload_first_text(
+        browser_payload,
+        "history_marker",
+        DEFAULT_STABLE_PROFILE_HISTORY_MARKER,
+    )
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_stable_profile_history_before_snapshot",
+        "history_marker_sha256": hashlib.sha256(
+            history_marker.encode("utf-8")
+        ).hexdigest(),
+        "browser_profile_authority": False,
+        "stable_profile_root_exposed": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "snapshot": None,
+            "next_action": "remove_forbidden_browser_payload_fields",
+        }
+    if not isinstance(last_launch_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_LAUNCH_PACKET_REQUIRED",
+            "snapshot": None,
+            "next_action": "launch_custom_codex_with_stable_profile",
+        }
+    profile_packet = build_custom_codex_persistent_profile_packet(
+        last_launch_packet=last_launch_packet,
+    )
+    profile_root_value = str(last_launch_packet.get("persistent_profile_root") or "")
+    profile_root = Path(profile_root_value).expanduser() if profile_root_value else None
+    snapshot = _stable_profile_history_storage_snapshot(
+        profile_root,
+        history_marker=history_marker,
+    )
+    snapshot["snapshot_source"] = "current_stable_profile_storage_before_relaunch"
+    stable_profile_used = profile_packet.get("profile_persistence_proven") is True
+    marker_seen = snapshot.get("history_marker_seen") is True
+    thread_count = int(snapshot.get("thread_count") or 0)
+    success = bool(stable_profile_used and marker_seen and thread_count > 0)
+    return {
+        **base,
+        "status": "ok" if success else "blocked",
+        "machine_error_code": (
+            "OK"
+            if success
+            else "STABLE_PROFILE_HISTORY_BEFORE_SNAPSHOT_NOT_PROVEN"
+        ),
+        "stable_profile_used": stable_profile_used,
+        "profile_id": str(last_launch_packet.get("persistent_profile_id") or ""),
+        "thread_count": thread_count,
+        "history_marker_seen": marker_seen,
+        "snapshot": snapshot,
+        "next_action": (
+            "relaunch_custom_codex_then_prove_after"
+            if success
+            else "create_history_marker_in_stable_profile_then_capture_before",
+        ),
+    }
+
+
+def build_custom_codex_visible_history_relaunch_owner_confirmation_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    relaunch_profile_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_codex_visible_history_relaunch_owner_confirmation",
+        "final_status": VISIBLE_HISTORY_RELAUNCH_NOT_CONFIRMED_STATUS,
+        "profile_relaunch_proven": False,
+        "session_storage_survived_relaunch": False,
+        "owner_confirmed_old_chat_visible": False,
+        "owner_confirmed_chat_not_empty": False,
+        "owner_confirmed_custom_codex_window": False,
+        "owner_confirmed_after_relaunch": False,
+        "owner_confirmed_smoke_phrase_visible": False,
+        "smoke_phrase_required": False,
+        "raw_thread_content_read": False,
+        "raw_thread_content_recorded": False,
+        "ocr_used_as_truth": False,
+        "all_history_restored_claimed": False,
+        "cloud_history_restored_claimed": False,
+        "browser_client_path_authority": False,
+        "original_codex_touched": False,
+        "asar_touched": False,
+    }
+    if not isinstance(payload, dict):
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "VISIBLE_HISTORY_CONFIRMATION_PAYLOAD_REQUIRED",
+            "human_message": "Visible relaunch history confirmation payload must be an object.",
+            "next_action": "send_owner_relaunch_checklist_booleans_only",
+        }
+    forbidden = _forbidden_visible_history_owner_confirmation_fields(
+        payload,
+        allowed_fields=VISIBLE_HISTORY_RELAUNCH_ALLOWED_OWNER_FIELDS,
+    )
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Visible relaunch history confirmation accepts only owner checklist booleans.",
+            "forbidden_fields": sorted(set(forbidden)),
+            "next_action": "remove_raw_history_path_or_runtime_fields",
+        }
+    if not owner_authorized:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+            "human_message": "Owner authorization is required before visible relaunch history confirmation.",
+            "next_action": "provide_exact_owner_authorization_phrase",
+        }
+    if not isinstance(relaunch_profile_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "PROFILE_RELAUNCH_PACKET_REQUIRED",
+            "human_message": "Profile relaunch packet is required before visible history confirmation.",
+            "next_action": "launch_custom_codex_twice_with_stable_profile",
+        }
+
+    profile_relaunch_proven = relaunch_profile_packet.get("profile_relaunch_proven") is True
+    session_storage_survived = (
+        relaunch_profile_packet.get("session_storage_survived_relaunch") is True
+    )
+    original_codex_touched = relaunch_profile_packet.get("original_codex_touched") is True
+    asar_touched = relaunch_profile_packet.get("asar_touched") is True
+    if (
+        not profile_relaunch_proven
+        or relaunch_profile_packet.get("status") != "ok"
+        or original_codex_touched
+        or asar_touched
+    ):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_UI_WITHOUT_PROFILE_PACKET_TRUTH",
+            "final_status": "KNOWN_BLOCKER_VISIBLE_HISTORY_UI_WITHOUT_PROFILE_PACKET_TRUTH",
+            "human_message": "Owner UI confirmation is not admitted without proven profile relaunch packet.",
+            "profile_relaunch_proven": profile_relaunch_proven,
+            "session_storage_survived_relaunch": session_storage_survived,
+            "original_codex_touched": original_codex_touched,
+            "asar_touched": asar_touched,
+            "next_action": "repair_profile_relaunch_packet_before_visible_history_confirmation",
+        }
+
+    smoke_required = payload.get("smoke_phrase_required") is True
+    smoke_visible = payload.get("smoke_phrase_visible") is True
+    owner_checklist = {
+        "custom_codex_open": payload.get("custom_codex_open") is True,
+        "old_chat_visible": payload.get("old_chat_visible") is True,
+        "chat_not_empty": payload.get("chat_not_empty") is True,
+        "not_original_codex": payload.get("not_original_codex") is True,
+        "owner_confirmed_after_relaunch": (
+            payload.get("owner_confirmed_after_relaunch") is True
+        ),
+        "raw_thread_content_not_recorded": (
+            payload.get("raw_thread_content_not_recorded") is True
+        ),
+        "smoke_phrase_required": smoke_required,
+        "smoke_phrase_visible": smoke_visible,
+    }
+    common_owner_truth = bool(
+        owner_checklist["custom_codex_open"]
+        and owner_checklist["chat_not_empty"]
+        and owner_checklist["not_original_codex"]
+        and owner_checklist["owner_confirmed_after_relaunch"]
+        and owner_checklist["raw_thread_content_not_recorded"]
+    )
+    old_chat_confirmed = owner_checklist["old_chat_visible"]
+    smoke_confirmed = smoke_visible
+    if smoke_required and not smoke_confirmed:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_SMOKE_PHRASE_NOT_CONFIRMED",
+            "human_message": "Smoke phrase was required but not owner-confirmed visible.",
+            "profile_relaunch_proven": profile_relaunch_proven,
+            "session_storage_survived_relaunch": session_storage_survived,
+            "owner_checklist": owner_checklist,
+            "smoke_phrase_required": smoke_required,
+            "next_action": "confirm_smoke_phrase_visible_or_use_path_a_without_smoke",
+        }
+    if not common_owner_truth or not (old_chat_confirmed or smoke_confirmed):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_OWNER_CONFIRMATION_INCOMPLETE",
+            "human_message": "Owner relaunch history checklist is incomplete.",
+            "profile_relaunch_proven": profile_relaunch_proven,
+            "session_storage_survived_relaunch": session_storage_survived,
+            "owner_checklist": owner_checklist,
+            "smoke_phrase_required": smoke_required,
+            "next_action": "confirm_visible_history_relaunch_checklist_from_open_custom_window",
+        }
+
+    final_status = (
+        VISIBLE_HISTORY_RELAUNCH_CONFIRMED_STATUS
+        if old_chat_confirmed
+        else VISIBLE_HISTORY_RELAUNCH_SMOKE_CONFIRMED_STATUS
+    )
+    return {
+        **base,
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Owner confirmed visible Custom Codex history after relaunch.",
+        "final_status": final_status,
+        "profile_relaunch_proven": True,
+        "session_storage_survived_relaunch": session_storage_survived,
+        "owner_confirmed_old_chat_visible": old_chat_confirmed,
+        "owner_confirmed_chat_not_empty": True,
+        "owner_confirmed_custom_codex_window": True,
+        "owner_confirmed_after_relaunch": True,
+        "owner_confirmed_smoke_phrase_visible": smoke_confirmed,
+        "smoke_phrase_required": smoke_required,
+        "owner_checklist": owner_checklist,
+        "original_codex_touched": False,
+        "asar_touched": False,
+        "next_action": "treat_as_owner_confirmed_visible_history_with_limits",
+    }
+
+
+def _path_is_tmp(path: Path | None) -> bool:
+    if path is None:
+        return False
+    raw_text = str(path.expanduser())
+    if raw_text == "/tmp" or raw_text.startswith("/tmp/") or raw_text.startswith("/private/tmp/"):
+        return True
+    text = str(path.expanduser().resolve(strict=False))
+    return text == "/tmp" or text.startswith("/tmp/") or text.startswith("/private/tmp/")
+
+
+def _forbidden_custom_persistent_profile_fields(
+    payload: Any,
+    prefix: str = "",
+) -> list[str]:
+    if payload in (None, {}, ""):
+        return []
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            findings.append(key_path)
+            if isinstance(value, (dict, list)):
+                findings.extend(_forbidden_custom_persistent_profile_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(_forbidden_custom_persistent_profile_fields(value, f"{prefix}[{index}]"))
+    return sorted(dict.fromkeys(findings))
+
+
+def build_visible_thread_history_owner_confirmation_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    last_launch_packet: dict[str, Any] | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "packet_kind": "visible_thread_history_owner_confirmation",
+        "final_status": VISIBLE_HISTORY_NOT_PROVEN_STATUS,
+        "visible_thread_history_owner_confirmed": False,
+        "profile_storage_continuity_proven": False,
+        "full_history_restoration_claimed": False,
+        "all_threads_restored_claimed": False,
+        "cloud_history_restoration_claimed": False,
+        "automatic_ui_inspection_claimed": False,
+        "owner_confirmation_counts_as_automatic_runtime_proof": False,
+        "raw_thread_content_recorded": False,
+        "chat_text_copied": False,
+        "browser_client_path_authority": False,
+        "original_codex_touched": False,
+        "fresh_launch_packet_required": True,
+        "freshness_window_seconds": VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS,
+    }
+    if not isinstance(payload, dict):
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "VISIBLE_HISTORY_CONFIRMATION_PAYLOAD_REQUIRED",
+            "human_message": "Visible history confirmation payload must be an object.",
+            "next_action": "send_owner_checklist_booleans_only",
+        }
+    forbidden = _forbidden_visible_history_owner_confirmation_fields(payload)
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Visible history confirmation accepts only owner checklist booleans.",
+            "forbidden_fields": sorted(set(forbidden)),
+            "next_action": "remove_raw_history_path_or_runtime_fields",
+        }
+    if not owner_authorized:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+            "human_message": "Owner authorization is required before visible history confirmation.",
+            "next_action": "provide_exact_owner_authorization_phrase",
+        }
+    if not isinstance(last_launch_packet, dict):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_FRESH_LAUNCH_PACKET_REQUIRED",
+            "human_message": "Launch Custom Codex first, then confirm visible history from the open window.",
+            "next_action": "launch_custom_codex_with_stable_profile",
+        }
+
+    launch_time = _parse_utc_timestamp(last_launch_packet.get("captured_at_utc"))
+    current_time = now or datetime.now(timezone.utc)
+    age_seconds = (
+        int((current_time - launch_time).total_seconds()) if launch_time is not None else None
+    )
+    launch_ok = (
+        last_launch_packet.get("status") == "ok"
+        and last_launch_packet.get("persistent_profile_id") == "wbp-custom-main"
+        and last_launch_packet.get("temp_profile_used") is False
+        and last_launch_packet.get("native_window_observed") is True
+    )
+    if age_seconds is None or age_seconds < 0 or age_seconds > VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_LAUNCH_PACKET_STALE",
+            "human_message": "Fresh Custom Codex launch packet is required for owner-visible history confirmation.",
+            "launch_packet_age_seconds": age_seconds,
+            "persistent_profile_id": last_launch_packet.get("persistent_profile_id", ""),
+            "temp_profile_used": last_launch_packet.get("temp_profile_used", None),
+            "native_window_observed": last_launch_packet.get("native_window_observed", None),
+            "next_action": "launch_custom_codex_again_then_confirm",
+        }
+    if not launch_ok:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_LAUNCH_PACKET_NOT_ADMITTED",
+            "human_message": "Last launch packet does not prove stable Custom Codex native window.",
+            "launch_packet_age_seconds": age_seconds,
+            "launch_status": last_launch_packet.get("status", ""),
+            "persistent_profile_id": last_launch_packet.get("persistent_profile_id", ""),
+            "temp_profile_used": last_launch_packet.get("temp_profile_used", None),
+            "native_window_observed": last_launch_packet.get("native_window_observed", None),
+            "next_action": "repair_custom_native_launch_packet",
+        }
+
+    checklist = {
+        key: payload.get(key) is True for key in sorted(VISIBLE_HISTORY_ALLOWED_OWNER_FIELDS)
+    }
+    if not all(checklist.values()):
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "VISIBLE_HISTORY_OWNER_CONFIRMATION_INCOMPLETE",
+            "human_message": "All owner checklist confirmations must be true.",
+            "owner_checklist": checklist,
+            "launch_packet_age_seconds": age_seconds,
+            "persistent_profile_id": last_launch_packet.get("persistent_profile_id", ""),
+            "temp_profile_used": last_launch_packet.get("temp_profile_used", None),
+            "native_window_observed": last_launch_packet.get("native_window_observed", None),
+            "next_action": "confirm_visible_history_checklist_from_open_custom_window",
+        }
+
+    return {
+        **base,
+        **_visible_history_session_storage_summary(last_launch_packet),
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Owner confirmed visible thread history in the open Custom Codex window.",
+        "final_status": VISIBLE_HISTORY_CONFIRMED_STATUS,
+        "visible_thread_history_owner_confirmed": True,
+        "profile_storage_continuity_proven": True,
+        "owner_checklist": checklist,
+        "launch_packet_age_seconds": age_seconds,
+        "persistent_profile_id": last_launch_packet.get("persistent_profile_id", ""),
+        "persistent_profile_path_exposed": False,
+        "persistent_codex_home_exposed": False,
+        "temp_profile_used": last_launch_packet.get("temp_profile_used", None),
+        "native_window_observed": last_launch_packet.get("native_window_observed", None),
+        "next_action": "treat_as_owner_confirmed_with_limits_not_full_history_proof",
+    }
 
 
 def _runtime_check_all_component(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -3225,6 +6796,8 @@ def run_ui_action(
         allowed_payload_keys.add("route_id")
     if ui_action in SESSION_ID_UI_ACTIONS:
         allowed_payload_keys.add("session_id")
+    if ui_action == "launch_custom_client_native":
+        allowed_payload_keys.update(CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS)
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
         return _blocked_action(ui_action, f"Неподдерживаемые поля UI action: {', '.join(unsupported_keys)}.")
@@ -3265,6 +6838,11 @@ def run_ui_action(
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_custom_client_native":
+        launch_payload = {
+            key: value
+            for key, value in payload.items()
+            if key != "ui_action"
+        }
         account_commands = (
             {
                 "status": execute_command(runner, "status"),
@@ -3278,12 +6856,18 @@ def run_ui_action(
             else {}
         )
         packet = _launch_custom_native_codex_packet(
-            {},
+            launch_payload,
             owner_authorized=owner_authorized,
             commands=account_commands,
             operator_status=native_operator_status if owner_authorized else None,
             api_snapshot=native_api_snapshot if owner_authorized else None,
         )
+        return _ui_action_response_from_result(
+            ui_action,
+            _native_ui_action_result(packet),
+        )
+    if ui_action == "show_custom_client_native":
+        packet = show_custom_native_window_packet()
         return _ui_action_response_from_result(
             ui_action,
             _native_ui_action_result(packet),
@@ -3427,6 +7011,7 @@ def build_handler(
     owner_authorization_phrase: str | None = None,
     review_import_context: ReviewImportContext | None = None,
     review_apply_context: ReviewApplyContext | None = None,
+    safe_worktree_repo_root: Path | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -3435,6 +7020,7 @@ def build_handler(
     action_runner = command_runner
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
+    codex_custom_safe_worktree_repo_root = safe_worktree_repo_root or ROOT
     legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
@@ -3448,7 +7034,19 @@ def build_handler(
         review_session_store,
         review_apply_context=query_review_apply_context,
     )
-    custom_native_bridge_lease = _CustomNativeBridgeLease()
+    custom_native_bridge_lease = _CustomNativeBridgeLease(
+        bridge_port=_custom_codex_stable_wbp_bridge_port()
+    )
+    custom_native_launch_state: dict[str, dict[str, Any] | None] = {
+        "previous_packet": None,
+        "last_packet": None,
+        "history_before_snapshot": None,
+    }
+
+    def record_custom_native_launch_packet(packet: dict[str, Any]) -> None:
+        custom_native_launch_state["previous_packet"] = custom_native_launch_state["last_packet"]
+        custom_native_launch_state["last_packet"] = packet
+
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
@@ -3824,23 +7422,32 @@ def build_handler(
                 self._send_json(build_original_status_packet())
                 return
             if parsed.path == "/api/codex/custom/status":
-                self._send_json(build_custom_status_packet(operator_surface_session.status_payload()))
+                def build_custom_status_snapshot() -> dict[str, Any]:
+                    return build_custom_status_packet(operator_surface_session.status_payload())
+
+                self._send_json(
+                    _run_custom_codex_readonly_snapshot(
+                        endpoint=parsed.path,
+                        timeout_scope="custom_status_readonly_snapshot",
+                        build_snapshot=build_custom_status_snapshot,
+                    )
+                )
                 return
             if parsed.path == "/api/codex/custom/models":
                 def build_models_snapshot() -> dict[str, Any]:
                     api_snapshot = build_api_connections_readonly_snapshot(
                         api_connections_readonly_runner
                     )
-                    operator_status = operator_surface_session.status_payload()
-                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                        operator_surface_session
+                    )
+                    packet = build_custom_model_registry_packet(
                         operator_status,
                         api_snapshot=api_snapshot,
                     )
-                    return build_custom_model_registry_packet(
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                    )
+                    if operator_status_timeout:
+                        packet = _mark_operator_status_timeout_fallback(packet)
+                    return packet
 
                 self._send_json(
                     _run_custom_codex_readonly_snapshot(
@@ -3855,16 +7462,16 @@ def build_handler(
                     api_snapshot = build_api_connections_readonly_snapshot(
                         api_connections_readonly_runner
                     )
-                    operator_status = operator_surface_session.status_payload()
-                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                        operator_surface_session
+                    )
+                    packet = build_dual_lane_model_selection_ui_packet(
                         operator_status,
                         api_snapshot=api_snapshot,
                     )
-                    return build_dual_lane_model_selection_ui_packet(
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                    )
+                    if operator_status_timeout:
+                        packet = _mark_operator_status_timeout_fallback(packet)
+                    return packet
 
                 self._send_json(
                     _run_custom_codex_readonly_snapshot(
@@ -4069,6 +7676,139 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/window-prompt-trace":
+                self._send_json(
+                    build_custom_codex_window_prompt_trace_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/window-input-route-trace":
+                self._send_json(
+                    build_custom_codex_window_input_route_trace_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/chatgpt-plus-api-coder-trace":
+                self._send_json(
+                    build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof":
+                self._send_json(
+                    build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/deepseek-code-edit-proof":
+                self._send_json(
+                    build_custom_codex_deepseek_code_edit_reproduction_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/deepseek-route-bound-edit-proof":
+                self._send_json(
+                    build_custom_codex_deepseek_route_bound_real_edit_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/persistent-profile":
+                self._send_json(
+                    build_custom_codex_persistent_profile_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/persistent-relaunch-profile":
+                self._send_json(
+                    build_custom_codex_persistent_relaunch_profile_packet(
+                        first_launch_packet=custom_native_launch_state["previous_packet"],
+                        second_launch_packet=custom_native_launch_state["last_packet"],
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/stable-profile-history-persistence":
+                payload = (
+                    parse_qs(parsed.query, keep_blank_values=True)
+                    if parsed.query
+                    else {}
+                )
+                action = _payload_first_text(payload, "action", "prove_after")
+                if action == "capture_before":
+                    packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        browser_payload=payload,
+                    )
+                    if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
+                        custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
+                    self._send_json(packet)
+                    return
+                self._send_json(
+                    build_custom_codex_stable_profile_history_persistence_packet(
+                        first_launch_packet=custom_native_launch_state["previous_packet"],
+                        second_launch_packet=custom_native_launch_state["last_packet"],
+                        before_history_snapshot=custom_native_launch_state[
+                            "history_before_snapshot"
+                        ],
+                        browser_payload=payload,
+                    )
+                )
+                return
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:
                 session_id, action = custom_session
@@ -4153,33 +7893,8 @@ def build_handler(
                     )
                 )
                 return
-            if parsed.path == "/api/codex/custom/native-launch":
+            if parsed.path == "/api/codex/custom/native-launch-preflight":
                 payload = self._read_json_body()
-                if codex_custom_live_prompt_authorized:
-                    model_id = payload.get("model_id")
-                    if _forbidden_custom_live_launch_fields(payload) or not isinstance(model_id, str) or not model_id:
-                        self._send_json(
-                            _launch_custom_native_codex_packet(
-                                payload,
-                                owner_authorized=True,
-                                commands={},
-                                operator_status=None,
-                                api_snapshot=None,
-                                external_routes_packet=None,
-                                native_bridge_lease=custom_native_bridge_lease,
-                            )
-                        )
-                        return
-                operator_status = (
-                    operator_surface_session.status_payload()
-                    if codex_custom_live_prompt_authorized
-                    else None
-                )
-                account_commands = (
-                    self._codex_account_commands()
-                    if codex_custom_live_prompt_authorized
-                    else {}
-                )
                 api_snapshot = (
                     build_api_connections_readonly_snapshot(api_connections_readonly_runner)
                     if codex_custom_live_prompt_authorized
@@ -4188,15 +7903,200 @@ def build_handler(
                 external_routes_packet = (
                     _external_routes_packet() if codex_custom_live_prompt_authorized else None
                 )
+                operator_status = None
+                if codex_custom_live_prompt_authorized:
+                    operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                        operator_surface_session
+                    )
                 self._send_json(
-                    _launch_custom_native_codex_packet(
+                    _custom_native_launch_preflight_packet(
                         payload,
                         owner_authorized=codex_custom_live_prompt_authorized,
-                        commands=account_commands,
                         operator_status=operator_status,
                         api_snapshot=api_snapshot,
                         external_routes_packet=external_routes_packet,
                         native_bridge_lease=custom_native_bridge_lease,
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/native-launch":
+                payload = self._read_json_body()
+                if not codex_custom_live_prompt_authorized:
+                    self._send_json(
+                        _launch_custom_native_codex_packet(
+                            payload,
+                            owner_authorized=False,
+                            commands={},
+                            operator_status=None,
+                            api_snapshot=None,
+                            external_routes_packet=None,
+                            native_bridge_lease=custom_native_bridge_lease,
+                        )
+                    )
+                    return
+                if codex_custom_live_prompt_authorized:
+                    model_id = str(payload.get("model_id") or "").strip()
+                    execution_mode = str(payload.get("execution_mode") or "").strip()
+                    api_model_id = str(payload.get("api_model_id") or "").strip()
+                    chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
+                    missing_selection = not any(
+                        [model_id, execution_mode, api_model_id, chatgpt_model_id]
+                    )
+                    if _forbidden_custom_live_launch_fields(payload) or missing_selection:
+                        packet = _launch_custom_native_codex_packet(
+                            payload,
+                            owner_authorized=True,
+                            commands={},
+                            operator_status=None,
+                            api_snapshot=None,
+                            external_routes_packet=None,
+                            native_bridge_lease=custom_native_bridge_lease,
+                        )
+                        record_custom_native_launch_packet(packet)
+                        self._send_json(packet)
+                        return
+                api_snapshot = (
+                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                    if codex_custom_live_prompt_authorized
+                    else None
+                )
+                external_routes_packet = (
+                    _external_routes_packet() if codex_custom_live_prompt_authorized else None
+                )
+                route_model_ids = {
+                    str(route.get("route_id") or "").strip()
+                    for route in _enabled_external_route_records(external_routes_packet)
+                }
+                requested_model_id = str(payload.get("model_id") or "").strip()
+                if str(payload.get("execution_mode") or "").strip() == "api_only":
+                    requested_model_id = str(payload.get("api_model_id") or "").strip()
+                api_route_selected = (
+                    bool(requested_model_id) and requested_model_id in route_model_ids
+                )
+                operator_status = None
+                if codex_custom_live_prompt_authorized:
+                    operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                        operator_surface_session
+                    )
+                preflight_packet = _custom_native_launch_preflight_packet(
+                    payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    external_routes_packet=external_routes_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                )
+                if preflight_packet.get("status") != "ok":
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status=str(preflight_packet.get("status") or "blocked"),
+                        machine_error_code=str(
+                            preflight_packet.get("machine_error_code")
+                            or "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_BLOCKED"
+                        ),
+                        human_message="Custom native launch stopped because preflight did not return an ok packet.",
+                    )
+                    self._send_json(packet)
+                    return
+                if preflight_packet.get("existing_window_reuse_admissible") is True:
+                    show_window_packet = show_custom_native_window_packet()
+                    show_ok = (
+                        show_window_packet.get("status") == "ok"
+                        and show_window_packet.get("custom_window_visible") is True
+                    )
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status="ok" if show_ok else "blocked",
+                        machine_error_code=(
+                            "OK"
+                            if show_ok
+                            else "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+                        ),
+                        human_message=(
+                            "Existing Custom Codex window reused; no new launch was started."
+                            if show_ok
+                            else "Existing Custom Codex process matched the launch config, but the window could not be proven usable."
+                        ),
+                        show_window_packet=show_window_packet,
+                    )
+                    self._send_json(packet)
+                    return
+                if preflight_packet.get("custom_process_observed") is True:
+                    config_status = str(preflight_packet.get("config_status") or "")
+                    if config_status == "changed":
+                        machine_error_code = (
+                            "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
+                        )
+                        human_message = "Existing Custom Codex process uses a different launch selection; silent reuse and second-window launch are blocked."
+                    else:
+                        machine_error_code = (
+                            "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
+                        )
+                        human_message = "Existing Custom Codex process is running, but no matching previous launch packet proves it belongs to the selected config; second-window launch is blocked."
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status="blocked",
+                        machine_error_code=machine_error_code,
+                        human_message=human_message,
+                    )
+                    self._send_json(packet)
+                    return
+                account_commands = (
+                    {}
+                    if api_route_selected
+                    else (
+                        self._codex_account_commands()
+                        if codex_custom_live_prompt_authorized
+                        else {}
+                    )
+                )
+                packet = _launch_custom_native_codex_packet(
+                    payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    commands=account_commands,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    external_routes_packet=external_routes_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                )
+                packet["launch_preflight_packet"] = preflight_packet
+                packet["launch_stability_guard_checked"] = True
+                packet["reused_existing_window"] = (
+                    packet.get("reused_existing_window") is True
+                    or packet.get("existing_custom_window_reused") is True
+                )
+                packet["launch_packet_is_truth_source"] = True
+                packet["visible_window_counts_as_model_truth"] = False
+                packet["response_text_counts_as_route_truth"] = False
+                packet["final_status"] = "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
+                record_custom_native_launch_packet(packet)
+                self._send_json(packet)
+                return
+            if parsed.path == "/api/codex/custom/show-window":
+                packet = show_custom_native_window_packet()
+                self._send_json(packet)
+                return
+            if parsed.path == "/api/codex/custom/visible-history/owner-confirmation":
+                self._send_json(
+                    build_visible_thread_history_owner_confirmation_packet(
+                        self._read_json_body(),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/visible-history/relaunch-owner-confirmation":
+                relaunch_profile_packet = build_custom_codex_persistent_relaunch_profile_packet(
+                    first_launch_packet=custom_native_launch_state["previous_packet"],
+                    second_launch_packet=custom_native_launch_state["last_packet"],
+                )
+                self._send_json(
+                    build_custom_codex_visible_history_relaunch_owner_confirmation_packet(
+                        self._read_json_body(),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        relaunch_profile_packet=relaunch_profile_packet,
                     )
                 )
                 return
@@ -4244,16 +8144,14 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/custom/model-selector-dry-run":
                 api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                    operator_surface_session.status_payload(),
-                    api_snapshot=api_snapshot,
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
                 )
                 self._send_json(
                     build_dual_lane_selection_intent_packet(
                         self._read_json_body(),
-                        operator_surface_session.status_payload(),
+                        operator_status,
                         api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return
@@ -4278,17 +8176,14 @@ def build_handler(
             if parsed.path == "/api/codex/custom/execution-mode-dry-run":
                 payload = self._read_json_body()
                 api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status = operator_surface_session.status_payload()
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                    operator_status,
-                    api_snapshot=api_snapshot,
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
                 )
                 self._send_json(
                     build_custom_codex_execution_mode_selector_packet(
                         payload,
                         operator_status,
                         api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
                     )
                 )
                 return
@@ -4348,6 +8243,82 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/quick-start/deepseek-safe-worktree-check":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                self._send_json(
+                    _quick_start_deepseek_safe_worktree_check_packet(
+                        payload,
+                        session_manager=codex_custom_sessions,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                        prompt_runner=lambda runner_payload, worktree_dir: operator_surface_session.run_prompt(
+                            runner_payload,
+                            trace_wbp=True,
+                            sandbox_mode_override="workspace-write",
+                            writable_additional_dir=worktree_dir,
+                        ),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        repo_root=codex_custom_safe_worktree_repo_root,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/deepseek-code-edit-proof":
+                self._send_json(
+                    build_custom_codex_deepseek_code_edit_reproduction_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=self._read_json_body(),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/deepseek-route-bound-edit-proof":
+                self._send_json(
+                    build_custom_codex_deepseek_route_bound_real_edit_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=self._read_json_body(),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof":
+                self._send_json(
+                    build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                        browser_payload=self._read_json_body(),
+                        repo_root=ROOT,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/stable-profile-history-persistence":
+                payload = self._read_json_body()
+                action = _payload_first_text(payload, "action", "prove_after")
+                if action == "capture_before":
+                    packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        browser_payload=payload,
+                    )
+                    if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
+                        custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
+                    self._send_json(packet)
+                    return
+                self._send_json(
+                    build_custom_codex_stable_profile_history_persistence_packet(
+                        first_launch_packet=custom_native_launch_state["previous_packet"],
+                        second_launch_packet=custom_native_launch_state["last_packet"],
+                        before_history_snapshot=custom_native_launch_state[
+                            "history_before_snapshot"
+                        ],
+                        browser_payload=payload,
+                    )
+                )
+                return
             if parsed.path == "/api/codex/custom/account-smoke-dry-run":
                 self._send_json(
                     build_account_smoke_dry_run_packet(
@@ -4404,6 +8375,13 @@ def build_handler(
                     )
                 )
                 return
+            worktree_cleanup_prefix = "/api/codex/custom/worktrees/"
+            if parsed.path.startswith(worktree_cleanup_prefix):
+                rest = parsed.path[len(worktree_cleanup_prefix) :].strip("/")
+                parts = rest.split("/")
+                if len(parts) == 2 and parts[1] == "cleanup":
+                    self._send_json(codex_custom_sessions.safe_worktree_cleanup_packet(parts[0]))
+                    return
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:
                 session_id, action = custom_session
@@ -4451,6 +8429,53 @@ def build_handler(
                         )
                     )
                     return
+                if action == "temp-write-probe":
+                    self._send_json(
+                        codex_custom_sessions.temp_write_probe_packet(
+                            session_id,
+                            self._read_json_body(),
+                            lambda payload, writable_dir: operator_surface_session.run_prompt(
+                                payload,
+                                trace_wbp=True,
+                                sandbox_mode_override="workspace-write",
+                                writable_additional_dir=writable_dir,
+                            ),
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                        )
+                    )
+                    return
+                if action == "safe-worktree-edit-probe":
+                    self._send_json(
+                        codex_custom_sessions.safe_worktree_edit_probe_packet(
+                            session_id,
+                            self._read_json_body(),
+                            lambda payload, writable_dir: operator_surface_session.run_prompt(
+                                payload,
+                                trace_wbp=True,
+                                sandbox_mode_override="workspace-write",
+                                writable_additional_dir=writable_dir,
+                            ),
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                            repo_root=codex_custom_safe_worktree_repo_root,
+                        )
+                    )
+                    return
+                if action == "safe-worktree-coder":
+                    self._send_json(
+                        codex_custom_sessions.safe_worktree_coder_packet(
+                            session_id,
+                            self._read_json_body(),
+                            lambda payload, worktree_dir: operator_surface_session.run_prompt(
+                                payload,
+                                trace_wbp=True,
+                                sandbox_mode_override="workspace-write",
+                                working_dir_override=worktree_dir,
+                            ),
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                            repo_root=codex_custom_safe_worktree_repo_root,
+                        )
+                    )
+                    return
                 if action == "cancel":
                     self._send_json(codex_custom_sessions.cancel_packet(session_id))
                     return
@@ -4460,21 +8485,30 @@ def build_handler(
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
+            action_payload = self._read_json_body()
             action_owner_authorized = codex_custom_live_prompt_authorized
-            native_operator_status = (
-                operator_surface_session.status_payload()
-                if action_owner_authorized
-                else None
+            native_context_required = (
+            action_owner_authorized
+            and isinstance(action_payload, dict)
+            and action_payload.get("ui_action") == "launch_custom_client_native"
+            and set(action_payload).issubset(
+                {"ui_action", *CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS}
             )
+        )
+            native_operator_status = None
+            if native_context_required:
+                native_operator_status, _native_operator_status_timeout = (
+                    _bounded_operator_status_payload(operator_surface_session)
+                )
             native_api_snapshot = (
                 build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                if action_owner_authorized
+                if native_context_required
                 else None
             )
             self._send_json(
                 run_ui_action(
                     action_runner,
-                    self._read_json_body(),
+                    action_payload,
                     launch_client_path=launch_client_path,
                     launch_copy_contract=launch_copy_contract,
                     launch_action_runner=launch_copy_runner,
@@ -6424,6 +10458,7 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
                 "provider": _safe_short_text(model.provider, max_length=32),
                 "upstream_model": _safe_short_text(model.upstream_model, max_length=72),
                 "cost_class": _safe_short_text(getattr(model, "cost_class", ""), max_length=48),
+                "thinking": dict(getattr(model, "thinking", {}) or {}),
                 "enabled": model.enabled,
                 "status_code": status_code,
                 "status_label": status_label,

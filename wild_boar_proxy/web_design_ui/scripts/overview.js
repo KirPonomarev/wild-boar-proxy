@@ -487,6 +487,8 @@ let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
 let codexCustomSessionActionInFlight = false;
 let codexCustomSelectedSessionId = "";
+let codexCustomProductCoderWorktreeId = "";
+let codexCustomApiModelEntryById = new Map();
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -548,8 +550,8 @@ function sourceFromLocation() {
 
 function screenFromLocation() {
   const params = new URLSearchParams(window.location.search);
-  const screen = params.get("screen") || "overview";
-  return SCREENS.includes(screen) ? screen : "overview";
+  const screen = params.get("screen") || "quick-start";
+  return SCREENS.includes(screen) ? screen : "quick-start";
 }
 
 function settingsSectionFromLocation() {
@@ -559,7 +561,7 @@ function settingsSectionFromLocation() {
 }
 
 function currentScreen() {
-  return document.querySelector(".desktop").dataset.screen || "overview";
+  return document.querySelector(".desktop").dataset.screen || "quick-start";
 }
 
 function currentSettingsSection() {
@@ -969,11 +971,103 @@ function renderCodexCustomLaunch(packet) {
       workbench_ready: packet?.workbench_ready === true,
       selected_source_class: packet?.selection_packet?.selected_source_class || "",
       selected_route_digest: packet?.selection_packet?.selected_route_digest || "",
+      selected_model: packet?.selected_model || "",
+      launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
+      quick_start_stable_custom_launch_final_status:
+        packet?.quick_start_stable_custom_launch_final_status || "",
+      profile_final_status: packet?.profile_final_status || "",
+      session_storage_final_status: packet?.session_storage_final_status || "",
+      profile_persistence_proven: packet?.profile_persistence_proven === true,
+      persistent_profile_reused: packet?.persistent_profile_reused === true,
+      codex_home_reused: packet?.codex_home_reused === true,
+      electron_user_data_reused: packet?.electron_user_data_reused === true,
+      profile_path_stable: packet?.profile_path_stable === true,
+      persistent_profile_root_is_tmp: packet?.persistent_profile_root_is_tmp === true,
+      persistent_codex_home_is_tmp: packet?.persistent_codex_home_is_tmp === true,
+      persistent_user_data_dir_is_tmp: packet?.persistent_user_data_dir_is_tmp === true,
+      profile_relaunch_required_for_strong_history_claim:
+        packet?.profile_relaunch_required_for_strong_history_claim === true,
+      route_packet_matches_selection_packet:
+        packet?.route_packet_matches_selection_packet === true,
+      quick_start_launch_route_truth_proven_with_limits:
+        packet?.quick_start_launch_route_truth_proven_with_limits === true,
+      custom_codex_window_deepseek_smoke_final_status:
+        packet?.custom_codex_window_deepseek_smoke_final_status || "",
+      custom_codex_window_deepseek_launch_proven_with_limits:
+        packet?.custom_codex_window_deepseek_launch_proven_with_limits === true,
+      manual_prompt_smoke_attempted: packet?.manual_prompt_smoke_attempted === true,
+      manual_prompt_smoke_proven: packet?.manual_prompt_smoke_proven === true,
+      manual_prompt_smoke_blocked_reason: packet?.manual_prompt_smoke_blocked_reason || "",
+      manual_prompt_smoke_counts_as_model_truth:
+        packet?.manual_prompt_smoke_counts_as_model_truth === true,
+      model_self_report_counts_as_runtime_truth:
+        packet?.model_self_report_counts_as_runtime_truth === true,
+      deepseek_window_prompt_runtime_truth_proven:
+        packet?.deepseek_window_prompt_runtime_truth_proven === true,
+      history_persistence_claimed: packet?.history_persistence_claimed === true,
+      visible_thread_history_restored_claimed:
+        packet?.visible_thread_history_restored_claimed === true,
+      api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
       source_provenance_status: packet?.selection_packet?.source_provenance_status || "",
       launch_claim_scope: claimScope,
       next_action: packet?.next_action || "",
     }, null, 2);
   }
+  setQuickStartChip(
+    "quickStartLaunchState",
+    packet?.status === "ok" ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
+    packet?.status === "ok" ? "запущен" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    packet?.status === "ok" ? "green" : "amber",
+    packet?.status === "ok" ? "запуск ok" : "проверь пакет"
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    selected_model: packet?.selected_model || packet?.selection_packet?.selected_model || packet?.model || "",
+    launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
+    quick_start_stable_custom_launch_final_status:
+      packet?.quick_start_stable_custom_launch_final_status || "",
+    profile_final_status: packet?.profile_final_status || "",
+    session_storage_final_status: packet?.session_storage_final_status || "",
+    profile_persistence_proven: packet?.profile_persistence_proven === true,
+    persistent_profile_reused: packet?.persistent_profile_reused === true,
+    profile_path_stable: packet?.profile_path_stable === true,
+    persistent_profile_root_is_tmp: packet?.persistent_profile_root_is_tmp === true,
+    persistent_user_data_dir_is_tmp: packet?.persistent_user_data_dir_is_tmp === true,
+    route_packet_matches_selection_packet:
+      packet?.route_packet_matches_selection_packet === true,
+    quick_start_launch_route_truth_proven_with_limits:
+      packet?.quick_start_launch_route_truth_proven_with_limits === true,
+    custom_codex_window_deepseek_smoke_final_status:
+      packet?.custom_codex_window_deepseek_smoke_final_status || "",
+    custom_codex_window_deepseek_launch_proven_with_limits:
+      packet?.custom_codex_window_deepseek_launch_proven_with_limits === true,
+    manual_prompt_smoke_attempted: packet?.manual_prompt_smoke_attempted === true,
+    manual_prompt_smoke_proven: packet?.manual_prompt_smoke_proven === true,
+    manual_prompt_smoke_blocked_reason: packet?.manual_prompt_smoke_blocked_reason || "",
+    manual_prompt_smoke_counts_as_model_truth:
+      packet?.manual_prompt_smoke_counts_as_model_truth === true,
+    model_self_report_counts_as_runtime_truth:
+      packet?.model_self_report_counts_as_runtime_truth === true,
+    deepseek_window_prompt_runtime_truth_proven:
+      packet?.deepseek_window_prompt_runtime_truth_proven === true,
+    history_persistence_claimed: packet?.history_persistence_claimed === true,
+    visible_thread_history_restored_claimed:
+      packet?.visible_thread_history_restored_claimed === true,
+    api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+    api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
+    persistent_profile_id: packet?.persistent_profile_id || "",
+    temp_profile_used: packet?.temp_profile_used === true,
+    native_window_observed: packet?.native_window_observed === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    original_codex_touched: packet?.original_codex_touched === true,
+    launch_claim_scope: packet?.launch_claim_scope || "",
+    next_action: packet?.next_action || ""
+  });
 }
 
 function renderSafeAppCopyLaunchPacket(packet) {
@@ -1249,25 +1343,75 @@ async function runCodexCustomLaunchDryRun() {
   }
 }
 
+async function buildCodexCustomLaunchSelectionPayload() {
+  syncCodexRouteSelects("quickStartChatModelSelect");
+  syncCodexRouteSelects("quickStartApiModelSelect");
+  syncCodexRouteSelects("quickStartApiReasoningOptionSelect");
+  syncCodexRouteSelects("quickStartExecutionModeSelect");
+  const modeNode = document.getElementById("codexCustomExecutionModeSelect");
+  const modelNode = document.getElementById("codexCustomModelSelect");
+  const apiModelNode = document.getElementById("codexCustomApiModelSelect");
+  const apiReasoningNode = document.getElementById("codexCustomApiReasoningOptionSelect");
+  const executionMode = modeNode ? modeNode.value : "chatgpt_only";
+  let chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
+  let apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
+  const apiReasoningOptionId = executionMode === "chatgpt_only"
+    ? ""
+    : (apiReasoningNode ? apiReasoningNode.value : "");
+  if ((executionMode === "api_only" && !apiModelId) || (executionMode !== "api_only" && !chatgptModelId)) {
+    await refreshCodexCustomModelsPanel();
+    chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
+    apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
+  }
+  return {
+    execution_mode: executionMode,
+    chatgpt_model_id: chatgptModelId,
+    api_model_id: apiModelId,
+    api_reasoning_option_id: apiReasoningOptionId
+  };
+}
+
 async function runCodexCustomLaunch() {
   if (codexLaunchDryRunInFlight) {
     return;
   }
-  const modelNode = document.getElementById("codexCustomModelSelect");
-  let modelId = modelNode ? modelNode.value : "";
-  if (!modelId) {
-    await refreshCodexCustomModelsPanel();
-    modelId = modelNode ? modelNode.value : "";
-  }
+  const payload = await buildCodexCustomLaunchSelectionPayload();
   codexLaunchDryRunInFlight = true;
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   codexLaunchSetChip("neutral", "launching");
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 45000) : null;
   try {
+    const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!preflightResponse.ok) {
+      throw new Error(`custom launch preflight http ${preflightResponse.status}`);
+    }
+    const preflightPacket = await preflightResponse.json();
+    renderQuickStartLaunchPreflight(preflightPacket);
+    if (preflightPacket?.status !== "ok") {
+      renderCodexCustomLaunch({
+        ...preflightPacket,
+        running_status: false,
+        process_started: false,
+        native_window_observed: false,
+        native_app_usable: false,
+        launch_claim_scope: "quick_start_launch_guard_no_live_mutation"
+      });
+      return;
+    }
     const response = await fetch("api/codex/custom/native-launch", {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_id: modelId })
+      body: JSON.stringify(payload),
+      signal: controller?.signal
     });
     if (!response.ok) {
       throw new Error(`custom launch http ${response.status}`);
@@ -1275,10 +1419,11 @@ async function runCodexCustomLaunch() {
     const packet = await response.json();
     renderCodexCustomLaunch(packet);
   } catch (error) {
+    const timedOut = error?.name === "AbortError";
     renderCodexCustomLaunch({
       status: "failed",
-      machine_error_code: "CUSTOM_LAUNCH_FETCH_FAILED",
-      human_message: error.message,
+      machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED",
+      human_message: timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message,
       session_created: false,
       running_status: false,
       isolated_home: false,
@@ -1294,11 +1439,246 @@ async function runCodexCustomLaunch() {
       native_window_observed: false,
       native_app_usable: false,
       workbench_ready: false,
-      launch_claim_scope: "native_proof_unavailable"
+      launch_claim_scope: "native_proof_unavailable",
+      launch_timeout_with_limits: timedOut,
+      window_response_timeout: timedOut,
+      new_launch_started: false,
+      show_window_attempted: false,
+      visible_window_counts_as_model_truth: false,
+      response_text_counts_as_route_truth: false,
+      launch_packet_is_truth_source: false,
+      final_status: "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
     });
   } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartLaunchPreflight() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = await buildCodexCustomLaunchSelectionPayload();
+  codexLaunchDryRunInFlight = true;
+  const button = document.getElementById("quickStartLaunchPreflightAction");
+  button?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "preflight");
+  const responseNode = document.getElementById("quickStartRouteResponse");
+  if (responseNode) {
+    responseNode.textContent = "запрашиваю предзапусковый пакет...";
+  }
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  try {
+    const response = await fetch("api/codex/custom/native-launch-preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!response.ok) {
+      throw new Error(`custom launch preflight http ${response.status}`);
+    }
+    renderQuickStartLaunchPreflight(await response.json());
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    renderQuickStartLaunchPreflight({
+      status: "failed",
+      machine_error_code: timedOut
+        ? "CUSTOM_LAUNCH_PREFLIGHT_REQUEST_TIMEOUT"
+        : "CUSTOM_LAUNCH_PREFLIGHT_FETCH_FAILED",
+      human_message: timedOut
+        ? "Custom Codex launch preflight timed out before a packet returned."
+        : error.message,
+      packet_kind: "custom_native_launch_preflight",
+      execution_mode: payload.execution_mode || "",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      api_reasoning_option_id: payload.api_reasoning_option_id || "",
+      bridge_required: payload.execution_mode !== "chatgpt_only",
+      bridge_alive: false,
+      custom_process_observed: false,
+      config_status: "unknown",
+      show_window_attempted: false,
+      new_launch_started: false,
+      live_provider_called: false,
+      visible_window_counts_as_model_truth: false,
+      bridge_alive_counts_as_model_truth: false,
+      response_text_counts_as_route_truth: false,
+      launch_packet_is_truth_source: true,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      raw_path_exposed: false,
+      original_codex_touched: false,
+      asar_touched: false
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    codexLaunchDryRunInFlight = false;
+    button?.removeAttribute("disabled");
+  }
+}
+
+function renderCodexCustomShowWindow(packet) {
+  const summary = {
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    packet_kind: packet?.packet_kind || "",
+    custom_process_pid: packet?.custom_process_pid ?? null,
+    custom_window_visible: packet?.custom_window_visible === true,
+    custom_window_frontmost: packet?.custom_window_frontmost === true,
+    visible_window_counts_as_model_truth: false,
+    response_text_counts_as_route_truth: false,
+    launch_packet_is_truth_source: false,
+    show_window_attempted: true,
+    new_launch_started: false,
+    original_codex_touched: packet?.original_codex_touched === true,
+    asar_touched: packet?.asar_touched === true,
+    claim_scope: "show_existing_custom_window_only"
+  };
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  if (response) {
+    response.textContent = JSON.stringify(summary, null, 2);
+  }
+  const quickResponse = document.getElementById("quickStartRouteResponse");
+  if (quickResponse) {
+    quickResponse.textContent = JSON.stringify(summary, null, 2);
+  }
+  const ok = packet?.status === "ok" && packet?.custom_window_visible === true;
+  setQuickStartChip(
+    "quickStartLaunchState",
+    ok ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
+    ok ? "окно видно" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ok ? "green" : "amber",
+    ok ? "окно ok" : "пакет окна"
+  );
+  codexLaunchSetChip(ok ? "green" : "amber", ok ? "window visible" : "window packet");
+}
+
+async function showCodexCustomWindow() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  const button = document.getElementById("quickStartShowCustomWindowAction");
+  button?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartLaunchState", "neutral", "показываю");
+  const responseNode = document.getElementById("quickStartRouteResponse");
+  if (responseNode) {
+    responseNode.textContent = "запрашиваю пакет показа окна...";
+  }
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  try {
+    const response = await fetch("api/codex/custom/show-window", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: controller?.signal
+    });
+    if (!response.ok) {
+      throw new Error(`custom show-window http ${response.status}`);
+    }
+    renderCodexCustomShowWindow(await response.json());
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    renderCodexCustomShowWindow({
+      status: "failed",
+      machine_error_code: timedOut ? "CUSTOM_SHOW_WINDOW_REQUEST_TIMEOUT" : "CUSTOM_SHOW_WINDOW_FETCH_FAILED",
+      human_message: timedOut ? "Custom Codex show-window request timed out before a packet returned." : error.message,
+      packet_kind: "custom_codex_show_window",
+      custom_window_visible: false,
+      custom_window_frontmost: false,
+      window_response_timeout: timedOut,
+      window_unresponsive_with_limits: timedOut,
+      new_launch_started: false,
+      visible_window_counts_as_model_truth: false,
+      response_text_counts_as_route_truth: false,
+      launch_packet_is_truth_source: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      final_status: "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    codexLaunchDryRunInFlight = false;
+    button?.removeAttribute("disabled");
+  }
+}
+
+async function confirmCodexCustomVisibleHistory() {
+  const responseNode = document.getElementById("codexCustomVisibleHistoryResponse");
+  const button = document.getElementById("codexCustomVisibleHistoryConfirmAction");
+  const quickResponseNode = document.getElementById("quickStartRouteResponse");
+  const checked = (...ids) => ids.some((id) => document.getElementById(id)?.checked === true);
+  const payload = {
+    custom_codex_open: checked("customVisibleHistoryOpenCheck", "quickStartVisibleHistoryOpenCheck"),
+    old_chat_visible: checked("customVisibleHistoryOldChatCheck", "quickStartVisibleHistoryOldChatCheck"),
+    chat_not_empty: checked("customVisibleHistoryNonEmptyCheck", "quickStartVisibleHistoryNonEmptyCheck"),
+    not_original_codex: checked("customVisibleHistoryNotOriginalCheck", "quickStartVisibleHistoryNotOriginalCheck"),
+    raw_thread_content_not_recorded: checked("customVisibleHistoryNoRawContentCheck", "quickStartVisibleHistoryNoRawContentCheck")
+  };
+  button?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartVisibleHistoryConfirmAction")?.setAttribute("disabled", "disabled");
+  if (responseNode) {
+    responseNode.textContent = "проверяю ручное подтверждение видимой истории...";
+  }
+  if (quickResponseNode) {
+    quickResponseNode.textContent = "проверяю ручное подтверждение видимой истории...";
+  }
+  try {
+    const response = await fetch("api/codex/custom/visible-history/owner-confirmation", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(`visible history confirmation http ${response.status}`);
+    }
+    if (responseNode) {
+      const packet = await response.json();
+      responseNode.textContent = JSON.stringify(packet, null, 2);
+      setQuickStartRouteResponse(packet);
+      setQuickStartChip(
+        "quickStartVisibleHistoryState",
+        packet?.status === "ok" ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
+        packet?.status === "ok" ? "подтверждена" : (packet?.machine_error_code || packet?.status || "ошибка")
+      );
+    }
+  } catch (error) {
+    const failedPacket = {
+      status: "failed",
+      machine_error_code: "VISIBLE_HISTORY_CONFIRMATION_FETCH_FAILED",
+      human_message: error.message,
+      final_status: "VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY",
+      raw_thread_content_recorded: false,
+      full_history_restoration_claimed: false
+    };
+    if (responseNode) {
+      responseNode.textContent = JSON.stringify(failedPacket, null, 2);
+    }
+    if (quickResponseNode) {
+      setQuickStartRouteResponse(failedPacket);
+    }
+    setQuickStartChip("quickStartVisibleHistoryState", "red", "ошибка");
+  } finally {
+    button?.removeAttribute("disabled");
+    document.getElementById("quickStartVisibleHistoryConfirmAction")?.removeAttribute("disabled");
   }
 }
 
@@ -1467,12 +1847,473 @@ function renderCodexCustomModelCatalog(listId, entries) {
   }
 }
 
+function mirrorSelectOptions(source, targetId) {
+  const target = document.getElementById(targetId);
+  if (!source || !target) {
+    return;
+  }
+  const previous = target.value;
+  target.replaceChildren();
+  for (const sourceOption of source.options) {
+    const option = document.createElement("option");
+    option.value = sourceOption.value;
+    option.textContent = sourceOption.textContent;
+    option.disabled = sourceOption.disabled;
+    target.append(option);
+  }
+  if ([...target.options].some((option) => option.value === previous && !option.disabled)) {
+    target.value = previous;
+  } else {
+    target.value = source.value;
+  }
+}
+
+function apiReasoningOptionForModelEntry(entry) {
+  const thinking = entry?.thinking || {};
+  if (thinking?.type === "enabled" && thinking?.reasoning_effort === "max") {
+    return {
+      option_id: "provider_declared_max",
+      label: "Максимум · provider-declared"
+    };
+  }
+  if (thinking?.type === "enabled" && thinking?.reasoning_effort === "high") {
+    return {
+      option_id: "provider_declared_high",
+      label: "Высокий · provider-declared"
+    };
+  }
+  if (thinking?.type === "disabled") {
+    return {
+      option_id: "provider_declared_disabled",
+      label: "Обычный · thinking off"
+    };
+  }
+  return {
+    option_id: "catalog_default",
+    label: "По каталогу · не доказано"
+  };
+}
+
+function renderApiReasoningOptionSelects() {
+  const apiSelect = document.getElementById("codexCustomApiModelSelect");
+  const modelEntry = codexCustomApiModelEntryById.get(apiSelect?.value || "") || {};
+  const optionPacket = apiReasoningOptionForModelEntry(modelEntry);
+  const targets = [
+    document.getElementById("codexCustomApiReasoningOptionSelect"),
+    document.getElementById("quickStartApiReasoningOptionSelect")
+  ];
+  for (const target of targets) {
+    if (!target) {
+      continue;
+    }
+    target.replaceChildren();
+    const option = document.createElement("option");
+    option.value = optionPacket.option_id;
+    option.textContent = optionPacket.label;
+    target.append(option);
+    target.value = optionPacket.option_id;
+  }
+}
+
+function syncCodexRouteSelects(sourceId) {
+  const pairs = [
+    ["codexCustomModelSelect", "quickStartChatModelSelect"],
+    ["codexCustomApiModelSelect", "quickStartApiModelSelect"],
+    ["codexCustomApiReasoningOptionSelect", "quickStartApiReasoningOptionSelect"],
+    ["codexCustomExecutionModeSelect", "quickStartExecutionModeSelect"]
+  ];
+  const pair = pairs.find((items) => items.includes(sourceId));
+  if (!pair) {
+    return;
+  }
+  const source = document.getElementById(sourceId);
+  const targetId = pair[0] === sourceId ? pair[1] : pair[0];
+  const target = document.getElementById(targetId);
+  if (source && target) {
+    target.value = source.value;
+  }
+}
+
+function setQuickStartChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || "unknown";
+  } else {
+    chip.textContent = label || "unknown";
+  }
+}
+
+function setQuickStartRouteResponse(packet) {
+  const response = document.getElementById("quickStartRouteResponse");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || packet?.final_status || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: packet?.execution_mode || "",
+      chatgpt_model_id: packet?.chatgpt_model_id || "",
+      api_model_id: packet?.api_model_id || "",
+      selected_model: packet?.selected_model || packet?.api_model_id || packet?.chatgpt_model_id || "",
+      api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
+      quick_start_stable_custom_launch_final_status:
+        packet?.quick_start_stable_custom_launch_final_status || "",
+      profile_final_status: packet?.profile_final_status || "",
+      session_storage_final_status: packet?.session_storage_final_status || "",
+      bridge_status: packet?.bridge_status || "",
+      window_status: packet?.window_status || "",
+      config_status: packet?.config_status || "",
+      existing_window_reuse_admissible:
+        packet?.existing_window_reuse_admissible === true,
+      new_launch_required: packet?.new_launch_required === true,
+      visible_window_counts_as_model_truth:
+        packet?.visible_window_counts_as_model_truth === true,
+      bridge_alive_counts_as_model_truth:
+        packet?.bridge_alive_counts_as_model_truth === true,
+      response_text_counts_as_route_truth:
+        packet?.response_text_counts_as_route_truth === true,
+      launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
+      profile_persistence_proven: packet?.profile_persistence_proven === true,
+      persistent_profile_reused: packet?.persistent_profile_reused === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      secret_value_exposed: packet?.secret_value_exposed === true,
+      raw_path_exposed: packet?.raw_path_exposed === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      asar_touched: packet?.asar_touched === true,
+      live_call_attempted: packet?.live_call_attempted === true,
+      provider_called: packet?.provider_called === true,
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
+}
+
+function renderQuickStartLaunchPreflight(packet) {
+  const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
+  const bridgeLabel = packet?.bridge_required === true
+    ? (packet?.bridge_alive === true ? "жив" : "упал")
+    : "не нужен";
+  const bridgeVisual = packet?.bridge_required === true
+    ? (packet?.bridge_alive === true ? "green" : "amber")
+    : "neutral";
+  const windowLabel = packet?.custom_process_observed === true ? "найдено" : "не найдено";
+  const configStatus = packet?.config_status || "не проверен";
+  const configLabel = configStatus === "matches_last_launch"
+    ? "совпадает"
+    : (configStatus === "changed" ? "изменился" : "нет запуска");
+  const configVisual = configStatus === "matches_last_launch"
+    ? "green"
+    : (configStatus === "changed" ? "amber" : "neutral");
+  setQuickStartChip(
+    "quickStartBridgeState",
+    bridgeVisual,
+    bridgeLabel
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.custom_process_observed === true ? "green" : "neutral",
+    windowLabel
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    configVisual,
+    configLabel
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "preflight ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: packet?.execution_mode || "",
+    selected_model: packet?.selected_model || "",
+    api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+    bridge_status: packet?.bridge_status || "",
+    window_status: packet?.window_status || "",
+    config_status: configStatus,
+    existing_window_reuse_admissible: packet?.existing_window_reuse_admissible === true,
+    new_launch_required: packet?.new_launch_required === true,
+    visible_window_counts_as_model_truth:
+      packet?.visible_window_counts_as_model_truth === true,
+    bridge_alive_counts_as_model_truth:
+      packet?.bridge_alive_counts_as_model_truth === true,
+    response_text_counts_as_route_truth:
+      packet?.response_text_counts_as_route_truth === true,
+    launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    secret_value_exposed: packet?.secret_value_exposed === true,
+    raw_path_exposed: packet?.raw_path_exposed === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+function renderQuickStartDeepSeekCoderCheck(packet) {
+  const ok = packet?.final_status === "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS"
+    || packet?.legacy_quick_start_final_status === "QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS";
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "DeepSeek ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    packet?.execution_mode === "api_only" && packet?.server_issued_catalog_used === true ? "green" : "amber",
+    packet?.execution_mode === "api_only" ? "API-only" : "не API-only"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    ok ? "green" : "amber",
+    ok ? "tool-loop ok" : "не доказан"
+  );
+  const response = document.getElementById("quickStartRouteResponse");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      legacy_quick_start_final_status: packet?.legacy_quick_start_final_status || "",
+      deepseek_live_executor_packet_proven_with_limits:
+        packet?.deepseek_live_executor_packet_proven_with_limits === true,
+      execution_mode: packet?.execution_mode || "",
+      api_model_id: packet?.api_model_id || "",
+      api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
+      api_reasoning_intelligence_measured:
+        packet?.api_reasoning_intelligence_measured === true,
+      api_reasoning_codex_parity_claimed:
+        packet?.api_reasoning_codex_parity_claimed === true,
+      selected_model: packet?.selected_model || packet?.model_id || "",
+      provider_id: packet?.provider_id || "",
+      server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      chatgpt_line_used_as_executor: packet?.chatgpt_line_used_as_executor === true,
+      api_line_used_as_executor: packet?.api_line_used_as_executor === true,
+      api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
+      no_chatgpt: packet?.no_chatgpt === true,
+      provider_response_proven: packet?.provider_response_proven === true,
+      tool_loop_proven: packet?.tool_loop_proven === true,
+      request_count: packet?.request_count ?? 0,
+      safe_worktree_used: packet?.safe_worktree_used === true,
+      write_surface: packet?.write_surface || "",
+      workspace_write_admitted: packet?.workspace_write_admitted === true,
+      file_changed_by_codex_tool: packet?.file_changed_by_codex_tool === true,
+      git_diff_observed: packet?.git_diff_observed === true,
+      expected_diff_observed: packet?.expected_diff_observed === true,
+      main_worktree_mutated_by_probe: packet?.main_worktree_mutated_by_probe === true,
+      main_tree_untouched: packet?.main_tree_untouched === true,
+      worktree_removed_after_probe: packet?.worktree_removed_after_probe === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      browser_raw_backend_authority_widened:
+        packet?.browser_raw_backend_authority_widened === true,
+      secret_value_exposed: packet?.secret_value_exposed === true,
+      secret_value_recorded: packet?.secret_value_recorded === true,
+      secret_in_diff: packet?.secret_in_diff === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      original_codex_profile_touched: packet?.original_codex_profile_touched === true,
+      wbp_patch_applier_used: packet?.wbp_patch_applier_used === true,
+      no_patch_applier: packet?.no_patch_applier === true,
+      no_fallback: packet?.no_fallback === true,
+      commit_attempted: packet?.commit_attempted === true,
+      push_attempted: packet?.push_attempted === true,
+      merge_attempted: packet?.merge_attempted === true,
+      response_preview_bounded: packet?.response_preview_bounded || "",
+      git_diff_sha256: packet?.git_diff_sha256 || "",
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
+}
+
+function renderQuickStartDeepSeekCodeEditProof(packet) {
+  const ok = packet?.final_status === "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS";
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "правка ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    packet?.execution_mode === "api_only" && packet?.selected_model === "wbp-deepseek-v4-pro-max" ? "green" : "amber",
+    packet?.execution_mode === "api_only" ? "API-only" : "не API-only"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    packet?.window_launch_proven_with_limits === true ? "green" : "amber",
+    packet?.window_launch_proven_with_limits === true ? "окно ok" : "окно не доказано"
+  );
+  const response = document.getElementById("quickStartRouteResponse");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: packet?.execution_mode || "",
+      selected_model: packet?.selected_model || "",
+      api_model_id: packet?.api_model_id || "",
+      api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      cwd: packet?.cwd || "",
+      repo_root: packet?.repo_root || "",
+      thread_id: packet?.thread_id || "",
+      thread_model: packet?.thread_model || "",
+      thread_model_provider: packet?.thread_model_provider || "",
+      file_created: packet?.file_created === true,
+      file_content_exact: packet?.file_content_exact === true,
+      file_content_sha256: packet?.file_content_sha256 || "",
+      provider_called: packet?.provider_called === true,
+      provider_id: packet?.provider_id || "",
+      upstream_model: packet?.upstream_model || "",
+      request_seen_after_launch: packet?.request_seen_after_launch === true,
+      response_seen: packet?.response_seen === true,
+      route_digest_matches_launch: packet?.route_digest_matches_launch === true,
+      chatgpt_called: packet?.chatgpt_called === true,
+      api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
+      fallback_used: packet?.fallback_used === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      secret_value_exposed: packet?.secret_value_exposed === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      asar_touched: packet?.asar_touched === true,
+      wbp_patch_applier_used: packet?.wbp_patch_applier_used === true,
+      commit_attempted: packet?.commit_attempted === true,
+      push_attempted: packet?.push_attempted === true,
+      merge_attempted: packet?.merge_attempted === true,
+      response_text_counts_as_model_truth: packet?.response_text_counts_as_model_truth === true,
+      model_self_report_counts_as_runtime_truth: packet?.model_self_report_counts_as_runtime_truth === true,
+      manual_prompt_required: packet?.manual_prompt_required || "",
+      next_action: packet?.next_action || ""
+    }, null, 2);
+  }
+}
+
+async function runQuickStartDeepSeekCoderCheck() {
+  syncCodexRouteSelects("quickStartApiModelSelect");
+  syncCodexRouteSelects("quickStartExecutionModeSelect");
+  const modeNode = document.getElementById("quickStartExecutionModeSelect");
+  const apiNode = document.getElementById("quickStartApiModelSelect");
+  const apiReasoningNode = document.getElementById("quickStartApiReasoningOptionSelect");
+  const executionMode = modeNode ? modeNode.value : "";
+  const apiModelId = apiNode ? apiNode.value : "";
+  const apiReasoningOptionId = executionMode === "chatgpt_only"
+    ? ""
+    : (apiReasoningNode ? apiReasoningNode.value : "");
+  document.getElementById("quickStartDeepSeekCoderCheckAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "проверка");
+  try {
+    const response = await fetch("api/codex/custom/quick-start/deepseek-safe-worktree-check", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        execution_mode: executionMode,
+        api_model_id: apiModelId,
+        api_reasoning_option_id: apiReasoningOptionId
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`quick start deepseek coder check http ${response.status}`);
+    }
+    renderQuickStartDeepSeekCoderCheck(await response.json());
+  } catch (error) {
+    renderQuickStartDeepSeekCoderCheck({
+      status: "failed",
+      machine_error_code: "QUICK_START_DEEPSEEK_SAFE_WORKTREE_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_PROVEN",
+      execution_mode: executionMode,
+      api_model_id: apiModelId,
+      api_reasoning_option_id: apiReasoningOptionId,
+      server_issued_catalog_used: false,
+      provider_response_proven: false,
+      tool_loop_proven: false,
+      safe_worktree_used: false,
+      file_changed_by_codex_tool: false,
+      main_worktree_mutated_by_probe: false,
+      raw_backend_details_exposed: false,
+      browser_raw_backend_authority_widened: false,
+      secret_value_exposed: false,
+      original_codex_touched: false,
+      original_codex_profile_touched: false,
+      wbp_patch_applier_used: false,
+      no_patch_applier: true,
+      no_fallback: true,
+      no_chatgpt: true,
+      main_tree_untouched: true,
+      commit_attempted: false,
+      push_attempted: false,
+      merge_attempted: false,
+      next_action: error.message
+    });
+  } finally {
+    document.getElementById("quickStartDeepSeekCoderCheckAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartDeepSeekCodeEditProof() {
+  syncCodexRouteSelects("quickStartApiModelSelect");
+  syncCodexRouteSelects("quickStartExecutionModeSelect");
+  const modeNode = document.getElementById("quickStartExecutionModeSelect");
+  const apiNode = document.getElementById("quickStartApiModelSelect");
+  const apiReasoningNode = document.getElementById("quickStartApiReasoningOptionSelect");
+  const executionMode = modeNode ? modeNode.value : "";
+  const apiModelId = apiNode ? apiNode.value : "";
+  const apiReasoningOptionId = executionMode === "chatgpt_only"
+    ? ""
+    : (apiReasoningNode ? apiReasoningNode.value : "");
+  document.getElementById("quickStartDeepSeekCodeEditProofAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "проверка");
+  try {
+    const response = await fetch("api/codex/custom/quick-start/deepseek-code-edit-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        execution_mode: executionMode,
+        api_model_id: apiModelId,
+        api_reasoning_option_id: apiReasoningOptionId
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`quick start deepseek code edit proof http ${response.status}`);
+    }
+    renderQuickStartDeepSeekCodeEditProof(await response.json());
+  } catch (error) {
+    renderQuickStartDeepSeekCodeEditProof({
+      status: "failed",
+      machine_error_code: "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_PROOF_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
+      execution_mode: executionMode,
+      api_model_id: apiModelId,
+      api_reasoning_option_id: apiReasoningOptionId,
+      selected_model: "",
+      file_created: false,
+      file_content_exact: false,
+      provider_called: false,
+      chatgpt_called: false,
+      fallback_used: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      wbp_patch_applier_used: false,
+      commit_attempted: false,
+      push_attempted: false,
+      merge_attempted: false,
+      next_action: error.message
+    });
+  } finally {
+    document.getElementById("quickStartDeepSeekCodeEditProofAction")?.removeAttribute("disabled");
+  }
+}
+
 function renderCodexCustomModels(registry, compat) {
   const chatSelect = document.getElementById("codexCustomModelSelect");
   const apiSelect = document.getElementById("codexCustomApiModelSelect");
   const chatEntries = codexCustomAvailableModelEntries(registry);
   const apiEntries = codexCustomApiModelEntries(registry);
   const seedEntries = codexCustomSeedEntries(registry);
+  codexCustomApiModelEntryById = new Map(apiEntries.map((entry) => [entry.model_id, entry]));
   const modelIds = chatEntries.map((entry) => entry.model_id);
   const selectableIds = chatEntries
     .filter((entry) => entry?.selection_enabled === true)
@@ -1521,6 +2362,10 @@ function renderCodexCustomModels(registry, compat) {
       apiSelect.value = apiModelIds[0];
     }
   }
+  mirrorSelectOptions(chatSelect, "quickStartChatModelSelect");
+  mirrorSelectOptions(apiSelect, "quickStartApiModelSelect");
+  renderApiReasoningOptionSelects();
+  syncCodexRouteSelects("codexCustomExecutionModeSelect");
   renderCodexCustomModelCatalog("codexCustomChatLaneCatalog", chatEntries);
   renderCodexCustomModelCatalog("codexCustomApiLaneCatalog", apiEntries);
   renderCodexCustomModelCatalog("codexCustomSeedLaneCatalog", seedEntries);
@@ -1556,6 +2401,11 @@ function renderCodexCustomModels(registry, compat) {
   codexCustomModelsSetText("codexCustomApiModelCount", String(apiEntries.length));
   codexCustomModelsSetText("codexCustomSeedModelCount", String(seedEntries.length));
   codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
+  setQuickStartChip(
+    "quickStartRouteChip",
+    chatEntries.length || apiEntries.length ? "neutral" : "amber",
+    chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
+  );
 }
 
 function renderCodexCustomSelectorIntent(packet) {
@@ -1701,6 +2551,16 @@ function renderCodexCustomExecutionMode(packet) {
     "codexCustomExecutionBoundary",
     `${packet?.execution_mode || "unknown"} · live call ${packet?.live_call_attempted === true ? "attempted" : "not attempted"}`
   );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "OK" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ok ? "green" : "amber",
+    ok ? "маршрут ok" : "маршрут не доказан"
+  );
   if (response) {
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
@@ -1708,6 +2568,8 @@ function renderCodexCustomExecutionMode(packet) {
       final_status: packet?.final_status || "",
       execution_mode: packet?.execution_mode || "",
       api_model_id: packet?.api_model_id || "",
+      api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
       primary_model_slot: packet?.primary_model_slot || {},
       coding_agent_model_slot: packet?.coding_agent_model_slot || {},
       chatgpt_executor_selected: packet?.chatgpt_executor_selected === true,
@@ -1729,6 +2591,23 @@ function renderCodexCustomExecutionMode(packet) {
       next_action: packet?.next_action || ""
     }, null, 2);
   }
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: packet?.execution_mode || "",
+    chatgpt_model_id: packet?.chatgpt_model_id || "",
+    api_model_id: packet?.api_model_id || "",
+    api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+    api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
+    primary_model_slot: packet?.primary_model_slot || {},
+    coding_agent_model_slot: packet?.coding_agent_model_slot || {},
+    server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    original_codex_touched: packet?.original_codex_touched === true,
+    next_action: packet?.next_action || ""
+  });
 }
 
 function renderCodexCustomDeepSeekLiveFormat(packet) {
@@ -1832,18 +2711,34 @@ async function refreshCodexCustomApiActionGate() {
 }
 
 async function runCodexCustomExecutionModeDryRun() {
+  syncCodexRouteSelects("quickStartChatModelSelect");
+  syncCodexRouteSelects("quickStartApiModelSelect");
+  syncCodexRouteSelects("quickStartApiReasoningOptionSelect");
+  syncCodexRouteSelects("quickStartExecutionModeSelect");
   const modeNode = document.getElementById("codexCustomExecutionModeSelect");
+  const chatNode = document.getElementById("codexCustomModelSelect");
   const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const apiReasoningNode = document.getElementById("codexCustomApiReasoningOptionSelect");
   const executionMode = modeNode ? modeNode.value : "";
+  const chatgptModelId = executionMode === "api_only" ? "" : (chatNode ? chatNode.value : "");
   const apiModelId = executionMode === "chatgpt_only" ? "" : (apiNode ? apiNode.value : "");
+  const apiReasoningOptionId = executionMode === "chatgpt_only"
+    ? ""
+    : (apiReasoningNode ? apiReasoningNode.value : "");
   document.getElementById("codexCustomExecutionModeDryRunAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartExecutionModeDryRunAction")?.setAttribute("disabled", "disabled");
   codexCustomModelsSetChip("neutral", "checking");
   try {
     const response = await fetch("api/codex/custom/execution-mode-dry-run", {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })
+      body: JSON.stringify({
+        execution_mode: executionMode,
+        chatgpt_model_id: chatgptModelId,
+        api_model_id: apiModelId,
+        api_reasoning_option_id: apiReasoningOptionId
+      })
     });
     if (!response.ok) {
       throw new Error(`execution mode dry-run http ${response.status}`);
@@ -1856,6 +2751,7 @@ async function runCodexCustomExecutionModeDryRun() {
       final_status: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
       execution_mode: executionMode,
       api_model_id: apiModelId,
+      api_reasoning_option_id: apiReasoningOptionId,
       raw_backend_details_exposed: false,
       browser_raw_backend_authority_widened: false,
       live_call_attempted: false,
@@ -1870,6 +2766,7 @@ async function runCodexCustomExecutionModeDryRun() {
     });
   } finally {
     document.getElementById("codexCustomExecutionModeDryRunAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartExecutionModeDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -2429,12 +3326,128 @@ async function runCodexCustomSessionPrompt() {
   await postCodexCustomSessionAction("prompt", { prompt: promptNode ? promptNode.value : "" });
 }
 
+function renderCodexCustomProductCoderPacket(packet) {
+  const response = document.getElementById("codexCustomProductCoderResponse");
+  const diff = document.getElementById("codexCustomProductCoderDiff");
+  const changedFiles = Array.isArray(packet?.changed_files) ? packet.changed_files : [];
+  const worktreeId = String(packet?.worktree_id || codexCustomProductCoderWorktreeId || "");
+  if (worktreeId) {
+    codexCustomProductCoderWorktreeId = worktreeId;
+  }
+  codexCustomSessionsSetText(
+    "codexCustomProductCoderState",
+    `${packet?.status || "unknown"} · ${packet?.machine_error_code || "UNKNOWN"}`
+  );
+  codexCustomSessionsSetText("codexCustomProductCoderWorktree", worktreeId || "none");
+  codexCustomSessionsSetText("codexCustomProductCoderChangedFiles", String(changedFiles.length));
+  codexCustomSessionsSetText(
+    "codexCustomProductCoderCleanupState",
+    packet?.safe_worktree_status || (worktreeId ? "active" : "worktree не создан")
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      session_id: packet?.session_id || codexCustomSelectedSessionId || "",
+      worktree_id: worktreeId,
+      safe_worktree_status: packet?.safe_worktree_status || "",
+      cleanup_required: packet?.cleanup_required === true,
+      selected_model: packet?.selected_model || "",
+      runtime_model: packet?.runtime_model || "",
+      safe_worktree_used: packet?.safe_worktree_used === true,
+      working_dir_override_admitted: packet?.working_dir_override_admitted === true,
+      working_dir_scope: packet?.working_dir_scope || "",
+      changed_files: changedFiles,
+      diff_present: packet?.diff_present === true,
+      main_worktree_mutated_by_run: packet?.main_worktree_mutated_by_run === true,
+      commit_attempted: packet?.commit_attempted === true,
+      push_attempted: packet?.push_attempted,
+      merge_attempted: packet?.merge_attempted === true,
+      wbp_patch_applier_used: packet?.wbp_patch_applier_used === true,
+      raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      original_codex_profile_touched: packet?.original_codex_profile_touched === true,
+      browser_worktree_path_intake: packet?.browser_worktree_path_intake === true,
+      token_burn: packet?.token_burn ?? 0,
+      request_count: packet?.request_count ?? null,
+    }, null, 2);
+  }
+  if (diff) {
+    diff.textContent = packet?.diff_text_bounded || "diff отсутствует";
+  }
+}
+
+async function runCodexCustomProductCoder() {
+  const taskNode = document.getElementById("codexCustomProductCoderTask");
+  const apiNode = document.getElementById("codexCustomApiModelSelect");
+  const task = taskNode ? taskNode.value : "";
+  const apiModelId = apiNode ? apiNode.value : "";
+  if (!task.trim()) {
+    renderCodexCustomProductCoderPacket({
+      status: "rejected",
+      machine_error_code: "TASK_REQUIRED",
+      changed_files: []
+    });
+    return;
+  }
+  await postCodexCustomSessionAction("safe-worktree-coder", {
+    api_model_id: apiModelId,
+    task
+  }).then((packet) => {
+    if (packet) {
+      renderCodexCustomProductCoderPacket(packet);
+    }
+  });
+}
+
 async function cancelCodexCustomSession() {
   await postCodexCustomSessionAction("cancel", {});
 }
 
 async function cleanupCodexCustomSession() {
   await postCodexCustomSessionAction("cleanup", {});
+}
+
+async function cleanupCodexCustomProductCoderWorktree() {
+  const worktreeId = codexCustomProductCoderWorktreeId;
+  if (!worktreeId) {
+    renderCodexCustomProductCoderPacket({
+      status: "rejected",
+      machine_error_code: "WORKTREE_NOT_SELECTED",
+      changed_files: []
+    });
+    return;
+  }
+  if (codexCustomSessionActionInFlight) {
+    return;
+  }
+  codexCustomSessionActionInFlight = true;
+  codexCustomSessionsSetChip("neutral", "cleanup");
+  try {
+    const response = await fetch(`api/codex/custom/worktrees/${encodeURIComponent(worktreeId)}/cleanup`, {
+      method: "POST",
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`product coder cleanup http ${response.status}`);
+    }
+    const packet = await response.json();
+    if (packet?.status === "ok") {
+      codexCustomProductCoderWorktreeId = "";
+    }
+    renderCodexCustomProductCoderPacket(packet);
+  } catch (error) {
+    renderCodexCustomProductCoderPacket({
+      status: "failed",
+      machine_error_code: "PRODUCT_CODER_CLEANUP_FETCH_FAILED",
+      human_message: error.message,
+      worktree_id: worktreeId,
+      changed_files: []
+    });
+  } finally {
+    codexCustomSessionActionInFlight = false;
+  }
 }
 
 function codexCustomRecoverySetText(id, value) {
@@ -9554,6 +10567,13 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   text("quickStartAccountsConnected", noAccounts ? 0 : accounts.length);
   text("quickStartAccountsWorking", workingCount);
   text("quickStartAccountsToCheck", accountProblemCount + accountStaleCount);
+  text("quickStartConnectionsChatCount", `${noAccounts ? 0 : accounts.length} аккаунта`);
+  text("quickStartConnectionsChatWorking", `${workingCount} работают`);
+  setQuickStartChip(
+    "quickStartConnectionsChatChip",
+    accountVisual,
+    accountLabel
+  );
   renderQuickStartAccountRows(safeAccounts);
 
   const apiModel = quickStartApiModel(safeApi, source);
@@ -9562,7 +10582,12 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   apiChip.lastElementChild.textContent = apiModel.title;
   text("quickStartApiProvider", apiModel.provider);
   text("quickStartApiModel", apiModel.model);
-  text("quickStartApiSecret", `secret_ref: ${apiModel.secretRef}`);
+  text(
+    "quickStartApiSecret",
+    apiModel.secretState === "available"
+      ? "ключ: доступен серверу · значение скрыто"
+      : "ключ: значение скрыто"
+  );
   const routeHint = document.getElementById("quickStartApiRouteHint");
   const hiddenRouteCount = Math.max(0, apiModel.routeCount - 1);
   routeHint.hidden = hiddenRouteCount <= 0;
@@ -11250,11 +12275,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("originalCodexLaunchAction")?.addEventListener("click", () => runOriginalCodexLaunch());
   document.getElementById("codexCustomLaunchDryRunAction")?.addEventListener("click", () => runCodexCustomLaunchDryRun());
   document.getElementById("codexCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch());
+  document.getElementById("codexCustomVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("safeAppCopyLaunchDryRunAction")?.addEventListener("click", () => runSafeAppCopyLaunchDryRun());
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
-  document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => refreshCodexCustomApiActionGate());
+  document.getElementById("codexCustomModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomModelSelect"));
+  document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("codexCustomApiModelSelect");
+    renderApiReasoningOptionSelects();
+    refreshCodexCustomApiActionGate();
+  });
+  document.getElementById("codexCustomApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomApiReasoningOptionSelect"));
+  document.getElementById("codexCustomExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomExecutionModeSelect"));
+  document.getElementById("quickStartChatModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartChatModelSelect"));
+  document.getElementById("quickStartApiModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("quickStartApiModelSelect");
+    renderApiReasoningOptionSelects();
+    refreshCodexCustomApiActionGate();
+  });
+  document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));
+  document.getElementById("quickStartExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartExecutionModeSelect"));
+  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runCodexCustomExecutionModeDryRun());
+  document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
+  document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
+  document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
+  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch());
+  document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow());
+  document.getElementById("quickStartVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
   document.getElementById("codexCustomSelectorIntentDryRunAction")?.addEventListener("click", () => runCodexCustomSelectorIntentDryRun());
   document.getElementById("codexCustomExecutionModeDryRunAction")?.addEventListener("click", () => runCodexCustomExecutionModeDryRun());
@@ -11266,6 +12315,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionCreateAction")?.addEventListener("click", () => createCodexCustomSession());
   document.getElementById("codexCustomSessionPromptDryRunAction")?.addEventListener("click", () => runCodexCustomSessionPromptDryRun());
   document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
+  document.getElementById("codexCustomProductCoderRunAction")?.addEventListener("click", () => runCodexCustomProductCoder());
+  document.getElementById("codexCustomProductCoderCleanupAction")?.addEventListener("click", () => cleanupCodexCustomProductCoderWorktree());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract());

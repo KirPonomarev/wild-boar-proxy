@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles/overview.css">
 </head>
 <body>
-  <div class="desktop" data-fixture-state="unknown" data-source="fixture">
+  <div class="desktop" data-fixture-state="unknown" data-source="fixture" data-screen="quick-start">
     <div class="window">
       <div class="traffic" aria-hidden="true">
         <span class="r"></span>
@@ -25,11 +25,11 @@
         </div>
 
         <nav class="nav" aria-label="Основная навигация">
-          <a id="quickStartNav" class="nav-item" href="?screen=quick-start" data-screen-link="quick-start">
+          <a id="quickStartNav" class="nav-item active" href="?screen=quick-start" aria-current="page" data-screen-link="quick-start">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/lightning.png" alt="" aria-hidden="true">
             <span>Быстрый старт</span>
           </a>
-          <a id="overviewNav" class="nav-item active" href="?screen=overview" aria-current="page" data-screen-link="overview">
+          <a id="overviewNav" class="nav-item" href="?screen=overview" data-screen-link="overview">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true">
             <span>Обзор</span>
           </a>
@@ -86,11 +86,11 @@
       <main class="main">
         <div class="main-header">
           <div>
-            <h1 id="mainTitle">Обзор</h1>
+            <h1 id="mainTitle">Быстрый старт</h1>
             <div class="subtitle">
               <span id="subtitleText">
-                Операторская сводка: фактическое состояние, режим работы,
-                пул аккаунтов и последние события.
+                Главный пульт: подключения, выбранный маршрут и запуск Codex Custom
+                подтверждаются только серверными пакетами.
               </span>
             </div>
           </div>
@@ -122,7 +122,7 @@
             </button>
             <button id="quickStartCheckAllAction" class="button quick-start-only check-all-action" type="button" data-ui-action="quick_start_check_all" disabled title="Нужен live sandbox source и admitted aggregate command surface." hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
-              <span>Проверить всё</span>
+              <span>Проверить</span>
             </button>
             <button id="dataLayoutOpenFinderAction" class="button settings-only" type="button" disabled title="Показать в Finder доступно только через desktop/native или admitted human-open surface." hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true">
@@ -131,22 +131,37 @@
           </div>
         </div>
 
-        <section id="quickStartScreen" class="screen quick-start-screen" data-screen="quick-start" data-quick-start-mode="daily-control-panel" hidden>
+        <section id="quickStartScreen" class="screen quick-start-screen" data-screen="quick-start" data-quick-start-mode="daily-control-panel">
           <div id="quickStartBanner" class="fixture-banner blue">
             Упрощённый режим показывает только итоговые статусы и безопасные действия.
           </div>
 
           <div class="quick-start-grid" aria-label="Ежедневный пульт подключений">
-            <section class="card quick-start-card quick-start-accounts-card" data-quick-start-card="accounts">
+            <section class="card quick-start-card quick-start-connections-card quick-start-accounts-card" data-quick-start-card="connections">
               <div class="quick-start-card-head">
                 <div>
                   <div class="quick-start-title-row">
                     <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true">
-                    <h2>Аккаунты Codex</h2>
+                    <h2>Подключения</h2>
                   </div>
-                  <p>Подключённые аккаунты с простым итоговым статусом.</p>
+                  <p>ChatGPT-аккаунт и API-ключ подключаются здесь, без перехода в другие разделы.</p>
                 </div>
                 <span id="quickStartAccountsChip" class="chip neutral"><span class="dot"></span><span>нет данных</span></span>
+              </div>
+
+              <div class="quick-start-connection-actions" aria-label="Добавить подключения">
+                <button id="quickStartAddAccountAction" class="quick-start-connect-tile onboard-action" type="button" data-ui-action="onboard_account_dry_run">
+                  <span class="round-icon">
+                    <img class="ui-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
+                  </span>
+                  <span><strong>Добавить ChatGPT</strong><small>аккаунт</small></span>
+                </button>
+                <button id="quickStartConnectApiAction" class="quick-start-connect-tile api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect" data-route-state-requirement="any" title="Подключить server-owned API route без browser secrets, paths или raw route fields.">
+                  <span class="round-icon">
+                    <img class="ui-icon" src="assets/icons/phosphor/plus.png" alt="" aria-hidden="true">
+                  </span>
+                  <span><strong>Добавить API</strong><small>ключ</small></span>
+                </button>
               </div>
 
               <div class="quick-start-metrics" aria-label="Сводка аккаунтов Codex">
@@ -157,43 +172,18 @@
 
               <div id="quickStartAccountList" class="quick-start-account-list" aria-live="polite"></div>
 
-              <div class="quick-start-card-actions">
-                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account_dry_run">
-                  <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
-                  <span>Подключить аккаунт</span>
-                </button>
-                <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled title="Массовая проверка требует отдельного admitted action mapping.">
-                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
-                  <span>Проверить</span>
-                </button>
-                <a class="quick-start-link" href="?screen=accounts" data-screen-link="accounts">Открыть аккаунты</a>
-              </div>
-            </section>
-
-            <section class="card quick-start-card quick-start-api-card" data-quick-start-card="api">
-              <div class="quick-start-card-head">
-                <div>
-                  <div class="quick-start-title-row">
-                    <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
-                    <h2>Основной API</h2>
-                  </div>
-                  <p>Один главный route. Таблица остаётся в API-подключениях.</p>
+              <div class="quick-start-connection-status" aria-label="Итог подключений">
+                <div class="quick-start-check-row">
+                  <span>ChatGPT</span>
+                  <strong><span id="quickStartConnectionsChatCount">0 аккаунтов</span> <small id="quickStartConnectionsChatWorking">0 работают</small></strong>
+                  <span id="quickStartConnectionsChatChip" class="chip neutral"><span class="dot"></span><span>ожидание</span></span>
                 </div>
-                <span id="quickStartApiChip" class="chip neutral"><span class="dot"></span><span>не настроено</span></span>
-              </div>
-
-              <section class="quick-start-api-identity" aria-label="Основной API route">
-                <div>
-                  <strong id="quickStartApiProvider">Не настроено</strong>
-                  <span id="quickStartApiModel">Основной route не подтверждён</span>
+                <div class="quick-start-check-row">
+                  <span>API</span>
+                  <strong><span id="quickStartApiProvider">Не настроено</span> <small id="quickStartApiModel">Основной route не подтверждён</small></strong>
+                  <span id="quickStartApiChip" class="chip neutral"><span class="dot"></span><span>не настроено</span></span>
                 </div>
-                <img id="quickStartApiIdentityIcon" class="ui-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
-              </section>
-
-              <div id="quickStartApiSecret" class="quick-start-secret mono-value">secret_ref: —</div>
-              <a id="quickStartApiRouteHint" class="quick-start-route-hint" href="?screen=api-connections" data-screen-link="api-connections" hidden>
-                +0 route · открыть API-подключения
-              </a>
+              </div>
 
               <section id="quickStartApiStatusCard" class="quick-start-api-status neutral" aria-label="Итоговый статус основного API">
                 <div class="quick-start-api-status-head">
@@ -203,13 +193,18 @@
                 <p id="quickStartApiStatusText">Основной route не подтверждён bounded snapshot.</p>
               </section>
 
+              <div id="quickStartApiSecret" class="quick-start-secret mono-value">ключ: не показывается</div>
+              <div id="quickStartApiRouteHint" class="quick-start-route-hint" hidden>
+                +0 route · открыть API-подключения
+              </div>
+
               <div class="quick-start-api-checklist" aria-label="API checklist">
                 <div class="quick-start-check-row">
                   <span><img class="ui-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">Provider</span>
                   <span id="quickStartApiProviderChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
                 </div>
                 <div class="quick-start-check-row">
-                  <span><img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">secret_ref</span>
+                  <span><img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">credential</span>
                   <span id="quickStartApiSecretChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
                 </div>
                 <div class="quick-start-check-row">
@@ -219,19 +214,14 @@
               </div>
 
               <div class="quick-start-card-actions">
-                <a class="button small" href="?screen=api-connections" data-screen-link="api-connections">
-                  <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
-                  <span>Настроить API</span>
-                </a>
-                <button id="quickStartConnectApiAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect" data-route-state-requirement="any" title="Подключить server-owned API route без browser secrets, paths или route_id.">
-                  <img class="ui-icon button-icon" src="assets/icons/phosphor/plus.png" alt="" aria-hidden="true">
-                  <span>Подключить API</span>
+                <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled title="Массовая проверка требует отдельного admitted action mapping.">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить</span>
                 </button>
                 <button id="quickStartCheckApiAction" class="button small api-route-action" type="button" data-ui-action="api_route_check" data-route-id="" data-route-enabled="false" data-route-state-proven="false" data-route-state-requirement="enabled" disabled title="Нужен confirmed main route из bounded snapshot.">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                   <span>Проверить API</span>
                 </button>
-                <a class="quick-start-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть детали</a>
               </div>
 
               <section id="quickStartApiCredentialLane" class="api-credential-lane neutral" aria-label="Owner credential setup для API" hidden>
@@ -262,6 +252,114 @@
                 </div>
               </section>
             </section>
+
+            <section class="card quick-start-card quick-start-route-card" data-quick-start-card="route">
+              <div class="quick-start-card-head">
+                <div>
+                  <div class="quick-start-title-row">
+                    <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/lightning.png" alt="" aria-hidden="true">
+                    <h2>Рабочий маршрут</h2>
+                  </div>
+                  <p>Выбор исполнителя для Custom Codex. Пакет сервера важнее подписи в интерфейсе.</p>
+                </div>
+                <span id="quickStartRouteChip" class="chip neutral"><span class="dot"></span><span>ожидание</span></span>
+              </div>
+
+              <div class="quick-start-route-grid" aria-label="Выбор исполнителя Custom Codex">
+                <label>
+                  <span>ChatGPT</span>
+                  <select id="quickStartChatModelSelect" aria-label="Quick Start ChatGPT model"></select>
+                </label>
+                <label>
+                  <span>API</span>
+                  <select id="quickStartApiModelSelect" aria-label="Quick Start API model"></select>
+                </label>
+                <label>
+                  <span>Уровень API</span>
+                  <select id="quickStartApiReasoningOptionSelect" aria-label="Quick Start API reasoning option"></select>
+                </label>
+                <label>
+                  <span>Режим</span>
+                  <select id="quickStartExecutionModeSelect" aria-label="Quick Start execution mode">
+                    <option value="chatgpt_only">Только ChatGPT</option>
+                    <option value="chatgpt_plus_api">ChatGPT + API</option>
+                    <option value="api_only">Только API</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="quick-start-api-checklist" aria-label="Проверка рабочего маршрута">
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">режим</span>
+                  <span id="quickStartExecutionModeState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">запуск</span>
+                  <span id="quickStartLaunchState" class="chip neutral"><span class="dot"></span><span>не запускался</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">мост</span>
+                  <span id="quickStartBridgeState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">окно</span>
+                  <span id="quickStartWindowState" class="chip neutral"><span class="dot"></span><span>не проверено</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">конфиг</span>
+                  <span id="quickStartConfigState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">история</span>
+                  <span id="quickStartVisibleHistoryState" class="chip neutral"><span class="dot"></span><span>не проверена</span></span>
+                </div>
+              </div>
+
+              <div class="quick-start-card-actions">
+                <button id="quickStartRouteRefreshAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                  <span>Обновить модели</span>
+                </button>
+                <button id="quickStartExecutionModeDryRunAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить</span>
+                </button>
+                <button id="quickStartLaunchPreflightAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                  <span>Предзапусковая проверка</span>
+                </button>
+                <button id="quickStartDeepSeekCoderCheckAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Проверить DeepSeek-кодера</span>
+                </button>
+                <button id="quickStartDeepSeekCodeEditProofAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить DeepSeek-правку</span>
+                </button>
+                <button id="quickStartCustomLaunchAction" class="button primary" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
+                  <span>Запустить Codex Custom</span>
+                </button>
+                <button id="quickStartShowCustomWindowAction" class="button small ghost" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Показать окно</span>
+                </button>
+              </div>
+
+              <div class="quick-start-history-checklist" aria-label="Подтверждение истории на быстром старте">
+                <label><input id="quickStartVisibleHistoryOpenCheck" type="checkbox"> Custom открыт</label>
+                <label><input id="quickStartVisibleHistoryOldChatCheck" type="checkbox"> старый чат виден</label>
+                <label><input id="quickStartVisibleHistoryNonEmptyCheck" type="checkbox"> чат не пустой</label>
+                <label><input id="quickStartVisibleHistoryNotOriginalCheck" type="checkbox"> не Original</label>
+                <label><input id="quickStartVisibleHistoryNoRawContentCheck" type="checkbox"> текст не писать</label>
+                <button id="quickStartVisibleHistoryConfirmAction" class="button small ghost" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Подтвердить историю</span>
+                </button>
+              </div>
+
+              <div id="quickStartRouteResponse" class="quick-start-route-response mono-value">пакет рабочего маршрута ожидает проверки</div>
+            </section>
           </div>
 
           <div id="quickStartFooter" class="quick-start-footer">
@@ -269,7 +367,7 @@
           </div>
         </section>
 
-        <section id="overviewScreen" class="screen" data-screen="overview">
+        <section id="overviewScreen" class="screen" data-screen="overview" hidden>
           <div id="fixtureBanner" class="fixture-banner">
             Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.
           </div>
@@ -446,11 +544,15 @@
             <div>
               <select id="codexCustomApiModelSelect" aria-label="Codex Custom API lane model"></select>
             </div>
+            <div>Уровень API</div>
+            <div>
+              <select id="codexCustomApiReasoningOptionSelect" aria-label="Codex Custom API reasoning option"></select>
+            </div>
             <div>Исполнитель Codex Custom</div>
             <div>
               <select id="codexCustomExecutionModeSelect" aria-label="Codex Custom execution mode">
                 <option value="chatgpt_only">Только ChatGPT</option>
-                <option value="chatgpt_api">ChatGPT + API</option>
+                <option value="chatgpt_plus_api">ChatGPT + API</option>
                 <option value="api_only">Только API</option>
               </select>
             </div>
@@ -535,10 +637,22 @@
               </button>
             </div>
           </div>
+          <div class="owner-visible-history-checklist" aria-label="Подтверждение видимой истории Custom Codex">
+            <label><input id="customVisibleHistoryOpenCheck" type="checkbox"> Custom Codex открыт</label>
+            <label><input id="customVisibleHistoryOldChatCheck" type="checkbox"> старый чат виден</label>
+            <label><input id="customVisibleHistoryNonEmptyCheck" type="checkbox"> чат не пустой</label>
+            <label><input id="customVisibleHistoryNotOriginalCheck" type="checkbox"> это не Original Codex</label>
+            <label><input id="customVisibleHistoryNoRawContentCheck" type="checkbox"> текст чата не записывать</label>
+            <button id="codexCustomVisibleHistoryConfirmAction" class="button ghost" type="button">
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+              <span>Подтвердить видимую историю</span>
+            </button>
+          </div>
           <p class="secondary model-selector-boundary-note">Selecting both lanes does not prove simultaneous execution semantics. Session and role-slot behavior remain separate contours.</p>
           <pre id="codexCustomApiActionGateResponse" class="mono-value">api action gate packet pending</pre>
           <pre id="codexCustomExecutionModeResponse" class="mono-value">execution mode packet pending</pre>
           <pre id="codexCustomDeepSeekLiveFormatResponse" class="mono-value">пакет живого теста DeepSeek ожидает запуска</pre>
+          <pre id="codexCustomVisibleHistoryResponse" class="mono-value">пакет видимой истории ожидает ручного подтверждения</pre>
           <pre id="codexCustomSelectorIntentResponse" class="mono-value">selector intent packet pending</pre>
           <pre id="codexCustomModelDryRunResponse" class="mono-value">model dry-run packet pending</pre>
         </section>
@@ -598,6 +712,34 @@
             <span>Prompt</span>
             <textarea id="codexCustomSessionPrompt" rows="3" autocomplete="off" spellcheck="false">Reply with exactly SESSION_OK.</textarea>
           </label>
+          <div class="action-panel-grid">
+            <div>API-кодер</div><div id="codexCustomProductCoderState">не запускался</div>
+            <div>Пишет</div><div>только безопасный worktree</div>
+            <div>Коммиты</div><div>запрещены</div>
+            <div>Очистка</div><div id="codexCustomProductCoderCleanupState">worktree не создан</div>
+          </div>
+          <label class="form-field" for="codexCustomProductCoderTask">
+            <span>Задача для DeepSeek</span>
+            <textarea id="codexCustomProductCoderTask" rows="3" autocomplete="off" spellcheck="false">Измени только README.md: добавь одну строку WBP_DEEPSEEK_PRODUCT_CODER_READY.</textarea>
+          </label>
+          <div class="action-summary-footer">
+            <div>
+              <span>worktree: <strong id="codexCustomProductCoderWorktree">none</strong></span>
+              <span>files: <strong id="codexCustomProductCoderChangedFiles">0</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexCustomProductCoderRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/lightning.png" alt="" aria-hidden="true">
+                <span>Запустить DeepSeek-кодер</span>
+              </button>
+              <button id="codexCustomProductCoderCleanupAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+                <span>Очистить worktree</span>
+              </button>
+            </div>
+          </div>
+          <pre id="codexCustomProductCoderResponse" class="mono-value">пакет API-кодера ожидает запуска</pre>
+          <pre id="codexCustomProductCoderDiff" class="mono-value">diff появится только после безопасного worktree-запуска</pre>
           <div class="action-summary-footer">
             <div>
               <span>inference: <strong id="codexCustomSessionInference">not claimed</strong></span>

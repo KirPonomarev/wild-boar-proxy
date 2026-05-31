@@ -1862,6 +1862,25 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.owner-visible-history-checklist {
+  align-items: center;
+  border-top: 1px solid rgba(217, 208, 195, .78);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.owner-visible-history-checklist label {
+  align-items: center;
+  color: var(--secondary);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+  line-height: 18px;
+}
+
 .overview-utility-strip {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
   display: grid;
@@ -7050,7 +7069,7 @@ button:disabled {
 
 .desktop[data-screen="quick-start"] .main {
   overflow-y: auto;
-  padding: var(--qs-main-padding) var(--qs-main-padding) 28px;
+  padding: 48px var(--qs-main-padding) 32px;
 }
 
 .desktop[data-screen="quick-start"] .sidebar-footer {
@@ -7059,19 +7078,40 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .main-header {
-  margin-bottom: 16px;
+  align-items: center;
+  margin-bottom: 48px;
 }
 
-.desktop[data-screen="quick-start"] h1 {
-  font-size: 34px;
-  line-height: 40px;
+.desktop[data-screen="quick-start"] .main-header > div:first-child {
+  align-items: center;
+  display: flex;
+  min-height: 56px;
 }
 
-.desktop[data-screen="quick-start"] .subtitle {
-  font-size: 14px;
-  line-height: 22px;
-  margin-top: 7px;
-  max-width: 780px;
+.desktop[data-screen="quick-start"] .main-header > div:first-child::before {
+  background: #fffaf6 url("../assets/icons/phosphor/lightning.png") center / 22px 22px no-repeat;
+  border: 1px solid rgba(217, 208, 195, .92);
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(51, 41, 30, .08);
+  content: "";
+  display: block;
+  height: 56px;
+  width: 56px;
+}
+
+.desktop[data-screen="quick-start"] h1,
+.desktop[data-screen="quick-start"] .subtitle,
+.desktop[data-screen="quick-start"] .fixture-banner,
+.desktop[data-screen="quick-start"] .quick-start-metrics,
+.desktop[data-screen="quick-start"] .quick-start-account-list,
+.desktop[data-screen="quick-start"] .quick-start-connections-card .quick-start-api-status,
+.desktop[data-screen="quick-start"] .quick-start-connections-card .quick-start-secret,
+.desktop[data-screen="quick-start"] .quick-start-connections-card .quick-start-route-hint,
+.desktop[data-screen="quick-start"] .quick-start-connections-card .quick-start-api-checklist,
+.desktop[data-screen="quick-start"] .quick-start-connections-card .api-credential-lane,
+.desktop[data-screen="quick-start"] .quick-start-history-checklist,
+.desktop[data-screen="quick-start"] .quick-start-footer {
+  display: none;
 }
 
 .desktop[data-screen="quick-start"] .header-actions {
@@ -7091,19 +7131,10 @@ button:disabled {
   padding-inline: 13px;
 }
 
-.desktop[data-screen="quick-start"] .fixture-banner {
-  border-radius: 13px;
-  font-size: 13px;
-  line-height: 18px;
-  margin-bottom: 0;
-  min-height: 42px;
-  padding-inline: 14px;
-}
-
 .quick-start-screen {
   display: grid;
   gap: var(--qs-section-gap);
-  grid-template-rows: min-content minmax(0, 1fr) min-content;
+  grid-template-rows: minmax(0, 1fr);
   height: auto;
   min-height: 0;
 }
@@ -7116,14 +7147,19 @@ button:disabled {
   align-items: start;
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(620px, 1fr) minmax(380px, 460px);
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, .88fr);
+  max-width: 1110px;
   min-height: 0;
+}
+
+.quick-start-route-card {
+  grid-column: auto;
 }
 
 .quick-start-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   height: auto;
   min-height: 0;
   padding: var(--qs-card-padding);
@@ -7164,6 +7200,10 @@ button:disabled {
   margin: 5px 0 0;
 }
 
+.desktop[data-screen="quick-start"] .quick-start-card-head p {
+  display: none;
+}
+
 .quick-start-card-icon {
   height: 18px;
   width: 18px;
@@ -7173,6 +7213,95 @@ button:disabled {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-start-connection-actions {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-start-connect-tile {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .86);
+  border-radius: 16px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 74px;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.quick-start-connect-tile.api-route-action {
+  flex: initial;
+  font-size: inherit;
+  line-height: inherit;
+  max-width: none;
+  padding-inline: 16px;
+}
+
+.quick-start-connect-tile:hover {
+  border-color: var(--border-strong);
+}
+
+.quick-start-connect-tile strong,
+.quick-start-connect-tile small {
+  display: block;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.quick-start-connect-tile strong {
+  font-size: 14px;
+  line-height: 19px;
+  white-space: nowrap;
+}
+
+.quick-start-connect-tile small {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.quick-start-connection-status {
+  border-top: 1px solid rgba(217, 208, 195, .86);
+  display: grid;
+  padding-top: 6px;
+}
+
+.quick-start-connection-status .quick-start-check-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+}
+
+.quick-start-connection-status strong,
+.quick-start-connection-status small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-start-connection-status strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.quick-start-connection-status small {
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 15px;
+  margin-top: 2px;
 }
 
 .quick-start-metric {
@@ -7361,10 +7490,12 @@ button:disabled {
 
 .quick-start-card-actions {
   align-items: center;
+  border-top: 1px solid rgba(217, 208, 195, .86);
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 0;
   min-height: 40px;
+  padding-top: 16px;
 }
 
 .quick-start-card-actions .button {
@@ -7379,6 +7510,55 @@ button:disabled {
   background: rgba(246, 241, 234, .86);
   border-color: rgba(217, 208, 195, .94);
   color: var(--secondary);
+}
+
+.quick-start-route-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.quick-start-route-grid label {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 104px minmax(0, 1fr);
+}
+
+.quick-start-route-grid label > span {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.quick-start-route-grid select {
+  background: rgba(246, 241, 234, .88);
+  border: 0;
+  border-radius: 12px;
+  color: var(--text);
+  font-weight: 700;
+  min-height: 42px;
+  min-width: 0;
+  padding-inline: 14px;
+  width: 100%;
+}
+
+.quick-start-history-checklist {
+  align-items: center;
+  border-top: 1px solid rgba(217, 208, 195, .86);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding-top: 14px;
+}
+
+.quick-start-history-checklist label {
+  align-items: center;
+  color: var(--secondary);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+  line-height: 18px;
 }
 
 .quick-start-api-identity {
@@ -7504,10 +7684,24 @@ button:disabled {
   display: grid;
 }
 
+.desktop[data-screen="quick-start"] .quick-start-route-card .quick-start-api-checklist .quick-start-check-row:nth-child(n+3),
+.desktop[data-screen="quick-start"] #quickStartCheckAccountsAction,
+.desktop[data-screen="quick-start"] #quickStartRouteRefreshAction,
+.desktop[data-screen="quick-start"] #quickStartLaunchPreflightAction,
+.desktop[data-screen="quick-start"] #quickStartDeepSeekCoderCheckAction,
+.desktop[data-screen="quick-start"] #quickStartDeepSeekCodeEditProofAction,
+.desktop[data-screen="quick-start"] #quickStartShowCustomWindowAction {
+  display: none;
+}
+
 .quick-start-check-row {
   border-bottom: 1px solid rgba(217, 208, 195, .86);
   justify-content: space-between;
   min-height: 40px;
+}
+
+.desktop[data-screen="quick-start"] .quick-start-check-row:last-child {
+  border-bottom: 0;
 }
 
 .quick-start-check-row > span:first-child {
@@ -7528,6 +7722,20 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
+}
+
+.desktop[data-screen="quick-start"] .quick-start-route-response {
+  border-top: 1px solid rgba(217, 208, 195, .86);
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  max-height: 92px;
+  overflow: auto;
+  padding-top: 14px;
+}
+
+.desktop[data-screen="quick-start"] .quick-start-card-actions #quickStartCustomLaunchAction {
+  margin-left: auto;
 }
 
 @media (max-width: 1511px) {
@@ -7652,7 +7860,8 @@ button:disabled {
 
   .quick-start-grid,
   .api-connections-summary,
-  .quick-start-metrics {
+  .quick-start-metrics,
+  .quick-start-connection-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 

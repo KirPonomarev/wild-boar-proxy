@@ -314,7 +314,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="codexCustomApiModelSelect"', html)
         self.assertIn('id="codexCustomExecutionModeSelect"', html)
         self.assertIn('value="chatgpt_only"', html)
-        self.assertIn('value="chatgpt_api"', html)
+        self.assertIn('value="chatgpt_plus_api"', html)
         self.assertIn('value="api_only"', html)
         self.assertIn('id="codexCustomExecutionModeDryRunAction"', html)
         self.assertIn('id="codexCustomExecutionModeState"', html)
@@ -345,7 +345,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('fetch("api/codex/custom/model-selector-dry-run"', js)
         self.assertIn('fetch("api/codex/custom/model-dry-run"', js)
         self.assertIn("body: JSON.stringify({ api_model_id: apiModelId })", js)
-        self.assertIn("body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })", js)
+        self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
         self.assertIn("body: JSON.stringify({ chatgpt_model_id: chatgptModelId, api_model_id: apiModelId })", js)
         self.assertIn("body: JSON.stringify({ model_id: modelId })", js)
         self.assertIn("renderCodexCustomApiActionGate(await response.json())", js)
@@ -415,6 +415,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="originalCodexLaunchAction"', html)
         self.assertIn('id="codexCustomLaunchDryRunAction"', html)
         self.assertIn('id="codexCustomLaunchAction"', html)
+        self.assertIn('id="codexCustomVisibleHistoryConfirmAction"', html)
+        self.assertIn('id="customVisibleHistoryOpenCheck"', html)
+        self.assertIn('id="customVisibleHistoryOldChatCheck"', html)
+        self.assertIn('id="customVisibleHistoryNoRawContentCheck"', html)
+        self.assertIn('id="codexCustomVisibleHistoryResponse"', html)
         self.assertIn('id="safeAppCopyLaunchDryRunAction"', html)
         self.assertIn('id="safeAppCopyLiveAdmissionAction"', html)
         self.assertIn('id="safeAppCopyLaunchAction"', html)
@@ -428,6 +433,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('fetch("api/codex/original/launch"', js)
         self.assertIn('fetch("api/codex/custom/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/custom/native-launch"', js)
+        self.assertIn('const controller = typeof AbortController === "function" ? new AbortController() : null;', js)
+        self.assertIn('setTimeout(() => controller.abort(), 45000)', js)
+        self.assertIn('machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED"', js)
+        self.assertIn("execution_mode: executionMode", js)
+        self.assertIn("chatgpt_model_id: chatgptModelId", js)
+        self.assertIn("api_model_id: apiModelId", js)
+        self.assertIn('fetch("api/codex/custom/visible-history/owner-confirmation"', js)
+        self.assertIn("raw_thread_content_not_recorded", js)
+        self.assertIn("VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY", js)
         self.assertIn('fetch("api/codex/app-copy/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/app-copy/live-admission"', js)
         self.assertIn('fetch("api/codex/app-copy/launch"', js)
@@ -511,6 +525,28 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("postCodexCustomSessionAction(\"prompt\", { prompt: promptNode ? promptNode.value : \"\" })", js)
         self.assertIn('id="codexCustomSessionPromptRunAction"', html)
         self.assertIn('document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt())', js)
+        self.assertIn('id="codexCustomProductCoderTask"', html)
+        self.assertIn("Задача для DeepSeek", html)
+        self.assertIn("Запустить DeepSeek-кодер", html)
+        self.assertIn("Очистить worktree", html)
+        self.assertIn('id="codexCustomProductCoderResponse"', html)
+        self.assertIn('id="codexCustomProductCoderDiff"', html)
+        self.assertIn('document.getElementById("codexCustomProductCoderRunAction")?.addEventListener("click", () => runCodexCustomProductCoder())', js)
+        self.assertIn('document.getElementById("codexCustomProductCoderCleanupAction")?.addEventListener("click", () => cleanupCodexCustomProductCoderWorktree())', js)
+        self.assertIn('postCodexCustomSessionAction("safe-worktree-coder", {', js)
+        self.assertIn("api_model_id: apiModelId", js)
+        self.assertIn("task", js)
+        self.assertIn("api/codex/custom/worktrees/${encodeURIComponent(worktreeId)}/cleanup", js)
+        self.assertIn("working_dir_override_admitted: packet?.working_dir_override_admitted === true", js)
+        self.assertIn("main_worktree_mutated_by_run: packet?.main_worktree_mutated_by_run === true", js)
+        self.assertIn("wbp_patch_applier_used: packet?.wbp_patch_applier_used === true", js)
+        product_coder_section = js.split("async function runCodexCustomProductCoder()", 1)[1].split(
+            "async function cancelCodexCustomSession()", 1
+        )[0]
+        self.assertNotIn("worktree_path:", product_coder_section)
+        self.assertNotIn("base_url:", product_coder_section)
+        self.assertNotIn("api_key:", product_coder_section)
+        self.assertNotIn("secret_ref:", product_coder_section)
         self.assertIn("selection_dry_run_proven: selectionDryRun", js)
         self.assertIn("live_selection_proven: liveSelection", js)
         self.assertIn("source_provenance_status: packet?.source_provenance_status || session?.source_provenance_status || \"\"", js)
@@ -1242,6 +1278,15 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
 
+        self.assertIn('data-screen="quick-start"', html)
+        self.assertIn('id="mainTitle">Быстрый старт</h1>', html)
+        self.assertIn('id="quickStartNav" class="nav-item active"', html)
+        self.assertIn('id="overviewNav" class="nav-item" href="?screen=overview"', html)
+        self.assertIn('const screen = params.get("screen") || "quick-start";', js)
+        self.assertIn('return document.querySelector(".desktop").dataset.screen || "quick-start";', js)
+        self.assertNotIn('id="quickStartScreen" class="screen quick-start-screen" data-screen="quick-start" data-quick-start-mode="daily-control-panel" hidden', html)
+        self.assertIn('id="overviewScreen" class="screen" data-screen="overview" hidden', html)
+
         nav_match = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', html, re.S)
         self.assertIsNotNone(nav_match)
         nav = nav_match.group(1)
@@ -1255,18 +1300,118 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
 
         section = self._section_html(html, "quickStartScreen")
         self.assertIn('data-screen="quick-start"', section)
-        self.assertIn("Аккаунты Codex", section)
-        self.assertIn("Основной API", section)
+        self.assertIn("Подключения", section)
+        self.assertIn("Добавить ChatGPT", section)
+        self.assertIn("Добавить API", section)
+        self.assertIn("без перехода в другие разделы", section)
         self.assertIn("Упрощённый режим показывает только итоговые статусы и безопасные действия.", section + js)
         self.assertIn("Первый запуск: пустые состояния не являются ошибкой.", js)
         self.assertIn("Live-readonly данные недоступны. Предыдущие fixture-данные не используются.", js)
         self.assertIn("Основной route не подтверждён", section + js)
-        self.assertIn("secret_ref: —", section)
-        self.assertIn('href="?screen=api-connections"', section)
-        self.assertIn('href="?screen=accounts"', section)
+        self.assertIn("ключ: не показывается", section)
+        self.assertNotIn("secret_ref:", section)
+        self.assertNotIn("base_url", section)
+        self.assertNotIn("api_key", section)
+        self.assertNotIn("CODEX_HOME", section)
+        self.assertIn("ключ: доступен серверу · значение скрыто", js)
+        self.assertNotIn('text("quickStartApiSecret", `secret_ref:', js)
+        self.assertNotIn('href="?screen=api-connections"', section)
+        self.assertNotIn('href="?screen=accounts"', section)
         self.assertIn('data-ui-action="onboard_account_dry_run"', section)
+        self.assertIn('document.getElementById("quickStartAddAccountAction")?.addEventListener("click", () => openOnboardModal())', js)
+        self.assertIn('id="quickStartConnectApiAction" class="quick-start-connect-tile api-route-action api-route-connect-action"', section)
+        self.assertIn('document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {', js)
+        self.assertIn('maybeConfirmAndRun("api_route_connect")', js)
+        connect_api_match = re.search(r'<button id="quickStartConnectApiAction"[^>]*>', section)
+        self.assertIsNotNone(connect_api_match)
+        connect_api_button = connect_api_match.group(0)
+        self.assertNotIn("data-route-id", connect_api_button)
+        self.assertNotIn("route_id", connect_api_button)
+        self.assertNotIn("api_key", connect_api_button)
+        self.assertNotIn("secret_ref", connect_api_button)
         self.assertIn('data-ui-action="api_route_check"', section)
         self.assertIn('data-route-id=""', section)
+        self.assertIn("Рабочий маршрут", section)
+        self.assertIn('id="quickStartChatModelSelect"', section)
+        self.assertIn('id="quickStartApiModelSelect"', section)
+        self.assertIn('id="quickStartApiReasoningOptionSelect"', section)
+        self.assertIn('id="quickStartExecutionModeSelect"', section)
+        self.assertIn('id="quickStartDeepSeekCoderCheckAction"', section)
+        self.assertIn("Проверить DeepSeek-кодера", section)
+        self.assertIn('id="quickStartDeepSeekCodeEditProofAction"', section)
+        self.assertIn("Проверить DeepSeek-правку", section)
+        self.assertIn('id="quickStartCustomLaunchAction"', section)
+        self.assertIn("Запустить Codex Custom", section)
+        self.assertIn('id="quickStartLaunchPreflightAction"', section)
+        self.assertIn("Предзапусковая проверка", section)
+        self.assertIn('id="quickStartBridgeState"', section)
+        self.assertIn('id="quickStartWindowState"', section)
+        self.assertIn('id="quickStartConfigState"', section)
+        self.assertIn('document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch())', js)
+        self.assertIn('document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight())', js)
+        self.assertIn('fetch("api/codex/custom/native-launch-preflight"', js)
+        self.assertIn("renderQuickStartLaunchPreflight", js)
+        self.assertIn("visible_window_counts_as_model_truth", js)
+        self.assertIn("bridge_alive_counts_as_model_truth", js)
+        self.assertIn("launch_packet_is_truth_source", js)
+        self.assertIn('id="quickStartShowCustomWindowAction"', section)
+        self.assertIn("Показать окно", section)
+        self.assertIn('document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow())', js)
+        self.assertIn('fetch("api/codex/custom/show-window"', js)
+        show_window_match = re.search(r'<button id="quickStartShowCustomWindowAction"[^>]*>', section)
+        self.assertIsNotNone(show_window_match)
+        show_window_button = show_window_match.group(0)
+        self.assertNotIn("href=", show_window_button)
+        self.assertNotIn("data-screen-link", show_window_button)
+        self.assertNotIn("base_url", show_window_button)
+        self.assertNotIn("api_key", show_window_button)
+        self.assertNotIn("secret_ref", show_window_button)
+        self.assertIn('id="quickStartVisibleHistoryConfirmAction"', section)
+        self.assertIn("syncCodexRouteSelects", js)
+        self.assertIn("apiReasoningOptionForModelEntry", js)
+        self.assertIn("provider_declared_max", js)
+        self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
+        self.assertNotIn("reasoning_effort: apiReasoningOptionId", js)
+        self.assertIn('fetch("api/codex/custom/execution-mode-dry-run"', js)
+        self.assertIn('fetch("api/codex/custom/native-launch"', js)
+        self.assertIn("execution_mode: executionMode", js)
+        self.assertIn("chatgpt_model_id: chatgptModelId", js)
+        self.assertIn("api_model_id: apiModelId", js)
+        self.assertIn("launch_route_truth_final_status", js)
+        self.assertIn("quick_start_stable_custom_launch_final_status", js)
+        self.assertIn("profile_final_status", js)
+        self.assertIn("session_storage_final_status", js)
+        self.assertIn("profile_persistence_proven", js)
+        self.assertIn("persistent_profile_reused", js)
+        self.assertIn("profile_relaunch_required_for_strong_history_claim", js)
+        self.assertIn("route_packet_matches_selection_packet", js)
+        self.assertIn("quick_start_launch_route_truth_proven_with_limits", js)
+        self.assertIn("response.textContent = JSON.stringify({", js)
+        self.assertIn("custom_codex_window_deepseek_smoke_final_status", js)
+        self.assertIn("custom_codex_window_deepseek_launch_proven_with_limits", js)
+        self.assertIn("manual_prompt_smoke_attempted", js)
+        self.assertIn("model_self_report_counts_as_runtime_truth", js)
+        self.assertIn("history_persistence_claimed", js)
+        self.assertIn("selected_model: packet?.selected_model", js)
+        self.assertIn("runQuickStartDeepSeekCoderCheck()", js)
+        self.assertIn("api/codex/custom/quick-start/deepseek-safe-worktree-check", js)
+        self.assertIn("runQuickStartDeepSeekCodeEditProof()", js)
+        self.assertIn("api/codex/custom/quick-start/deepseek-code-edit-proof", js)
+        self.assertIn("CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS", js)
+        self.assertIn("file_content_exact", js)
+        self.assertIn("quickStartCustomLaunchAction", js)
+        self.assertIn('executionMode === "api_only"', js)
+        self.assertIn("DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS", js)
+        self.assertIn("QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS", js)
+        self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
+        self.assertIn("deepseek_live_executor_packet_proven_with_limits", js)
+        self.assertIn("no_chatgpt: packet?.no_chatgpt === true", js)
+        self.assertIn("no_fallback: packet?.no_fallback === true", js)
+        self.assertIn("no_patch_applier: packet?.no_patch_applier === true", js)
+        self.assertIn("main_tree_untouched: packet?.main_tree_untouched === true", js)
+        self.assertIn("file_changed_by_codex_tool: packet?.file_changed_by_codex_tool === true", js)
+        self.assertIn("main_worktree_mutated_by_probe: packet?.main_worktree_mutated_by_probe === true", js)
+        self.assertIn("quickStartRouteResponse", js)
         self.assertIn("quickStartAccountsFixtureFromOverview", js)
         self.assertIn("quickStartApiFixtureFromOverview", js)
         self.assertIn("quickStartApiModel", js)
@@ -1307,11 +1452,22 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn("quick start · live readonly", html + js)
         self.assertNotIn("quick start · v0.2.0", html + js)
         self.assertIn("align-items: start", css)
-        self.assertIn("grid-template-columns: minmax(620px, 1fr) minmax(380px, 460px)", css)
+        self.assertIn("grid-template-columns: minmax(0, 1.2fr) minmax(360px, .88fr)", css)
+        self.assertIn("max-width: 1110px", css)
+        self.assertIn("quick-start-connections-card", html)
+        self.assertIn(".quick-start-connection-actions", css)
+        self.assertIn(".quick-start-connect-tile", css)
+        self.assertIn("overflow-wrap: anywhere", css)
+        self.assertIn(".quick-start-connection-status", css)
+        self.assertIn(".quick-start-route-card", css)
+        self.assertIn("grid-column: auto", css)
+        self.assertIn(".quick-start-route-grid", css)
+        self.assertIn(".quick-start-history-checklist", css)
         self.assertIn("height: auto", css)
-        self.assertIn("padding: var(--qs-main-padding) var(--qs-main-padding) 28px", css)
+        self.assertIn("padding: 48px var(--qs-main-padding) 32px", css)
         self.assertIn("@media (max-width: 1511px)", css)
-        self.assertIn("font-size: 34px", css)
+        self.assertIn(".main-header > div:first-child::before", css)
+        self.assertIn('url("../assets/icons/phosphor/lightning.png") center / 22px 22px no-repeat', css)
         self.assertIn("min-height: 76px", css)
         self.assertIn("min-height: 102px", css)
         self.assertIn("white-space: nowrap", css)
@@ -1348,13 +1504,61 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn("source_dir", section + js)
         self.assertNotIn("showOpenFilePicker", section + js)
         self.assertIn('src="assets/icons/phosphor/users.png"', section)
-        self.assertIn('src="assets/icons/phosphor/share-network.png"', section)
+        self.assertIn('src="assets/icons/phosphor/plus.png"', section)
         self.assertIn('src="assets/icons/phosphor/key.png"', section)
         self.assertIn('src="assets/icons/phosphor/terminal-window.png"', section)
         self.assertIn('src="assets/icons/phosphor/shield-check.png"', section)
         self.assertIn("missing_secret_ref", js)
         self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
         self.assertIn('const primary = source === "live"', js)
+
+    def test_quick_start_wired_actions_stay_on_first_screen_and_do_not_cross_launch_paths(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        section = self._section_html(html, "quickStartScreen")
+
+        for button_id in (
+            "quickStartExecutionModeDryRunAction",
+            "quickStartLaunchPreflightAction",
+            "quickStartCustomLaunchAction",
+            "quickStartShowCustomWindowAction",
+        ):
+            match = re.search(rf'<button id="{button_id}"[^>]*>', section)
+            self.assertIsNotNone(match, button_id)
+            button = match.group(0)
+            self.assertNotIn("href=", button)
+            self.assertNotIn("data-screen-link", button)
+            self.assertNotIn("base_url", button)
+            self.assertNotIn("api_key", button)
+            self.assertNotIn("secret_ref", button)
+
+        preflight_body = re.search(
+            r"async function runQuickStartLaunchPreflight\(\) \{(?P<body>.*?)\n\}\n\nfunction renderCodexCustomShowWindow",
+            js,
+            re.S,
+        )
+        self.assertIsNotNone(preflight_body)
+        preflight_js = preflight_body.group("body")
+        self.assertIn('fetch("api/codex/custom/native-launch-preflight"', preflight_js)
+        self.assertNotIn(
+            'fetch("api/codex/custom/native-launch"',
+            preflight_js.replace("native-launch-preflight", ""),
+        )
+        self.assertNotIn("setScreen(", preflight_js)
+        self.assertIn("new_launch_started: false", preflight_js)
+        self.assertIn("live_provider_called: false", preflight_js)
+
+        show_body = re.search(
+            r"async function showCodexCustomWindow\(\) \{(?P<body>.*?)\n\}\n\nasync function confirmCodexCustomVisibleHistory",
+            js,
+            re.S,
+        )
+        self.assertIsNotNone(show_body)
+        show_js = show_body.group("body")
+        self.assertIn('fetch("api/codex/custom/show-window"', show_js)
+        self.assertNotIn('fetch("api/codex/custom/native-launch"', show_js)
+        self.assertNotIn("setScreen(", show_js)
+        self.assertIn("custom_window_visible: false", show_js)
 
     def test_quick_start_live_rows_format_operator_copy(self) -> None:
         script = r"""
@@ -7920,6 +8124,28 @@ renderCodexCustomLaunch({
   native_app_usable: false,
   real_codex_app_launched: true,
   launch_claim_scope: "custom_native_app_window_launch_only",
+  quick_start_stable_custom_launch_final_status: "QUICK_START_STABLE_CUSTOM_LAUNCH_WITH_PROFILE_REUSE_PROVEN_WITH_LIMITS",
+  profile_final_status: "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS",
+  session_storage_final_status: "KNOWN_BLOCKER_CUSTOM_CODEX_SESSION_STORAGE_NOT_OBSERVED",
+  profile_persistence_proven: true,
+  persistent_profile_reused: true,
+  codex_home_reused: true,
+  electron_user_data_reused: true,
+  profile_path_stable: true,
+  persistent_profile_root_is_tmp: false,
+  persistent_codex_home_is_tmp: false,
+  persistent_user_data_dir_is_tmp: false,
+  profile_relaunch_required_for_strong_history_claim: true,
+  custom_codex_window_deepseek_smoke_final_status: "CUSTOM_CODEX_WINDOW_DEEPSEEK_LAUNCH_PROVEN_PROMPT_SMOKE_BLOCKED_WITH_LIMITS",
+  custom_codex_window_deepseek_launch_proven_with_limits: true,
+  manual_prompt_smoke_attempted: false,
+  manual_prompt_smoke_proven: false,
+  manual_prompt_smoke_counts_as_model_truth: false,
+  manual_prompt_smoke_blocked_reason: "manual_native_window_prompt_not_automated",
+  model_self_report_counts_as_runtime_truth: false,
+  deepseek_window_prompt_runtime_truth_proven: false,
+  history_persistence_claimed: false,
+  visible_thread_history_restored_claimed: false,
   next_action: "none"
 });
 `, sandbox);
@@ -7939,6 +8165,30 @@ if (rendered.native_app_usable !== false) {
 }
 if (rendered.real_codex_app_launched !== true) {
   throw new Error(`real_codex_app_launched should be true: ${JSON.stringify(rendered)}`);
+}
+if (rendered.custom_codex_window_deepseek_smoke_final_status !== "CUSTOM_CODEX_WINDOW_DEEPSEEK_LAUNCH_PROVEN_PROMPT_SMOKE_BLOCKED_WITH_LIMITS") {
+  throw new Error(`window smoke status should render: ${JSON.stringify(rendered)}`);
+}
+if (rendered.quick_start_stable_custom_launch_final_status !== "QUICK_START_STABLE_CUSTOM_LAUNCH_WITH_PROFILE_REUSE_PROVEN_WITH_LIMITS") {
+  throw new Error(`stable launch final status should render: ${JSON.stringify(rendered)}`);
+}
+if (rendered.profile_final_status !== "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS" || rendered.profile_persistence_proven !== true) {
+  throw new Error(`profile persistence should render separately: ${JSON.stringify(rendered)}`);
+}
+if (rendered.persistent_profile_root_is_tmp !== false || rendered.persistent_user_data_dir_is_tmp !== false) {
+  throw new Error(`persistent profile paths must not be tmp for normal launch: ${JSON.stringify(rendered)}`);
+}
+if (rendered.custom_codex_window_deepseek_launch_proven_with_limits !== true) {
+  throw new Error(`window launch proof should render true: ${JSON.stringify(rendered)}`);
+}
+if (rendered.manual_prompt_smoke_attempted !== false || rendered.manual_prompt_smoke_proven !== false) {
+  throw new Error(`manual prompt smoke must stay unproven: ${JSON.stringify(rendered)}`);
+}
+if (rendered.model_self_report_counts_as_runtime_truth !== false) {
+  throw new Error(`model self-report must not count as truth: ${JSON.stringify(rendered)}`);
+}
+if (rendered.history_persistence_claimed !== false || rendered.visible_thread_history_restored_claimed !== false) {
+  throw new Error(`history must not be claimed by window smoke: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(
