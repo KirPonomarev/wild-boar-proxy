@@ -2393,6 +2393,29 @@ def build_chatgpt_plus_api_slot_truth_packet(
         "api_reasoning_operator_level": str(
             server_truth_packet.get("api_reasoning_operator_level") or ""
         ),
+        "api_reasoning_option_model_bound": server_truth_packet.get(
+            "api_reasoning_option_model_bound"
+        )
+        is True,
+        "source": "server_selection_truth",
+        "server_selection_truth_used": server_truth_packet.get("model_selection_truth_proven")
+        is True,
+        "server_catalog_source": server_truth_packet.get("server_catalog_source") is True,
+        "selected_chatgpt_model_server_issued": chatgpt_primary_slot_proven,
+        "selected_api_model_server_issued": api_coding_slot_proven,
+        "api_reasoning_option_server_validated": server_truth_packet.get(
+            "api_reasoning_option_model_bound"
+        )
+        is True,
+        "browser_route_authority": False,
+        "browser_secret_authority": False,
+        "browser_model_authority": False,
+        "browser_allowed_to_request_server_model_id": True,
+        "ui_label_counts_as_model_truth": False,
+        "model_self_report_counts_as_model_truth": False,
+        "codex_window_required": False,
+        "codex_window_observed": False,
+        "dry_server_truth_only": True,
         "primary_model_slot": primary_slot,
         "coding_agent_model_slot": coding_slot,
         "chatgpt_primary_slot_proven": chatgpt_primary_slot_proven,
@@ -2418,6 +2441,7 @@ def build_chatgpt_plus_api_slot_truth_packet(
         )
         is True,
         "live_call_attempted": server_truth_packet.get("live_call_attempted") is True,
+        "live_api_call_attempted": server_truth_packet.get("live_api_call_attempted") is True,
         "provider_called": server_truth_packet.get("provider_called") is True,
         "network_calls_made": server_truth_packet.get("network_calls_made") is True,
         "runtime_execution_proven": server_truth_packet.get("runtime_execution_proven") is True,

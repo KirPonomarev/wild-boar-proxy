@@ -720,6 +720,21 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
         self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
         self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-high")
+        self.assertEqual(packet["source"], "server_selection_truth")
+        self.assertTrue(packet["server_selection_truth_used"])
+        self.assertTrue(packet["server_catalog_source"])
+        self.assertTrue(packet["selected_chatgpt_model_server_issued"])
+        self.assertTrue(packet["selected_api_model_server_issued"])
+        self.assertTrue(packet["api_reasoning_option_model_bound"])
+        self.assertTrue(packet["api_reasoning_option_server_validated"])
+        self.assertFalse(packet["browser_route_authority"])
+        self.assertFalse(packet["browser_secret_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["ui_label_counts_as_model_truth"])
+        self.assertFalse(packet["model_self_report_counts_as_model_truth"])
+        self.assertFalse(packet["codex_window_required"])
+        self.assertFalse(packet["codex_window_observed"])
+        self.assertTrue(packet["dry_server_truth_only"])
         self.assertEqual(packet["primary_model_slot"]["slot_id"], "primary_model_slot")
         self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
         self.assertEqual(packet["primary_model_slot"]["model_id"], "gpt-5.3-codex")
@@ -741,11 +756,18 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["fallback_attempted"])
         self.assertFalse(packet["fallback_can_prove_success"])
         self.assertFalse(packet["model_lane_fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["route_or_backend_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["browser_raw_backend_authority_widened"])
         self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["live_api_call_attempted"])
         self.assertFalse(packet["provider_called"])
         self.assertFalse(packet["network_calls_made"])
         self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["ui_work_attempted"])
         self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["live_paid_call_attempted"])
         self.assertFalse(packet["full_delegation_claimed"])
         self.assertFalse(packet["simultaneous_execution_proven"])
 
@@ -777,6 +799,16 @@ class CodexModelRegistryTests(unittest.TestCase):
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot,
         )
+        unknown_api = build_chatgpt_plus_api_slot_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "browser-api-model",
+                "api_reasoning_option_id": "provider_declared_high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
         raw_backend = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
@@ -787,6 +819,10 @@ class CodexModelRegistryTests(unittest.TestCase):
                 "route_id": "browser-route",
                 "base_url": "https://browser.invalid/v1",
                 "api_key": "browser-key",
+                "secret_ref": "BROWSER_SECRET_REF",
+                "CODEX_HOME": "/tmp/browser-codex-home",
+                "path": "/tmp/browser-path",
+                "raw_config": {"route_id": "nested-browser-route"},
             },
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot,
@@ -802,7 +838,14 @@ class CodexModelRegistryTests(unittest.TestCase):
             api_snapshot=api_snapshot,
         )
 
-        for packet in (api_only, missing_api, unknown_chatgpt, raw_backend, reasoning_mismatch):
+        for packet in (
+            api_only,
+            missing_api,
+            unknown_chatgpt,
+            unknown_api,
+            raw_backend,
+            reasoning_mismatch,
+        ):
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(
                 packet["final_status"],
@@ -826,11 +869,35 @@ class CodexModelRegistryTests(unittest.TestCase):
             unknown_chatgpt["machine_error_code"],
             "CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_MODEL_NOT_SERVER_ISSUED",
         )
+        self.assertEqual(
+            unknown_api["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
+        )
         self.assertEqual(raw_backend["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(raw_backend["forbidden_fields"], [])
-        self.assertEqual(raw_backend["forbidden_field_count"], 4)
+        self.assertEqual(raw_backend["forbidden_browser_fields"], [])
+        self.assertEqual(raw_backend["forbidden_field_count"], 9)
         self.assertTrue(raw_backend["forbidden_fields_redacted"])
+        self.assertTrue(raw_backend["forbidden_browser_fields_redacted"])
         self.assertTrue(raw_backend["browser_raw_backend_authority_widened"])
+        self.assertFalse(raw_backend["browser_route_authority"])
+        self.assertFalse(raw_backend["browser_secret_authority"])
+        self.assertFalse(raw_backend["browser_model_authority"])
+        raw_backend_json = json.dumps(raw_backend, ensure_ascii=False)
+        self.assertNotIn("browser-route", raw_backend_json)
+        self.assertNotIn("nested-browser-route", raw_backend_json)
+        self.assertNotIn("https://browser.invalid/v1", raw_backend_json)
+        self.assertNotIn("browser-key", raw_backend_json)
+        self.assertNotIn("BROWSER_SECRET_REF", raw_backend_json)
+        self.assertNotIn("/tmp/browser-codex-home", raw_backend_json)
+        self.assertNotIn("/tmp/browser-path", raw_backend_json)
+        self.assertNotIn('"route_id"', raw_backend_json)
+        self.assertNotIn('"base_url"', raw_backend_json)
+        self.assertNotIn('"api_key"', raw_backend_json)
+        self.assertNotIn('"secret_ref"', raw_backend_json)
+        self.assertNotIn('"CODEX_HOME"', raw_backend_json)
+        self.assertNotIn('"path"', raw_backend_json)
+        self.assertNotIn('"raw_config"', raw_backend_json)
         self.assertEqual(
             reasoning_mismatch["machine_error_code"],
             "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
