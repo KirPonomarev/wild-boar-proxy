@@ -67,6 +67,61 @@ WINDOW_SMOKE_PHRASES = (
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
+BRIDGE_RESTART_ERROR_CODES = {
+    "LOCAL_BRIDGE_DEAD",
+    "LOCAL_BRIDGE_STREAM_DISCONNECTED",
+    "STALE_RESPONSES_PORT",
+    "STALE_LAUNCH_PACKET",
+}
+
+
+def _bridge_auth_error_payload(*, auth_header_seen: bool) -> dict[str, Any]:
+    return {
+        "error": {
+            "message": "local bridge authorization failed",
+            "type": "local_bridge_auth_error",
+            "code": "LOCAL_BRIDGE_AUTH_ERROR",
+        },
+        "auth_header_expected": True,
+        "auth_header_seen": auth_header_seen,
+        "auth_ok": False,
+        "secret_value_recorded": False,
+    }
+
+
+def _bridge_error_code_from_exception(exc: BaseException) -> str:
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, ConnectionRefusedError):
+            return "STALE_RESPONSES_PORT"
+        if isinstance(reason, TimeoutError):
+            return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
+        if isinstance(reason, OSError):
+            return "LOCAL_BRIDGE_DEAD"
+    if isinstance(exc, ConnectionRefusedError):
+        return "STALE_RESPONSES_PORT"
+    if isinstance(exc, TimeoutError):
+        return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
+    if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+        return "LOCAL_BRIDGE_STREAM_DISCONNECTED"
+    if isinstance(exc, OSError):
+        return "LOCAL_BRIDGE_DEAD"
+    return "LOCAL_BRIDGE_DEAD"
+
+
+def _bridge_error_payload(code: str, *, message: str = "local bridge request failed") -> dict[str, Any]:
+    return {
+        "error": {
+            "message": message,
+            "type": "local_bridge_error",
+            "code": code,
+            "restart_required": code in BRIDGE_RESTART_ERROR_CODES,
+        },
+        "last_error_type": code,
+        "restart_required": code in BRIDGE_RESTART_ERROR_CODES,
+        "stale_port_detected": code == "STALE_RESPONSES_PORT",
+        "secret_value_recorded": False,
+    }
 
 
 def _is_loopback_client_host(client_host: str) -> bool:
@@ -1286,8 +1341,9 @@ class ExternalRouteResponsesAdapter:
         client_host: str = "",
     ) -> tuple[int, dict[str, str], bytes]:
         normalized_path = path.split("?", 1)[0]
-        if str(headers.get("Authorization") or "") != f"Bearer {self.expected_api_key}":
-            payload = {"error": {"message": "unauthorized", "type": "auth_error"}}
+        authorization = str(headers.get("Authorization") or "")
+        if authorization != f"Bearer {self.expected_api_key}":
+            payload = _bridge_auth_error_payload(auth_header_seen=bool(authorization))
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 401, {"Content-Type": "application/json"}, body_bytes
         if method == "GET" and normalized_path in {"/v1/models", "/models"}:
@@ -1552,6 +1608,7 @@ class HybridOpenAICompatAdapter:
         safe_context = {
             "launch_id": str(context.get("launch_id") or ""),
             "trace_id": str(context.get("trace_id") or ""),
+            "launch_packet_id": str(context.get("launch_packet_id") or context.get("launch_id") or ""),
             "selected_model": str(context.get("selected_model") or ""),
             "api_reasoning_option_id": str(context.get("api_reasoning_option_id") or ""),
             "launch_route_digest": str(context.get("launch_route_digest") or ""),
@@ -1564,11 +1621,43 @@ class HybridOpenAICompatAdapter:
             records = [dict(record) for record in self._trace_records]
             context = dict(self._trace_context)
         last_record = records[-1] if records else {}
+        launch_packet_id = str(context.get("launch_packet_id") or context.get("launch_id") or "")
+        last_record_launch_packet_id = str(
+            last_record.get("launch_packet_id") or last_record.get("launch_id") or ""
+        )
+        stale_launch_packet = bool(
+            launch_packet_id
+            and last_record_launch_packet_id
+            and last_record_launch_packet_id != launch_packet_id
+        )
+        response_error_type = str(
+            last_record.get("response_error_code")
+            or last_record.get("response_error_type")
+            or ""
+        )
+        last_error_type = "STALE_LAUNCH_PACKET" if stale_launch_packet else response_error_type
         return {
             "schema_version": 1,
             "packet_kind": "hybrid_openai_compat_prompt_trace",
             "captured_at_utc": utc_now(),
             "trace_context": context,
+            "trace_id": str(context.get("trace_id") or ""),
+            "launch_packet_id": launch_packet_id,
+            "last_record_launch_packet_id": last_record_launch_packet_id,
+            "bridge_alive": self._server is not None,
+            "responses_endpoint_alive": self._server is not None,
+            "auth_header_expected": True,
+            "auth_header_seen": bool(last_record.get("auth_header_seen")),
+            "auth_ok": bool(last_record.get("auth_ok")) if last_record else False,
+            "selected_route": str(last_record.get("effective_route_model") or ""),
+            "provider_id": str(last_record.get("provider_id") or ""),
+            "model_id": str(last_record.get("upstream_model") or ""),
+            "fallback_used": last_record.get("fallback_used") is True,
+            "last_error_type": last_error_type,
+            "last_error_message": "",
+            "restart_required": last_error_type in BRIDGE_RESTART_ERROR_CODES,
+            "stale_launch_packet": stale_launch_packet,
+            "stale_port_detected": response_error_type == "STALE_RESPONSES_PORT",
             "request_count": len(records),
             "last_record": last_record,
             "records": records[-5:],
@@ -1621,7 +1710,7 @@ class HybridOpenAICompatAdapter:
             and _is_loopback_client_host(client_host)
         )
         if not auth_matches and not loopback_missing_auth:
-            payload = {"error": {"message": "unauthorized", "type": "auth_error"}}
+            payload = _bridge_auth_error_payload(auth_header_seen=bool(authorization))
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 401, {"Content-Type": "application/json"}, body_bytes
         if loopback_missing_auth:
@@ -1726,6 +1815,9 @@ class HybridOpenAICompatAdapter:
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
             "known_smoke_phrase_matched": smoke_match,
+            "auth_header_expected": True,
+            "auth_header_seen": True,
+            "auth_ok": True,
             "chatgpt_route_used": False,
             "api_only_calls_chatgpt": False,
             "fallback_used": False,
@@ -1780,6 +1872,9 @@ class HybridOpenAICompatAdapter:
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
             "known_smoke_phrase_matched": smoke_match,
+            "auth_header_expected": True,
+            "auth_header_seen": True,
+            "auth_ok": True,
             "chatgpt_route_used": True,
             "api_only_calls_chatgpt": False,
             "fallback_used": False,
@@ -1871,8 +1966,11 @@ class HybridOpenAICompatAdapter:
                 {"Content-Type": exc.headers.get("Content-Type", "application/json")},
                 exc.read(),
             )
-        except Exception:
-            payload = {"error": {"message": "hybrid bridge upstream request failed", "type": "server_error"}}
+        except Exception as exc:
+            payload = _bridge_error_payload(
+                _bridge_error_code_from_exception(exc),
+                message="hybrid bridge upstream request failed",
+            )
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 502, {"Content-Type": "application/json"}, body_bytes
 
