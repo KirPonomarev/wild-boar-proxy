@@ -1,0 +1,12 @@
+{
+  "contour": "SANDBOX_POST_ONBOARD_STATUS_ATTESTATION_REPAIR_PASS",
+  "status": "completed",
+  "final_verdict": "GO_TO_ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS",
+  "decision_reason": "reserve-first onboarding remains proven; raw status truth remains degraded; the degraded status is now machine-classified as reserve-only launch gap rather than a generic lifecycle blocker",
+  "raw_status_truth_unchanged": true,
+  "reserve_first_proof_preserved": true,
+  "lifecycle_admission_status": "ready",
+  "lifecycle_admission_reason": "reserve_only_launch_gap",
+  "forbidden_live_path_drift_observed": false,
+  "next_contour": "ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS"
+}

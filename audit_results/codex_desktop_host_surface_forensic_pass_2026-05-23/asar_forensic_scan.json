@@ -1,0 +1,69 @@
+{
+  "app_asar": "/Applications/Codex.app/Contents/Resources/app.asar",
+  "read_only": true,
+  "header_words": [
+    4,
+    425972,
+    425968,
+    425963
+  ],
+  "total_entries": 1619,
+  "js_files": 1208,
+  "package_json": {
+    "name": "openai-codex-electron",
+    "productName": "Codex",
+    "version": "26.519.31651",
+    "main": ".vite/build/bootstrap.js",
+    "codexBuildFlavor": "prod",
+    "codexBuildNumber": "3017",
+    "codexSparkleFeedUrl": "https://persistent.oaistatic.com/codex-app-prod/appcast.xml"
+  },
+  "relevant_findings": [
+    {
+      "file": ".vite/build/bootstrap.js",
+      "pattern": "app.setPath(`userData`, ...)",
+      "meaning": "Electron userData is explicitly set during bootstrap from appData/buildFlavor/env-derived logic."
+    },
+    {
+      "file": ".vite/build/bootstrap.js",
+      "pattern": "requestSingleInstanceLock",
+      "meaning": "Packaged app uses Electron single-instance locking and exits second desktop instance when lock fails."
+    },
+    {
+      "file": ".vite/build/bootstrap.js",
+      "pattern": "second-instance",
+      "meaning": "Second-instance args are queued into the primary process, which can collapse an intended isolated launch into an existing app instance."
+    },
+    {
+      "file": ".vite/build/main-DVEWN1ng.js",
+      "pattern": "app-server-control",
+      "meaning": "Remote/bootstrap code references ${CODEX_HOME:-$HOME/.codex}/app-server-control and app-server.log."
+    },
+    {
+      "file": ".vite/build/main-DVEWN1ng.js",
+      "pattern": "CODEX_CLI_PATH",
+      "meaning": "Desktop can select bundled or env-overridden Codex CLI path for certain runtime/tool surfaces."
+    },
+    {
+      "file": ".vite/build/app-session-DpDFpgD2.js",
+      "pattern": "CODEX_HOME",
+      "meaning": "CODEX_HOME is propagated into node_repl MCP/server environment, not sufficient by itself for all Electron/macOS storage."
+    },
+    {
+      "file": "webview/assets/src-DAzAmbVS.js",
+      "pattern": "CODEX_HOME fallback",
+      "meaning": "Webview helper logic treats CODEX_HOME or HOME/.codex as Codex home for worktree classification."
+    }
+  ],
+  "negative_findings": [
+    {
+      "pattern": "--user-data-dir",
+      "result": "No direct string hit in JS scan; prior launch used Chromium/Electron CLI arg successfully but it did not isolate all macOS bundle-id storage."
+    },
+    {
+      "pattern": "requestSingleInstanceLock bypass",
+      "result": "No safe supported bypass identified in read-only scan."
+    }
+  ],
+  "conclusion": "ASAR scan supports a future copied/renamed bundle dry-run because bundle identity/userData/single-instance behavior are central. It does not support official app env-wrapper as safe enough."
+}

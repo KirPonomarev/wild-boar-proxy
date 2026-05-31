@@ -1,0 +1,79 @@
+{
+  "contour_id": "reserve_first_stage20_live_path_selection_and_precondition_contour",
+  "date": "2026-05-12",
+  "auditor": "Singer",
+  "model": "gpt-5.4-mini",
+  "status": "completed",
+  "machine_error_code": "NO_GO_STAY_ON_HOLD_CONFIRMED",
+  "audit_verdict": "agree_with_main_verdict",
+  "findings": [
+    {
+      "severity": "P1",
+      "title": "OWNER_SURFACE_CONTRADICTION remains active",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:20-36",
+        "audit_results/step42_normalization_decision_packet.json:6-31"
+      ],
+      "observed_truth": "owner_surface_truth_status=contradiction_persistent_after_bounded_recheck and normalization_contour_admissible=false"
+    },
+    {
+      "severity": "P1",
+      "title": "Rotation evidence is still non-reopenable and is now contradicted",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:69-83",
+        "audit_results/reserve_first_stage20_rotation_inspect_raw_2026-05-12.json"
+      ],
+      "observed_truth": "machine_error_code=ROTATION_EVIDENCE_CONTRADICTED, participation_status=contradicted, evidence_reason=policy_drift_detected"
+    },
+    {
+      "severity": "P1",
+      "title": "Explicit reserve posture is still absent",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:101-115",
+        "audit_results/reserve_first_stage20_accounts_list_raw_2026-05-12.json",
+        "audit_results/reserve_first_stage20_posture20_raw_2026-05-12.json"
+      ],
+      "observed_truth": "reserve_count=0, reserve_target=0, reserve_live_capable_count=0, reserve_candidate_id is empty"
+    },
+    {
+      "severity": "P1",
+      "title": "Target-stage posture remains non-green",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:86-99",
+        "audit_results/reserve_first_stage20_posture20_raw_2026-05-12.json"
+      ],
+      "observed_truth": "machine_error_code=LIVE_POSTURE_DRIFT_ONLY and final_outcome=target_stage_posture_needs_normalization"
+    },
+    {
+      "severity": "P1",
+      "title": "Previously clear labels reappeared in current status truth",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:16-19",
+        "audit_results/reserve_first_stage20_status_raw_2026-05-12.json"
+      ],
+      "observed_truth": "claim_gate.status=blocked and policy_drift.status=detected in fresh status --json"
+    },
+    {
+      "severity": "P1",
+      "title": "Green healthcheck is insufficient reopen proof",
+      "evidence": [
+        "audit_results/hold_with_exact_blockers_packet_2026-05-12.json:125-130",
+        "audit_results/reserve_first_stage20_healthcheck_raw_2026-05-12.json",
+        "MASTER_PLAN.md:62-64"
+      ],
+      "observed_truth": "healthcheck is green, but reserve-first path remains blocked by claim gate, policy drift, rotation contradiction, and absent reserve posture"
+    }
+  ],
+  "commands_used": [
+    "python3 -m wild_boar_proxy status --json",
+    "python3 -m wild_boar_proxy healthcheck --json",
+    "python3 -m wild_boar_proxy rollout rotation inspect --json",
+    "python3 -m wild_boar_proxy accounts list --json",
+    "python3 -m wild_boar_proxy rollout posture inspect 20 --json"
+  ],
+  "scope_check": {
+    "product_behavior_changed": false,
+    "write_capable_actions_observed": false,
+    "claim_escalation_detected": false
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_RETIRE_ACTION_GATE",
+  "date": "2026-05-12",
+  "status": "implemented_verified",
+  "scope": {
+    "included": [
+      "web design command adapter spec for accounts_retire",
+      "live design server ui_action allowlist entry for retire_account",
+      "accounts list preflight eligibility gate before retire command execution",
+      "accounts screen row action for terminal lifecycle retirement",
+      "targeted adapter, live server, and static UI tests"
+    ],
+    "excluded": [
+      "reactivation",
+      "delete",
+      "auth file deletion",
+      "onboard account",
+      "bulk retire",
+      "desktop renderer",
+      "runtime.py",
+      "external lab dirty tail",
+      "direct state or log reads",
+      "policy or rollout mutation",
+      "global confirmation system redesign"
+    ]
+  },
+  "canonical_boundaries": {
+    "browser_payload": "ui_action plus structured account_id only",
+    "server_preflight": "accounts list --json",
+    "adapter_command": {
+      "adapter_command_id": "accounts_retire",
+      "argv_template": [
+        "accounts",
+        "retire",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "allowed_args": [
+        "account_id"
+      ]
+    },
+    "post_action_truth": "UI action result is not account truth; accounts screen refreshes canonical accounts readonly packet after action.",
+    "terminal_semantics": "retire is terminal lifecycle retirement, not demotion, deletion, or reactivation."
+  },
+  "eligibility_gate": {
+    "ui_action": "retire_account",
+    "eligible_when": [
+      "account exists in accounts list packet",
+      "pool is active or reserve",
+      "pool is not retired"
+    ],
+    "blocked_before_lifecycle_command_when": [
+      "missing account_id",
+      "unsafe account_id",
+      "unknown account_id",
+      "extra payload field",
+      "raw adapter command id from browser",
+      "already retired account",
+      "malformed accounts list packet"
+    ],
+    "error_codes": [
+      "UI_ACCOUNT_ID_REQUIRED",
+      "UI_ACCOUNT_ID_INVALID",
+      "UI_ACCOUNT_ID_NOT_FOUND",
+      "UI_ACTION_NOT_ALLOWED",
+      "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+      "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID"
+    ]
+  },
+  "ui_contract": {
+    "non_retired_accounts": "render retire_account as a terminal lifecycle action",
+    "retired_accounts": "render no retire button and no other lifecycle row actions",
+    "fixture_mode": "account actions remain disabled unless live action metadata allows them",
+    "copy_guard": "retire wording is terminal lifecycle retirement/removal from service, not delete or reactivation",
+    "confirmation": "uses existing confirmation path with confirmation_required metadata; global confirmation redesign is deferred"
+  },
+  "tests": {
+    "targeted_suite": {
+      "command": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+      "result": "passed",
+      "count": 55
+    },
+    "coverage_added": [
+      "adapter allowlist exact argv metadata for accounts_retire",
+      "server metadata for retire_account",
+      "preflight command sequence accounts list before active retire",
+      "preflight command sequence accounts list before reserve retire",
+      "already retired target blocked before lifecycle command execution",
+      "missing, unsafe, unknown, extra payload, raw adapter id, and malformed accounts packet blocked",
+      "static UI contains retire_account and not raw accounts retire string",
+      "static UI guards against delete and reactivation wording"
+    ],
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "count": 549
+    }
+  },
+  "changed_files": [
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "known_followups": [
+    {
+      "item": "retire button adds density to account row actions",
+      "disposition": "defer to UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "item": "global stronger confirmation policy remains unimplemented",
+      "disposition": "defer to UI_WEB_CONFIRMATION_SYSTEM_HARDENING"
+    },
+    {
+      "item": "pre-existing dirty worktree tail includes runtime and external lab files outside this contour",
+      "disposition": "exclude from this contour commit and adjudicate under WORKTREE_TAIL_ADJUDICATION"
+    }
+  ]
+}

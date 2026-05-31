@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "status": "not_run",
+  "reason": "authorization_gate_failed_before_live_runtime_preflight",
+  "commands_not_run": [
+    "python3 -m wild_boar_proxy status --json",
+    "python3 -m wild_boar_proxy healthcheck --json",
+    "python3 -m wild_boar_proxy accounts list --json"
+  ],
+  "runtime_ready_claim": "not_claimed",
+  "account_availability_claim": "not_claimed",
+  "no_false_green": true
+}

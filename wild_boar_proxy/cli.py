@@ -8,6 +8,8 @@ import json
 import sys
 from typing import Any
 
+from .cli_runner import run_codex_cli_runner_smoke
+from .external_models import run_external_models_command
 from .runtime import (
     RuntimeErrorInfo,
     RuntimePaths,
@@ -16,8 +18,13 @@ from .runtime import (
     mode_get,
     mode_set,
     run_accounts_command,
+    run_accounts_login_cancel,
+    run_accounts_login_status,
+    run_accounts_login_complete,
+    run_accounts_login_start,
     run_demote,
     run_healthcheck,
+    run_invariant_check,
     run_installer_init,
     run_hold,
     run_launch_client,
@@ -35,6 +42,8 @@ from .runtime import (
     run_rollout_stage_prove,
     run_package_experimental_build,
     run_package_experimental_verify,
+    run_package_launchable_build,
+    run_package_launchable_verify,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -42,6 +51,7 @@ from .runtime import (
     run_sync,
     summarize_status,
 )
+from .token_command import emit_local_token, token_status_payload
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status")
     status.add_argument("--json", action="store_true", required=True)
+
+    invariant_check = subparsers.add_parser("invariant-check")
+    invariant_check.add_argument("--json", action="store_true", required=True)
+
+    token = subparsers.add_parser("token")
+    token.add_argument("--json", action="store_true")
 
     stable = subparsers.add_parser("stable")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
@@ -86,6 +102,14 @@ def build_parser() -> argparse.ArgumentParser:
     launch_client.add_argument("--client-path", required=True)
     launch_client.add_argument("--json", action="store_true", required=True)
 
+    codex_runner = subparsers.add_parser("codex-runner")
+    codex_runner_subparsers = codex_runner.add_subparsers(
+        dest="codex_runner_command", required=True
+    )
+    codex_runner_smoke = codex_runner_subparsers.add_parser("smoke")
+    codex_runner_smoke.add_argument("--prompt", required=True)
+    codex_runner_smoke.add_argument("--json", action="store_true", required=True)
+
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
 
@@ -113,6 +137,25 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_onboard.add_argument("--skip-login", action="store_true")
     accounts_onboard.add_argument("--no-sync", action="store_true")
     accounts_onboard.add_argument("--non-interactive", action="store_true")
+    accounts_login = accounts_subparsers.add_parser("login")
+    accounts_login_subparsers = accounts_login.add_subparsers(
+        dest="accounts_login_command", required=True
+    )
+    accounts_login_start = accounts_login_subparsers.add_parser("start")
+    accounts_login_start.add_argument("--provider", required=True)
+    accounts_login_start.add_argument("--mode")
+    accounts_login_start.add_argument("--json", action="store_true", required=True)
+    accounts_login_status = accounts_login_subparsers.add_parser("status")
+    accounts_login_status.add_argument("--session", required=True)
+    accounts_login_status.add_argument("--json", action="store_true", required=True)
+    accounts_login_complete = accounts_login_subparsers.add_parser("complete")
+    accounts_login_complete.add_argument("--session", required=True)
+    accounts_login_complete.add_argument("--state")
+    accounts_login_complete.add_argument("--proof")
+    accounts_login_complete.add_argument("--json", action="store_true", required=True)
+    accounts_login_cancel = accounts_login_subparsers.add_parser("cancel")
+    accounts_login_cancel.add_argument("--session", required=True)
+    accounts_login_cancel.add_argument("--json", action="store_true", required=True)
 
     diagnostics = subparsers.add_parser("diagnostics")
     diagnostics_subparsers = diagnostics.add_subparsers(
@@ -209,6 +252,113 @@ def build_parser() -> argparse.ArgumentParser:
     package_experimental_verify = package_experimental_subparsers.add_parser("verify")
     package_experimental_verify.add_argument("--manifest", required=True)
     package_experimental_verify.add_argument("--json", action="store_true", required=True)
+    package_launchable = package_subparsers.add_parser("launchable")
+    package_launchable_subparsers = package_launchable.add_subparsers(
+        dest="package_launchable_command", required=True
+    )
+    package_launchable_build = package_launchable_subparsers.add_parser("build")
+    package_launchable_build.add_argument("--output-dir", required=True)
+    package_launchable_build.add_argument("--runtime-executable")
+    package_launchable_build.add_argument("--json", action="store_true", required=True)
+    package_launchable_verify = package_launchable_subparsers.add_parser("verify")
+    package_launchable_verify.add_argument("--manifest", required=True)
+    package_launchable_verify.add_argument("--json", action="store_true", required=True)
+
+    external_models = subparsers.add_parser("external-models")
+    external_models_subparsers = external_models.add_subparsers(
+        dest="external_models_command", required=True
+    )
+    external_models_start = external_models_subparsers.add_parser("start")
+    external_models_start.add_argument("--json", action="store_true", required=True)
+    external_models_stop = external_models_subparsers.add_parser("stop")
+    external_models_stop.add_argument("--json", action="store_true", required=True)
+    external_models_status = external_models_subparsers.add_parser("status")
+    external_models_status.add_argument("--json", action="store_true", required=True)
+    external_models_models = external_models_subparsers.add_parser("models")
+    external_models_models.add_argument("--json", action="store_true", required=True)
+    external_models_check = external_models_subparsers.add_parser("check")
+    external_models_check.add_argument("--route", required=True)
+    external_models_check.add_argument("--json", action="store_true", required=True)
+    external_models_live_format_check = external_models_subparsers.add_parser(
+        "live-format-check"
+    )
+    external_models_live_format_check.add_argument("--route", required=True)
+    external_models_live_format_check.add_argument("--prompt", required=True)
+    external_models_live_format_check.add_argument("--expected-text", required=True)
+    external_models_live_format_check.add_argument("--json", action="store_true", required=True)
+    external_models_credentials = external_models_subparsers.add_parser("credentials")
+    external_models_credentials_subparsers = external_models_credentials.add_subparsers(
+        dest="credentials_command", required=True
+    )
+    external_models_credentials_admit = external_models_credentials_subparsers.add_parser(
+        "admit"
+    )
+    external_models_credentials_admit.add_argument("--provider", required=True)
+    external_models_credentials_admit.add_argument("--source", required=True)
+    external_models_credentials_admit.add_argument(
+        "--json", action="store_true", required=True
+    )
+    external_models_credentials_status = external_models_credentials_subparsers.add_parser(
+        "status"
+    )
+    external_models_credentials_status.add_argument("--provider", required=True)
+    external_models_credentials_status.add_argument(
+        "--json", action="store_true", required=True
+    )
+
+    external_models_routes = external_models_subparsers.add_parser("routes")
+    external_models_routes_subparsers = external_models_routes.add_subparsers(
+        dest="routes_command", required=True
+    )
+    external_models_routes_add = external_models_routes_subparsers.add_parser("add")
+    external_models_routes_add_source = external_models_routes_add.add_mutually_exclusive_group(
+        required=True
+    )
+    external_models_routes_add_source.add_argument("--file")
+    external_models_routes_add_source.add_argument("--stdin", action="store_true")
+    external_models_routes_add.add_argument("--json", action="store_true", required=True)
+    external_models_routes_update = external_models_routes_subparsers.add_parser("update")
+    external_models_routes_update.add_argument("--route", required=True)
+    external_models_routes_update_source = (
+        external_models_routes_update.add_mutually_exclusive_group(required=True)
+    )
+    external_models_routes_update_source.add_argument("--file")
+    external_models_routes_update_source.add_argument("--stdin", action="store_true")
+    external_models_routes_update.add_argument("--json", action="store_true", required=True)
+    external_models_routes_remove = external_models_routes_subparsers.add_parser("remove")
+    external_models_routes_remove.add_argument("--route", required=True)
+    external_models_routes_remove.add_argument("--json", action="store_true", required=True)
+    external_models_routes_list = external_models_routes_subparsers.add_parser("list")
+    external_models_routes_list.add_argument("--json", action="store_true", required=True)
+    external_models_routes_enable = external_models_routes_subparsers.add_parser("enable")
+    external_models_routes_enable.add_argument("--route", required=True)
+    external_models_routes_enable.add_argument("--json", action="store_true", required=True)
+    external_models_routes_disable = external_models_routes_subparsers.add_parser("disable")
+    external_models_routes_disable.add_argument("--route", required=True)
+    external_models_routes_disable.add_argument("--json", action="store_true", required=True)
+    external_models_routes_validate = external_models_routes_subparsers.add_parser("validate")
+    external_models_routes_validate.add_argument("--route", required=True)
+    external_models_routes_validate.add_argument("--json", action="store_true", required=True)
+
+    external_models_profile = external_models_subparsers.add_parser("profile")
+    external_models_profile_subparsers = external_models_profile.add_subparsers(
+        dest="profile_command", required=True
+    )
+    external_models_profile_codex = external_models_profile_subparsers.add_parser(
+        "codex-desktop"
+    )
+    external_models_profile_codex.add_argument("--route", required=True)
+    external_models_profile_codex.add_argument("--json", action="store_true", required=True)
+
+    external_models_evidence = external_models_subparsers.add_parser("evidence")
+    external_models_evidence_subparsers = external_models_evidence.add_subparsers(
+        dest="evidence_command", required=True
+    )
+    external_models_evidence_capture = external_models_evidence_subparsers.add_parser(
+        "capture"
+    )
+    external_models_evidence_capture.add_argument("--route", required=True)
+    external_models_evidence_capture.add_argument("--json", action="store_true", required=True)
 
     return root_parser
 
@@ -228,6 +378,17 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_healthcheck(paths, args.model))
         if args.command == "status":
             return emit_json(summarize_status(paths))
+        if args.command == "invariant-check":
+            return emit_json(run_invariant_check(paths))
+        if args.command == "token":
+            if args.json:
+                return emit_json(token_status_payload(paths))
+            try:
+                sys.stdout.write(emit_local_token(paths))
+                return 0
+            except RuntimeErrorInfo as exc:
+                sys.stderr.write(exc.message + "\n")
+                return exc.exit_code
         if args.command == "stable" and args.stable_command == "repair":
             if args.apply:
                 return emit_json(run_stable_repair_apply(paths))
@@ -246,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_launch_smoke(paths))
         if args.command == "launch" and args.launch_command == "client":
             return emit_json(run_launch_client(paths, args.client_path))
+        if args.command == "codex-runner" and args.codex_runner_command == "smoke":
+            return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
@@ -278,6 +441,39 @@ def main(argv: list[str] | None = None) -> int:
                     non_interactive=args.non_interactive,
                 )
             )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "start"
+        ):
+            return emit_json(
+                run_accounts_login_start(paths, args.provider, mode=args.mode)
+            )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "status"
+        ):
+            return emit_json(run_accounts_login_status(paths, args.session))
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "complete"
+        ):
+            return emit_json(
+                run_accounts_login_complete(
+                    paths,
+                    login_session_id=args.session,
+                    state=getattr(args, "state", None),
+                    proof=getattr(args, "proof", None),
+                )
+            )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "cancel"
+        ):
+            return emit_json(run_accounts_login_cancel(paths, args.session))
         if args.command == "diagnostics" and args.diagnostics_command == "export":
             return emit_json(export_diagnostics(paths))
         if args.command == "installer" and args.installer_command == "init":
@@ -340,6 +536,26 @@ def main(argv: list[str] | None = None) -> int:
             and args.package_experimental_command == "verify"
         ):
             return emit_json(run_package_experimental_verify(paths, args.manifest))
+        if (
+            args.command == "package"
+            and args.package_command == "launchable"
+            and args.package_launchable_command == "build"
+        ):
+            return emit_json(
+                run_package_launchable_build(
+                    paths,
+                    args.output_dir,
+                    runtime_executable_raw=args.runtime_executable,
+                )
+            )
+        if (
+            args.command == "package"
+            and args.package_command == "launchable"
+            and args.package_launchable_command == "verify"
+        ):
+            return emit_json(run_package_launchable_verify(paths, args.manifest))
+        if args.command == "external-models":
+            return emit_json(run_external_models_command(args))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

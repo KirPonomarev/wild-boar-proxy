@@ -1,0 +1,13 @@
+{
+  "account_pool_validity_claimed": false,
+  "allowed_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "captured_at_utc": "2026-05-26T09:27:12.371345Z",
+  "direct_egress_claimed": false,
+  "experimental_bearer_preferred": false,
+  "file_auth_used": false,
+  "model_availability_claimed": false,
+  "native_launch_claimed": false,
+  "packet_kind": "auth_strategy_false_green_audit",
+  "status": "ok",
+  "validation_failures": []
+}

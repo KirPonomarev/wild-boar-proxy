@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_MODAL_CONFIRMATION_PARITY",
+  "date": "2026-05-14",
+  "mode": "implementation",
+  "type": "UI-only safety presentation repair",
+  "final_verdict": "PASS",
+  "changed_production_files": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js"
+  ],
+  "changed_test_files": [
+    "tests/test_web_design_ui.py"
+  ],
+  "not_changed": [
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "runtime behavior",
+    "desktop implementation"
+  ],
+  "modal_surfaces": {
+    "confirmOverlay": {
+      "source_reference": "09_confirm_action",
+      "surface_marker": "action-command-request",
+      "geometry": {
+        "overlay_padding_px": 40,
+        "modal_width_px": 640,
+        "modal_radius_px": 24,
+        "modal_padding_px": 32,
+        "modal_shadow": "0 32px 96px rgba(30, 27, 24, .18)"
+      },
+      "safety_presentation": [
+        "boundary strip",
+        "policy facts",
+        "truth warning",
+        "severity marker"
+      ]
+    },
+    "onboardOverlay": {
+      "source_reference": "05_add_account_modal",
+      "surface_marker": "onboard-reserve-request",
+      "geometry": {
+        "modal_width_px": 680,
+        "modal_radius_px": 24,
+        "modal_padding_px": 32
+      },
+      "safety_presentation": [
+        "reserve-first boundary strip",
+        "packet-backed result language",
+        "no automatic promotion copy",
+        "operator action for ambiguous outcomes"
+      ]
+    }
+  },
+  "behavior_preservation": {
+    "request_shape_changed": false,
+    "new_action_surface_added": false,
+    "final_confirm_pressed_in_smoke": false,
+    "runtime_mutation_attempted_in_smoke": false,
+    "confirmation_inflight_guard_preserved": true
+  },
+  "verification": {
+    "node_check": "PASS",
+    "ui_unittest": "PASS: 25 tests",
+    "targeted_suite": "PASS: 82 tests",
+    "browser_smoke": "PASS"
+  },
+  "screenshots": [
+    "audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/set_mode_managed_confirmation_1600x1000.png",
+    "audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/promote_account_confirmation_1600x1000.png",
+    "audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/retire_account_confirmation_1600x1000.png",
+    "audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/api_route_remove_confirmation_1600x1000.png",
+    "audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/onboard_account_modal_1600x1000.png"
+  ],
+  "residual_risks": [
+    "Smoke opens modal states through frontend open functions because the static server does not provide live action metadata.",
+    "Native desktop modal behavior remains out of scope until desktop admission."
+  ]
+}

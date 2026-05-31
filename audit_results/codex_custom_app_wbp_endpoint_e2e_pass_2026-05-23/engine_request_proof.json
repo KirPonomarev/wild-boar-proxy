@@ -1,0 +1,54 @@
+{
+  "app_launcher_exit_code": 0,
+  "blocked": false,
+  "blocker": "",
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "final_message": "WBP_OK",
+  "final_message_exact_match": true,
+  "machine_readable_stdout": true,
+  "ran": true,
+  "secret_value_recorded": false,
+  "started_at_utc": "2026-05-23T15:14:51.243741+00:00",
+  "stderr_preview": "Reading additional input from stdin...\n2026-05-23T15:14:52.521759Z  WARN codex_core::plugins::manager: failed to warm featured plugin ids cache error=remote plugin sync request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n",
+  "stdout_event_summary_tail": [
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "thread.started"
+    },
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "turn.started"
+    },
+    {
+      "event": null,
+      "item_role": null,
+      "item_type": "agent_message",
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "item.completed"
+    },
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "turn.completed"
+    }
+  ],
+  "temp_config_stat": {
+    "exists": true,
+    "is_dir": false,
+    "is_file": true,
+    "mtime_ns": 1779549291725944935,
+    "sha256": "38f38d08597380680c4567e36be4ac605d018900025382d1c0c9ef577b759761",
+    "size": 298
+  },
+  "timed_out": false
+}

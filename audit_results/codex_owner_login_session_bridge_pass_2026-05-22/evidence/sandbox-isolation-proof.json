@@ -1,0 +1,27 @@
+{
+  "status": "pass",
+  "sources": [
+    "audit_results/web_account_owner_login_bridge_pass_reopen_2026-05-21/evidence/browser-run-network.json",
+    "audit_results/web_codex_account_login_bridge_pass_2026-05-22/evidence/installer-init-packet.json"
+  ],
+  "sandbox_preflight": {
+    "status": "admitted",
+    "current_session_untouched": true,
+    "sandbox_target_proven": true,
+    "separate_profile": true,
+    "separate_data_dir": true,
+    "separate_port": true
+  },
+  "installer_baseline": {
+    "status": "ok",
+    "root_hint": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_bridge_proof_7w4n56lv",
+    "writes_confined_to_sandbox_root": true,
+    "operator_wrappers_materialized": true,
+    "owner_helpers_materialized": true
+  },
+  "assessment": {
+    "working_codex_untouched_proven": true,
+    "auth_boundary_proven": true,
+    "evidence_is_mixed_runtime_plus_browser_preflight": true
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "auditor_mode": "local_replay_independent_audit",
+  "external_subagent_attempted": true,
+  "external_subagent_available": false,
+  "external_subagent_blocker": "agent thread limit reached earlier in the thread; final audit replay executed locally against live targets instead of inventing a non-existent subagent report",
+  "verdict": "SUPPORTED",
+  "checks": [
+    {
+      "name": "bounded_launch_packet",
+      "result": "supported",
+      "fact": "launch client --json emitted dispatch_requested with launch_claim_scope=os_dispatch_only"
+    },
+    {
+      "name": "separate_gui_process",
+      "result": "supported",
+      "fact": "separate Codex GUI process observed with temp --user-data-dir and a child codex app-server process"
+    },
+    {
+      "name": "strict_gui_through_app_proof",
+      "result": "blocked",
+      "fact": "no isolated app-server control socket was observed for the launched GUI child, while debug app-server replay reported its own app-server exit"
+    },
+    {
+      "name": "gui_child_control_surface_probe",
+      "result": "supported",
+      "fact": "follow-up probe showed the launched GUI child running as `codex app-server --analytics-default-enabled`, while `doctor --json` for the same CODEX_HOME still reported the daemon as not running and no isolated control socket or TCP/UDP listener was found"
+    },
+    {
+      "name": "stack_reaches_boundary",
+      "result": "supported",
+      "fact": "isolated Codex engine replay using sandbox WBP auth plus openai_base_url returned agent_message=OK through the local 127.0.0.1:8318 endpoint"
+    },
+    {
+      "name": "shared_current_app_surfaces",
+      "result": "supported",
+      "fact": "lsof for the launched GUI process showed shared current-app cache and HTTP storage surfaces under the default Codex application-support tree"
+    }
+  ],
+  "final_classification": "blocked_by_current_codex_protection_boundary"
+}

@@ -1,0 +1,226 @@
+[
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 0,
+      "route_ids": []
+    }
+  },
+  {
+    "method": "POST",
+    "url": "/api/action",
+    "request_body": "{\"ui_action\":\"api_route_connect\"}",
+    "status": 200,
+    "response_summary": {
+      "ui_action": "api_route_connect",
+      "status": "command_error",
+      "machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+      "next_action": "owner_action",
+      "credential_phase": "credential_missing",
+      "credential_present": false,
+      "credential_admitted": false,
+      "api_route_connect_phase": "credential_missing"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 0,
+      "route_ids": []
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 0,
+      "route_ids": []
+    }
+  },
+  {
+    "method": "POST",
+    "url": "/api/action",
+    "request_body": "{\"ui_action\":\"api_route_connect\"}",
+    "status": 200,
+    "response_summary": {
+      "ui_action": "api_route_connect",
+      "status": "command_error",
+      "machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+      "next_action": "owner_action",
+      "credential_phase": "credential_missing",
+      "credential_present": false,
+      "credential_admitted": false,
+      "api_route_connect_phase": "credential_missing"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 0,
+      "route_ids": []
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 0,
+      "route_ids": []
+    }
+  },
+  {
+    "method": "POST",
+    "url": "/api/action",
+    "request_body": "{\"ui_action\":\"api_route_connect\"}",
+    "status": 200,
+    "response_summary": {
+      "ui_action": "api_route_connect",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "credential_phase": "credential_admitted",
+      "credential_present": true,
+      "credential_admitted": true,
+      "api_route_connect_phase": "created_and_validated"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/actions",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "action_phase": "sandbox_actions",
+      "api_route_connect_available": true,
+      "api_route_connect_state": "displayable_readonly"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "/api/api-connections-readonly",
+    "request_body": null,
+    "status": 200,
+    "response_summary": {
+      "status": "ok",
+      "routes_count": 1,
+      "route_ids": [
+        "wbp-web-primary-openrouter"
+      ]
+    }
+  }
+]

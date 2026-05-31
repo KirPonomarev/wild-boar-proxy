@@ -1,0 +1,33 @@
+{
+  "contour_id": "WBP_CODEX_CUSTOM_NATIVE_WINDOW_PROOF_PASS",
+  "date": "2026-05-25",
+  "status": "blocked",
+  "verdict": "NATIVE_CUSTOM_WINDOW_NOT_PROVEN",
+  "selected_strategy_id": "repo_canonical_custom_proxy_auth_isolated_home",
+  "live_attempt": {
+    "custom_launch_attempted": true,
+    "process_observed": true,
+    "native_window_observed": true,
+    "window_bound_to_custom_launch": true,
+    "window_distinguishable_from_original_codex": true,
+    "input_capable_ui_surface_observed": false,
+    "current_codex_touched": false,
+    "cleanup_or_rollback_status": "ok",
+    "tmp_root_removed": true,
+    "keychain_reset_prompt_observed": false
+  },
+  "blocked_reason": {
+    "reason_class": "input_capable_window_not_proven_for_pid",
+    "ax_window_count": 0,
+    "ax_input_query_error": "System Events: Не удается получить window 1. Неверный индекс. (-1719)",
+    "window_visible_by_name": true,
+    "ax_accessible_window_absent": true
+  },
+  "non_claims": [
+    "provider_routing_success",
+    "prompt_response_success",
+    "native_request_reached_wbp",
+    "Original_Codex_reversibility",
+    "final_E2E"
+  ]
+}

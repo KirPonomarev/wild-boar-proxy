@@ -1,0 +1,27 @@
+{
+  "href": "http://127.0.0.1:8768/?screen=settings&section=accounts-policy&source=live",
+  "documentScrollWidth": 1600,
+  "documentScrollHeight": 1000,
+  "mainScrollHeight": 942,
+  "mainClientHeight": 942,
+  "panelBottom": 934,
+  "visibleSvgIcons": 0,
+  "visibleImgIcons": 11,
+  "hasInput": 0,
+  "hasTextarea": 0,
+  "hasSelect": 0,
+  "dataActions": [],
+  "buttonOverflow": [],
+  "chipOverflow": [],
+  "coreVisible": {
+    "active": true,
+    "reserve": true,
+    "held": true,
+    "problem": true,
+    "retired": true
+  },
+  "panelChip": "unavailable",
+  "snapshotChip": "unavailable",
+  "bannerClass": "fixture-banner red",
+  "falsePolicyTruth": false
+}

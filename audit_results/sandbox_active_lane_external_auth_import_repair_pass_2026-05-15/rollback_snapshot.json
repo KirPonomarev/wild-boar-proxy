@@ -1,0 +1,46 @@
+{
+  "backup_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-auth-rollback-lfcb8te2/auth.json.before_import",
+  "backup_sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+  "captured_at_utc": "2026-05-15T16:58:50.301856+00:00",
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "external_source_mutation_forbidden": true,
+  "restore_procedure": [
+    "copy backup_path bytes back to sandbox auth target",
+    "chmod sandbox auth target to 0o600",
+    "re-run owner truth if post-import owner truth remains blocked"
+  ],
+  "restore_result": {
+    "backup_meta": {
+      "mode_octal": "0o600",
+      "path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-auth-rollback-lfcb8te2/auth.json.before_import",
+      "sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+      "size": 87
+    },
+    "backup_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-auth-rollback-lfcb8te2/auth.json.before_import",
+    "byte_equal_to_backup": true,
+    "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+    "restored_at_utc": "2026-05-15T16:59:15.688440+00:00",
+    "rollback_trigger": "post-import owner truth remained blocked",
+    "schema_version": 1,
+    "source_meta_unchanged": {
+      "mode_octal": "0o644",
+      "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8",
+      "size": 112
+    },
+    "target_after_restore": {
+      "mode_octal": "0o600",
+      "path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+      "sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+      "size": 87
+    }
+  },
+  "schema_version": 1,
+  "target_before": {
+    "exists": true,
+    "mode_octal": "0o600",
+    "path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+    "size": 87
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "bounded_acceleration_treated_as_broad_product_speedup": false,
+  "captured_at_utc": "2026-05-28T15:12:38.197916Z",
+  "imported_packets_treated_as_reproven_acceleration": false,
+  "packet_kind": "false_green_boundary",
+  "partial_equivalence_treated_as_clean_comparability": false,
+  "same_binary_treated_as_same_path": false,
+  "status": "ok",
+  "timing_treated_as_quality_gain": false,
+  "visible_timing_data_treated_as_sufficient_comparison_proof": false
+}

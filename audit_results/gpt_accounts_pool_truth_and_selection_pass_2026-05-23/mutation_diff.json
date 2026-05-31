@@ -1,0 +1,13 @@
+{
+  "accounts_digest_unchanged": true,
+  "captured_at_utc": "2026-05-23T17:55:54.475761+00:00",
+  "dry_run_account_mutation_performed": false,
+  "inference_proven": false,
+  "managed_total_unchanged": true,
+  "post_accounts_digest": "62dc7b4bf1ebd09deb8c9c504c80d7d0bf293c95c110f66bd3487333551b79f3",
+  "post_managed_total": 25,
+  "pre_accounts_digest": "62dc7b4bf1ebd09deb8c9c504c80d7d0bf293c95c110f66bd3487333551b79f3",
+  "pre_managed_total": 25,
+  "rejected_account_mutation_performed": false,
+  "token_burn": 0
+}

@@ -1,0 +1,21 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v3",
+  "pre_reproof_basis": {
+    "status_packet": {
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "effective_stable_runtime_consumer_source_status": "observed_source_active",
+      "consumer_activation_readiness_status": "activation_pending"
+    },
+    "rotation_packet": {
+      "machine_error_code": "OK",
+      "evidence_status": "participation_evidence_present",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear",
+      "selected_backend_count": 15
+    }
+  }
+}

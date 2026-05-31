@@ -1,0 +1,38 @@
+{
+  "allowed_browser_fields": [
+    "model_id"
+  ],
+  "browser_can_supply_catalog_path": false,
+  "browser_can_supply_model_authority": false,
+  "browser_can_supply_provider": false,
+  "captured_at_utc": "2026-05-27T08:59:47.900065Z",
+  "forbidden_browser_fields": [
+    "all_proxy",
+    "api_key",
+    "apikey",
+    "auth",
+    "auth_path",
+    "backend_id",
+    "base_url",
+    "codex_home",
+    "endpoint",
+    "home",
+    "http_proxy",
+    "https_proxy",
+    "model_provider",
+    "openai_base_url",
+    "path",
+    "provider",
+    "proxy",
+    "route_id",
+    "runtime_config",
+    "secret",
+    "token",
+    "wire_api"
+  ],
+  "packet_kind": "model_catalog_authority_boundary",
+  "remote_can_supply_catalog_path": false,
+  "remote_can_supply_model_authority": false,
+  "remote_can_supply_provider": false,
+  "status": "ok"
+}

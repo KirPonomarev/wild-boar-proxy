@@ -1,0 +1,58 @@
+{
+  "contour_id": "UI_WEB_VISUAL_REBASE_TO_ORIGINAL_RENDER",
+  "date": "2026-05-13",
+  "auditor": "independent explorer",
+  "status": "PASS",
+  "scope": "Tracked git diff and contour-named artifacts only; no file edits and no test execution by auditor.",
+  "checks": [
+    {
+      "name": "diff limited to visual CSS and static test",
+      "result": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/styles/overview.css",
+        "tests/test_web_design_ui.py"
+      ]
+    },
+    {
+      "name": "no runtime server adapter desktop scope",
+      "result": "PASS",
+      "evidence": [
+        "no runtime, server, adapter, or desktop files appeared in the tracked diff",
+        "boundary claims in closeout and matrix were consistent with the diff"
+      ]
+    },
+    {
+      "name": "visual spec plausibility",
+      "result": "PASS",
+      "evidence": [
+        "SF Mono UI token present",
+        "sidebar mark fixed at 112 px",
+        "24 px header rhythm present",
+        "40 px controls present",
+        "semibold hierarchy present for headings, modal title, KPI numbers, and object titles"
+      ]
+    },
+    {
+      "name": "artifact consistency",
+      "result": "PASS",
+      "evidence": [
+        "closeout visual claims matched matrix decisions",
+        "verification claims aligned between closeout and matrix",
+        "browser smoke details aligned with browser smoke artifact"
+      ]
+    },
+    {
+      "name": "private reference trace absence",
+      "result": "PASS",
+      "evidence": [
+        "contour artifacts used only generic private-reference wording",
+        "no external reference-service identifiers, URLs, tokens, install prompts, downloaded screenshots, or private research notes were found by inspection"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Auditor did not validate pixel closeness against the actual source render package.",
+    "Auditor did not re-run tests because the audit scope was inspection-only.",
+    "The worktree contains unrelated untracked dirty-tail files outside this contour; they must not be included in this commit."
+  ]
+}

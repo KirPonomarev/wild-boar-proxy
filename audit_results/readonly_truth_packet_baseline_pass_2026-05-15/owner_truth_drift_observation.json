@@ -1,0 +1,38 @@
+{
+  "observed": true,
+  "initial_live_server_admission_snapshot": {
+    "live_readonly_status": "ok",
+    "live_readonly_ui_state": "healthy",
+    "warning_codes": [
+      "ROTATION_EVIDENCE_CONTRADICTED"
+    ],
+    "runtime_status_label": "Работает",
+    "active": 17,
+    "problem": 14
+  },
+  "intermediate_failure_capture": {
+    "status_status": "error",
+    "status_machine_error_code": "ATTESTATION_FAILED",
+    "status_liveness": "degraded",
+    "status_last_error": "timed out",
+    "healthcheck_status": "error",
+    "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+    "responses_ok": false,
+    "launch_readiness_status": "blocked",
+    "launch_blocking_reason": "responses_probe_failed",
+    "observed_at_utc": "2026-05-15T18:37:36.196646+00:00"
+  },
+  "retry_capture": {
+    "status_status": "ok",
+    "status_machine_error_code": "OK",
+    "status_liveness": "healthy",
+    "status_last_error": "",
+    "healthcheck_status": "error",
+    "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+    "responses_ok": false,
+    "launch_readiness_status": "blocked",
+    "launch_blocking_reason": "responses_probe_failed",
+    "observed_at_utc": "2026-05-15T18:40:47.996424+00:00"
+  },
+  "material_owner_truth_flip_detected": true
+}

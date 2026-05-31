@@ -1,0 +1,14 @@
+{
+  "fallback_attempted": false,
+  "live_call_attempted": false,
+  "live_provider_request_allowed": false,
+  "original_codex_touched": false,
+  "packet_kind": "live_provider_request_boundary",
+  "paid_route_used": false,
+  "parallel_fanout_attempted": false,
+  "raw_secret_recorded": false,
+  "retry_count": 0,
+  "secret_value_recorded": false,
+  "status": "blocked",
+  "upstream_response_observed": false
+}

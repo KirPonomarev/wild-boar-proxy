@@ -1,0 +1,95 @@
+{
+  "candidate_gaps": {
+    "combined_gap": {
+      "basis": [
+        "route add already gives the narrowest first mutation surface",
+        "combining routes plus token/state broadens rollback domain without current necessity"
+      ],
+      "exact_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json"
+      ],
+      "launcher_materialization_scope": false,
+      "primary_by_current_packets": false,
+      "rollback_domain": [
+        "routes.json",
+        "secrets.env",
+        "state.json"
+      ],
+      "secret_bearing": true,
+      "verification_surfaces": [
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json",
+        "healthcheck --json"
+      ]
+    },
+    "local_token_gap": {
+      "basis": [
+        "token_present=false",
+        "token creation exists only in external-models start --json",
+        "with zero routes and profile_ready=false token-only does not address unknown provider"
+      ],
+      "exact_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json"
+      ],
+      "launcher_materialization_scope": false,
+      "primary_by_current_packets": false,
+      "rollback_domain": [
+        "secrets.env",
+        "state.json"
+      ],
+      "secret_bearing": true,
+      "verification_surfaces": [
+        "external-models status --json"
+      ]
+    },
+    "provider_profile_gap": {
+      "admissibility_note": "not a standalone primary contour on current command surfaces",
+      "basis": [
+        "no standalone provider/profile mutation command exists",
+        "profile codex-desktop is read-only contract generation",
+        "provider/base_url/upstream_model live inside route payload"
+      ],
+      "exact_write_surfaces": [
+        "embedded inside routes.json payload only"
+      ],
+      "launcher_materialization_scope": false,
+      "primary_by_current_packets": false,
+      "rollback_domain": [
+        "routes.json"
+      ],
+      "secret_bearing": false,
+      "verification_surfaces": [
+        "external-models profile codex-desktop --json --route <route_id>"
+      ]
+    },
+    "route_gap": {
+      "basis": [
+        "routes_count=0",
+        "models_count=0",
+        "models source is local_routes_registry",
+        "unknown provider for configured model after 401 was cleared"
+      ],
+      "exact_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ],
+      "launcher_materialization_scope": false,
+      "primary_by_current_packets": true,
+      "rollback_domain": [
+        "routes.json"
+      ],
+      "secret_bearing": false,
+      "verification_surfaces": [
+        "external-models routes list --json",
+        "external-models models --json",
+        "healthcheck --json",
+        "status --json"
+      ]
+    }
+  },
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "schema_version": 1
+}

@@ -1,0 +1,488 @@
+{
+  "alternative_statuses": {
+    "domain_attribution_limit_packet.json or import-derived domain attribution limit": "import_derived",
+    "independent_native_direct_egress_audit.json or import audit packet": "import_derived",
+    "owner_visible_response_context_packet.json or import-derived context-only packet": "import_derived",
+    "temp_custom_cleanup_packet.json or cleanup_reversibility_packet.json": "present"
+  },
+  "captured_at_utc": "2026-05-27T02:25:31.105262Z",
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R2_2026-05-27",
+  "external_evidence_dir_exists": true,
+  "invalid_json_packets": [],
+  "json_validated": true,
+  "missing_packets": [],
+  "packet_kind": "external_evidence_validation",
+  "packet_statuses": {
+    "native_direct_egress_claim_packet.json": "present",
+    "native_direct_egress_false_green_audit.json": "present",
+    "native_process_network_observation_packet.json": "present",
+    "source_wbp_trace_packet.json": "present",
+    "wbp_trace_observation_packet.json": "present"
+  },
+  "parsed_packet_count": 18,
+  "parsed_packets": {
+    "cleanup_reversibility_packet.json": {
+      "captured_at_utc": "2026-05-27T02:20:14.783148Z",
+      "cleanup_error": "",
+      "custom_processes_gone": true,
+      "packet_kind": "cleanup_reversibility",
+      "status": "ok",
+      "termination_packet": {
+        "captured_at_utc": "2026-05-27T02:20:14.848184Z",
+        "custom_processes_gone": true,
+        "final_inventory": {
+          "captured_at_utc": "2026-05-27T02:20:14.848136Z",
+          "custom_process_count": 0,
+          "custom_process_lines": [],
+          "custom_user_data_dir": "/private/tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+          "default_process_count": 6,
+          "default_process_lines": [
+            "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+            "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+            "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+            "2458 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=32",
+            "2470 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=34",
+            "2632 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130968760 --launch-time-ticks=198611233 --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=64"
+          ],
+          "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+          "line_count": 12,
+          "root_app_pids": [
+            1358,
+            2416
+          ],
+          "sample": [
+            "1358 /Applications/Codex.app/Contents/MacOS/Codex",
+            "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+            "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+            "1429 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+            "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+            "1829 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://",
+            "2416 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+            "2458 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=32",
+            "2470 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=34",
+            "2601 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+            "2632 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130968760 --launch-time-ticks=198611233 --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=64",
+            "4890 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://"
+          ]
+        },
+        "initial_custom_pids": []
+      },
+      "tmp_root": "/tmp/wbp-native-egress-1x0sw0fu",
+      "tmp_root_removed": true
+    },
+    "declared_write_surfaces_packet.json": {
+      "captured_at_utc": "2026-05-27T02:18:43.582104Z",
+      "declared_write_surfaces": [
+        "fresh audit_results evidence directory",
+        "temporary /tmp/wbp-native-egress-* profile if live mode is used"
+      ],
+      "original_codex_bundle_write_allowed": false,
+      "original_codex_profile_write_allowed": false,
+      "packet_kind": "declared_write_surfaces",
+      "protected_surfaces_write_allowed": false,
+      "rollback_expectation": "terminate isolated Custom process and remove temp root",
+      "status": "ok"
+    },
+    "historical_dirt_quarantine_packet.json": {
+      "captured_at_utc": "2026-05-27T02:18:43.454726Z",
+      "current_contour_mutates_quarantined_paths": false,
+      "current_contour_relies_on_quarantined_paths": false,
+      "current_contour_stages_quarantined_paths": false,
+      "packet_kind": "historical_dirt_quarantine",
+      "quarantine_classification": "out_of_scope_historical_residue",
+      "quarantined_paths": [
+        "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json",
+        "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/"
+      ],
+      "status": "ok"
+    },
+    "import audit packet": {
+      "audit_emitted_by_import_tool": true,
+      "captured_at_utc": "2026-05-27T02:25:31.104224Z",
+      "packet_kind": "detached_egress_import_audit_reference",
+      "status": "ok",
+      "text_only_audit_counted_as_pass": false
+    },
+    "import-derived context-only packet": {
+      "captured_at_utc": "2026-05-27T02:25:31.104220Z",
+      "context_only": true,
+      "counts_as_egress_proof": false,
+      "counts_as_final_e2e": false,
+      "counts_as_model_availability": false,
+      "counts_as_native_ux_acceptance": false,
+      "counts_as_route_proof": false,
+      "counts_as_wire_compatibility": false,
+      "owner_confirmation_collected": false,
+      "owner_visible_response_reported": false,
+      "packet_kind": "owner_visible_response_context",
+      "status": "ok"
+    },
+    "import-derived domain attribution limit": {
+      "allowed_claim_without_domain_attribution": "no observed direct non-WBP model peer during bounded attributed window",
+      "api_openai_com_absence_claim_allowed": false,
+      "api_openai_com_absence_proven": false,
+      "captured_at_utc": "2026-05-27T02:25:31.104229Z",
+      "domain_attribution_available": false,
+      "forbidden_claim_without_domain_attribution": "api.openai.com absent",
+      "ip_or_socket_attribution_available": true,
+      "no_observed_api_openai_equals_absence": false,
+      "observer_strategy": "process_socket_sampling",
+      "packet_kind": "domain_attribution_limit",
+      "peer_endpoint_count": 5,
+      "status": "ok"
+    },
+    "native_background_codex_noise_packet.json": {
+      "background_codex_noise_detected": true,
+      "captured_at_utc": "2026-05-27T02:20:14.628348Z",
+      "default_codex_process_count_increased": true,
+      "default_process_count_after": 6,
+      "default_process_count_before": 3,
+      "observer_can_separate_custom_from_background": false,
+      "packet_kind": "native_background_codex_noise",
+      "status": "blocked",
+      "unexpected_peer_command_basenames": []
+    },
+    "native_custom_launch_packet.json": {
+      "before_process_inventory": {
+        "captured_at_utc": "2026-05-27T02:18:43.611995Z",
+        "custom_process_count": 0,
+        "custom_process_lines": [],
+        "custom_user_data_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+        "default_process_count": 3,
+        "default_process_lines": [
+          "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+          "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+          "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74"
+        ],
+        "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+        "line_count": 6,
+        "root_app_pids": [
+          1358
+        ],
+        "sample": [
+          "1358 /Applications/Codex.app/Contents/MacOS/Codex",
+          "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+          "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+          "1429 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+          "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+          "1829 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://"
+        ]
+      },
+      "captured_at_utc": "2026-05-27T02:18:43.612026Z",
+      "config_sha256": "b47183bbb3f61e94ee4f5591ef6b175fa93d80dbeab244f5b5192b2a7dbb1a80",
+      "configured_endpoint": "http://127.0.0.1:49952/v1",
+      "configured_model": "gpt-5.4-mini",
+      "custom_process_observed": true,
+      "launcher_pid": 2416,
+      "materialized_profile": {
+        "auth_path": "/tmp/wbp-native-egress-1x0sw0fu/profile/auth.json",
+        "config_path": "/tmp/wbp-native-egress-1x0sw0fu/profile/config.toml",
+        "custom_home_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/home",
+        "custom_tmp_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/tmp",
+        "custom_user_data_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+        "launcher_path": "/tmp/wbp-native-egress-1x0sw0fu/profile/codex-custom-launch.sh",
+        "profile_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile"
+      },
+      "packet_kind": "native_direct_egress_launch",
+      "startup_inventory": {
+        "captured_at_utc": "2026-05-27T02:18:44.153785Z",
+        "custom_process_count": 1,
+        "custom_process_lines": [
+          "2416 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data"
+        ],
+        "custom_user_data_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+        "default_process_count": 3,
+        "default_process_lines": [
+          "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+          "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+          "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74"
+        ],
+        "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+        "line_count": 7,
+        "root_app_pids": [
+          1358,
+          2416
+        ],
+        "sample": [
+          "1358 /Applications/Codex.app/Contents/MacOS/Codex",
+          "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+          "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+          "1429 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+          "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+          "1829 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://",
+          "2416 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data"
+        ]
+      },
+      "status": "ok"
+    },
+    "native_direct_egress_claim_packet.json": {
+      "allowed_local_endpoint_observed": false,
+      "bounded_observation_absence_proven": false,
+      "captured_at_utc": "2026-05-27T02:20:14.628385Z",
+      "custom_process_bound": true,
+      "direct_model_egress_observed": false,
+      "direct_non_wbp_model_egress_absent_proven": false,
+      "filesystem_safety_claimed": false,
+      "final_e2e_claimed": false,
+      "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+      "full_network_absence_proven": false,
+      "machine_ui_proof_claimed": false,
+      "native_ux_claimed": false,
+      "observer_classification": "insufficient_observation",
+      "original_codex_via_wbp_claimed": false,
+      "packet_kind": "native_direct_egress_claim",
+      "provider_compatibility_claimed": false,
+      "reason_class": "BACKGROUND_CODEX_NOISE",
+      "route_trace_confirmed": false,
+      "status": "blocked"
+    },
+    "native_direct_egress_false_green_audit.json": {
+      "captured_at_utc": "2026-05-27T02:20:14.628428Z",
+      "checks": [
+        {
+          "name": "route_trace_alone_not_counted_as_egress_absence",
+          "passed": true
+        },
+        {
+          "name": "observer_insufficient_not_counted_as_pass",
+          "passed": true
+        },
+        {
+          "name": "direct_model_egress_blocks",
+          "passed": true
+        },
+        {
+          "name": "bounded_absence_not_global_absence",
+          "passed": true
+        },
+        {
+          "name": "no_cross_layer_claims",
+          "passed": true
+        }
+      ],
+      "forbidden_claims_present": false,
+      "packet_kind": "native_direct_egress_false_green_audit",
+      "route_trace_counted_as_egress_absence": false,
+      "status": "ok"
+    },
+    "native_direct_egress_summary_packet.json": {
+      "captured_at_utc": "2026-05-27T02:20:16.144348Z",
+      "direct_non_wbp_model_egress_absent_proven": false,
+      "filesystem_safety_claimed": false,
+      "final_e2e_claimed": false,
+      "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+      "full_network_absence_proven": false,
+      "live_native_launch_attempted": true,
+      "native_ux_claimed": false,
+      "packet_kind": "native_direct_egress_summary",
+      "provider_compatibility_claimed": false,
+      "status": "blocked"
+    },
+    "native_process_inventory_after_packet.json": {
+      "captured_at_utc": "2026-05-27T02:20:14.628200Z",
+      "custom_process_count": 1,
+      "custom_process_lines": [
+        "2416 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data"
+      ],
+      "custom_user_data_dir": "/tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+      "default_process_count": 6,
+      "default_process_lines": [
+        "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+        "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+        "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+        "2458 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=32",
+        "2470 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=34",
+        "2632 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130968760 --launch-time-ticks=198611233 --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=64"
+      ],
+      "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+      "line_count": 12,
+      "root_app_pids": [
+        1358,
+        2416
+      ],
+      "sample": [
+        "1358 /Applications/Codex.app/Contents/MacOS/Codex",
+        "1376 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=31",
+        "1379 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=33",
+        "1429 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+        "1468 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130969741 --launch-time-ticks=131344609 --shared-files --field-trial-handle=1718379636,r,3564494456556909814,6358365790418107952,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,9217521868953019617,9459225524012938402,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=74",
+        "1829 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://",
+        "2416 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-egress-1x0sw0fu/profile/electron-user-data",
+        "2458 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --gpu-preferences=SAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAAwAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAAAAAACAAAAAAAAAAIAAAAAAAAAA== --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=32",
+        "2470 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=ru --service-sandbox-type=network --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=34",
+        "2601 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+        "2632 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex --standard-schemes=app --secure-schemes=app,sentry-ipc --bypasscsp-schemes=sentry-ipc --cors-schemes=sentry-ipc --fetch-schemes=app,sentry-ipc --streaming-schemes=app --app-path=/Applications/Codex.app/Contents/Resources/app.asar --enable-sandbox --lang=ru --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1779848130968760 --launch-time-ticks=198611233 --shared-files --field-trial-handle=1718379636,r,344401271921986998,4345920864430204314,262144 --enable-features=DocumentPolicyIncludeJSCallStacksInCrashReports,PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15596787412724477791,9315298729297889863,4 --trace-process-track-uuid=3190708990060038890 --seatbelt-client=64",
+        "4890 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://"
+      ]
+    },
+    "native_process_network_observation_packet.json": {
+      "allowed_local_endpoint_observed": false,
+      "allowed_local_endpoints": [
+        "127.0.0.1:49952"
+      ],
+      "classification": "insufficient_observation",
+      "direct_non_wbp_model_egress_absent_proven": false,
+      "machine_error_code": "OK",
+      "non_local_peer_endpoints_present": true,
+      "observed_process_count_max": 13,
+      "peer_endpoints": [
+        {
+          "command_basename": "Codex",
+          "endpoint": "127.0.0.1:10809",
+          "host_class": "local",
+          "is_root_process": false,
+          "pid_digest": "468344ce1f2e74f3"
+        },
+        {
+          "command_basename": "git-remote-https",
+          "endpoint": "140.82.121.3:443",
+          "host_class": "non_local",
+          "is_root_process": false,
+          "pid_digest": "a8d248c5eda6fa32"
+        },
+        {
+          "command_basename": "Codex",
+          "endpoint": "104.18.41.158:443",
+          "host_class": "non_local",
+          "is_root_process": true,
+          "pid_digest": "0edcd7f37d75330b"
+        },
+        {
+          "command_basename": "Codex",
+          "endpoint": "172.64.150.28:443",
+          "host_class": "non_local",
+          "is_root_process": true,
+          "pid_digest": "0edcd7f37d75330b"
+        },
+        {
+          "command_basename": "Codex",
+          "endpoint": "34.160.81.0:443",
+          "host_class": "non_local",
+          "is_root_process": true,
+          "pid_digest": "0edcd7f37d75330b"
+        }
+      ],
+      "pid_not_exposed_to_browser": true,
+      "process_tree_observed": true,
+      "raw_pid_exposed": false,
+      "sample_count": 264,
+      "secret_value_recorded": false,
+      "status": "ok"
+    },
+    "observer_capability_packet.json": {
+      "captured_at_utc": "2026-05-27T02:18:43.582890Z",
+      "full_network_absence_proven": false,
+      "lsof_available": true,
+      "lsof_path": "/usr/sbin/lsof",
+      "nettop_path": "/usr/bin/nettop",
+      "observer_strategy": "lsof_process_tree_sampling",
+      "observer_usable_for_bounded_native_classification": true,
+      "packet_capture_used": false,
+      "packet_kind": "native_direct_egress_observer_capability",
+      "process_tree_observer_available": true,
+      "status": "ok",
+      "tcpdump_path": "/usr/sbin/tcpdump",
+      "unsafe_packet_capture_tools_present": true
+    },
+    "source_wbp_trace_packet.json": {
+      "auth_header_recorded": false,
+      "downstream_endpoint": "http://127.0.0.1:8318/v1",
+      "forwarded_endpoint": "",
+      "forwarded_to_wbp": false,
+      "listen_endpoint": "http://127.0.0.1:49952/v1",
+      "machine_error_code": "TRACE_READY",
+      "method": "",
+      "observer_closed": false,
+      "path": "",
+      "prompt_body_recorded": false,
+      "raw_account_id_recorded": false,
+      "raw_backend_id_recorded": false,
+      "request_body_sha256": "",
+      "request_observed": false,
+      "response_body_sha256": "",
+      "response_observed": false,
+      "secret_value_recorded": false,
+      "upstream_status": null
+    },
+    "sync_gate_packet.json": {
+      "captured_at_utc": "2026-05-27T02:18:43.439988Z",
+      "git_branch": "codex/external-agent-lab-isolated",
+      "git_head": "fe5ba1b5ea230ce17f393efb8159a296e84e59dc",
+      "git_status_short": [
+        "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json",
+        " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json",
+        "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+        "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/"
+      ],
+      "master_plan_written_to_repo": false,
+      "new_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R2_2026-05-27",
+      "packet_kind": "sync_gate",
+      "status": "ok",
+      "unexpected_dirty_entries": []
+    },
+    "version_pinning_packet.json": {
+      "captured_at_utc": "2026-05-27T02:18:43.454754Z",
+      "codex_app_bundle_version": "3178",
+      "codex_app_path": "/Applications/Codex.app",
+      "codex_app_version": "26.519.81530",
+      "codex_cli_path": "/opt/homebrew/bin/codex",
+      "codex_cli_version": "codex-cli 0.128.0",
+      "packet_kind": "version_pinning",
+      "status": "ok",
+      "wbp_git_commit": "fe5ba1b5ea230ce17f393efb8159a296e84e59dc"
+    },
+    "wbp_trace_observation_packet.json": {
+      "auth_header_recorded": false,
+      "captured_at_utc": "2026-05-27T02:20:14.588280Z",
+      "forwarded_to_wbp": false,
+      "model_id": "",
+      "packet_kind": "wbp_trace_observation",
+      "raw_auth_recorded": false,
+      "raw_prompt_recorded": false,
+      "request_body_sha256": "",
+      "request_observed": false,
+      "response_body_sha256": "",
+      "response_hash_recorded": false,
+      "response_observed": false,
+      "route_status": "missing",
+      "status": "blocked",
+      "trace_path": "",
+      "upstream_status": null,
+      "upstream_status_ok": false
+    }
+  },
+  "partial_write_state_detected": false,
+  "reason_class": "",
+  "required_packets": [
+    "native_process_network_observation_packet.json",
+    "source_wbp_trace_packet.json",
+    "wbp_trace_observation_packet.json",
+    "native_direct_egress_claim_packet.json",
+    "domain_attribution_limit_packet.json or import-derived domain attribution limit",
+    "owner_visible_response_context_packet.json or import-derived context-only packet",
+    "temp_custom_cleanup_packet.json or cleanup_reversibility_packet.json",
+    "native_direct_egress_false_green_audit.json",
+    "independent_native_direct_egress_audit.json or import audit packet"
+  ],
+  "status": "ok"
+}

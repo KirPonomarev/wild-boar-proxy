@@ -1,0 +1,146 @@
+{
+  "contour_id": "UI_WEB_VISUAL_REBASE_TO_ORIGINAL_RENDER",
+  "date": "2026-05-13",
+  "status": "passed_ready_for_commit",
+  "type": "visual_correction",
+  "goal": "Rebase the web design UI back toward the source render package and owner correction spec while preserving command/runtime boundaries.",
+  "design_authority": [
+    "source render package",
+    "owner correction spec",
+    "runtime and command canon",
+    "private external references only as non-authoritative adaptation background"
+  ],
+  "private_reference_note": {
+    "used_for_repo_artifact": false,
+    "result": "A generic private reference query timed out and contributed no adopted repo decision.",
+    "repo_trace_policy": "No service names, URLs, screenshots, tokens, install notes, or private research notes are recorded."
+  },
+  "scope": {
+    "included": [
+      "CSS visual rebase",
+      "static visual guard update",
+      "fake-runner browser smoke",
+      "source render package comparison",
+      "owner correction spec alignment"
+    ],
+    "excluded": [
+      "runtime.py",
+      "desktop files",
+      "server allowlist",
+      "command adapter argv",
+      "new ui_action",
+      "new command surface",
+      "real runtime commands",
+      "external reference artifacts",
+      "dirty external-agent tail"
+    ]
+  },
+  "changed_files": [
+    {
+      "path": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "change": "restored mono-first typography and source-render spacing/control proportions"
+    },
+    {
+      "path": "tests/test_web_design_ui.py",
+      "change": "updated static visual guard to assert SF Mono visual authority"
+    }
+  ],
+  "visual_rebase_decisions": [
+    {
+      "area": "typography",
+      "before": "sans-first font token",
+      "after": "SF Mono mono-first UI token with mono fallback stack",
+      "reason": "source render package and owner correction spec use SF Mono as the visual baseline"
+    },
+    {
+      "area": "brand_anchor",
+      "before": "responsive logo width drifted between 104 and 132 px",
+      "after": "fixed 112 px logo width",
+      "reason": "source render package uses fixed 112 px brand mark in the sidebar"
+    },
+    {
+      "area": "layout_rhythm",
+      "before": "header gap and margin were compressed after stabilization",
+      "after": "24 px header gap and 24 px header margin restored",
+      "reason": "closer to source render package while keeping responsive containment"
+    },
+    {
+      "area": "controls",
+      "before": "buttons and inputs used 38 px height and tighter horizontal padding",
+      "after": "40 px primary control height and wider button padding restored",
+      "reason": "matches source render package control rhythm"
+    },
+    {
+      "area": "overview_grid",
+      "before": "system column narrowed to 486 px",
+      "after": "system column restored to 496 px baseline",
+      "reason": "aligns overview grid with source render package"
+    },
+    {
+      "area": "kpi_cards",
+      "before": "KPI cards were shorter with heavier numeric weight",
+      "after": "112 px minimum height and semibold numeric weight",
+      "reason": "warmer editorial hierarchy without making all text medium/bold"
+    },
+    {
+      "area": "modal_heading",
+      "before": "confirm heading used larger 24/30 treatment",
+      "after": "22/28 semibold treatment",
+      "reason": "closer to original modal proportions and owner type scale"
+    }
+  ],
+  "preserved_stabilization": [
+    "viewport containment remains responsive",
+    "table horizontal overflow guard remains",
+    "account action groups remain readable",
+    "stale/error action ledger states remain visually distinct",
+    "modal overflow remains bounded"
+  ],
+  "browser_smoke": {
+    "target": "http://127.0.0.1:8788",
+    "runner": "fake MappingRunner live payloads",
+    "observations": [
+      "overview live screen loaded with heading Обзор and live-readonly footer",
+      "accounts screen loaded with heading Аккаунты",
+      "validate_account for acct-active was confirmed once",
+      "action ledger showed status ok and live refresh ok",
+      "truth note preserved canonical refreshed JSON requirement",
+      "diagnostics screen loaded as support-artifact view",
+      "settings screen loaded as command-packet bounded view",
+      "setup/select/import screens loaded with inert deferred copy"
+    ],
+    "tool_note": "A long multi-screen browser script timed out, then the smoke was split into shorter successful checks."
+  },
+  "verification": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "OK"
+    },
+    "targeted_tests": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "Ran 70 tests in 2.045s OK"
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -q",
+      "result": "Ran 564 tests in 228.157s OK"
+    },
+    "browser_smoke_artifact": {
+      "path": "audit_results/ui_web_visual_rebase_to_original_browser_smoke_2026-05-13.json",
+      "result": "passed"
+    },
+    "independent_audit": {
+      "path": "audit_results/ui_web_visual_rebase_to_original_independent_audit_2026-05-13.json",
+      "result": "PASS"
+    }
+  },
+  "boundary_checks": {
+    "runtime_files_touched": false,
+    "desktop_files_touched": false,
+    "server_allowlist_changed": false,
+    "adapter_argv_changed": false,
+    "new_ui_action_added": false,
+    "real_runtime_commands_used": false,
+    "external_reference_trace_recorded": false
+  },
+  "next": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT"
+}

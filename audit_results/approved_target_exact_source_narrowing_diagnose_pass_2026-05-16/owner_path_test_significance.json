@@ -1,0 +1,7 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "failing_test": "tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+  "significance": "secondary_but_real",
+  "why_not_primary": "the lane is already blocked earlier by live runtime and selector precondition regression",
+  "why_not_noise": "it weakens trust in the nearest effectful explicit-auth owner surface and reinforces the stop verdict"
+}

@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-27T13:56:39Z",
+  "packet_kind": "current_truth_false_green_audit",
+  "status": "ok",
+  "checks": [
+    {
+      "name": "owner_ui_waiver_not_promoted_to_route_or_machine_proof",
+      "passed": true
+    },
+    {
+      "name": "direct_non_wbp_egress_observation_not_softened_into_absence",
+      "passed": true
+    },
+    {
+      "name": "completion_shaped_labels_reinterpreted_as_bounded_when_required",
+      "passed": true
+    },
+    {
+      "name": "import_only_evidence_not_promoted_to_fresh_live_proof",
+      "passed": true
+    },
+    {
+      "name": "verification_reruns_not_promoted_to_new_provider_or_native_classes",
+      "passed": true
+    },
+    {
+      "name": "closeout_artifacts_hold_completed_evidence_only",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false
+}

@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-25T13:21:35.150801Z",
+  "findings": {
+    "native_or_original_mode_overclaim_found": false,
+    "non_native_scope_preserved": true,
+    "noted_test_gap_was_route_backed_selection_and_nested_cleanup_transcript_assertions": true,
+    "required_live_evidence_focus": [
+      "selection_packet route-backed fields",
+      "transcript_packet service_ledger_only fields",
+      "cleanup_packet owned temp root fields",
+      "current_codex_observation targeted file comparisons"
+    ]
+  },
+  "machine_error_code": "OK",
+  "packet_kind": "subagent_factcheck_packet",
+  "secret_value_recorded": false,
+  "status": "ok",
+  "subagent_model": "gpt-5.4-mini",
+  "subagent_role": "explorer"
+}

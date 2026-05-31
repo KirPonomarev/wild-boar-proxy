@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T11:33:07.927962Z",
+  "owner_command_edit_allowed": false,
+  "owner_config_model_provider_account_change_allowed": false,
+  "owner_prompt_allowed": false,
+  "owner_report_is_not_packet_truth": true,
+  "owner_reported_execution": false,
+  "owner_screenshot_counts_as_proof": false,
+  "packet_kind": "owner_execution_attestation",
+  "status": "blocked"
+}

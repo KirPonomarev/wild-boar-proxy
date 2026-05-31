@@ -1,0 +1,104 @@
+{
+  "contour": "WEB_API_ROUTE_CONNECT_SERVER_OWNED_PASS",
+  "date": "2026-05-22",
+  "status": "closed_success",
+  "changed_files": [
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "browser_proof": {
+    "url": "http://127.0.0.1:8788/?screen=quick-start&source=live",
+    "before_routes_count": 0,
+    "after_routes_count": 1,
+    "route_visible_after_refresh": true,
+    "route_id": "wbp-web-primary-openrouter",
+    "route_enabled": true,
+    "secret_status_label": "available",
+    "validation_label": "ok",
+    "action_status": "ok",
+    "action_ui_action": "api_route_connect",
+    "action_machine_error_code": "OK",
+    "action_connect_phase": "created_and_validated",
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "route_spec_path_exposed": false,
+    "panel": {
+      "actionRefreshStatus": "canonical refresh complete",
+      "actionUiAction": "api_route_connect",
+      "actionStatus": "ok",
+      "containsRoute": false
+    }
+  },
+  "ledger_proof": {
+    "action_status": "ok",
+    "action_ui_action": "api_route_connect",
+    "action_machine_error_code": "OK",
+    "action_connect_phase": "adopted_existing_route",
+    "ledger_contains_action": true,
+    "ledger_contains_ok": false,
+    "ledger_rows": [
+      "api_route_connect · -\n12:12:51\nподтверждено",
+      "api_route_connect · -\n12:12:51\nвыполняется"
+    ]
+  },
+  "action_packet": {
+    "status": "ok",
+    "ui_action": "api_route_connect",
+    "machine_error_code": "OK",
+    "connect_phase": "created_and_validated",
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "route_spec_path_exposed": false
+  },
+  "routes_after_count": 1,
+  "api_connections_after_routes": 1,
+  "tests": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_web_design_ui -q",
+      "result": "pass",
+      "count": 135
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_web_design_live_server -q",
+      "result": "pass",
+      "count": 60
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui -q",
+      "result": "pass",
+      "count": 662
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_cli_external_models tests.test_external_models -q",
+      "result": "pass",
+      "count": 28
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    }
+  ],
+  "forbidden_browser_fields_rejected": [
+    "route_id",
+    "token",
+    "secret",
+    "path",
+    "backend_id"
+  ],
+  "screenshots": [
+    "evidence/browser-api-route-connect-after.png",
+    "evidence/browser-api-route-connect-ledger.png"
+  ],
+  "commit": "final contour commit containing this metrics file; see git log"
+}

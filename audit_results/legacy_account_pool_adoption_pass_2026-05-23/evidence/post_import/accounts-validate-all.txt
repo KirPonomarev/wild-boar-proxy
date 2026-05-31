@@ -1,0 +1,100 @@
+
+### open17-plus
+open17-plus: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "open17-plus"]}
+
+### gpt2026bis-team
+gpt2026bis-team: OK - ok (warning: duplicate account_id used by: gpt2026bis-team, kip85905-team, kir-test-gpt26-team)
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "gpt2026bis-team"]}
+
+### kip85905-team
+kip85905-team: OK - ok (warning: duplicate account_id used by: gpt2026bis-team, kip85905-team, kir-test-gpt26-team)
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kip85905-team"]}
+
+### pig-outlook-team
+pig-outlook-team: OK - ok (warning: duplicate account_id used by: beep-outlook-team, pig-outlook-team)
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "pig-outlook-team"]}
+
+### beep-outlook-team
+beep-outlook-team: OK - ok (warning: duplicate account_id used by: beep-outlook-team, pig-outlook-team)
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "beep-outlook-team"]}
+
+### kir-test-gpt26-team
+kir-test-gpt26-team: OK - ok (warning: duplicate account_id used by: gpt2026bis-team, kip85905-team, kir-test-gpt26-team)
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kir-test-gpt26-team"]}
+
+### k-ponomarev-photo
+k-ponomarev-photo: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-ponomarev-photo"]}
+
+### k-gpt-pro-3k
+k-gpt-pro-3k: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-gpt-pro-3k"]}
+
+### k-gpt-pro-2
+k-gpt-pro-2: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-gpt-pro-2"]}
+
+### k-gpt-pro
+k-gpt-pro: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-gpt-pro"]}
+
+### k-gpt-pro-4
+k-gpt-pro-4: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-gpt-pro-4"]}
+
+### new-gpt-pro
+new-gpt-pro: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-gpt-pro"]}
+
+### pkir0477
+pkir0477: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "pkir0477"]}
+
+### kirpon556
+kirpon556: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kirpon556"]}
+
+### ponkirill816-team
+ponkirill816-team: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "ponkirill816-team"]}
+
+### new-new33333
+new-new33333: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-new33333"]}
+
+### new-new22222
+new-new22222: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-new22222"]}
+
+### new-new11111
+new-new11111: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-new11111"]}
+
+### new-new44444
+new-new44444: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-new44444"]}
+
+### new-new55555
+new-new55555: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-new55555"]}
+
+### new-gpt-bis
+new-gpt-bis: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "new-gpt-bis"]}
+
+### k-ponomarev-pro
+k-ponomarev-pro: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "k-ponomarev-pro"]}
+
+### kabanui7070
+kabanui7070: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kabanui7070"]}
+
+### kp8750410
+kp8750410: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kp8750410"]}
+
+### kp8750410-team
+kp8750410-team: OK - ok
+{"status": "ok", "exit_code": 0, "human_message": "Account validation completed.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "command": ["validate", "kp8750410-team"]}

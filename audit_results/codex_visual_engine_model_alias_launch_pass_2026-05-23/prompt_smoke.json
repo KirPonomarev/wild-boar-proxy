@@ -1,0 +1,18 @@
+{
+  "prompt": "Reply with exactly OK.",
+  "attempted": false,
+  "classification": "blocked_before_prompt_by_current_codex_host_surface",
+  "reason": "Prompt entry was stopped because the visible Codex launch crossed into the default current Codex user-data surface via a helper process, so typing into the window could not be kept within the intended isolated profile boundary.",
+  "what_worked_before_stop": [
+    "WBP preflight passed",
+    "authenticated /v1/models included gpt-5.3-codex",
+    "owner launch client packet returned dispatch_requested",
+    "visible Codex GUI process was observed with the temp --user-data-dir argument"
+  ],
+  "what_failed_boundary": [
+    "Codex Helper used /Users/kirillponomarev/Library/Application Support/Codex as user-data",
+    "host screenshot capture was unavailable",
+    "manual prompt would risk current Codex/profile boundary"
+  ],
+  "no_gui_e2e_claim": true
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "WBP_NATIVE_CODEX_LAUNCH_PREFLIGHT_AND_ADMISSION_PASS_R2",
+  "packet_kind": "native_launch_admission_summary",
+  "admission_scope": "admission_only_no_runtime_launch",
+  "allowed_launch_modes": [
+    "CODEX_CUSTOM_NATIVE_APP",
+    "ORIGINAL_CODEX_VIA_WBP"
+  ],
+  "custom_native_admission_status": "admitted",
+  "original_via_wbp_admission_status": "admitted",
+  "browser_authority_allowed": false,
+  "cleanup_rollback_required": true,
+  "write_surfaces_declared": true,
+  "identity_chain_fields_reserved": true,
+  "identity_chain_proven": false,
+  "live_process_observed": false,
+  "native_window_observed": false,
+  "route_trace_bound": false,
+  "native_launch_complete": false,
+  "live_launch_performed": false,
+  "runtime_mutation_performed": false,
+  "ui_mutation_performed": false,
+  "product_status_upgraded": false,
+  "final_verdict": "NATIVE_LAUNCH_ADMISSION_READY"
+}

@@ -1,0 +1,28 @@
+{
+  "authoritative_isolation_source": "process_isolation_proof.json",
+  "browser_dom_secret_findings": [],
+  "browser_final_message": "HARDENED_OK",
+  "browser_selected_model": "gpt-5.3-codex",
+  "browser_status": "status=ok health=ok claim_gate=blocked",
+  "captured_at_utc": "2026-05-23T16:07:53.794850Z",
+  "chosen_model_visible": true,
+  "claims_not_made": [
+    "production app ready",
+    "GUI Desktop ready",
+    "existing WBP web UI integrated",
+    "provider-route proof",
+    "rotation/load proof",
+    "account lifecycle mutation",
+    "design gate ready",
+    "stable-15-proved",
+    "active-only-traffic",
+    "pool-participation-correct"
+  ],
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_HARDENING_PASS",
+  "model_probe_status": 200,
+  "process_final_message": "PROCESS_HARDENED_OK",
+  "process_protected_surfaces_unchanged": true,
+  "process_selected_model": "gpt-5.3-codex",
+  "process_tmp_root_removed": true,
+  "secret_value_recorded": false
+}

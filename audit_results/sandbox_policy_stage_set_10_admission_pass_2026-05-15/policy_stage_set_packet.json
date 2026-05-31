@@ -1,0 +1,57 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "policy",
+    "stage",
+    "set",
+    "10",
+    "--json"
+  ],
+  "returncode": 0,
+  "stdout": "{\"status\": \"ok\", \"exit_code\": 0, \"human_message\": \"Pool policy updated to canonical stage 10.\", \"machine_error_code\": \"OK\", \"changed_files\": [\"/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json\"], \"next_action\": \"none\", \"liveness\": \"unknown\", \"severity\": \"recoverable\", \"operator_action\": \"none\", \"requested_stage\": \"10\", \"pool_policy_update_result\": {\"status\": \"owner_path_emitted\", \"attempted\": true, \"requested_stage\": \"10\", \"mapped_pool_policy\": {\"active_min\": 10, \"active_target\": 10, \"reserve_target\": 0}, \"previous_pool_policy\": {\"active_min\": 0, \"active_target\": 0, \"reserve_target\": 0}, \"next_pool_policy\": {\"active_min\": 10, \"active_target\": 10, \"reserve_target\": 0}, \"policy_validation_status\": \"ok\", \"stage_mapping_status\": \"ok\", \"rollback_point_captured\": true, \"write_attempted\": true, \"write_observed\": true, \"rollback_attempted\": false, \"rollback_outcome\": \"not_needed\", \"final_outcome\": \"stage_policy_updated\"}}\n",
+  "stderr": "",
+  "json": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Pool policy updated to canonical stage 10.",
+    "machine_error_code": "OK",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+    ],
+    "next_action": "none",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "requested_stage": "10",
+    "pool_policy_update_result": {
+      "status": "owner_path_emitted",
+      "attempted": true,
+      "requested_stage": "10",
+      "mapped_pool_policy": {
+        "active_min": 10,
+        "active_target": 10,
+        "reserve_target": 0
+      },
+      "previous_pool_policy": {
+        "active_min": 0,
+        "active_target": 0,
+        "reserve_target": 0
+      },
+      "next_pool_policy": {
+        "active_min": 10,
+        "active_target": 10,
+        "reserve_target": 0
+      },
+      "policy_validation_status": "ok",
+      "stage_mapping_status": "ok",
+      "rollback_point_captured": true,
+      "write_attempted": true,
+      "write_observed": true,
+      "rollback_attempted": false,
+      "rollback_outcome": "not_needed",
+      "final_outcome": "stage_policy_updated"
+    }
+  }
+}

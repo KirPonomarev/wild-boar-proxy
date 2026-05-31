@@ -1,0 +1,15 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "decision": "GO_TO_SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "materialization_earned_now": false,
+  "selected_upstream_source_class": "forbidden_live_root_auth_material_requires_narrower_source_specific_admission",
+  "sandbox_owned_upstream_source_present": false,
+  "adjacent_non_live_local_source_present": false,
+  "forbidden_live_root_candidates_observed": true,
+  "forbidden_live_root_direct_admission": false,
+  "next_contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "next_contour_class": "admission",
+  "reason": "the destination is fixed, but the only currently observed upstream auth-like candidates live under forbidden live/working roots, so a narrower source-specific admission contour is required before any materialization"
+}

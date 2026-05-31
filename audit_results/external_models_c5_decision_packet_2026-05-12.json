@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c5_ui_read_only_control_lite",
+  "date": "2026-05-12",
+  "branch": "codex/external-agent-lab-isolated",
+  "mode": "implementation",
+  "gate_basis": [
+    "audit_results/stage20_c6_closeout_report.md",
+    "audit_results/stage20_c6_verification_packet.json"
+  ],
+  "scope": {
+    "in": [
+      "web UI panels for external-models overview, routes, and action results",
+      "existing-command action wiring for validate/check/profile/evidence/enable/disable",
+      "external-models packet normalization helpers",
+      "packet-driven UI tests"
+    ],
+    "out": [
+      "new command surfaces",
+      "runtime truth changes",
+      "direct state/log parsing",
+      "installer or packaging work",
+      "design-polish expansion"
+    ]
+  },
+  "guardrails": {
+    "ui_truth_source": "existing_command_packets_only",
+    "status_surface": "synthetic_only",
+    "provider_surface": "route_provider_only",
+    "verified_means": "provider_compatibility_evidence_only",
+    "no_state_or_log_parsing": true,
+    "no_auto_validate_on_page_load": true,
+    "no_background_provider_polling_v1": true,
+    "no_runtime_or_listener_readiness_inference": true
+  },
+  "touched_files": [
+    "wild_boar_proxy/ui_shell.py",
+    "wild_boar_proxy/web_ui.py",
+    "tests/test_ui_shell.py",
+    "tests/test_web_ui.py",
+    "audit_results/external_models_c5_contour_2026-05-12.md",
+    "audit_results/external_models_c5_decision_packet_2026-05-12.json",
+    "audit_results/external_models_c5_independent_audit_2026-05-12.json",
+    "audit_results/external_models_c5_closeout_2026-05-12.md"
+  ],
+  "verification_plan": {
+    "tests": [
+      "python3 -m unittest -q tests.test_web_ui",
+      "python3 -m unittest -q tests.test_ui_shell",
+      "python3 -m unittest -q tests.test_external_models",
+      "python3 -m unittest -q tests.test_cli_external_models",
+      "python3 -m unittest -q tests.test_external_agent_lab"
+    ],
+    "build": "python3 -m compileall -q wild_boar_proxy tests",
+    "manual": [
+      "run wild_boar_proxy.web_ui on localhost",
+      "fetch rendered HTML over HTTP",
+      "confirm external-models sections and warning labels render",
+      "avoid mutating POST actions against real paths without separate authorization"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "endpoint": "/api/codex/custom/accounts",
+  "observed_status": "degraded",
+  "machine_error_code": "ACCOUNTS_TRUTH_DEGRADED",
+  "root_cause": {
+    "command_error_codes": {
+      "rollout_rotation_inspect": "ROTATION_EVIDENCE_STALE"
+    },
+    "managed_total": 25,
+    "launch_capable_count": 15,
+    "claim_gate_status": "blocked"
+  },
+  "interpretation": "Accounts packet remains usable as repeated truth, but not fully green because rollout rotation evidence is stale.",
+  "fixable_within_this_slice": false
+}

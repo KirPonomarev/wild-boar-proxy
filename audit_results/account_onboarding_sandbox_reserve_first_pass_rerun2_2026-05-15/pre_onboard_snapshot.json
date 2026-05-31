@@ -1,0 +1,64 @@
+{
+  "captured_at": "2026-05-15T15:29:50.147990+00:00",
+  "sandbox_env_overrides": {
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models"
+  },
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+  "auth_payload": {
+    "auth_mode": "apikey",
+    "OPENAI_API_KEY": "sk-959211fed28c4991ac493818616dddda"
+  },
+  "pre_accounts_reference": {
+    "argv": [
+      "accounts",
+      "list",
+      "--json"
+    ],
+    "returncode": 0,
+    "stdout": "{\"status\": \"ok\", \"exit_code\": 0, \"human_message\": \"Account registry snapshot is available.\", \"machine_error_code\": \"OK\", \"changed_files\": [], \"next_action\": \"none\", \"liveness\": \"unknown\", \"severity\": \"recoverable\", \"operator_action\": \"none\", \"accounts\": [], \"registry_identity\": {\"status\": \"clear\", \"machine_error_code\": \"OK\", \"duplicate_backend_ids\": [], \"duplicate_auth_basenames\": [], \"missing_auth_refs\": [], \"empty_auth_ref_backends\": [], \"invalid_auth_basenames\": [], \"invalid_backend_pools\": [], \"registry_schema_version\": 2, \"unsupported_schema_versions\": [], \"claim_blockers\": [], \"next_action\": \"none\"}, \"pool_policy\": {\"active_min\": 0, \"active_target\": 0, \"reserve_target\": 0}, \"stable_default_backend_id\": \"\"}\n",
+    "stderr": "",
+    "parsed_json": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Account registry snapshot is available.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "unknown",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "accounts": [],
+      "registry_identity": {
+        "status": "clear",
+        "machine_error_code": "OK",
+        "duplicate_backend_ids": [],
+        "duplicate_auth_basenames": [],
+        "missing_auth_refs": [],
+        "empty_auth_ref_backends": [],
+        "invalid_auth_basenames": [],
+        "invalid_backend_pools": [],
+        "registry_schema_version": 2,
+        "unsupported_schema_versions": [],
+        "claim_blockers": [],
+        "next_action": "none"
+      },
+      "pool_policy": {
+        "active_min": 0,
+        "active_target": 0,
+        "reserve_target": 0
+      },
+      "stable_default_backend_id": ""
+    }
+  }
+}

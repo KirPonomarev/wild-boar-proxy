@@ -1,0 +1,11 @@
+/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q
+
+Result:
+- exit_code=0
+- ran_tests=553
+- duration_seconds=194.179
+- outcome=OK
+
+Notes:
+- The earlier 90-second wrapper was shorter than the real suite duration.
+- The remaining stale failure was `tests.test_cli.CliTests.test_accounts_login_start_codex_requires_device_mode`, aligned to the current `provider=codex` + `mode=device` contract.

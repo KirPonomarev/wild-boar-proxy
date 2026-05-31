@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_DESIGN_GATE_ADMISSION_CHECK_PASS",
+  "date": "2026-05-16",
+  "status": "verified_pending_git_close",
+  "final_verdict": "DESIGN_GATE_ADMITTED",
+  "design_gate_token": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+  "design_gate_admitted": true,
+  "evidence_sufficient": true,
+  "blocking_reasons": [],
+  "higher_priority_revocation_found": false,
+  "evidence_used": [
+    "AGENTS.md design gate rule",
+    "audit_results/stage20_c6_verification_packet.json final_verdict",
+    "audit_results/stage20_c6_closeout_report.md closeout support",
+    "README.md current-status support",
+    "MASTER_PLAN.md product-sequence support"
+  ],
+  "evidence_rejected": [
+    "MASTER_PLAN ordering alone",
+    "plan_recenter non-claim as revocation",
+    "README alone",
+    "narrative memory"
+  ],
+  "next_admitted_contour": "WEB_DESIGN_FINISH_PASS"
+}

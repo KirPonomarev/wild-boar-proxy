@@ -1,0 +1,19 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "decision": "GO_TO_STABLE_POLICY_RUNTIME_RECONCILIATION_PASS",
+  "status": "completed",
+  "selector_refresh_surface": "sync --json",
+  "selector_snapshot_fresh": true,
+  "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+  "rotation_evidence_reason": "policy_drift_detected",
+  "status_effective_mode": "managed",
+  "status_claim_gate": "blocked",
+  "status_policy_drift": "detected",
+  "stable_repair_would_change": true,
+  "stable_repair_target_would_add_count": 6,
+  "stable_repair_target_would_prune_count": 2,
+  "exact_source_admission_earned_now": false,
+  "next_contour": "STABLE_POLICY_RUNTIME_RECONCILIATION_PASS",
+  "next_contour_class": "reconciliation",
+  "reason": "the contradiction is no longer stale-selector ambiguity; sync refreshed selector truth in the managed lane, but rotation and status now agree that policy drift is active and stable repair again has pending reconciliation work, so the next narrow contour is stable-policy/runtime reconciliation rather than exact-source admission"
+}

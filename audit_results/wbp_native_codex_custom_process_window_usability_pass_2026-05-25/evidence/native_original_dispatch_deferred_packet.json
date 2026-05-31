@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "packet_kind": "native_original_dispatch_deferred",
+  "captured_at_utc": "2026-05-25T09:51:24.650862Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_runtime_surface": "bounded_dispatch_only",
+  "ui_mutation_performed": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "native_launch_complete": false,
+  "product_status_upgraded": false,
+  "status": "blocked",
+  "machine_error_code": "NATIVE_ORIGINAL_DISPATCH_DEFERRED",
+  "launch_mode": "ORIGINAL_CODEX_VIA_WBP",
+  "original_contract_preserved": true,
+  "original_live_dispatch_attempted": false,
+  "reason_class": "out_of_scope_custom_first",
+  "reversibility_proof_claimed": false,
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_PROCESS_WINDOW_USABILITY_PASS_R4"
+}

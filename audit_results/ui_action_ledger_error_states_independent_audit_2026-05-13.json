@@ -1,0 +1,62 @@
+{
+  "contour_id": "UI_WEB_ACTION_LEDGER_AND_ERROR_STATES",
+  "date": "2026-05-13",
+  "auditor": "independent read-only subagent",
+  "verdict": "PASS_WITH_RESIDUAL_LITERAL_SCAN_LIMIT",
+  "findings": [
+    {
+      "claim": "UI-only scope is preserved",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/index.html:190-210",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:64-75",
+        "wild_boar_proxy/web_design_ui/styles/overview.css:424-452",
+        "tests/test_web_design_ui.py:428-574"
+      ]
+    },
+    {
+      "claim": "command_error, integration_failure, and invalid_json cannot render green in action ledger",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:64-75",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:320-336",
+        "tests/test_web_design_ui.py:433-452"
+      ]
+    },
+    {
+      "claim": "top-level packet status precedence is implemented intentionally",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:320-334",
+        "audit_results/ui_action_ledger_error_states_matrix_2026-05-13.json:36-42",
+        "COMMAND_API.md:439-442"
+      ]
+    },
+    {
+      "claim": "behavioral test meaningfully executes mapping",
+      "verdict": "PASS",
+      "evidence": [
+        "tests/test_web_design_ui.py:454-574"
+      ]
+    },
+    {
+      "claim": "no forbidden action ids, payloads, raw commands, state/log reads, or external reference traces added",
+      "verdict": "PASS",
+      "evidence": [
+        "tests/test_web_design_ui.py:98-123",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:186-289",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:385-410"
+      ]
+    }
+  ],
+  "residual_risks": [
+    {
+      "risk": "Forbidden-surface check remains literal-string based and cannot prove against intentionally obfuscated runtime access.",
+      "disposition": "Accepted for this UI contour because no obfuscated access was introduced and changed files are manually reviewed."
+    },
+    {
+      "risk": "Pre-existing dirty tail remains in runtime/external-agent files.",
+      "disposition": "Not staged; deferred to WORKTREE_TAIL_ADJUDICATION."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "candidate_freeze_reproved_here": false,
+  "captured_at_utc": "2026-05-27T09:15:32.049730Z",
+  "fresh_models_endpoint_visible_ids": [
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "codex-auto-review",
+    "gpt-image-2",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4"
+  ],
+  "imported_external_route_ids": [
+    "direct-mistral-devstral-2512"
+  ],
+  "model_availability_proven_by_reference": false,
+  "packet_kind": "model_availability_readiness_reference",
+  "readiness_admitted_candidate_ids": [
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.5",
+    "direct-mistral-devstral-2512"
+  ],
+  "readiness_candidate_count": 4,
+  "reference_only": true,
+  "source_dir": "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27",
+  "source_packet": "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27/model_availability_candidate_matrix_packet.json",
+  "status": "ok"
+}

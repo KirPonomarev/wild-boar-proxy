@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+  "generated_at_local_date": "2026-05-13",
+  "mode": "verification_integration_hardening",
+  "canon_owner_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md"
+  ],
+  "scope_boundary": {
+    "production_code_changed": false,
+    "runtime_py_changed": false,
+    "external_models_engine_changed": false,
+    "desktop_work_started": false,
+    "real_live_mutation_used": false,
+    "runner_mode": "HTTP server with fake MappingRunner command packets"
+  },
+  "changed_files_expected": [
+    "tests/test_web_design_live_server.py",
+    "audit_results/ui_web_end_to_end_operator_flow_final_matrix_2026-05-13.json",
+    "audit_results/ui_web_end_to_end_operator_flow_final_command_sequence_2026-05-13.json",
+    "audit_results/ui_web_end_to_end_operator_flow_final_independent_audit_2026-05-13.json",
+    "audit_results/ui_web_end_to_end_operator_flow_final_closeout_2026-05-13.md"
+  ],
+  "coverage_summary": {
+    "implemented_screens_with_e2e_coverage": [
+      "01_overview_dashboard",
+      "04_accounts",
+      "05_add_account_modal",
+      "06_diagnostics",
+      "07_settings",
+      "09_confirm_action",
+      "api_connections"
+    ],
+    "inert_or_deferred_screens_checked_by_existing_static_tests": [
+      "02_setup_client",
+      "03_select_codex_client",
+      "08_import_existing"
+    ],
+    "primary_e2e_test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+    "forbidden_action_test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions"
+  },
+  "admitted_action_coverage": [
+    {
+      "ui_action": "refresh_health_detail",
+      "coverage": "E2E_SEQUENCE",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "healthcheck --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "export_diagnostics",
+      "coverage": "E2E_SEQUENCE",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "diagnostics export --json"
+      ],
+      "direct_bundle_read": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "stable_repair_plan",
+      "coverage": "E2E_SEQUENCE",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "stable repair --dry-run --json"
+      ],
+      "apply_used": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "sync_runtime",
+      "coverage": "E2E_SEQUENCE_WITH_LIVE_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "sync --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "set_mode_stable",
+      "coverage": "E2E_SEQUENCE_WITH_LIVE_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "mode set stable --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "set_mode_managed",
+      "coverage": "E2E_SEQUENCE_WITH_LIVE_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "mode set managed --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "launch_smoke",
+      "coverage": "E2E_SEQUENCE_WITH_LIVE_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "launch smoke --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "host_client_session_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "launch_client_dispatch",
+      "coverage": "E2E_SEQUENCE_WITH_FAKE_BOUNDED_SERVER_PATH_AND_LIVE_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "launch client --client-path /Applications/Codex.app --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "real_host_client_launch": false,
+      "browser_path_allowed": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "validate_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts validate acct-active --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "hold_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts hold acct-active --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "release_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts release acct-hold --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "promote_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts promote acct-reserve --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "demote_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts demote acct-active --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "retire_account",
+      "coverage": "E2E_SEQUENCE_WITH_ACCOUNTS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts list --json",
+        "accounts retire acct-reserve --json",
+        "accounts list --json"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "onboard_account",
+      "coverage": "E2E_SEQUENCE_WITH_RESERVE_FIRST_ASSERTION",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "accounts onboard --json",
+        "accounts list --json"
+      ],
+      "reserve_first_proven": true,
+      "auto_promote": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_validate",
+      "coverage": "E2E_SEQUENCE_WITH_API_CONNECTIONS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models routes validate --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "runtime_readiness_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_check",
+      "coverage": "E2E_SEQUENCE_WITH_API_CONNECTIONS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models check --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "runtime_readiness_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_allow",
+      "coverage": "E2E_SEQUENCE_WITH_API_CONNECTIONS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models routes enable --route wbp-disabled --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "active_route_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_disable",
+      "coverage": "E2E_SEQUENCE_WITH_API_CONNECTIONS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models routes disable --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "traffic_stop_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_profile",
+      "coverage": "E2E_SEQUENCE_WITH_NON_MUTATING_PACKET_ASSERTIONS",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models profile codex-desktop --route wbp-deepseek-v3 --json"
+      ],
+      "writes_external_config": false,
+      "profile_ready_claim": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_evidence_capture",
+      "coverage": "E2E_SEQUENCE_WITH_COMMAND_PACKET_ONLY",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models evidence capture --route wbp-deepseek-v3 --json"
+      ],
+      "direct_evidence_file_read": false,
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_remove",
+      "coverage": "E2E_SEQUENCE_WITH_DISABLED_ONLY_PREFLIGHT_AND_API_CONNECTIONS_REFRESH",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "command_sequence": [
+        "external-models routes list --json",
+        "external-models routes remove --route wbp-disabled --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "disabled_route_required": true,
+      "changed_files_truth": false,
+      "verdict": "PASS"
+    }
+  ],
+  "not_admitted_action_coverage": [
+    {
+      "ui_action": "api_route_create",
+      "coverage": "EXPLICIT_BLOCKED_ACTION_TEST",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions",
+      "expected_machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "runner_calls": [],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_update",
+      "coverage": "EXPLICIT_BLOCKED_ACTION_TEST",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions",
+      "expected_machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "runner_calls": [],
+      "verdict": "PASS"
+    },
+    {
+      "ui_action": "api_route_draft",
+      "coverage": "EXPLICIT_BLOCKED_ACTION_TEST",
+      "test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions",
+      "expected_machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "runner_calls": [],
+      "verdict": "PASS"
+    }
+  ],
+  "layer_guardrail_verdicts": {
+    "strict_json_command_surfaces_only": "PASS",
+    "browser_command_id_rejected": "PASS",
+    "browser_raw_argv_rejected": "PASS",
+    "browser_path_payload_rejected": "PASS",
+    "browser_route_json_payload_rejected": "PASS",
+    "browser_token_secret_provider_config_not_admitted": "PASS",
+    "direct_state_log_route_secret_evidence_file_truth": "PASS_ABSENT",
+    "runtime_py_changed": "PASS_ABSENT",
+    "desktop_files_changed": "PASS_ABSENT",
+    "route_create_update_draft": "PASS_NOT_ADMITTED"
+  },
+  "next_contour": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT"
+}

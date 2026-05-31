@@ -1,0 +1,86 @@
+{
+  "captured_at_utc": "2026-05-28T15:22:49.056635Z",
+  "evidence_precedence": "packet_backed_current_contour_truth_only",
+  "inventory_listing_does_not_create_proof": true,
+  "packet_kind": "current_truth_inventory",
+  "rows": [
+    {
+      "claim_summary": "current provider admission is packet-backed",
+      "closeout_path": "audit_results/generic_provider_auth_and_secret_admission_r1_2026-05-28/closeout.md",
+      "final_status": null,
+      "id": "generic_provider_auth",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "admitted_provider_list",
+      "packet_path": "audit_results/generic_provider_auth_and_secret_admission_r1_2026-05-28/admitted_provider_list_packet.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "current runtime catalog and seed-only boundary are packet-backed",
+      "closeout_path": "audit_results/generic_provider_and_model_registry_r1_2026-05-28/closeout.md",
+      "final_status": null,
+      "id": "generic_model_registry",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "generic_model_registry",
+      "packet_path": "audit_results/generic_provider_and_model_registry_r1_2026-05-28/generic_model_registry_packet.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "historical seed-only models are not current runtime catalog",
+      "closeout_path": "audit_results/generic_provider_and_model_registry_r1_2026-05-28/closeout.md",
+      "final_status": null,
+      "id": "current_vs_seed_model_matrix",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "current_vs_seed_model_matrix",
+      "packet_path": "audit_results/generic_provider_and_model_registry_r1_2026-05-28/current_vs_seed_model_matrix.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "seed-only models are not selectable current UI/runtime choices",
+      "closeout_path": "audit_results/custom_codex_dual_lane_model_selection_ui_r1_2026-05-28/closeout.md",
+      "final_status": null,
+      "id": "selector_visibility_boundary",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "selector_current_vs_seed_visibility",
+      "packet_path": "audit_results/custom_codex_dual_lane_model_selection_ui_r1_2026-05-28/selector_current_vs_seed_visibility_packet.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "current final workflow truth is packet-backed and historical item 0 is not counted as closed",
+      "closeout_path": "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/closeout.md",
+      "final_status": "CUSTOM_CODEX_DUAL_LANE_AGENT_WORKFLOW_PROVEN_WITH_LIMITS",
+      "id": "final_dual_lane_acceptance",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "final_dual_lane_acceptance_matrix",
+      "packet_path": "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/final_dual_lane_acceptance_matrix.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "independent packet notes item 0 remains open and non-counted before reconciliation",
+      "closeout_path": "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/closeout.md",
+      "final_status": null,
+      "id": "final_dual_lane_audit",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "independent_audit",
+      "packet_path": "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/independent_audit_packet.json",
+      "status": "ok"
+    },
+    {
+      "claim_summary": "latest acceleration truth is classified with limits and remains packet-backed",
+      "closeout_path": "audit_results/original_vs_custom_acceleration_reconciliation_r1_2026-05-28/closeout.md",
+      "final_status": "ORIGINAL_VS_CUSTOM_ACCELERATION_RECONCILIATION_CLASSIFIED_WITH_LIMITS",
+      "id": "acceleration_reconciliation",
+      "inventory_listing_counts_as_proof": false,
+      "packet_backed_current_truth": true,
+      "packet_kind": "acceleration_classification",
+      "packet_path": "audit_results/original_vs_custom_acceleration_reconciliation_r1_2026-05-28/acceleration_classification_packet.json",
+      "status": "ok"
+    }
+  ],
+  "status": "ok"
+}

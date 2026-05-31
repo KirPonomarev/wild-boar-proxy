@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_ACCOUNTS_VALIDATE_ACTION_GATE",
+  "captured_at_utc": "2026-05-12T18:51:41Z",
+  "status": "pass_with_unrelated_dirty_worktree_note",
+  "scope": {
+    "implemented": [
+      "accounts_validate command adapter entry using structured account_id",
+      "validate_account UI action metadata",
+      "server-side payload allowlist limited to ui_action plus account_id for validate_account",
+      "server-side safe account_id validation",
+      "server-side accounts list preflight before accounts validate",
+      "accounts screen Validate button with confirmation",
+      "post-action accounts readonly refresh"
+    ],
+    "forbidden_scope_not_implemented": [
+      "desktop transfer",
+      "runtime.py changes by this contour",
+      "direct state/log reads",
+      "browser command_id or raw argv submission",
+      "account lifecycle promote/demote/hold/release/retire/onboard controls"
+    ]
+  },
+  "browser_smoke": {
+    "server": "fake-runner local ThreadingHTTPServer",
+    "url_shape": "http://127.0.0.1:<port>/?source=live&screen=accounts",
+    "button_selector": "button.account-action[data-account-id=\"acct-active\"]",
+    "button_count": 1,
+    "button_enabled": true,
+    "confirmation_visible": true,
+    "confirmation_account_id": "acct-active",
+    "action_status": "ok",
+    "action_machine_error_code": "OK",
+    "action_account_id": "acct-active",
+    "post_action_refresh": "live refresh ok",
+    "runner_calls": [
+      ["accounts", "list", "--json"],
+      ["accounts", "list", "--json"],
+      ["accounts", "validate", "acct-active", "--json"],
+      ["accounts", "list", "--json"]
+    ],
+    "runner_calls_meaning": [
+      "initial accounts live render",
+      "server preflight target lookup",
+      "bounded account validation command",
+      "post-action accounts refresh"
+    ]
+  },
+  "verification": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "ok"
+    },
+    "targeted_adapter_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_command_adapter",
+      "tests": 15,
+      "status": "ok"
+    },
+    "targeted_live_server_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_live_server",
+      "tests": 18,
+      "status": "ok"
+    },
+    "targeted_ui_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_ui",
+      "tests": 12,
+      "status": "ok"
+    },
+    "combined_web_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+      "tests": 45,
+      "status": "ok"
+    },
+    "full_discover_tests": {
+      "command": "python3 -m unittest discover -s tests -p 'test_*.py' -q",
+      "tests": 539,
+      "duration_seconds": 263.463,
+      "status": "ok"
+    },
+    "zero_test_guard": {
+      "command": "python3 -m unittest -q",
+      "tests": 0,
+      "status": "rejected_as_not_success"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "status": "ok"
+    }
+  },
+  "independent_audit": {
+    "agent": "Rawls",
+    "scoped_files_result": "pass",
+    "worktree_boundary_result": "fail_due_to_unrelated_runtime_py_dirty",
+    "resolution": "runtime.py is not staged or modified by this contour; preserve unrelated dirty state and exclude from commit"
+  },
+  "known_unrelated_dirty_state": [
+    "wild_boar_proxy/runtime.py",
+    "external_agent_lab/legacy/agent_eval.py",
+    "external_agent_lab/legacy/proxy_server.py",
+    "external_agent_lab/legacy/run_lab.py",
+    "external_agent_lab/model_registry_seed.json",
+    "tests/test_external_agent_lab.py",
+    "pre-existing external_lab audit artifacts"
+  ],
+  "next_action": "commit_only_this_contour_files"
+}

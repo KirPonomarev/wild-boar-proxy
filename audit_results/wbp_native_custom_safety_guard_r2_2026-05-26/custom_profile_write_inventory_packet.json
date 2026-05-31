@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-26T18:56:51.803759Z",
+  "native_launch_attempted": false,
+  "original_codex_profile_write_allowed": false,
+  "owned_write_surfaces": [
+    "/private/tmp/wbp-native-safety-r3-59571/profile",
+    "/private/tmp/wbp-native-safety-r3-59571/profile/electron-user-data",
+    "/private/tmp/wbp-native-safety-r3-59571/profile"
+  ],
+  "packet_kind": "custom_profile_write_inventory",
+  "profile_materialized": false,
+  "protected_surface_overlaps": [],
+  "protected_surfaces_write_allowed": false,
+  "reason_class": "",
+  "status": "ok",
+  "tmp_root": "/private/tmp/wbp-native-safety-r3-59571",
+  "write_inventory_kind": "prelaunch_planned_owned_surfaces"
+}

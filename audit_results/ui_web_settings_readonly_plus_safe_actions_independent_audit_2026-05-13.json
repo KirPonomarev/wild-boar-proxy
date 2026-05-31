@@ -1,0 +1,20 @@
+{
+  "contour_id": "UI_WEB_SETTINGS_READONLY_PLUS_SAFE_ACTIONS",
+  "auditor": "Maxwell",
+  "date": "2026-05-13",
+  "mode": "read_only_independent_audit",
+  "verdict": "no contour-scope findings",
+  "findings": [],
+  "assessment": {
+    "settings_not_config_editor": true,
+    "active_controls_use_existing_allowlisted_ui_actions": true,
+    "read_only_and_deferred_copy_present": true,
+    "browser_path_submission_not_found": true,
+    "runtime_py_and_external_agent_lab_dirty_tail_identified_as_unrelated": true,
+    "tests_materially_cover_boundary": true
+  },
+  "residual_risks": [
+    "The new settings tests are mostly string/structure assertions rather than a browser-level click-through of each button.",
+    "The settings data is rendered from the live snapshot object; if upstream snapshot shape changes, the guard is mostly test-driven rather than a settings-specific schema validator."
+  ]
+}

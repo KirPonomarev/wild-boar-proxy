@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-25T12:32:46.368352Z",
+  "packet_kind": "codex_provider_wire_compatibility",
+  "status": "ok",
+  "schema_version": 1,
+  "machine_error_code": "OK",
+  "configured_wire_api": "responses",
+  "variant_a": {
+    "responses_path": "/v1/responses",
+    "responses_status": 200,
+    "final_message_exact": true,
+    "wire_api_accepted": true
+  },
+  "variant_b": {
+    "responses_path": "/v1/responses",
+    "responses_status": 200,
+    "final_message_exact": true,
+    "wire_api_accepted": true,
+    "models_refresh_query_string_limit_observed": null
+  },
+  "compatibility_limitations": [
+    "responses path compatibility proven for both variants",
+    "full GET /models compatibility through the observer surface was not classified in this contour"
+  ],
+  "secret_value_recorded": false
+}

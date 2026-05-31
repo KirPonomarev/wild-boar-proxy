@@ -1,0 +1,18 @@
+{
+  "contour": "DEEPSEEK_DIRECT_PROVIDER_ROUTE_PASS",
+  "targeted_unittest_gate": {
+    "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli_external_models.ExternalModelsCliTests.test_deepseek_credentials_admit_and_status_use_direct_provider_refs tests.test_cli_external_models.ExternalModelsCliTests.test_credentials_admit_and_status_owner_env_without_secret_leak -q",
+    "status": "pass",
+    "tests_run": 2
+  },
+  "node_check": {
+    "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "status": "pass"
+  },
+  "relevant_unittest_gate": {
+    "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli_external_models tests.test_external_models tests.test_web_design_command_adapter -q",
+    "status": "pass",
+    "tests_run": 62
+  },
+  "outcome": "closed_direct_lane_added_provider_auth_failed"
+}

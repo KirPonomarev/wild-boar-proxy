@@ -1,0 +1,20 @@
+{
+  "backup_execution_allowed": false,
+  "backup_plan_is_backup_created": false,
+  "captured_at_utc": "2026-05-27T06:21:14.403965Z",
+  "cleanup_execution_allowed": false,
+  "contour_scope": "dry_run_backup_restore_readiness_only",
+  "delete_execution_allowed": false,
+  "manifest_schema_is_materialized_backup": false,
+  "packet_kind": "persistent_backup_restore_contract",
+  "parent_target": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_HISTORY_CLASSIFIED",
+  "persistent_profile_id": "wbp-custom-main",
+  "profile_mode": "persistent_custom",
+  "real_profile_inventory_allowed": false,
+  "restore_execution_allowed": false,
+  "restore_plan_is_restore_executed": false,
+  "restored_state_equivalence_claimed": false,
+  "rollback_proof_claimed": false,
+  "status": "ok",
+  "target_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_RESTORE_DRY_RUN_READINESS_R4_CLASSIFIED"
+}

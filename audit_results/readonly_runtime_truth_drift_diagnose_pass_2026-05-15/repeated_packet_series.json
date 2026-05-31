@@ -1,0 +1,134 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "sampling_policy": {
+    "read_only_only": true,
+    "mutation_commands_executed": false,
+    "bounded_series_runs": 2,
+    "total_command_invocations": 10
+  },
+  "series": [
+    {
+      "series_id": "broad_series_1",
+      "invocations": 4,
+      "command_order": [
+        "healthcheck --json",
+        "status --json",
+        "healthcheck --json",
+        "status --json"
+      ],
+      "observed_summary": {
+        "all_status_values": [
+          "ok",
+          "ok",
+          "ok",
+          "ok"
+        ],
+        "all_machine_error_codes": [
+          "OK",
+          "OK",
+          "OK",
+          "OK"
+        ],
+        "all_liveness_values": [
+          "healthy",
+          "healthy",
+          "healthy",
+          "healthy"
+        ],
+        "drift_reproduced": false
+      }
+    },
+    {
+      "series_id": "field_series_2",
+      "invocations": 6,
+      "command_order": [
+        "healthcheck --json",
+        "status --json",
+        "healthcheck --json",
+        "status --json",
+        "healthcheck --json",
+        "status --json"
+      ],
+      "samples": [
+        {
+          "ts": "2026-05-15T18:48:05Z",
+          "cmd": "healthcheck --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "responses_ok": true,
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        },
+        {
+          "ts": "2026-05-15T18:48:09Z",
+          "cmd": "status --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "attestation_summary_status": "ok",
+          "attestation_summary_code": "OK",
+          "attestation_summary_observed_at": "2026-05-15T18:48:12.298099+00:00",
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        },
+        {
+          "ts": "2026-05-15T18:48:13Z",
+          "cmd": "healthcheck --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "responses_ok": true,
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        },
+        {
+          "ts": "2026-05-15T18:48:16Z",
+          "cmd": "status --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "attestation_summary_status": "ok",
+          "attestation_summary_code": "OK",
+          "attestation_summary_observed_at": "2026-05-15T18:48:20.658834+00:00",
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        },
+        {
+          "ts": "2026-05-15T18:48:21Z",
+          "cmd": "healthcheck --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "responses_ok": true,
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        },
+        {
+          "ts": "2026-05-15T18:48:25Z",
+          "cmd": "status --json",
+          "status": "ok",
+          "machine_error_code": "OK",
+          "liveness": "healthy",
+          "last_error": "",
+          "attestation_summary_status": "ok",
+          "attestation_summary_code": "OK",
+          "attestation_summary_observed_at": "2026-05-15T18:48:28.063532+00:00",
+          "launch_status": "ready",
+          "launch_blocking_reason": ""
+        }
+      ],
+      "drift_reproduced": false
+    }
+  ],
+  "overall_result": {
+    "current_bounded_sampling_reproduced_prior_drift": false,
+    "observed_current_healthcheck_failures": 0,
+    "observed_current_status_failures": 0
+  }
+}

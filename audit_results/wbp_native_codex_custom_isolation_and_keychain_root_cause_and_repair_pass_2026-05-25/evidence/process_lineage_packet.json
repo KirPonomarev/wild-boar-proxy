@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "packet_kind": "process_lineage",
+  "captured_at_utc": "2026-05-25T10:29:15.265520Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_ISOLATION_AND_KEYCHAIN_ROOT_CAUSE_AND_REPAIR_PASS_R2",
+  "wrapper_app_path": "/Users/kirillponomarev/Applications/Codex Custom.app",
+  "wrapper_bin_path": "/Users/kirillponomarev/Applications/Codex Custom.app/Contents/MacOS/CodexCustom",
+  "target_binary_path": "/Applications/Codex.app/Contents/MacOS/Codex",
+  "active_launcher_path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+  "active_launcher_repo_managed_marker_valid": true,
+  "active_launcher_repo_managed_marker_recognized": true,
+  "backup_launcher_status": {
+    "path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh.pre-isolation-repair-20260525T102002Z.bak",
+    "exists": true,
+    "repo_managed_marker_present": true,
+    "repo_managed_marker_valid": false,
+    "repo_managed_marker_recognized": false
+  },
+  "isolated_recheck_pid": 95944,
+  "isolated_recheck_process_observed": true,
+  "isolated_recheck_process_ps": "95944 95941 95944 /Applications/Codex.app/Contents/MacOS/Codex"
+}

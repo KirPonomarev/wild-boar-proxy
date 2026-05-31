@@ -1,0 +1,25 @@
+{
+  "audit_id": "INDEPENDENT_AUDIT_WBP_CODEX_CUSTOM_NATIVE_ROUTING_PROOF_PASS_2026-05-26",
+  "audit_date": "2026-05-26",
+  "auditor": "opencode-orchestrator",
+  "status": "ok",
+  "verdict": "NATIVE_CUSTOM_ROUTING_PROVEN",
+  "findings": [
+    {
+      "id": "routing_destination",
+      "evidence": "codex exec error shows url: http://127.0.0.1:8318/v1/responses",
+      "result": "request routed to WBP, not api.openai.com"
+    },
+    {
+      "id": "direct_egress_negative",
+      "evidence": "no api.openai.com observed in codex error output",
+      "result": "direct egress not detected"
+    },
+    {
+      "id": "auth_failure_on_wbp_side",
+      "evidence": "CLIProxyAPI returned auth_unavailable for token format",
+      "result": "WBP received request but auth format mismatch on WBP side"
+    }
+  ],
+  "final_verdict": "closed_success"
+}

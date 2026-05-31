@@ -1,0 +1,10 @@
+{
+  "browser_authority_widened_here": false,
+  "captured_at_utc": "2026-05-28T10:40:36.298136Z",
+  "fresh_runtime_proof_created_here": false,
+  "generic_provider_family_compatibility_claimed_here": false,
+  "model_availability_claimed_here": false,
+  "packet_kind": "provider_auth_false_green_boundary",
+  "provider_reachability_claimed_here": false,
+  "status": "ok"
+}

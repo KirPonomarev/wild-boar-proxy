@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "python3",
+    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py",
+    "--repo-root",
+    "/Volumes/Work/wild-boar-proxy",
+    "--evidence-dir",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_native_external_safety_execution_r1_EXTERNAL_2026-05-26"
+  ],
+  "captured_at_utc": "2026-05-26T18:14:50.274841Z",
+  "command_executed": false,
+  "cwd": "/Volumes/Work/wild-boar-proxy",
+  "evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_native_external_safety_execution_r1_EXTERNAL_2026-05-26",
+  "external_result_imported": false,
+  "native_launch_attempted_from_current_thread": false,
+  "packet_kind": "external_detached_command",
+  "shell_command": "cd /Volumes/Work/wild-boar-proxy && python3 /Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/codex_custom_native_external_safety_execution_r1_EXTERNAL_2026-05-26",
+  "status": "ok",
+  "target_tool": "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py"
+}

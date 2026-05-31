@@ -1,0 +1,24 @@
+{
+  "verdict": "no_medium_plus_findings",
+  "findings": [],
+  "evidence_checked": [
+    "wild_boar_proxy/runtime.py",
+    "tests/test_cli.py",
+    "COMMAND_API.md",
+    "wild_boar_proxy/cli.py",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/desktop_launchable_smoke.json",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/launchable_targeted_tests.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/launchable_related_existing_tests.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/full_test_cli_current.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/head_comparison_regressions.json",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/non_cli_suite.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/non_cli_suite_bundled.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/ui_shell_bundled_suite.txt",
+    "audit_results/desktop_launchable_package_admission_pass_2026-05-21/evidence/node_check.txt"
+  ],
+  "notes": [
+    "The source-side symlink ingress fix is present in wild_boar_proxy/runtime.py via list_experimental_package_files() skipping root symlinks, and the verifier still rejects symlink entries in the built bundle.",
+    "The refreshed smoke evidence includes metadata_sha256 and metadata_checksum_match=true, resolving the earlier metadata-integrity gap on the verified path.",
+    "head_comparison_regressions.json and full_test_cli_current.txt still contain unrelated failing or noisy tests, but they are not medium-or-higher findings for this launchable package contour."
+  ]
+}

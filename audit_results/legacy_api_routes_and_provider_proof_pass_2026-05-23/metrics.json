@@ -1,0 +1,17 @@
+{
+  "account_visible_count": 25,
+  "contour": "LEGACY_API_ROUTES_AND_PROVIDER_PROOF_PASS",
+  "credential_admit_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "credential_admit_status": "error",
+  "credential_status": "missing",
+  "outcome": "closed_blocked_waiting_for_valid_provider_key",
+  "provider_check_status": "not_run",
+  "redaction_status": "pass",
+  "route_restore_status": "not_attempted",
+  "routes_count": 0,
+  "secret_value_exposed": false,
+  "web_action_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "web_action_status": "command_error",
+  "web_api_routes_count": 0,
+  "web_secret_intake": false
+}

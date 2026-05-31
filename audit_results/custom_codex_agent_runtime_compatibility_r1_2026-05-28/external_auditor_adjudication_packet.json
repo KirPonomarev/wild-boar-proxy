@@ -1,0 +1,42 @@
+{
+  "auditor_agent_id": "019e6db8-56cc-7453-854f-704963773e1e",
+  "auditor_model": "gpt-5.4-mini",
+  "captured_at_utc": "2026-05-28T08:39:00Z",
+  "current_contour": "CUSTOM_CODEX_AGENT_RUNTIME_COMPATIBILITY_CLASSIFICATION_R1",
+  "initial_verdict": "BLOCKED",
+  "packet_kind": "external_auditor_adjudication",
+  "post_fix_verdict": "PASS",
+  "status": "ok",
+  "initial_findings": [
+    {
+      "finding": "sync gate could report ok while dirty entries were only globally quarantined",
+      "adjudication": "partially accepted",
+      "fix": "sync gate now preserves git-status leading spaces and explicitly records quarantined dirty count, historical_dirty_quarantined, and unquarantined-current-dirty policy"
+    },
+    {
+      "finding": "false-green audit did not check sync_gate_packet.json",
+      "adjudication": "accepted",
+      "fix": "false-green audit now includes sync_gate_packet.json in required ok packets and has a regression test for blocked sync gate propagation"
+    },
+    {
+      "finding": "guard-test coverage was incomplete for sync gate and original-profile metadata-only contamination guard",
+      "adjudication": "accepted",
+      "fix": "tests now cover metadata-only original-profile guard, sync-gate policy disclosure, git-status leading whitespace, and blocked-packet summary propagation"
+    }
+  ],
+  "post_fix_evidence": {
+    "tests": "python3 -m pytest -q tests/test_custom_codex_agent_runtime_compatibility_r1_probe.py -> 13 passed",
+    "sync_gate": "audit_results/custom_codex_agent_runtime_compatibility_r1_2026-05-28/sync_gate_packet.json records historical_dirty_quarantined and quarantined_dirty_count",
+    "false_green": "audit_results/custom_codex_agent_runtime_compatibility_r1_2026-05-28/false_green_audit.json has status ok only after sync gate and required packets are ok",
+    "original_profile_guard": "audit_results/custom_codex_agent_runtime_compatibility_r1_2026-05-28/original_profile_contamination_guard_packet.json remains metadata-only with content_recorded=false"
+  },
+  "canon_result": {
+    "text_only_audit_counted_as_pass": false,
+    "quarantined_historical_dirty_disclosed": true,
+    "hidden_dirty_accepted": false,
+    "runtime_repair_performed": false,
+    "ui_changed": false,
+    "model_grid_claimed": false,
+    "performance_claimed": false
+  }
+}

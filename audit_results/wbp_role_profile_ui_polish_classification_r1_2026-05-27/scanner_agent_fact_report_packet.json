@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T12:49:34.836323Z",
+  "facts": [
+    "role_profile_ui_polish remains currently admitted",
+    "api connections screen now contains explicit role/profile metadata boundary copy",
+    "route identity rendering normalizes role labels into presentation-only pills",
+    "api route action payload remains route_id-only",
+    "no new route command surface was introduced"
+  ],
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok"
+}

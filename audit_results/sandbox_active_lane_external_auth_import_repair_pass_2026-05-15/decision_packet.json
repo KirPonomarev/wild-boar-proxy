@@ -1,0 +1,28 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "declared_read_surface": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+  "declared_write_surface": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "machine_rationale": {
+    "external_models_foundation_empty": true,
+    "lifecycle_rerun_earned": false,
+    "materialization_repair_selected": false,
+    "new_owner_level_blocker": "unknown_provider_for_model",
+    "post_import_owner_truth_remained_blocked": true,
+    "primary_http_401_cleared_by_real_import": true,
+    "registry_rebinding_required": false,
+    "rollback_completed": true
+  },
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "post_import_blocker_summary": {
+    "external_models_local_token_present": false,
+    "external_models_models_count": 0,
+    "external_models_profile_ready": false,
+    "external_models_routes_count": 0,
+    "healthcheck_blocking_reason": "usable_auth_pool_empty",
+    "healthcheck_last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+  },
+  "rollback_expectation_honored": true,
+  "schema_version": 1,
+  "status": "ok"
+}

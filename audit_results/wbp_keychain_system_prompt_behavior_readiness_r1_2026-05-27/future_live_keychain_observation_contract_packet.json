@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T05:32:12.497303Z",
+  "future_live_import_required": true,
+  "packet_kind": "future_live_keychain_observation_contract",
+  "prompt_behavior_classified": false,
+  "prompt_observation_performed": false,
+  "raw_prompt_text_allowed": false,
+  "raw_secret_allowed": false,
+  "required_future_fields": [
+    "command_hash_verified",
+    "evidence_dir_returned",
+    "prompt_appeared_true_false_unknown",
+    "prompt_category_text_without_secrets",
+    "owner_action_cancel_allow_ignore_not_observed",
+    "no_keychain_mutation_by_wbp_tools",
+    "auth_strategy_in_use",
+    "original_auth_keychain_non_dependency_checked_or_drift_classified",
+    "flow_result_after_prompt_classified",
+    "false_green_audit_passed"
+  ],
+  "screenshot_alone_counts_as_packet_truth": false,
+  "status": "ok"
+}

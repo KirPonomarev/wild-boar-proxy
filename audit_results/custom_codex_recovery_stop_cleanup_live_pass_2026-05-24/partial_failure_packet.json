@@ -1,0 +1,12 @@
+{
+  "status": "failed",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_CLEANUP_FAILED_AFTER_CANCEL",
+  "session_cancel_performed": true,
+  "session_cancel_verified": true,
+  "cleanup_attempted": true,
+  "owned_cleanup_performed": false,
+  "owned_cleanup_verified": false,
+  "process_kill_performed": false,
+  "filesystem_write_performed": true,
+  "next_action": "diagnose_owned_cleanup_failure"
+}

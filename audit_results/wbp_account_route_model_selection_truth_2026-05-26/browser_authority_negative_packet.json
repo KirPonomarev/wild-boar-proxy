@@ -1,0 +1,127 @@
+{
+  "browser_authority_blocked": true,
+  "captured_at_utc": "2026-05-26T08:36:50.484450Z",
+  "forbidden_payload_result": {
+    "account_mutation_performed": false,
+    "account_pool_truth": {
+      "account_count_claim_scope": "packet_shape_only",
+      "auth_classes": {
+        "auth_invalid": 0,
+        "auth_ref_missing": 0,
+        "auth_ref_present": 3
+      },
+      "eligibility_classes": {
+        "auth_invalid": 0,
+        "cooldown_only": 0,
+        "excluded": 1,
+        "live_capable": 2,
+        "quota_exhausted": 0,
+        "unknown_unverified": 0
+      },
+      "launch_capable_count": 2,
+      "machine_error_code": "OK",
+      "pool_classes": {
+        "active": 2,
+        "hold": 0,
+        "problem": 0,
+        "reserve": 1,
+        "retired": 0
+      },
+      "status": "ok"
+    },
+    "account_quota_proven": false,
+    "account_token_validity_proven": false,
+    "active_routing_after_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_before_refs": [
+      "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef"
+    ],
+    "active_routing_changed": false,
+    "allowed_status": "WBP_MODEL_SELECTION_ACCOUNT_ROUTE_TRUTH_CLASSIFIED",
+    "auth_ref_static_classification": {
+      "auth_ref_missing_count": 0,
+      "auth_ref_present_count": 3,
+      "classification_scope": "static_dry_run_only",
+      "duplicate_auth_ref_count": 0,
+      "duplicate_auth_ref_is_green": false,
+      "duplicate_auth_ref_refs": [],
+      "live_validation_performed": false,
+      "missing_auth_ref_is_green": false,
+      "quota_proven": false,
+      "raw_auth_refs_exposed": false,
+      "token_validity_proven": false,
+      "unexpected_auth_ref_format_count": 0,
+      "unexpected_auth_ref_refs": [],
+      "upstream_credentials_accepted": false
+    },
+    "browser_authority": {
+      "account_id": false,
+      "auth_path": false,
+      "backend_id": false,
+      "base_url": false,
+      "path": false,
+      "provider": false,
+      "route_id": false,
+      "token": false
+    },
+    "browser_selected_backend": false,
+    "browser_selected_route": false,
+    "captured_at_utc": "2026-05-26T08:36:50.318291Z",
+    "chat_completions_called": false,
+    "claim_limits": {
+      "account_exists_means_healthy": false,
+      "model_listed_means_usable": false,
+      "selection_policy_proves_egress": false,
+      "selection_policy_proves_native": false,
+      "selection_policy_proves_route_response": false,
+      "static_auth_ref_means_token_valid": false
+    },
+    "cli_runner_proven": false,
+    "contract_scope": "model_selection_account_route_truth_only",
+    "direct_egress_absence_proven": false,
+    "dry_run": true,
+    "final_e2e_proven": false,
+    "forbidden_claims": [
+      "live_model_availability_proven",
+      "selected_model_usable_live",
+      "selected_account_healthy_live",
+      "account_token_validity_proven",
+      "account_quota_proven",
+      "reserve_promoted",
+      "native_codex_proven",
+      "cli_runner_proven",
+      "direct_egress_absent",
+      "final_e2e_proven"
+    ],
+    "forbidden_fields": [
+      "route_id",
+      "backend_id",
+      "provider",
+      "base_url",
+      "token"
+    ],
+    "human_message": "Model selection accepts only server-issued model_id.",
+    "live_account_truth_checked": false,
+    "live_model_availability_proven": false,
+    "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+    "mode_id": "codex_custom",
+    "model_server_issued": false,
+    "native_codex_proven": false,
+    "network_calls_made": false,
+    "provider_called": false,
+    "raw_auth_refs_exposed": false,
+    "raw_backend_id_exposed": false,
+    "raw_route_id_exposed": false,
+    "raw_secret_exposed": false,
+    "reserve_promotion_performed": false,
+    "responses_called": false,
+    "schema_version": 1,
+    "selection_not_inference": true,
+    "selection_policy_proven": false,
+    "status": "rejected",
+    "token_burn": 0,
+    "upstream_credentials_accepted": false
+  },
+  "schema_version": 1
+}

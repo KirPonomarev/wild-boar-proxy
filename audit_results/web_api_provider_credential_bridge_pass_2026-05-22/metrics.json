@@ -1,0 +1,90 @@
+{
+  "contour": "WEB_API_PROVIDER_CREDENTIAL_BRIDGE_PASS",
+  "date": "2026-05-22",
+  "verdict": "closed_success_pending_commit",
+  "tests": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "pass"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_cli_external_models tests.test_external_models -q",
+      "status": "pass",
+      "tests_ran": 175,
+      "duration_seconds": 206.618
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    }
+  ],
+  "browser_proof": {
+    "url": "http://127.0.0.1:8788/?screen=quick-start&source=live",
+    "action_ui_action": "api_route_connect",
+    "action_status": "ok",
+    "action_machine_error_code": "OK",
+    "credential_phase": "credential_admitted",
+    "credential_status": "missing",
+    "credential_admit_status": "admitted",
+    "credential_present": true,
+    "credential_admitted": true,
+    "credential_ref": "OPENROUTER_API_KEY",
+    "credential_owner_source_kind": "owner_env",
+    "api_route_connect_phase": "created_and_validated",
+    "route_id": "wbp-web-primary-openrouter",
+    "validate_status": "ok",
+    "browser_api_key_intake": false,
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "secret_value_exposed": false,
+    "refresh_status": "canonical refresh complete",
+    "routes_after_count": 1,
+    "route_visible_after_refresh": true,
+    "ledger_contains_credential_phase": true,
+    "screenshot": "audit_results/web_api_provider_credential_bridge_pass_2026-05-22/evidence/browser-api-credential-bridge-after.png"
+  },
+  "action_packet_core": {
+    "status": "ok",
+    "ui_action": "api_route_connect",
+    "machine_error_code": "OK",
+    "credential_phase": "credential_admitted",
+    "credential_status": "missing",
+    "credential_admit_status": "admitted",
+    "connect_phase": "created_and_validated",
+    "validate_status": "ok"
+  },
+  "owner_status_after_browser": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "credential_present": true
+  },
+  "routes_after_browser": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "count": 1
+  },
+  "redaction": {
+    "secret_sentinel_absent_from_text_evidence": true,
+    "secret_sentinel_hit_files": [],
+    "packet_secret_value_exposed": false,
+    "browser_api_key_intake": false,
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "credential_ref_only": true
+  },
+  "evidence_files": [
+    "evidence/browser-action-packet.json",
+    "evidence/browser-api-connections-after.json",
+    "evidence/browser-api-credential-bridge-after.png",
+    "evidence/browser-dom-summary.json",
+    "evidence/browser-external-models-start.json",
+    "evidence/browser-run-network.json",
+    "evidence/browser-run-summary.json",
+    "evidence/browser-sandbox-init.json",
+    "evidence/credential-status-after-browser.json",
+    "evidence/redaction-check.json",
+    "evidence/routes-list-after-browser.json"
+  ]
+}

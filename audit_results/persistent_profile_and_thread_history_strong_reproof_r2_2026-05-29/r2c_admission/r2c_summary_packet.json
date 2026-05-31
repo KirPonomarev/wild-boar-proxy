@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-29T05:44:52.479650Z",
+  "direct_egress_absence_claimed": false,
+  "execution_mode": "admission",
+  "final_e2e_claimed": false,
+  "final_status": "WBP_CUSTOM_CODEX_OWNER_VISIBLE_THREAD_CONTINUITY_R2C_ADMITTED_NO_NATIVE_LAUNCH",
+  "model_availability_claimed": false,
+  "native_launch_attempted": false,
+  "native_ux_acceptance_claimed": false,
+  "owner_visible_thread_continuity_classified": false,
+  "packet_kind": "r2c_summary",
+  "profile_id": "wbp-custom-main",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "status": "ok",
+  "storage_level_thread_history_proven": false
+}

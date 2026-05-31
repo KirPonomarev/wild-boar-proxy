@@ -1,0 +1,449 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_SETUP_CLIENT_SELECT_IMPORT_DECISION",
+  "created_at": "2026-05-13",
+  "artifact_type": "ui_admission_decision_matrix",
+  "scope": {
+    "source_package": "/Users/kirillponomarev/Desktop/кабан дизайн/эталон дизайна.zip",
+    "source_screens": [
+      "wild_boar_proxy_redesign/html/02_setup_client.html",
+      "wild_boar_proxy_redesign/html/03_select_codex_client.html",
+      "wild_boar_proxy_redesign/html/08_import_existing.html"
+    ],
+    "implementation_status": "decision_only_no_ui_implementation",
+    "desktop_status": "not_started"
+  },
+  "canon_basis": [
+    {
+      "source": "UI_READINESS_SPEC.md:15-17",
+      "rule": "UI consumes strict JSON command packets and must not infer runtime truth from files, logs, cached UI state, exit code alone, or narrative memory."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:31-40",
+      "rule": "UI must not mutate runtime files directly, parse logs as API, read state files as primary truth, synthesize healthy status, or introduce new command surfaces."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:333-345",
+      "rule": "First-pass settings may show host client path, data directory display, probe limits display, and legacy import status as deferred; settings must not invent write paths or mutate config directly."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:475-489",
+      "rule": "Primary truth comes from strict JSON commands, not direct parsing of registry, supervisor state, mode files, managed config, logs, or diagnostics bundles."
+    },
+    {
+      "source": "COMMAND_API.md:16-47",
+      "rule": "Existing command API includes strict JSON surfaces for launch client, installer init, and legacy import, but required CLI commands are not automatically browser-safe contracts."
+    },
+    {
+      "source": "COMMAND_API.md:160-210",
+      "rule": "Launch client is bounded OS dispatch truth only; it does not prove host-client session success, profile-selection success, runtime health, or launch-smoke truth."
+    },
+    {
+      "source": "MASTER_PLAN.md:172-177",
+      "rule": "The companion UI is a managed control app, not a universal GUI for config, logs, OAuth, or generic host-client management."
+    },
+    {
+      "source": "RUNTIME_CONTRACT.md:44-52",
+      "rule": "Launch client must not become owner of runtime health, fallback, recovery, profile-selection success, or runtime connectivity success."
+    }
+  ],
+  "path_rule": {
+    "browser_origin_arbitrary_path_allowed": false,
+    "allowed_future_patterns": [
+      "server_owned_known_location",
+      "preconfigured_bounded_profile_id",
+      "command_owned_discovery_result_id",
+      "future_desktop_native_picker_after_owner_approval"
+    ],
+    "notes": [
+      "Browser payload must not contain arbitrary source directories, config paths, auth paths, app bundle paths, or shell strings.",
+      "The presence of legacy import --source-dir <path> --json in the CLI command API is not a safe first-pass web browser contract."
+    ]
+  },
+  "decisions": [
+    {
+      "screen_id": "02_setup_client",
+      "control_id": "setup_flow_stepper",
+      "visible_label": "Setup flow progress",
+      "intended_behavior": "Show current setup phase and later phases.",
+      "admission_verdict": "readonly_only",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:15-17",
+        "MASTER_PLAN.md:172-177"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "none",
+      "truth_source": "static_ui_structure_until_command_owned_setup_status_exists",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "",
+      "future_contour_required": null
+    },
+    {
+      "screen_id": "02_setup_client",
+      "control_id": "find_automatically",
+      "visible_label": "Find automatically",
+      "intended_behavior": "Search standard locations for host client and existing configuration.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:31-40",
+        "UI_READINESS_SPEC.md:333-345"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "future command-owned discovery result only",
+      "truth_source": "future strict JSON setup discovery packet",
+      "mutation_surface": "none_admitted",
+      "confirmation_required": false,
+      "post_action_refresh": "future setup discovery/status refresh",
+      "deferred_reason": "No current web allowlist command exposes host-client/config discovery as a strict JSON browser-safe surface.",
+      "future_contour_required": "SETUP_DISCOVERY_COMMAND_API_CONTOUR_OR_BOUNDED_UI_DISCOVERY_CONTOUR"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "control_id": "manual_path_choice",
+      "visible_label": "Specify manually / Change",
+      "intended_behavior": "Let operator enter or change executable/work directory path.",
+      "admission_verdict": "forbidden",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:31-40",
+        "UI_READINESS_SPEC.md:342-345"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "arbitrary_browser_path_forbidden",
+      "truth_source": "none",
+      "mutation_surface": "none_admitted",
+      "confirmation_required": true,
+      "post_action_refresh": null,
+      "deferred_reason": "Browser-origin local paths are not admitted. A future desktop/native picker or command-owned discovery id is required.",
+      "future_contour_required": "DESKTOP_NATIVE_PICKER_OR_SERVER_OWNED_PATH_CONTRACT_AFTER_APPROVAL"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "control_id": "work_directory_display",
+      "visible_label": "Host-client work/data directory display",
+      "intended_behavior": "Show observed local setup directory without changing it.",
+      "admission_verdict": "readonly_only",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:333-345",
+        "UI_READINESS_SPEC.md:475-489"
+      ],
+      "command_surface": "future or existing command-derived metadata only",
+      "browser_payload_allowed": false,
+      "path_handling": "display_only_if_server_supplied_or_command_redacted",
+      "truth_source": "command_packet_or_server_owned_metadata",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "Direct config/state/path reads are not admitted as UI truth.",
+      "future_contour_required": "BOUNDED_SETUP_STATUS_DISPLAY_IF_NEEDED"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "control_id": "continue_setup",
+      "visible_label": "Continue",
+      "intended_behavior": "Move to next setup UI step.",
+      "admission_verdict": "admitted_for_future_bounded_implementation",
+      "canon_basis": [
+        "MASTER_PLAN.md:181-192"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "none",
+      "truth_source": "navigation_only_not_runtime_truth",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "",
+      "future_contour_required": "UI_WEB_SETUP_CLIENT_BOUNDED_IMPLEMENTATION"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "client_search_filter",
+      "visible_label": "Search by name or path",
+      "intended_behavior": "Filter detected host-client candidates.",
+      "admission_verdict": "readonly_only",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:333-345",
+        "MASTER_PLAN.md:172-177"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "may_filter_already_server_supplied_candidates_only",
+      "truth_source": "server_supplied_candidate_list_only",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "Search cannot trigger filesystem scan from browser.",
+      "future_contour_required": "SETUP_DISCOVERY_COMMAND_API_CONTOUR_FOR_REAL_CANDIDATES"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "choose_file",
+      "visible_label": "Choose file",
+      "intended_behavior": "Select a host-client executable or app bundle manually.",
+      "admission_verdict": "forbidden",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:31-40",
+        "UI_READINESS_SPEC.md:342-345"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "arbitrary_browser_path_forbidden",
+      "truth_source": "none",
+      "mutation_surface": "none_admitted",
+      "confirmation_required": true,
+      "post_action_refresh": null,
+      "deferred_reason": "Manual browser file/path selection would submit arbitrary local paths and belongs to a future desktop/native picker contract.",
+      "future_contour_required": "DESKTOP_NATIVE_PICKER_OR_SERVER_OWNED_PATH_CONTRACT_AFTER_APPROVAL"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "verify_path",
+      "visible_label": "Verify path",
+      "intended_behavior": "Check whether a selected host-client path is valid.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "COMMAND_API.md:160-210",
+        "RUNTIME_CONTRACT.md:44-52"
+      ],
+      "command_surface": "launch client --json is dispatch, not pure path verification",
+      "browser_payload_allowed": false,
+      "path_handling": "future command-owned candidate id only",
+      "truth_source": "future strict JSON verification packet",
+      "mutation_surface": "none_admitted",
+      "confirmation_required": false,
+      "post_action_refresh": "future setup/client candidate refresh",
+      "deferred_reason": "Current launch-client surface is bounded dispatch and cannot be repurposed as browser path validation or profile-selection truth.",
+      "future_contour_required": "HOST_CLIENT_DISCOVERY_OR_VERIFY_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "detected_candidate_select",
+      "visible_label": "Select detected candidate",
+      "intended_behavior": "Choose one discovered host-client candidate.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:333-345",
+        "COMMAND_API.md:160-210"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": true,
+      "path_handling": "candidate_id_only_if_server_generated",
+      "truth_source": "future command-owned candidate list and selection packet",
+      "mutation_surface": "future bounded profile/client selection only",
+      "confirmation_required": true,
+      "post_action_refresh": "future setup/status refresh",
+      "deferred_reason": "No current command surface persists host-client selection by candidate id.",
+      "future_contour_required": "HOST_CLIENT_SELECTION_COMMAND_API_CONTOUR"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "show_in_finder",
+      "visible_label": "Show in file manager",
+      "intended_behavior": "Open selected candidate location for human inspection.",
+      "admission_verdict": "deferred",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:111-128"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "server_owned_known_location_only",
+      "truth_source": "support_action_only_not_runtime_truth",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "Support open-file actions are not truth; web contour lacks a safe server-owned open-location contract.",
+      "future_contour_required": "SUPPORT_OPEN_LOCATION_CONTOUR_OR_DESKTOP_NATIVE_CONTRACT"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "control_id": "save_selection",
+      "visible_label": "Save selection",
+      "intended_behavior": "Persist chosen host-client candidate.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:342-345",
+        "MASTER_PLAN.md:245-259"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": true,
+      "path_handling": "candidate_id_only_if_server_generated",
+      "truth_source": "future strict JSON selection command packet",
+      "mutation_surface": "future command-owned profile orchestration state only",
+      "confirmation_required": true,
+      "post_action_refresh": "future mode/status/setup metadata refresh",
+      "deferred_reason": "Any persisted setting needs a command API contour; UI must not write config directly.",
+      "future_contour_required": "HOST_CLIENT_SELECTION_COMMAND_API_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "found_installation_display",
+      "visible_label": "Found installation",
+      "intended_behavior": "Display detected existing installation, path, and found data count.",
+      "admission_verdict": "deferred",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:333-345",
+        "UI_READINESS_SPEC.md:475-489"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "display_only_after_command_owned_discovery",
+      "truth_source": "future strict JSON import discovery packet",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "No current first-pass web command exposes import discovery status; direct filesystem scan/read is not admitted.",
+      "future_contour_required": "LEGACY_IMPORT_DISCOVERY_OR_DRY_RUN_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "find_installation",
+      "visible_label": "Find installation",
+      "intended_behavior": "Locate an existing setup to import.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:31-40",
+        "COMMAND_API.md:42-43"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "future command-owned discovery result only",
+      "truth_source": "future strict JSON discovery packet",
+      "mutation_surface": "none_admitted",
+      "confirmation_required": false,
+      "post_action_refresh": "future import discovery refresh",
+      "deferred_reason": "Current CLI import requires source-dir input; there is no browser-safe discovery command.",
+      "future_contour_required": "LEGACY_IMPORT_DISCOVERY_OR_DRY_RUN_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "create_snapshot",
+      "visible_label": "Create snapshot",
+      "intended_behavior": "Create a restorable snapshot before import.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "MASTER_PLAN.md:731-748",
+        "UI_READINESS_SPEC.md:506-516"
+      ],
+      "command_surface": "legacy import has transactional rollback mechanics, but no separate UI snapshot command is currently admitted",
+      "browser_payload_allowed": false,
+      "path_handling": "none_from_browser",
+      "truth_source": "future strict JSON snapshot/dry-run packet",
+      "mutation_surface": "future command-owned companion-managed backup only",
+      "confirmation_required": true,
+      "post_action_refresh": "future import status refresh",
+      "deferred_reason": "Snapshot is a mutating support/recovery operation and needs an explicit bounded command contract before UI exposure.",
+      "future_contour_required": "LEGACY_IMPORT_SNAPSHOT_OR_DRY_RUN_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "verify_import_plan",
+      "visible_label": "Verify",
+      "intended_behavior": "Validate import plan before apply.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "COMMAND_API.md:8-14",
+        "UI_READINESS_SPEC.md:506-516"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "future command-owned discovery result only",
+      "truth_source": "future strict JSON dry-run or verify packet",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": "future import plan refresh",
+      "deferred_reason": "No current non-mutating legacy import dry-run/verify surface is exposed to web UI.",
+      "future_contour_required": "LEGACY_IMPORT_DRY_RUN_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "apply_import",
+      "visible_label": "Apply import",
+      "intended_behavior": "Apply import of existing setup into companion-managed state.",
+      "admission_verdict": "deferred",
+      "canon_basis": [
+        "COMMAND_API.md:42-43",
+        "MASTER_PLAN.md:731-748",
+        "UI_READINESS_SPEC.md:333-345"
+      ],
+      "command_surface": "legacy import --source-dir <path> --json",
+      "browser_payload_allowed": false,
+      "path_handling": "source_dir_must_not_come_from_browser",
+      "truth_source": "future strict JSON legacy import packet plus post-action refresh",
+      "mutation_surface": "companion-managed registry/state/config/import transaction only when command-owned",
+      "confirmation_required": true,
+      "post_action_refresh": "status --json; accounts list --json; mode get --json",
+      "deferred_reason": "CLI command exists, but web UI lacks safe server-owned source-dir mediation and strong import confirmation policy in this contour.",
+      "future_contour_required": "UI_WEB_SETUP_CLIENT_BOUNDED_IMPLEMENTATION_AFTER_IMPORT_MEDIATION_APPROVAL"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "rollback_import",
+      "visible_label": "Rollback",
+      "intended_behavior": "Rollback a previously applied import.",
+      "admission_verdict": "needs_command_api_contour",
+      "canon_basis": [
+        "MASTER_PLAN.md:731-748",
+        "UI_READINESS_SPEC.md:506-516"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "none_from_browser",
+      "truth_source": "future strict JSON rollback packet",
+      "mutation_surface": "future command-owned rollback only",
+      "confirmation_required": true,
+      "post_action_refresh": "status --json; accounts list --json; mode get --json",
+      "deferred_reason": "The render shows rollback availability, but no standalone UI-safe rollback command is currently admitted.",
+      "future_contour_required": "LEGACY_IMPORT_ROLLBACK_COMMAND_CONTOUR"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "show_import_location",
+      "visible_label": "Show import location in file manager",
+      "intended_behavior": "Open detected installation location for human inspection.",
+      "admission_verdict": "deferred",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:111-128"
+      ],
+      "command_surface": null,
+      "browser_payload_allowed": false,
+      "path_handling": "server_owned_known_location_only",
+      "truth_source": "support_action_only_not_runtime_truth",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "Support open-location actions need a separate safe server-owned path contract and must not become import truth.",
+      "future_contour_required": "SUPPORT_OPEN_LOCATION_CONTOUR_OR_DESKTOP_NATIVE_CONTRACT"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "control_id": "import_safety_claims",
+      "visible_label": "Plan import / risks and safety",
+      "intended_behavior": "Explain import plan, reserve/active placement, snapshot, and rollback safety.",
+      "admission_verdict": "readonly_only",
+      "canon_basis": [
+        "UI_READINESS_SPEC.md:454-489",
+        "MASTER_PLAN.md:731-748"
+      ],
+      "command_surface": "future import plan packet required for dynamic claims",
+      "browser_payload_allowed": false,
+      "path_handling": "none",
+      "truth_source": "static safety copy only until future strict JSON import plan packet exists",
+      "mutation_surface": "none",
+      "confirmation_required": false,
+      "post_action_refresh": null,
+      "deferred_reason": "Dynamic counts such as imported account count or active assignment must not be claimed without command packet truth.",
+      "future_contour_required": "LEGACY_IMPORT_DRY_RUN_COMMAND_CONTOUR_FOR_DYNAMIC_PLAN"
+    }
+  ],
+  "overall_verdict": {
+    "02_setup_client": "partial_readonly_with_future_bounded_navigation_only",
+    "03_select_codex_client": "deferred_until_server_owned_discovery_and_selection_contract",
+    "08_import_existing": "deferred_until_import_discovery_dry_run_source_dir_mediation_and_confirmation_contract",
+    "implementation_allowed_in_this_contour": false
+  }
+}

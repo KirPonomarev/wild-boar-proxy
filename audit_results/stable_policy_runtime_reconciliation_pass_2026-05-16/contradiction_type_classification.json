@@ -1,0 +1,19 @@
+{
+  "pre_action_classification": {
+    "type": "coupled_contradiction",
+    "components": [
+      "stable_policy_drift",
+      "runtime_lane_split",
+      "participation_evidence_contradicted"
+    ],
+    "reason": "fresh selector evidence was being rejected because policy/runtime truth was not reconciled"
+  },
+  "post_action_classification": {
+    "type": "runtime_lane_drift",
+    "components": [
+      "activation_pending",
+      "stale_participation_snapshot"
+    ],
+    "reason": "approved target is selected again, stable repair reconciliation work is closed, but effective runtime truth still points to observed source and activation evidence is stale"
+  }
+}

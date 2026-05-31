@@ -1,0 +1,361 @@
+{
+  "captured_at_utc": "2026-05-26T07:16:07.805549Z",
+  "surfaces": {
+    "app_support": {
+      "dirs": 62,
+      "errors": 0,
+      "exists": true,
+      "files": 3092,
+      "metadata_digest": "35df709ffcdfd637dc52e35b1edb8309f58233753e1ec3d6ddfced5ab5541b72",
+      "others": 0,
+      "root": "/Users/kirillponomarev/Library/Application Support/Codex",
+      "sample": [
+        {
+          "kind": "dir",
+          "mtime_ns": 1779779534753167303,
+          "relative_path": ".",
+          "size": 864
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125051489799,
+          "relative_path": "Cache",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125060199846,
+          "relative_path": "Code Cache",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428124651624592,
+          "relative_path": "Crashpad",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125648339394,
+          "relative_path": "DawnGraphiteCache",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125647098066,
+          "relative_path": "DawnWebGPUCache",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125645827779,
+          "relative_path": "GPUCache",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125046530695,
+          "relative_path": "Local Storage",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777808237591298611,
+          "relative_path": "Partitions",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779768699094245826,
+          "relative_path": "Session Storage",
+          "size": 256
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777428125269505515,
+          "relative_path": "Shared Dictionary",
+          "size": 160
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779774824244792889,
+          "relative_path": "blob_storage",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779768729240352660,
+          "relative_path": "sentry",
+          "size": 160
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779715273620002,
+          "relative_path": "Cookies",
+          "size": 36864
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779715273652210,
+          "relative_path": "Cookies-journal",
+          "size": 0
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779765385585107537,
+          "relative_path": "DIPS",
+          "size": 36864
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779776038425039660,
+          "relative_path": "DIPS-wal",
+          "size": 24752
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1778824144589968507,
+          "relative_path": "Local State",
+          "size": 57
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779534748680532,
+          "relative_path": "Network Persistent State",
+          "size": 33545
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779774834036928126,
+          "relative_path": "Preferences",
+          "size": 213
+        }
+      ]
+    },
+    "cache": {
+      "dirs": 4,
+      "errors": 0,
+      "exists": true,
+      "files": 4,
+      "metadata_digest": "bcc1898dfed331a4c579a6888460bc31b2a5f9116e956c1367791b600fba16bc",
+      "others": 0,
+      "root": "/Users/kirillponomarev/Library/Caches/com.openai.codex",
+      "sample": [
+        {
+          "kind": "dir",
+          "mtime_ns": 1777494309271487332,
+          "relative_path": ".",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779779317079399511,
+          "relative_path": "fsCachedData",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779545616753978946,
+          "relative_path": "org.sparkle-project.Sparkle",
+          "size": 96
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779679714132928239,
+          "relative_path": "Cache.db",
+          "size": 57344
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779769839678685411,
+          "relative_path": "Cache.db-shm",
+          "size": 32768
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779317079573590,
+          "relative_path": "Cache.db-wal",
+          "size": 2224832
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779545616105749009,
+          "relative_path": "org.sparkle-project.Sparkle/Launcher",
+          "size": 64
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779317079326721,
+          "relative_path": "fsCachedData/97ACE1F2-18E0-403E-8A1E-AC9A94DDD548",
+          "size": 8030
+        }
+      ]
+    },
+    "codex_home": {
+      "dirs": 2511,
+      "errors": 0,
+      "exists": true,
+      "files": 7179,
+      "metadata_digest": "7f268b28c181f4da0417fe591840e3b5eaa8676641fe106a696253fc2132e7f6",
+      "others": 0,
+      "root": "/Users/kirillponomarev/.codex",
+      "sample": [
+        {
+          "kind": "dir",
+          "mtime_ns": 1779779466005622248,
+          "relative_path": ".",
+          "size": 1504
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779496186536113538,
+          "relative_path": ".tmp",
+          "size": 224
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1778923341275782804,
+          "relative_path": "ambient-suggestions",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779774522427202186,
+          "relative_path": "archived_sessions",
+          "size": 35968
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779308926565924417,
+          "relative_path": "automations",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1778191214526879162,
+          "relative_path": "browser",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1778824143675303054,
+          "relative_path": "cache",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779774522863939099,
+          "relative_path": "computer-use",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1778730769932663513,
+          "relative_path": "generated_images",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779769692687298013,
+          "relative_path": "log",
+          "size": 128
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777616611322041595,
+          "relative_path": "memories",
+          "size": 64
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1778191207974164504,
+          "relative_path": "node_repl",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777668996885584485,
+          "relative_path": "pets",
+          "size": 64
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777617132547850500,
+          "relative_path": "plugins",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777616838900928778,
+          "relative_path": "rules",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777617420891547410,
+          "relative_path": "sessions",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779776934068508438,
+          "relative_path": "shell_snapshots",
+          "size": 384
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779768242115621230,
+          "relative_path": "skills",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1779308926566898732,
+          "relative_path": "sqlite",
+          "size": 96
+        },
+        {
+          "kind": "dir",
+          "mtime_ns": 1777617130143913913,
+          "relative_path": "tmp",
+          "size": 96
+        }
+      ]
+    },
+    "httpstorages": {
+      "dirs": 1,
+      "errors": 0,
+      "exists": true,
+      "files": 3,
+      "metadata_digest": "87c9dac7f82a0cd44eb34e959a08eec5fe5a916a6f2be77f92a6cc4d43e64ce6",
+      "others": 0,
+      "root": "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex",
+      "sample": [
+        {
+          "kind": "dir",
+          "mtime_ns": 1770122166948253653,
+          "relative_path": ".",
+          "size": 160
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779441985132812179,
+          "relative_path": "httpstorages.sqlite",
+          "size": 16384
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779769839552898400,
+          "relative_path": "httpstorages.sqlite-shm",
+          "size": 32768
+        },
+        {
+          "kind": "file",
+          "mtime_ns": 1779779317078923148,
+          "relative_path": "httpstorages.sqlite-wal",
+          "size": 3423752
+        }
+      ]
+    }
+  }
+}

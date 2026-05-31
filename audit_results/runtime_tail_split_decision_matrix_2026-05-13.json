@@ -1,0 +1,177 @@
+{
+  "contour_id": "RUNTIME_TAIL_SPLIT_DECISION_GATE",
+  "created_at": "2026-05-13",
+  "head_before_artifacts": "08969cb",
+  "mode": "decision_only",
+  "final_state": "RUNTIME_TAIL_SPLIT_DECISION_READY_OWNER_APPROVAL_REQUIRED",
+  "scope": {
+    "allowed_writes": [
+      "audit_results/runtime_tail_split_decision_matrix_2026-05-13.json",
+      "audit_results/runtime_tail_split_decision_closeout_2026-05-13.md"
+    ],
+    "forbidden_writes": [
+      "wild_boar_proxy/runtime.py",
+      "tests/",
+      "wild_boar_proxy/web_design_live_server.py",
+      "wild_boar_proxy/web_design_ui/",
+      "wild_boar_proxy/web_ui.py",
+      "wild_boar_proxy/ui_shell.py"
+    ],
+    "live_runtime_commands_allowed": false,
+    "runtime_diff_acceptance_allowed": false,
+    "runtime_revert_allowed": false
+  },
+  "observed_runtime_diff": {
+    "file": "wild_boar_proxy/runtime.py",
+    "diff_stat": {
+      "files_changed": 1,
+      "insertions": 16,
+      "deletions": 1
+    },
+    "textual_hunk_count": 3,
+    "behavior_bucket_count": 2,
+    "behavior_buckets_are_independent": true,
+    "dependency_note": "No direct dependency was found between the launch dispatch timing change and the promote/stage-advance verification predicate change. They only share the runtime.py file and the broader CLI/runtime test suite."
+  },
+  "buckets": [
+    {
+      "id": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_DECISION",
+      "owner_decision_required": true,
+      "changed_function": "dispatch_external_client",
+      "changed_surface_family": "launch dispatch",
+      "changed_command_surfaces": [
+        "launch client --json",
+        "launch smoke --json"
+      ],
+      "change_summary": "Adds a bounded settle loop after detached process spawn so short-lived probe scripts may materialize side effects before the command returns.",
+      "observed_hunk_shape": [
+        "adds settle_deadline = time.monotonic() + 1.25",
+        "polls process.poll() until process exits or the deadline passes",
+        "sleeps for 0.01 seconds between polls"
+      ],
+      "canonical_risk": [
+        "Launch success must remain bounded to explicit command packet truth.",
+        "Timing behavior must not become hidden runtime health truth.",
+        "Detached launch semantics must not silently become blocking runtime ownership."
+      ],
+      "affected_callers_or_surfaces": [
+        "run_launch_smoke",
+        "bounded external host-client dispatch",
+        "CLI launch smoke surface",
+        "CLI launch client surface",
+        "UI callers only as consumers of JSON command packets"
+      ],
+      "existing_test_coverage_candidates": [
+        "tests/test_cli.py launch-smoke stability and materialization cases",
+        "tests/test_cli.py launch-client bounded dispatch cases",
+        "tests/test_cli.py exec-format and nonzero-launcher JSON packet cases"
+      ],
+      "missing_later_contour_tests": [
+        "prove the settle window is needed without relying on post-return polling",
+        "prove the wait remains bounded and cannot hang the command surface",
+        "prove return packet shape and command meaning are unchanged",
+        "prove launch smoke and launch client surfaces do not claim runtime health from the timing wait"
+      ],
+      "independent_revertability": {
+        "assessment": "likely_independent",
+        "reason": "Removing the settle loop restores prior detached spawn timing and does not reference promote, rollout, lock_acquired, selected backend, or policy-step state.",
+        "requires_later_verification": true
+      },
+      "owner_options": [
+        "review_and_test_in_dedicated_runtime_launch_contour",
+        "revert_as_unapproved_runtime_tail",
+        "leave_pending_until_runtime_owner_decision"
+      ],
+      "recommended_next_gate": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_DECISION"
+    },
+    {
+      "id": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_DECISION",
+      "owner_decision_required": true,
+      "changed_function": "run_promote",
+      "changed_surface_family": "account promotion and rollout stage advance",
+      "changed_command_surfaces": [
+        "accounts promote <id> --json",
+        "rollout stage advance ... --json"
+      ],
+      "change_summary": "For lock_acquired=True, selected-backend participation is no longer required inside the local run_promote predicate; the owner path is expected to validate that requirement through postflight checks.",
+      "observed_hunk_shape": [
+        "adds selected_backend_verified",
+        "adds selected_backend_requirement_met",
+        "sets selected_backend_requirement_met to true when lock_acquired is true",
+        "keeps direct non-lock promote tied to selected_backend_verified",
+        "replaces backend_id in verified_selected_backend_ids in the promotion-success predicate"
+      ],
+      "canonical_risk": [
+        "Direct account promote must not inherit the stage-advance relaxation.",
+        "Stage advance must not claim success unless postflight proof owns the delegated selected-backend check.",
+        "Runtime truth must remain in strict JSON command packets, not inferred from caller narrative."
+      ],
+      "affected_callers_or_surfaces": [
+        "direct accounts promote command",
+        "rollout stage advance owner path",
+        "policy-step and active-placement verification",
+        "UI callers only as consumers of JSON command packets"
+      ],
+      "existing_test_coverage_candidates": [
+        "tests/test_cli.py::CliTests::test_accounts_promote_promotes_reserve_backend_with_verified_active_routing",
+        "tests/test_cli.py::CliTests::test_accounts_promote_status_verification_failure_rolls_back",
+        "tests/test_cli.py::CliTests::test_accounts_promote_policy_verification_failure_rolls_back",
+        "tests/test_cli.py rollout stage-advance 15/20 owner-path coverage"
+      ],
+      "missing_later_contour_tests": [
+        "prove direct run_promote without lock_acquired still requires selected-backend verification",
+        "prove lock-acquired stage-advance path delegates selected-backend proof to postflight verification",
+        "prove missing stage-advance postflight selected-backend proof fails closed",
+        "prove rollback behavior remains intact when active placement or policy proof fails"
+      ],
+      "independent_revertability": {
+        "assessment": "likely_independent",
+        "reason": "Reverting the selected_backend_requirement_met predicate logic does not require or affect the launch dispatch settle loop.",
+        "requires_later_verification": true
+      },
+      "owner_options": [
+        "review_and_test_in_dedicated_runtime_rollout_promote_contour",
+        "split direct-promote and stage-advance proof rules further before implementation",
+        "revert_as_unapproved_runtime_tail",
+        "leave_pending_until_runtime_owner_decision"
+      ],
+      "recommended_next_gate": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_DECISION"
+    }
+  ],
+  "ui_boundary": {
+    "ui_changes_in_this_contour": false,
+    "ui_tests_in_this_contour": false,
+    "ui_surfaces_may_be_named_only_as_consumers": true,
+    "ui_work_unblocked_by_this_contour": false,
+    "reason": "The runtime.py tail remains dirty and owner approval is still required before UI freeze work can rely on or clean up around it."
+  },
+  "independent_inspection": {
+    "performed": true,
+    "inspector_type": "read_only_code_inspector",
+    "summary": "Inspector confirmed two independent behavior buckets, identified launch dispatch impact on launch smoke and launch client surfaces, and listed stop conditions for any later execution contour."
+  },
+  "stop_conditions_for_later_execution": [
+    "a third runtime.py hunk appears",
+    "either bucket starts affecting an unrelated command surface",
+    "run_promote with lock_acquired=true is discovered outside the stage-advance owner path",
+    "reverting one bucket changes the other bucket's command-surface tests",
+    "later tests require live runtime mutation without explicit owner authorization",
+    "UI work attempts to accept or hide the runtime tail"
+  ],
+  "verification_required_before_accepting_any_runtime_change": [
+    "dedicated runtime contour",
+    "declared write surfaces",
+    "targeted unit or CLI tests for the exact behavior",
+    "independent audit",
+    "owner approval for accept or revert"
+  ],
+  "owner_decision_needed": {
+    "required": true,
+    "decision_options": [
+      "approve launch-dispatch bucket review/test first",
+      "approve rollout-promote bucket review/test first",
+      "approve reverting one or both buckets",
+      "keep both pending and pause UI freeze work"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "app_path": "/tmp/wbp-codex-custom-app-e2e-3uyyege6/Codex Custom Lab.app",
+  "auth_json_copied": false,
+  "bundle_id": "local.wbp.codex-custom.lab",
+  "captured_at_utc": "2026-05-23T15:14:51.242432+00:00",
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "direct_executable_launch_only": true,
+  "display_name": "Codex Custom Lab",
+  "executable": "/tmp/wbp-codex-custom-app-e2e-3uyyege6/Codex Custom Lab.app/Contents/MacOS/CodexCustomLab",
+  "official_codex_app_mutated": false,
+  "official_codex_bundle_id_used": false,
+  "open_a_forbidden": true,
+  "persistent_launchservices_registration": false,
+  "secret_value_recorded": false,
+  "tmp_root": "/tmp/wbp-codex-custom-app-e2e-3uyyege6"
+}

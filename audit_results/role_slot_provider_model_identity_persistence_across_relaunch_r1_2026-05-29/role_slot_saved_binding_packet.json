@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-29T06:11:38.737188Z",
+  "counts_as_runtime_dispatch_proof": false,
+  "packet_kind": "role_slot_saved_binding",
+  "persistent_profile_id": "wbp-custom-main",
+  "saved_coding_slot_model_id": "wbp-web-primary-openrouter",
+  "saved_coding_slot_route_digest": "c12fdfc8c0d4787ef30aa7f776ec538fb325e146103e48a86d75a9906d19ae7b",
+  "saved_coding_slot_source_class": "route_backed",
+  "saved_primary_slot_backend_digest": "92dd39f4d7d21cadbc5d676c15453f9b4bf6fa995447f36007467bd6ed3efcef",
+  "saved_primary_slot_model_id": "gpt-5.3-codex",
+  "saved_primary_slot_source_class": "gpt_account",
+  "saved_slot_binding_count": 2,
+  "session_id": "ccs-5c1121e9db454008a2e4",
+  "session_root_under_persistent_profile": true,
+  "slot_catalog_revalidated_before_reload": true,
+  "status": "ok"
+}

@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-05-15T16:02:18.620957+00:00",
+  "registry_path": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+  "state_path": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+  "pool_policy": {
+    "active_min": 0,
+    "active_target": 0,
+    "reserve_target": 0
+  },
+  "pool_counts": {
+    "active": 0,
+    "reserve": 1,
+    "retired": 0
+  },
+  "selected_backend_ids": [],
+  "forbidden_paths": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2",
+      "size": 577,
+      "mtime_ns": 1778332551870097299
+    }
+  ],
+  "sandbox_env_map": {
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+  }
+}

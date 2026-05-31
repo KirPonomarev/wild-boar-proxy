@@ -1,0 +1,42 @@
+{
+  "allowed_claims": [
+    {
+      "allowed": true,
+      "claim": "custom native process observed"
+    },
+    {
+      "allowed": false,
+      "claim": "native prompt reached WBP"
+    },
+    {
+      "allowed": false,
+      "claim": "native prompt-response success"
+    },
+    {
+      "allowed": false,
+      "claim": "honest route error observed through WBP"
+    },
+    {
+      "allowed": false,
+      "claim": "full direct egress negative proof"
+    },
+    {
+      "allowed": false,
+      "claim": "full provider compatibility"
+    },
+    {
+      "allowed": false,
+      "claim": "full native app UX pass"
+    },
+    {
+      "allowed": false,
+      "claim": "Original Codex via WBP"
+    },
+    {
+      "allowed": false,
+      "claim": "auth.command contract proven"
+    }
+  ],
+  "captured_at_utc": "2026-05-26T05:45:57.487863Z",
+  "secret_value_recorded": false
+}

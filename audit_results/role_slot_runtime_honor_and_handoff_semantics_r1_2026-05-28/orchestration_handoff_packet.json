@@ -1,0 +1,16 @@
+{
+  "autonomous_runtime_native_orchestration_proven": false,
+  "captured_at_utc": "2026-05-28T13:37:16.764412Z",
+  "coding_to_primary_return_observed": true,
+  "concurrent_execution_observed": false,
+  "generalized_workflow_capability_proven": false,
+  "handoff_chain": [
+    "primary_model_slot->coding_agent_model_slot",
+    "coding_agent_model_slot->primary_model_slot"
+  ],
+  "handoff_kind": "operator_mediated_sequential",
+  "packet_kind": "orchestration_handoff",
+  "primary_to_coding_handoff_observed": true,
+  "session_id": "ccs-cc3f9b8d698a4874bb63",
+  "status": "ok"
+}

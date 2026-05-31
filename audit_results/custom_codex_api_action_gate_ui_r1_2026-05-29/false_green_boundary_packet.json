@@ -1,0 +1,10 @@
+{
+  "blocked_status_promoted_to_success": false,
+  "credential_ref_presence_treated_as_auth_works": false,
+  "dry_run_treated_as_live_call": false,
+  "one_route_treated_as_provider_family_compatibility": false,
+  "packet_kind": "false_green_boundary",
+  "route_snapshot_treated_as_provider_response": false,
+  "selection_intent_treated_as_execution": false,
+  "status": "ok"
+}

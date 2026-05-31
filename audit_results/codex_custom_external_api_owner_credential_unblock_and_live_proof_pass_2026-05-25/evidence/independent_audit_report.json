@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "auditor": "Lovelace",
+  "credential_present": false,
+  "blocker_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "retry_without_owner_change_valid": false,
+  "overclaim_detected": true,
+  "overclaim_reason": "Claiming the external API route/connect pass as completed or retryable without owner-side credential change would overstate the repo truth: the canonical owner surfaces show `credential_present=false`, `credential_phase=credential_missing`, `next_action=owner_action`, and `machine_error_code=EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING` for OpenRouter.",
+  "verdict": "blocked_exact"
+}

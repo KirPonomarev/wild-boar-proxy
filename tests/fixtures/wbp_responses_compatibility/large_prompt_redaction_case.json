@@ -1,0 +1,15 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "LARGE_PROMPT_FIXTURE_DO_NOT_LOG_RAW_0123456789",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "model": "wbp-fixture-route"
+}

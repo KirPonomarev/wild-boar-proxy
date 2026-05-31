@@ -1,0 +1,29 @@
+{
+  "contour": "WEB_MANUAL_ACCESS_AND_INTERACTIVITY_FIX_PASS",
+  "status": "ok",
+  "verdict": "REPO_OWNED_MANUAL_INTERACTIVITY_BLOCKER_FIXED",
+  "root_cause_layer": "web_ui_metadata_refresh_path",
+  "repo_owned": true,
+  "blocking_mechanism": "initial action metadata failure could leave admitted actions disabled until full page reload",
+  "rejected_non_root_cause": [
+    "shell-side localhost 503 outside user-facing browser path"
+  ],
+  "fix": {
+    "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "function": "setLiveReadonly",
+    "behavior": "reload action metadata and reapply availability on live refresh"
+  },
+  "manual_access_path": "http://127.0.0.1:8765/?screen=quick-start&source=live",
+  "browser_checks": [
+    "quick-start live page loaded with source=live",
+    "quick-start onboard button enabled and modal opened",
+    "accounts screen visible account actions enabled",
+    "api-connections screen visible admitted route actions enabled"
+  ],
+  "tests": [
+    "python3 -m unittest -q tests.test_web_design_ui.WebDesignUiTests.test_overview_live_readonly_sets_pending_live_state_before_fetch_resolves tests.test_web_design_ui.WebDesignUiTests.test_set_live_readonly_retries_action_metadata_after_initial_failure",
+    "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui",
+    "git diff --check"
+  ],
+  "next_admitted_contour": "DESKTOP_APP_PORT_PASS"
+}

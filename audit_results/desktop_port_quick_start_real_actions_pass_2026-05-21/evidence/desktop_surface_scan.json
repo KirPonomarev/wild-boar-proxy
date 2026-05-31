@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "contour": "DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS",
+  "status": "stop_and_diagnose",
+  "decision": "DESKTOP_EXECUTABLE_PATH_MISSING_OR_PREVIEW_ONLY",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_at_evidence_capture": "d5df53a",
+  "verdict": {
+    "desktop_path_operational": false,
+    "desktop_parity_contour_admitted": false,
+    "stop_required": true
+  },
+  "strongest_evidence": [
+    {
+      "file": "wild_boar_proxy/web_design_ui/README.md",
+      "lines": [9, 13, 45],
+      "fact": "Preview README says default mode is fixture-backed, has no desktop shell integration, and current live-readonly leaves action buttons disabled."
+    },
+    {
+      "file": "audit_results/desktop_renderer_admission_approval_gate_2026-05-14.md",
+      "lines": [14, 50, 53],
+      "fact": "Desktop renderer admission was previously blocked as no implementation, no desktop files touched, and no command bridge."
+    },
+    {
+      "file": "audit_results/web_safe_app_copy_launch_pass_2026-05-16/decision_packet.json",
+      "lines": [20],
+      "fact": "Existing web launch preflight explicitly marks app_bundle_admitted as false."
+    },
+    {
+      "file": "wild_boar_proxy/web_design_live_server.py",
+      "lines": [497],
+      "fact": "Launch preflight says isolated copy requires a bounded executable target and that an app bundle does not prove a separate process."
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/index.html",
+      "lines": [1832, 2107, 2124, 2271],
+      "fact": "UI labels desktop/native bridge as owner-gated, future desktop/native flow, and desktop/native only."
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": [1412, 3369],
+      "fact": "JS copy says manual picker awaits desktop/native flow and Finder opening is desktop/native or admitted human-open only."
+    }
+  ],
+  "inspected_files": [
+    "README.md",
+    "UI_READINESS_SPEC.md",
+    "COMMAND_API.md",
+    "MASTER_PLAN.md",
+    "wild_boar_proxy/web_design_ui/README.md",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py",
+    "audit_results/desktop_renderer_admission_approval_gate_2026-05-14.md",
+    "audit_results/desktop_renderer_admission_approval_gate_closeout_2026-05-14.md",
+    "audit_results/web_safe_app_copy_launch_pass_2026-05-16/decision_packet.json"
+  ],
+  "next_action": {
+    "status": "follow_up_contour_needed",
+    "suggested_contour": "DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS",
+    "reason": "Desktop parity cannot start until a real executable desktop shell/bridge path exists and is no broader than the proven web semantics."
+  }
+}

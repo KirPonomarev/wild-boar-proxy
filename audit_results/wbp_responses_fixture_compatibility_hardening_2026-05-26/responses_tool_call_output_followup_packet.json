@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-26T07:53:04.804554Z",
+  "classification": "function_call_output_translated_to_tool_message",
+  "complete_tool_loop_claimed": false,
+  "fixture": "tool_call_output_followup.json",
+  "machine_error_code": "OK",
+  "status": "ok",
+  "test": "test_wbp_responses_tool_call_output_loop_classified"
+}

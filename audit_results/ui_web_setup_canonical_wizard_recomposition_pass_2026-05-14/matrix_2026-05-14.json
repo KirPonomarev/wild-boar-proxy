@@ -1,0 +1,114 @@
+{
+  "contour": "UI_WEB_SETUP_CANONICAL_WIZARD_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "viewport": "1600x1000",
+  "states": {
+    "fixture_healthy": {
+      "status": "PASS",
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "setup_bottom": 915,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 10,
+      "inputs": 0,
+      "file_inputs": 0,
+      "data_ui_actions": 0,
+      "live_actions": 0,
+      "active_primary_buttons": [],
+      "active_buttons": [
+        "Закрыть"
+      ],
+      "overflows": []
+    },
+    "fixture_degraded": {
+      "status": "PASS",
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "setup_bottom": 915,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 10,
+      "inputs": 0,
+      "file_inputs": 0,
+      "data_ui_actions": 0,
+      "live_actions": 0,
+      "active_primary_buttons": [],
+      "active_buttons": [
+        "Закрыть"
+      ],
+      "overflows": []
+    },
+    "fixture_down": {
+      "status": "PASS",
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "setup_bottom": 915,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 10,
+      "inputs": 0,
+      "file_inputs": 0,
+      "data_ui_actions": 0,
+      "live_actions": 0,
+      "active_primary_buttons": [],
+      "active_buttons": [
+        "Закрыть"
+      ],
+      "overflows": []
+    },
+    "fixture_stale": {
+      "status": "PASS",
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "setup_bottom": 915,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 10,
+      "inputs": 0,
+      "file_inputs": 0,
+      "data_ui_actions": 0,
+      "live_actions": 0,
+      "active_primary_buttons": [],
+      "active_buttons": [
+        "Закрыть"
+      ],
+      "overflows": []
+    },
+    "live_integration_failure": {
+      "status": "PASS",
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "setup_bottom": 915,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 10,
+      "inputs": 0,
+      "file_inputs": 0,
+      "data_ui_actions": 0,
+      "live_actions": 0,
+      "active_primary_buttons": [],
+      "active_buttons": [
+        "Закрыть"
+      ],
+      "overflows": []
+    }
+  },
+  "forbidden_surface": {
+    "filesystem_scan": false,
+    "path_input": false,
+    "file_picker": false,
+    "config_write": false,
+    "installer_init": false,
+    "desktop_bridge": false,
+    "command_adapter_change": false,
+    "allowlist_change": false,
+    "runtime_change": false
+  },
+  "verdict": "PASS"
+}

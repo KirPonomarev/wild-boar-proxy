@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T07:53:04.804366Z",
+  "fixtures": [
+    "upstream_4xx_error.json",
+    "upstream_5xx_error.json",
+    "unknown_model_request.json"
+  ],
+  "green_on_error_blocked": true,
+  "machine_error_code": "OK",
+  "status": "ok",
+  "test": "test_wbp_responses_error_shape_required"
+}

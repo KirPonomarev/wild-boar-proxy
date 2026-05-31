@@ -1,0 +1,47 @@
+{
+  "agent_orchestration": {
+    "attempts": [
+      {
+        "model": "gpt-5.4-mini",
+        "reason": "agent thread limit reached",
+        "role": "explorer",
+        "status": "failed"
+      },
+      {
+        "model": "gpt-5.4-mini",
+        "reason": "agent thread limit reached",
+        "role": "explorer",
+        "status": "failed"
+      }
+    ],
+    "fallback": "local replay audit",
+    "requested": true
+  },
+  "blocking_command": "python3 -m wild_boar_proxy external-models check --route wbp-deepseek-v3 --json",
+  "blocking_human_message": "Route not found: wbp-deepseek-v3",
+  "blocking_machine_error_code": "route_not_found",
+  "branch": "codex/external-agent-lab-isolated",
+  "codex_facing_model": "gpt-5.3-codex",
+  "contour": "ISOLATED_CODEX_ENGINE_WORK_SESSION_PASS_WITH_REAL_WBP_HARNESS",
+  "current_auth_copied": false,
+  "head_before_commit": "6f5b993",
+  "main_auth_hash_unchanged": true,
+  "main_config_hash_unchanged": true,
+  "next_action": "STOP_AND_DIAGNOSE default external-models target route_not_found for wbp-deepseek-v3; repair sandbox/default route parity before work-session smoke",
+  "plugin_sync_observed": false,
+  "plugin_sync_warning_count": 0,
+  "prompt_phase_blocked_by": "wbp_preflight route_not_found",
+  "prompt_phase_started": false,
+  "provider_native_model_used_as_codex_model": false,
+  "real_wbp_endpoint": "http://127.0.0.1:8318/v1",
+  "redaction_audit": "pass",
+  "required_prompts_succeeded": false,
+  "restart_succeeded": false,
+  "sandbox_auth_copied_to_temp": true,
+  "schema_version": 1,
+  "status": "closed_blocked_by_real_wbp_runtime_unavailable",
+  "temp_auth_copy_removed": true,
+  "temp_root_removed": true,
+  "wbp_preflight_acceptable": false,
+  "wbp_reclear_acceptable": true
+}

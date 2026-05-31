@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "secret_value_exposed": false,
+  "raw_key_material_committed": false,
+  "repo_auth_files_written": false,
+  "notes": [
+    "Sandbox-scoped auth.json was copied only into temporary roots under /tmp for live replay.",
+    "Temporary roots containing copied auth material were removed after capture.",
+    "Artifacts record only file paths, status fields, and response summaries.",
+    "No raw OPENAI_API_KEY value or refresh/access token value was written into audit_results."
+  ]
+}

@@ -1,0 +1,302 @@
+{
+  "fixture_healthy": {
+    "url": "http://127.0.0.1:8791/?state=healthy&source=fixture&screen=select-client",
+    "mainTitle": "Выбор клиента",
+    "subtitle": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "banner": "Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 934,
+    "screenHeight": 766,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 7,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать кандидата · disabled",
+      "Выбрать кандидата · disabled",
+      "Недоступно",
+      "Выбрать файл · disabled",
+      "Назад",
+      "Проверить кандидатов · missing surface",
+      "Сохранить выбор · requires candidate proof"
+    ],
+    "stepCount": 5,
+    "candidateRows": 3,
+    "candidatePaths": [
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 415,
+        "scrollWidth": 415,
+        "clientWidth": 415
+      },
+      {
+        "text": "/Applications/Codex.app",
+        "width": 451,
+        "scrollWidth": 451,
+        "clientWidth": 451
+      },
+      {
+        "text": "/Applications/Codex Beta.app",
+        "width": 566,
+        "scrollWidth": 566,
+        "clientWidth": 566
+      },
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 143,
+        "scrollWidth": 198,
+        "clientWidth": 143
+      }
+    ],
+    "overflows": []
+  },
+  "fixture_degraded": {
+    "url": "http://127.0.0.1:8791/?state=degraded&source=fixture&screen=select-client",
+    "mainTitle": "Выбор клиента",
+    "subtitle": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "banner": "Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 934,
+    "screenHeight": 766,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 7,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать кандидата · disabled",
+      "Выбрать кандидата · disabled",
+      "Недоступно",
+      "Выбрать файл · disabled",
+      "Назад",
+      "Проверить кандидатов · missing surface",
+      "Сохранить выбор · requires candidate proof"
+    ],
+    "stepCount": 5,
+    "candidateRows": 3,
+    "candidatePaths": [
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 415,
+        "scrollWidth": 415,
+        "clientWidth": 415
+      },
+      {
+        "text": "/Applications/Codex.app",
+        "width": 451,
+        "scrollWidth": 451,
+        "clientWidth": 451
+      },
+      {
+        "text": "/Applications/Codex Beta.app",
+        "width": 566,
+        "scrollWidth": 566,
+        "clientWidth": 566
+      },
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 143,
+        "scrollWidth": 198,
+        "clientWidth": 143
+      }
+    ],
+    "overflows": []
+  },
+  "fixture_down": {
+    "url": "http://127.0.0.1:8791/?state=down&source=fixture&screen=select-client",
+    "mainTitle": "Выбор клиента",
+    "subtitle": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "banner": "Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 934,
+    "screenHeight": 766,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 7,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать кандидата · disabled",
+      "Выбрать кандидата · disabled",
+      "Недоступно",
+      "Выбрать файл · disabled",
+      "Назад",
+      "Проверить кандидатов · missing surface",
+      "Сохранить выбор · requires candidate proof"
+    ],
+    "stepCount": 5,
+    "candidateRows": 3,
+    "candidatePaths": [
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 415,
+        "scrollWidth": 415,
+        "clientWidth": 415
+      },
+      {
+        "text": "/Applications/Codex.app",
+        "width": 451,
+        "scrollWidth": 451,
+        "clientWidth": 451
+      },
+      {
+        "text": "/Applications/Codex Beta.app",
+        "width": 566,
+        "scrollWidth": 566,
+        "clientWidth": 566
+      },
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 143,
+        "scrollWidth": 198,
+        "clientWidth": 143
+      }
+    ],
+    "overflows": []
+  },
+  "fixture_stale": {
+    "url": "http://127.0.0.1:8791/?state=stale&source=fixture&screen=select-client",
+    "mainTitle": "Выбор клиента",
+    "subtitle": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "banner": "Демо-режим stale. Кандидаты показаны как fixture preview, не как найденные локальные приложения.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 934,
+    "screenHeight": 766,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 7,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать кандидата · disabled",
+      "Выбрать кандидата · disabled",
+      "Недоступно",
+      "Выбрать файл · disabled",
+      "Назад",
+      "Проверить кандидатов · missing surface",
+      "Сохранить выбор · requires candidate proof"
+    ],
+    "stepCount": 5,
+    "candidateRows": 3,
+    "candidatePaths": [
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 415,
+        "scrollWidth": 415,
+        "clientWidth": 415
+      },
+      {
+        "text": "/Applications/Codex.app",
+        "width": 451,
+        "scrollWidth": 451,
+        "clientWidth": 451
+      },
+      {
+        "text": "/Applications/Codex Beta.app",
+        "width": 566,
+        "scrollWidth": 566,
+        "clientWidth": 566
+      },
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 143,
+        "scrollWidth": 198,
+        "clientWidth": 143
+      }
+    ],
+    "overflows": []
+  },
+  "live_integration_failure": {
+    "url": "http://127.0.0.1:8791/?source=live&screen=select-client",
+    "mainTitle": "Выбор клиента",
+    "subtitle": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "banner": "Список клиентов недоступен. Ручной выбор ожидает desktop/native flow.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 934,
+    "screenHeight": 766,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 7,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать кандидата · disabled",
+      "Выбрать кандидата · disabled",
+      "Недоступно",
+      "Выбрать файл · disabled",
+      "Назад",
+      "Проверить кандидатов · missing surface",
+      "Сохранить выбор · requires candidate proof"
+    ],
+    "stepCount": 5,
+    "candidateRows": 3,
+    "candidatePaths": [
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 415,
+        "scrollWidth": 415,
+        "clientWidth": 415
+      },
+      {
+        "text": "/Applications/Codex.app",
+        "width": 451,
+        "scrollWidth": 451,
+        "clientWidth": 451
+      },
+      {
+        "text": "/Applications/Codex Beta.app",
+        "width": 566,
+        "scrollWidth": 566,
+        "clientWidth": 566
+      },
+      {
+        "text": "/Applications/Codex Custom.app",
+        "width": 143,
+        "scrollWidth": 198,
+        "clientWidth": 143
+      }
+    ],
+    "overflows": []
+  }
+}

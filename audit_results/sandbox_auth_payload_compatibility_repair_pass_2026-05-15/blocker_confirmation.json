@@ -1,0 +1,20 @@
+{
+  "captured_at": "2026-05-15T15:23:11.530466+00:00",
+  "previous_contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "previous_decision": "STOP_AND_DIAGNOSE",
+  "previous_machine_error_code": "ONBOARD_FAILED",
+  "previous_stop_reason": "sandbox_auth_payload_incompatible_with_repaired_owner_lane_contract",
+  "stderr_fact": "invalid auth type: None",
+  "sandbox_auth_payload": {
+    "auth_mode": "apikey",
+    "OPENAI_API_KEY": "sk-959211fed28c4991ac493818616dddda"
+  },
+  "sandbox_auth_keys": [
+    "OPENAI_API_KEY",
+    "auth_mode"
+  ],
+  "current_expected_owner_auth_kinds_before_repair": [
+    "codex",
+    "apikey"
+  ]
+}

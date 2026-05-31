@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-29T03:23:12.654775Z",
+  "login_result": {
+    "auth_materialized": false,
+    "auth_ref_present": false,
+    "browser_path_intake": false,
+    "browser_secret_intake": false,
+    "created_at": "2026-05-29T03:17:16.038234+00:00",
+    "device_code": "S3SS-FDJCJ",
+    "device_code_present": true,
+    "device_url": "https://auth.openai.com/codex/device",
+    "expires_at": "2026-05-29T03:22:16.038244+00:00",
+    "login_session_id": "codex-ff4bfb37450d4d8dac0326923fbea520",
+    "mode": "device",
+    "provider": "codex",
+    "scope": "admitted_owner_login",
+    "session_id": "codex-ff4bfb37450d4d8dac0326923fbea520",
+    "status": "expired",
+    "used": false
+  },
+  "owner_completed": false,
+  "session_id": "codex-ff4bfb37450d4d8dac0326923fbea520",
+  "status_exit_code": 1,
+  "status_machine_error_code": "LOGIN_SESSION_EXPIRED"
+}

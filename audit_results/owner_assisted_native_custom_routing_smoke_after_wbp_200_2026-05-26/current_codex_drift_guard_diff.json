@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-05-26T07:17:01.504592Z",
+  "changes": [
+    {
+      "changed_fields": {
+        "metadata_digest": {
+          "after": "4a8a2e5c62311c93611ab12b01290b4e3cbf5a4473ba9599d3a6e303e30978e4",
+          "before": "7f268b28c181f4da0417fe591840e3b5eaa8676641fe106a696253fc2132e7f6"
+        }
+      },
+      "surface": "codex_home"
+    },
+    {
+      "changed_fields": {
+        "metadata_digest": {
+          "after": "efbb28421b1deac9a9d3e553670df1407fbf0643ac17abd56c2f4c7e8251be75",
+          "before": "35df709ffcdfd637dc52e35b1edb8309f58233753e1ec3d6ddfced5ab5541b72"
+        }
+      },
+      "surface": "app_support"
+    },
+    {
+      "changed_fields": {
+        "metadata_digest": {
+          "after": "b31c4966ac9d8f1e6a3c1c5d7e8ee4b3ea7b0b97f8ff809c69f05055147c14ae",
+          "before": "bcc1898dfed331a4c579a6888460bc31b2a5f9116e956c1367791b600fba16bc"
+        }
+      },
+      "surface": "cache"
+    },
+    {
+      "changed_fields": {
+        "metadata_digest": {
+          "after": "f0c93e89e5f80d5e955c6cb2a628e52728a9f46fe994984a2c3958ab12282565",
+          "before": "87c9dac7f82a0cd44eb34e959a08eec5fe5a916a6f2be77f92a6cc4d43e64ce6"
+        }
+      },
+      "surface": "httpstorages"
+    }
+  ],
+  "full_phase7_claimed": false,
+  "machine_error_code": "PROTECTED_SURFACE_DRIFT_OR_NOISE",
+  "status": "blocked_or_noisy"
+}

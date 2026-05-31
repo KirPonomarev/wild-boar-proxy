@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-28T22:42:43.943281Z",
+  "configured_model": "gpt-5.5",
+  "configured_model_selectable_after_gate": false,
+  "configured_model_visible_before_gate": true,
+  "hard_blocker": "no_native_chatgpt_account_model_runnable_on_current_live_surface",
+  "hard_blocker_localized": true,
+  "packet_kind": "native_lane_candidate_selection",
+  "recommended_default_model_after_gate": "gpt-5.3-codex",
+  "selectable_native_model_ids_after_gate": [],
+  "status": "ok"
+}

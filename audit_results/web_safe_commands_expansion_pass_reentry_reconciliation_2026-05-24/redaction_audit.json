@@ -1,0 +1,15 @@
+{
+  "contour": "WEB_SAFE_COMMANDS_EXPANSION_PASS_REENTRY_RECONCILIATION",
+  "checks": {
+    "raw_tmp_paths_recorded": false,
+    "raw_auth_ref_recorded": false,
+    "raw_token_recorded": false,
+    "raw_secret_recorded": false,
+    "raw_browser_supplied_path_recorded": false,
+    "artifact_bundle_redacted": true
+  },
+  "notes": [
+    "Packet summaries preserve only basenames or booleans for diagnostics and app-copy artifacts.",
+    "Open profile folder remains deferred, so no browser-visible local path is claimed."
+  ]
+}

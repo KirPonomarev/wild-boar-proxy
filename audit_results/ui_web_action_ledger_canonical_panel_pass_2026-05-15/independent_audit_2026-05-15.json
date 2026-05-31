@@ -1,0 +1,44 @@
+{
+  "contour": "UI_WEB_ACTION_LEDGER_CANONICAL_PANEL_PASS",
+  "auditor": "read_only_subagent",
+  "date": "2026-05-15",
+  "verdict": "pass",
+  "failures": [],
+  "findings": [
+    {
+      "item": "scope",
+      "status": "pass",
+      "summary": "Tracked implementation diff is web UI and UI tests only; no runtime, live server, command adapter, or allowlist edits."
+    },
+    {
+      "item": "sanitization",
+      "status": "pass",
+      "summary": "Compact summary and ledger row fields use safeLedgerText for response-side text and redact paths, secrets, raw argv, raw JSON, stack trace, and browser command id echoes."
+    },
+    {
+      "item": "collapsed_rows",
+      "status": "pass",
+      "summary": "Ledger rows are collapsed by default and expose an operator-readable summary line."
+    },
+    {
+      "item": "refresh_truth",
+      "status": "pass",
+      "summary": "Refresh-required OK remains amber until refresh complete; only refresh complete becomes green."
+    },
+    {
+      "item": "error_states",
+      "status": "pass",
+      "summary": "Command error and invalid JSON are red; timeout remains amber/recoverable."
+    },
+    {
+      "item": "duplicate_block",
+      "status": "pass",
+      "summary": "Duplicate dispatch is blocked and covered by UI-session tests."
+    },
+    {
+      "item": "screenshots",
+      "status": "pass",
+      "summary": "Empty ledger, refresh-complete ledger, and sanitized command-error ledger screenshots exist and match claimed states."
+    }
+  ]
+}

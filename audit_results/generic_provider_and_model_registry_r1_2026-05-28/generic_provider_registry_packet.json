@@ -1,0 +1,147 @@
+{
+  "auth_admission_is_runtime_admission": false,
+  "browser_authority_widened": false,
+  "captured_at_utc": "2026-05-28T10:49:59.054077Z",
+  "classification_scope": "provider_registry_only",
+  "current_auth_admitted_providers": [
+    "cerebras",
+    "deepseek",
+    "gemini",
+    "groq",
+    "mistral",
+    "openrouter"
+  ],
+  "packet_kind": "generic_provider_registry",
+  "provider_count": 7,
+  "provider_family_compatibility_claimed": false,
+  "rows": [
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "CEREBRAS_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "CEREBRAS_API_KEY",
+        "WBP_CEREBRAS_API_KEY",
+        "WBP_PROVIDER_CEREBRAS_API_KEY"
+      ],
+      "provider": "cerebras",
+      "provider_dashboard_url": "https://inference-docs.cerebras.ai/api-reference/authentication",
+      "provider_family": "direct_provider",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_seed_plus_current_schema"
+    },
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "DEEPSEEK_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "DEEPSEEK_API_KEY",
+        "WBP_DEEPSEEK_API_KEY",
+        "WBP_PROVIDER_DEEPSEEK_API_KEY"
+      ],
+      "provider": "deepseek",
+      "provider_dashboard_url": "https://platform.deepseek.com/api_keys",
+      "provider_family": "direct_provider",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "current_runtime"
+    },
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "GEMINI_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "WBP_GEMINI_API_KEY",
+        "WBP_PROVIDER_GEMINI_API_KEY"
+      ],
+      "provider": "gemini",
+      "provider_dashboard_url": "https://aistudio.google.com/app/apikey",
+      "provider_family": "direct_provider",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_seed_plus_current_schema"
+    },
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "GROQ_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "GROQ_API_KEY",
+        "WBP_GROQ_API_KEY",
+        "WBP_PROVIDER_GROQ_API_KEY"
+      ],
+      "provider": "groq",
+      "provider_dashboard_url": "https://console.groq.com/keys",
+      "provider_family": "direct_provider",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_seed_plus_current_schema"
+    },
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "MISTRAL_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "MISTRAL_API_KEY",
+        "WBP_MISTRAL_API_KEY",
+        "WBP_PROVIDER_MISTRAL_API_KEY"
+      ],
+      "provider": "mistral",
+      "provider_dashboard_url": "https://docs.mistral.ai/admin/security-access/api-keys",
+      "provider_family": "direct_provider",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_seed_plus_current_schema"
+    },
+    {
+      "auth_schema_admitted": true,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "OPENROUTER_API_KEY",
+      "current_status": "auth_schema_admitted",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [
+        "OPENROUTER_API_KEY",
+        "WBP_OPENROUTER_API_KEY",
+        "WBP_PROVIDER_OPENROUTER_API_KEY"
+      ],
+      "provider": "openrouter",
+      "provider_dashboard_url": "https://openrouter.ai/settings/keys",
+      "provider_family": "provider_router",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "current_runtime"
+    },
+    {
+      "auth_schema_admitted": false,
+      "classification_scope": "provider_registry_only",
+      "credential_ref": "",
+      "current_status": "seed_only",
+      "model_family_compatibility_claimed": false,
+      "owner_env_candidates": [],
+      "provider": "zai",
+      "provider_dashboard_url": "",
+      "provider_family": "provider_router",
+      "runtime_admitted": false,
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_seed"
+    }
+  ],
+  "schema_version": 1,
+  "seed_only_providers": [
+    "zai"
+  ],
+  "status": "ok"
+}

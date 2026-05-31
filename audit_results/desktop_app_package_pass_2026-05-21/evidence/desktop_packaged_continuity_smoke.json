@@ -1,0 +1,162 @@
+{
+  "contour": "DESKTOP_APP_PACKAGE_PASS",
+  "artifact_path": "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package-output/WildBoarProxy.app",
+  "runtime_executable": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+  "sandbox_harness": {
+    "root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t",
+    "profile_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/profile",
+    "data_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t",
+    "managed_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/profile/managed",
+    "external_models_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/external-models",
+    "mock_port": 59685
+  },
+  "preflight_packets": {
+    "route_add": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models route added: wbp-openrouter-primary.",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/external-models/routes.json"
+      ],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "route_id": "wbp-openrouter-primary"
+      },
+      "timestamp_utc": "2026-05-21T02:22:37Z"
+    },
+    "route_check": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models route smoke check captured provider evidence without claiming runtime readiness.",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/external-models/state.json",
+        "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/external-models/evidence/wbp-openrouter-primary-external-models_check-20260521T022237Z.json"
+      ],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "check_kind": "provider_route_smoke",
+        "network_dependent": true,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "verification_scope": "route_provider_only",
+        "route_state": "verified",
+        "requested_model": "wbp-openrouter-primary",
+        "effective_model": "deepseek/deepseek-chat",
+        "provider": "openrouter",
+        "fallback_used": false,
+        "fallback_chain": [
+          "wbp-openrouter-primary"
+        ],
+        "evidence_path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpk8qjlv9t/external-models/evidence/wbp-openrouter-primary-external-models_check-20260521T022237Z.json",
+        "latency_ms": 19,
+        "request_count": 1,
+        "transform_profile": "openai_chat_passthrough",
+        "response_profile": "openai_chat_choices_message",
+        "transform_declared": false,
+        "response_profile_declared": false,
+        "request_shape": "openai_chat_messages",
+        "response_shape": "choices_message"
+      },
+      "timestamp_utc": "2026-05-21T02:22:37Z"
+    }
+  },
+  "packaged_smoke_returncode": 0,
+  "packaged_smoke_stderr": "",
+  "packaged_smoke": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "human_message": "Все bounded truth surfaces подтверждены для Quick Start summary.",
+    "desktop_surface": "admitted_tk_shell_packaged",
+    "continuity": {
+      "packaged_launch": true,
+      "quick_start_opened": true,
+      "account_truth_loaded": true,
+      "api_truth_loaded": true,
+      "check_all_ran": true,
+      "ledger_opened": true
+    },
+    "quick_start_summary": {
+      "source": "live_sandbox",
+      "account_status": "ok",
+      "account_note": "Account registry snapshot is available.",
+      "api_status": "enabled",
+      "api_note": "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth.",
+      "route_label": "Local Mock Route",
+      "route_provider": "openrouter",
+      "route_secret_ref": "OPENROUTER_API_KEY",
+      "route_validation": "ok",
+      "route_last_checked": "2026-05-21T02:22:37Z",
+      "runtime_liveness": "healthy",
+      "bundle_status": "ok",
+      "bundle_verdict": "ready",
+      "bundle_machine_error": "OK",
+      "bundle_next_action": "none",
+      "bundle_message": "Все bounded truth surfaces подтверждены для Quick Start summary."
+    },
+    "bundle_components": {
+      "accounts": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Account registry snapshot is available."
+      },
+      "api": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth.",
+        "route_id": "wbp-openrouter-primary",
+        "refresh_status": "complete"
+      },
+      "runtime": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Runtime status summary is available.",
+        "visual_state": "healthy"
+      }
+    },
+    "ledger": [
+      {
+        "action_id": "quick_start_check_all",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "human_message": "Все bounded truth surfaces подтверждены для Quick Start summary."
+      }
+    ],
+    "direct_packets": {
+      "status": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "liveness": "healthy"
+      },
+      "accounts": {
+        "status": "clear",
+        "machine_error_code": "OK",
+        "account_count": 1
+      },
+      "api": {
+        "routes_count": 1,
+        "local_token_present": true,
+        "route_id": "wbp-openrouter-primary"
+      }
+    }
+  },
+  "server_requests": {
+    "count": 3,
+    "paths": [
+      "/v1/chat/completions",
+      "/v1/models",
+      "/v1/responses"
+    ],
+    "chat_requests_before_packaged": 1,
+    "chat_requests_after_packaged": 1
+  }
+}

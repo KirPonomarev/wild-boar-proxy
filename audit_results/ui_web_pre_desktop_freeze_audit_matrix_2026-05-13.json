@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT",
+  "generated_at_local_date": "2026-05-13",
+  "mode": "audit_verification_release_gate",
+  "canon_owner_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md"
+  ],
+  "scope_boundary": {
+    "new_features_added": false,
+    "new_ui_actions_added": false,
+    "new_backend_command_surfaces_added": false,
+    "production_code_changed": false,
+    "runtime_py_changed": false,
+    "external_models_engine_changed": false,
+    "desktop_work_started": false,
+    "real_live_mutation_used": false,
+    "intended_changed_files": [
+      "audit_results/ui_web_pre_desktop_freeze_audit_matrix_2026-05-13.json",
+      "audit_results/ui_web_pre_desktop_freeze_admission_readiness_packet_2026-05-13.json",
+      "audit_results/ui_web_pre_desktop_freeze_independent_audit_2026-05-13.json",
+      "audit_results/ui_web_pre_desktop_freeze_closeout_2026-05-13.md"
+    ]
+  },
+  "repo_start": {
+    "branch": "codex/external-agent-lab-isolated",
+    "head": "916ded5",
+    "head_subject": "Verify final web UI operator flow",
+    "tracked_worktree_clean_at_start": true
+  },
+  "audited_sources": {
+    "passports": "audit_results/ui_screen_passports_2026-05-13.json",
+    "render_surface_registry": "audit_results/ui_render_surface_registry_2026-05-13.json",
+    "api_connections_surface_registry": "audit_results/api_connections_surface_registry_2026-05-13.json",
+    "e2e_matrix": "audit_results/ui_web_end_to_end_operator_flow_final_matrix_2026-05-13.json",
+    "live_server": "wild_boar_proxy/web_design_live_server.py",
+    "command_adapter": "wild_boar_proxy/web_design_command_adapter.py",
+    "primary_e2e_test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes"
+  },
+  "action_surface_reconciliation": {
+    "live_server_ui_actions": [
+      "api_route_allow",
+      "api_route_check",
+      "api_route_disable",
+      "api_route_evidence_capture",
+      "api_route_profile",
+      "api_route_remove",
+      "api_route_validate",
+      "demote_account",
+      "export_diagnostics",
+      "hold_account",
+      "launch_client_dispatch",
+      "launch_smoke",
+      "onboard_account",
+      "promote_account",
+      "refresh_health_detail",
+      "release_account",
+      "retire_account",
+      "set_mode_managed",
+      "set_mode_stable",
+      "stable_repair_plan",
+      "sync_runtime",
+      "validate_account"
+    ],
+    "e2e_admitted_actions": [
+      "refresh_health_detail",
+      "export_diagnostics",
+      "stable_repair_plan",
+      "sync_runtime",
+      "set_mode_stable",
+      "set_mode_managed",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "validate_account",
+      "hold_account",
+      "release_account",
+      "promote_account",
+      "demote_account",
+      "retire_account",
+      "onboard_account",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "not_admitted_actions_checked": [
+      "api_route_create",
+      "api_route_update",
+      "api_route_draft"
+    ],
+    "verdict": "PASS"
+  },
+  "adapter_surface_reconciliation": {
+    "adapter_commands_required_by_ui_actions": [
+      "healthcheck",
+      "diagnostics_export",
+      "stable_repair_dry_run",
+      "sync",
+      "mode_stable",
+      "mode_managed",
+      "smoke",
+      "launch_client",
+      "accounts_onboard",
+      "accounts_validate",
+      "accounts_hold",
+      "accounts_release",
+      "accounts_promote",
+      "accounts_demote",
+      "accounts_retire",
+      "external_models_routes_validate",
+      "external_models_check",
+      "external_models_routes_enable",
+      "external_models_routes_disable",
+      "external_models_profile_codex_desktop",
+      "external_models_evidence_capture",
+      "external_models_routes_remove"
+    ],
+    "adapter_commands_present": true,
+    "disabled_adapter_commands": [
+      "launch_client"
+    ],
+    "launch_client_dispatch_policy": "server-owned bounded client_path only with explicit live-server bypass",
+    "stable_repair_apply_policy": "adapter surface exists but UI action remains absent/deferred",
+    "verdict": "PASS"
+  },
+  "payload_safety": {
+    "browser_command_id_rejected": true,
+    "browser_raw_argv_rejected": true,
+    "browser_shell_rejected_by_allowlist_shape": true,
+    "browser_arbitrary_path_rejected": true,
+    "browser_raw_route_json_rejected": true,
+    "browser_token_secret_provider_config_not_admitted": true,
+    "route_actions_allowed_payload": [
+      "ui_action",
+      "route_id"
+    ],
+    "account_actions_allowed_payload": [
+      "ui_action",
+      "account_id"
+    ],
+    "no_arg_actions_allowed_payload": [
+      "ui_action"
+    ],
+    "verdict": "PASS"
+  },
+  "truth_safety": {
+    "ui_truth_source": "strict JSON command packets and canonical refreshes",
+    "direct_state_file_truth": false,
+    "direct_log_file_truth": false,
+    "direct_route_registry_file_truth": false,
+    "direct_secret_file_truth": false,
+    "direct_evidence_file_truth": false,
+    "evidence_path_display_is_metadata_only": true,
+    "changed_files_is_execution_evidence_only": true,
+    "verdict": "PASS"
+  },
+  "copy_safety": {
+    "positive_runtime_ready_claim": false,
+    "positive_selected_route_claim": false,
+    "positive_active_traffic_claim": false,
+    "positive_primary_route_claim": false,
+    "positive_failover_claim": false,
+    "positive_pilot_ready_claim": false,
+    "positive_production_ready_claim": false,
+    "positive_desktop_approved_claim": false,
+    "review_note": "Search hits are negative guardrails such as 'not runtime readiness' and 'not active traffic proof'.",
+    "verdict": "PASS"
+  },
+  "api_connections_freeze": {
+    "readonly_surfaces": [
+      "external-models status --json",
+      "external-models models --json",
+      "external-models routes list --json"
+    ],
+    "admitted_actions": [
+      "api_route_validate",
+      "api_route_check",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "remove_contract": {
+      "classification": "disabled route registry cleanup only",
+      "server_preflight": "external-models routes list --json",
+      "browser_payload": [
+        "ui_action",
+        "route_id"
+      ],
+      "requires_enabled_value_exactly_false": true,
+      "changed_files_truth": false
+    },
+    "not_admitted": [
+      "api_route_create",
+      "api_route_update",
+      "api_route_draft",
+      "API key/token setup",
+      "selected/primary route semantics",
+      "automatic failover"
+    ],
+    "verdict": "PASS"
+  },
+  "desktop_boundary": {
+    "desktop_files_touched": false,
+    "desktop_approved_claim": false,
+    "desktop_started_claim": false,
+    "allowed_result": "recommend owner review only",
+    "verdict": "PASS"
+  },
+  "dirty_tail_isolation": {
+    "external_lab_tail_staged": false,
+    "external_lab_tail_used_as_evidence": false,
+    "verdict": "PASS_PENDING_STAGED_DIFF_CHECK"
+  },
+  "verification_status": {
+    "unit_tests": "PASS",
+    "unit_test_commands": [
+      "python3 -m unittest tests.test_web_design_command_adapter",
+      "python3 -m unittest tests.test_web_design_live_server",
+      "python3 -m unittest tests.test_web_design_ui",
+      "python3 -m unittest tests.test_cli_external_models"
+    ],
+    "unit_test_count": 97,
+    "json_artifacts": "PASS",
+    "closeout_resilience": "PASS",
+    "diff_check": "PASS",
+    "private_reference_trace_scan": "PASS",
+    "overclaim_scan": "PASS_REVIEWED_NEGATIVE_BOUNDARY_TERMS_ONLY",
+    "independent_staged_audit": "PENDING"
+  },
+  "recommendation_if_all_final_checks_pass": [
+    "WEB_UI_READY_FOR_DESKTOP_ADMISSION_REVIEW",
+    "STOP_FOR_OWNER_APPROVAL"
+  ],
+  "next_after_owner_approval_only": "DESKTOP_RENDERER_ADMISSION",
+  "freeze_audit_verdict": "PASS_RECOMMEND_OWNER_REVIEW_ONLY"
+}

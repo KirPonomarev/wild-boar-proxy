@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "candidates": [
+    {
+      "scope": "import_only",
+      "admissibility_role": "primary_candidate",
+      "exact_source_path_candidate": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "declared_read_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-cli/auth.json"
+      ],
+      "declared_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/auth.json"
+      ],
+      "verification_surfaces": [
+        "healthcheck --json",
+        "status --json"
+      ],
+      "rollback_expectations": [
+        "snapshot sandbox auth.json before mutation",
+        "restore sandbox auth.json byte-for-byte if post-import owner truth remains blocked",
+        "do not mutate the external source path"
+      ],
+      "why": [
+        "read-only override cleared the current HTTP 401",
+        "registry already points to sandbox auth.json",
+        "current facts do not require registry mutation to test the same auth source at the same target path"
+      ]
+    },
+    {
+      "scope": "rebind_only",
+      "admissibility_role": "not_primary_candidate",
+      "exact_source_path_candidate": "",
+      "declared_read_surfaces": [],
+      "declared_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+      ],
+      "verification_surfaces": [
+        "healthcheck --json",
+        "status --json"
+      ],
+      "rollback_expectations": [
+        "snapshot backend-registry.json before mutation",
+        "restore backend-registry.json atomically if verification fails"
+      ],
+      "why_not_primary": [
+        "current registry already points to sandbox auth.json",
+        "no different sandbox-local valid auth file is currently evidenced"
+      ]
+    },
+    {
+      "scope": "import_and_rebind",
+      "admissibility_role": "conditional_only",
+      "exact_source_path_candidate": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "declared_read_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-cli/auth.json"
+      ],
+      "declared_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/auth.json",
+        "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+      ],
+      "verification_surfaces": [
+        "healthcheck --json",
+        "status --json"
+      ],
+      "rollback_expectations": [
+        "snapshot sandbox auth.json and backend-registry.json before mutation",
+        "restore both atomically if verification fails"
+      ],
+      "why_conditional_only": [
+        "wider blast radius than import-only",
+        "no current fact proves registry mutation is necessary"
+      ]
+    }
+  ]
+}

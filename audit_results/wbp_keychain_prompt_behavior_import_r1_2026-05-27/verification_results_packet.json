@@ -1,0 +1,24 @@
+{
+  "blocked_packet_count": 0,
+  "captured_at_utc": "2026-05-27T11:36:20.561815Z",
+  "ok_packet_count": 15,
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "top_level_packet_statuses": {
+    "auth_strategy_prompt_interaction_packet.json": "ok",
+    "custom_flow_after_prompt_packet.json": "ok",
+    "historical_dirt_quarantine_packet.json": "ok",
+    "independent_keychain_prompt_behavior_audit.json": "ok",
+    "keychain_no_hidden_mutation_packet.json": "ok",
+    "keychain_prompt_behavior_classification_packet.json": "ok",
+    "keychain_prompt_classification_packet.json": "ok",
+    "keychain_prompt_false_green_audit.json": "ok",
+    "keychain_prompt_observation_packet.json": "ok",
+    "keychain_prompt_owner_action_packet.json": "ok",
+    "scanner_agent_fact_report_packet.json": "ok",
+    "source_keychain_prompt_evidence_inventory_packet.json": "ok",
+    "source_keychain_prompt_validation_packet.json": "ok",
+    "sync_gate_packet.json": "ok",
+    "version_pinning_packet.json": "ok"
+  }
+}

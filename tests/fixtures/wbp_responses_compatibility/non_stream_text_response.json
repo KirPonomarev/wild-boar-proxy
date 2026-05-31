@@ -1,0 +1,14 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "WBP_FIXTURE_OK"
+      }
+    }
+  ],
+  "usage": {
+    "completion_tokens": 3,
+    "prompt_tokens": 5,
+    "total_tokens": 8
+  }
+}

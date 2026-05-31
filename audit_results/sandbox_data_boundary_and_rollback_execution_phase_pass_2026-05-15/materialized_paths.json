@@ -1,0 +1,24 @@
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_EXECUTION_PHASE_PASS",
+  "created_paths": [
+    "/Users/kirillponomarev/.codex-custom-test/managed",
+    "/Users/kirillponomarev/.codex-custom-test/stable",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/evidence",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env"
+  ],
+  "launcher_mode": "0o755",
+  "secrets_mode": "0o600",
+  "notes": [
+    "Launcher is a non-runnable scaffold placeholder for topology only.",
+    "No live auth, config.toml, or supervisor state was copied from the work contour."
+  ]
+}

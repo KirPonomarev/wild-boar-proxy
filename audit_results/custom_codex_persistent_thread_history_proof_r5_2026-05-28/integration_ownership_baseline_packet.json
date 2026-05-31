@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-28T08:03:26.733942Z",
+  "classification_scope": "baseline_only",
+  "integration_classes": [
+    "unclassified"
+  ],
+  "integration_parity_claimed": false,
+  "integration_persistence_proven": false,
+  "original_codex_integration_state_runtime_dependency": false,
+  "packet_kind": "integration_ownership_baseline",
+  "status": "ok"
+}

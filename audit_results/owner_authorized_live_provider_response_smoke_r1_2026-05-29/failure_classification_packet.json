@@ -1,0 +1,35 @@
+{
+  "budget_failed_checks": [
+    "budget_policy_missing",
+    "request_limit_must_be_one",
+    "cost_ceiling_missing"
+  ],
+  "captured_at_utc": "2026-05-29T12:25:31.483414Z",
+  "failure_class": "owner_authorization_missing",
+  "final_status": "LIVE_PROVIDER_RESPONSE_SMOKE_KNOWN_BLOCKER_OWNER_AUTH_REQUIRED",
+  "known_failure_classes": [
+    "owner_authorization_missing",
+    "budget_policy_missing",
+    "credentials_missing",
+    "route_not_visible",
+    "route_not_ready",
+    "provider_auth_failed",
+    "quota_or_rate_limit",
+    "upstream_5xx",
+    "timeout",
+    "response_shape_mismatch",
+    "blocked_by_safety_policy",
+    "unknown_blocker"
+  ],
+  "owner_failed_checks": [
+    "owner_authorization_missing",
+    "provider_id_missing",
+    "model_id_missing",
+    "route_id_missing",
+    "request_limit_missing",
+    "cost_ceiling_missing",
+    "credential_ref_authorization_missing"
+  ],
+  "packet_kind": "failure_classification",
+  "status": "ok"
+}

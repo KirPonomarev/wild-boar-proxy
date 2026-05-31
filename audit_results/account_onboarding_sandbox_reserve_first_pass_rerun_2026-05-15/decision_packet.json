@@ -1,0 +1,14 @@
+{
+  "contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "decided_at": "2026-05-15T15:15:36.194701+00:00",
+  "decision": "STOP_AND_DIAGNOSE",
+  "machine_error_code": "ONBOARD_FAILED",
+  "final_outcome": "import_failed",
+  "selection_status": "no_new_backend_detected",
+  "reserve_first_enforced": false,
+  "post_refresh_accounts_count": 0,
+  "forbidden_live_path_drift_detected": false,
+  "changed_files_outside_sandbox": [],
+  "stop_reason": "sandbox_auth_payload_incompatible_with_repaired_owner_lane_contract",
+  "next_contour": "SANDBOX_AUTH_PAYLOAD_COMPATIBILITY_REPAIR_PASS"
+}

@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-28T08:25:38.628662Z",
+  "custom_process_count": 1,
+  "custom_user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data",
+  "inventory_usable": true,
+  "launch_fail_closed_on_inventory_unusable": true,
+  "launch_fail_closed_on_same_profile_conflict": true,
+  "launcher_enforces_policy": true,
+  "lock_acquired": false,
+  "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-persistent-profile.lock",
+  "packet_kind": "persistent_profile_lock_enforcement",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "policy_declared": "single_writer_only",
+  "reason_class": "",
+  "same_profile_conflict_classified": true,
+  "same_profile_conflict_observed": true,
+  "same_profile_existing_owner_counts_as_concurrent_launch": false,
+  "same_profile_new_launch_would_be_blocked": true,
+  "same_profile_process_present": true,
+  "single_writer_only_counts_as_lock_acquired": false,
+  "status": "ok"
+}

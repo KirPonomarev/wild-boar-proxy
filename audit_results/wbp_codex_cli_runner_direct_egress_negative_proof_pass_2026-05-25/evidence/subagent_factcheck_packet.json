@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-25T13:40:42.980198Z",
+  "findings": {
+    "git_remote_https_descendant_classifies_as_ancillary": true,
+    "legacy_blocked_packet_not_reused_as_final_truth": true,
+    "owner_side_classification_uses_process_tree_evidence": true,
+    "raw_pid_exposed": false
+  },
+  "machine_error_code": "OK",
+  "packet_kind": "subagent_factcheck_packet",
+  "secret_value_recorded": false,
+  "status": "ok",
+  "subagent_model": "gpt-5.4-mini",
+  "subagent_role": "explorer"
+}

@@ -1,0 +1,855 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:46:30.983289Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_CONFIG_DRIFT_ROOT_CAUSE_PASS_R2",
+  "packet_kind": "codex_config_drift_process_timeline",
+  "status": "blocked",
+  "machine_error_code": "CODEX_CONFIG_DRIFT_NOT_REPRODUCED",
+  "launch_start_utc": "2026-05-25T10:46:16.717318Z",
+  "launch_end_utc": "2026-05-25T10:46:30.838170Z",
+  "root_pid": 3240,
+  "process_group_id": 3240,
+  "process_snapshots": [
+    {
+      "captured_at_utc": "2026-05-25T10:46:17.223881Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/bin/sh",
+          "command_basename": "sh",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:17.757164Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:18.301578Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:18.847975Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:19.390783Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:19.944403Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:20.490826Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:21.037718Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:21.590948Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:22.145363Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:22.691487Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:23.232359Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:23.778662Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:24.332422Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:24.879036Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at_utc": "2026-05-25T10:46:25.415638Z",
+      "process_rows": [
+        {
+          "pid": 3240,
+          "ppid": 2996,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/MacOS/Codex",
+          "command_basename": "Codex",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3263,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        },
+        {
+          "pid": 3264,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "<defunct>",
+          "command_basename": "<defunct>",
+          "env_classification": {
+            "HOME": "not_visible",
+            "CODEX_HOME": "not_visible",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": false
+          }
+        },
+        {
+          "pid": 3265,
+          "ppid": 3240,
+          "pgid": 3240,
+          "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper",
+          "command_basename": "Codex Helper",
+          "env_classification": {
+            "HOME": "isolated",
+            "CODEX_HOME": "isolated",
+            "WBP_CONFIG_TOML": "not_visible",
+            "OPENAI_API_KEY_visible": true
+          }
+        }
+      ]
+    }
+  ],
+  "lsof_polling_attempted": true,
+  "lsof_event_count": 0,
+  "lsof_process_candidates": [],
+  "lsof_is_writer_proof": false,
+  "responsible_process_identified": false,
+  "responsible_writer": null,
+  "cleanup_status": "ok"
+}

@@ -1,0 +1,42 @@
+{
+  "contour_id": "WBP_NATIVE_WINDOW_PROOF_RUNNER_SURFACE_PREPARATION",
+  "date": "2026-05-25",
+  "status": "closed_success",
+  "binary_verdict": "PHASE9_WINDOW_PROOF_BLOCKED_PENDING_RUNNER_PREPARATION",
+  "frozen_truth": {
+    "native_contract_surface_exists": true,
+    "native_dispatch_packet_surface_exists": true,
+    "canonically_admitted_runnable_phase9_runner_exists": false,
+    "canonically_reusable_runner_surface_currently_exists_only_for_cli": true
+  },
+  "key_evidence": {
+    "contract_admission_only": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/native_launch_contract.py",
+    "dispatch_packet_only": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/native_launch_dispatch.py",
+    "cli_runner_surface": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli_runner.py",
+    "authorized_live_window_block": "audit_results/wbp_native_codex_custom_authorized_process_window_usability_proof_pass_2026-05-25/evidence/native_custom_live_dispatch_packet.json",
+    "window_reproof_block": "audit_results/wbp_native_codex_custom_window_usability_reproof_pass_2026-05-25/evidence/native_repaired_window_observation_packet.json",
+    "native_gap_matrix": "audit_results/wbp_native_codex_truth_correction_and_native_gap_matrix_pass_2026-05-25/evidence/native_gap_matrix.json"
+  },
+  "frozen_observation_contract": {
+    "window_observation_source": "AX/System Events process by unix id over launch process group",
+    "required_packets": [
+      "native_dispatch_authorization_packet.json",
+      "native_custom_launch_packet.json",
+      "process_lineage_packet.json",
+      "window_observation_packet.json",
+      "window_identity_binding_packet.json",
+      "native_window_ui_surface_packet.json",
+      "current_codex_running_state_before.json",
+      "current_codex_running_state_after.json",
+      "cleanup_reversibility_packet.json",
+      "native_window_proof_summary.json",
+      "independent_native_window_audit.json"
+    ]
+  },
+  "expected_blocked_reasons": [
+    "pid_visible_but_accessible_window_absent",
+    "SystemEventsInvalidIndex",
+    "window identity not bound to launch pid/process group",
+    "CURRENT_CODEX_PROTECTION_NOT_PROVEN"
+  ]
+}

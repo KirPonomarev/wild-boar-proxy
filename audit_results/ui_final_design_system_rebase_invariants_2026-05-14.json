@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before": "64db142",
+  "scope_mode": "visual design-system rebase only",
+  "changed_tracked_files_at_capture": [
+    "tests/test_web_design_ui.py",
+    "wild_boar_proxy/web_design_ui/styles/overview.css"
+  ],
+  "forbidden_files_changed": [],
+  "before": {
+    "data_screens": [
+      "accounts",
+      "api-connections",
+      "diagnostics",
+      "import-existing",
+      "overview",
+      "select-client",
+      "settings",
+      "setup"
+    ],
+    "data_screen_links": [
+      "accounts",
+      "api-connections",
+      "diagnostics",
+      "overview",
+      "settings"
+    ],
+    "static_data_ui_actions": [
+      "export_diagnostics",
+      "launch_client_dispatch",
+      "launch_smoke",
+      "onboard_account",
+      "refresh_health_detail",
+      "set_mode_managed",
+      "set_mode_stable",
+      "stable_repair_plan",
+      "sync_runtime"
+    ],
+    "screens_const": "const SCREENS = [\"overview\", \"accounts\", \"api-connections\", \"diagnostics\", \"settings\", \"setup\", \"select-client\", \"import-existing\"]"
+  },
+  "after": {
+    "data_screens": [
+      "accounts",
+      "api-connections",
+      "diagnostics",
+      "import-existing",
+      "overview",
+      "select-client",
+      "settings",
+      "setup"
+    ],
+    "data_screen_links": [
+      "accounts",
+      "api-connections",
+      "diagnostics",
+      "overview",
+      "settings"
+    ],
+    "static_data_ui_actions": [
+      "export_diagnostics",
+      "launch_client_dispatch",
+      "launch_smoke",
+      "onboard_account",
+      "refresh_health_detail",
+      "set_mode_managed",
+      "set_mode_stable",
+      "stable_repair_plan",
+      "sync_runtime"
+    ],
+    "screens_const": "const SCREENS = [\"overview\", \"accounts\", \"api-connections\", \"diagnostics\", \"settings\", \"setup\", \"select-client\", \"import-existing\"]"
+  },
+  "screen_list_unchanged": true,
+  "static_data_ui_actions_unchanged": true,
+  "final_design_token_checks": {
+    "canvas_token": true,
+    "surface_token": true,
+    "surface_muted_token": true,
+    "border_token": true,
+    "border_strong_token": true,
+    "text_token": true,
+    "secondary_token": true,
+    "muted_token": true,
+    "blue_token": true,
+    "green_token": true,
+    "amber_token": true,
+    "red_token": true,
+    "window_width_token": true,
+    "window_height_token": true,
+    "sidebar_width_token": true,
+    "radius_window_token": true,
+    "radius_card_token": true,
+    "radius_button_token": true,
+    "radius_chip_token": true,
+    "window_width_use": true,
+    "window_height_use": true,
+    "sidebar_padding": true,
+    "logo_width": true,
+    "main_padding": true,
+    "font_stack": true,
+    "body_line_height": true,
+    "title_size": true,
+    "title_line": true,
+    "kpi_line": true
+  },
+  "browser_payload_boundary": {
+    "html_static_actions_only": true,
+    "no_new_ui_action_added": true,
+    "no_index_or_js_change_in_this_capture": true
+  },
+  "identity_preservation_check": "visual language, layout hierarchy, copy tone, logo treatment, and product identity remain aligned with owner supplied final design package; external references were not used as repo evidence",
+  "icon_policy": "inline/icon migration deferred; no raw icon archive copied",
+  "resume_from_here": "Continue with UI_FINAL_CORE_SCREENS_TRANSFER after owner reviews the rebase screenshots."
+}

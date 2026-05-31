@@ -1,0 +1,31 @@
+{
+  "claimed": [
+    "main WBP web overview has a Codex Operator panel",
+    "browser payload for operator run is bounded to prompt + model_id",
+    "model_id is validated against server-issued WBP /v1/models list",
+    "one browser-click prompt returned MAIN_WEB_OK through the operator endpoint",
+    "one process-only prompt returned MAIN_WEB_PROCESS_OK with protected surfaces unchanged"
+  ],
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS",
+  "known_blocked_truth": {
+    "blocked_claims": [
+      "active-only-traffic",
+      "pool-participation-correct",
+      "stable-15-proved"
+    ],
+    "claim_gate_status": "blocked",
+    "machine_error_code": "CLAIM_GATE_BLOCKED"
+  },
+  "not_claimed": [
+    "overall runtime claim_gate green",
+    "stable-15-proved",
+    "active-only-traffic",
+    "pool-participation-correct",
+    "provider route proof",
+    "rotation/load proof",
+    "account lifecycle mutation",
+    "GUI Desktop app launch",
+    "production package readiness",
+    "design gate ready"
+  ]
+}

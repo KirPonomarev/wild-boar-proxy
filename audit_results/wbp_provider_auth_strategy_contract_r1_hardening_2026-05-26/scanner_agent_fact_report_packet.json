@@ -1,0 +1,49 @@
+{
+  "captured_at_utc": "2026-05-26T20:40:16Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agent_id": "019e6602-00ad-7810-80a3-521d8ad9b3b3",
+  "agent_role": "independent_auditor",
+  "agent_model": "gpt-5.4-mini",
+  "scope": [
+    "wild_boar_proxy/provider_auth_strategy.py",
+    "tools/provider_auth_strategy_contract_probe.py",
+    "tests/test_provider_auth_strategy.py",
+    "audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26"
+  ],
+  "claims_checked": {
+    "auth_command_preferred_and_selected": true,
+    "bounded_bearer_not_silently_selected": true,
+    "file_auth_excluded_and_deferred": true,
+    "browser_remote_token_path_model_provider_authority_blocked": true,
+    "current_codex_auth_json_inspection_only": true,
+    "native_live_model_egress_ux_claims_absent": true
+  },
+  "referenced_packets": [
+    "provider_auth_strategy_packet.json",
+    "auth_strategy_decision_matrix_packet.json",
+    "auth_strategy_precedence_packet.json",
+    "authority_boundary_packet.json",
+    "file_auth_fallback_deferred_packet.json",
+    "file_auth_fallback_exclusion_packet.json",
+    "current_codex_auth_independence_packet.json",
+    "auth_strategy_false_green_audit.json",
+    "no_ambient_authority_packet.json",
+    "secret_source_confusion_guard_packet.json"
+  ],
+  "blocking_findings": [],
+  "residual_limits": [
+    {
+      "limit": "authority filter is recursive key-name based",
+      "classification": "recorded_limit_not_blocker",
+      "packet": "authority_boundary_packet.json",
+      "false_green_guard": "semantic_alias_coverage_proven=false"
+    },
+    {
+      "limit": "contour proves classification/exclusion, not live auth.command E2E",
+      "classification": "out_of_scope_not_blocker",
+      "false_green_guard": "native_launch_attempted=false"
+    }
+  ],
+  "auditor_verdict": "no_blocking_mismatch_found"
+}

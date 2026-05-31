@@ -1,0 +1,26 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "owner_surface": "python3 -m wild_boar_proxy stable repair --apply --json",
+  "pre_repair_dry_run": {
+    "machine_error_code": "OK",
+    "would_change": true,
+    "approved_target_family_count": 9,
+    "eligible_source_copy_family_count": 11,
+    "target_would_add_backend_ids": [
+      "k-gpt-pro",
+      "new-new55555",
+      "kp8750410-team"
+    ],
+    "target_would_prune_basenames": [
+      "codex-k.gpt.pro.3k@outlook.com-free.json"
+    ]
+  },
+  "fixed_sandbox_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "repair_scope": "approved_target_inventory_only",
+  "repair_not_in_scope": [
+    "sandbox_auth_json_write",
+    "onboarding_rerun",
+    "exact_source_admission",
+    "runtime_activation_claim"
+  ]
+}

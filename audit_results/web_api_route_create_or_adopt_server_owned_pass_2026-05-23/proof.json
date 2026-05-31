@@ -1,0 +1,42 @@
+{
+  "contour": "WEB_API_ROUTE_CREATE_OR_ADOPT_SERVER_OWNED_PASS",
+  "date": "2026-05-23",
+  "status": "verified",
+  "verdict": "CLOSURE_PASS_WITH_ADOPT_REGRESSION_AND_EXISTING_SERVER_OWNED_LANE_PROOF",
+  "existing_lane": {
+    "ui_action": "api_route_connect",
+    "action_claim_scope_contains_add_adopt": true,
+    "implementation_commit": "607ceb10bd31264e06557bdcfb0b870fb6d0b2a2",
+    "implementation_artifact_dir": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22",
+    "existing_browser_proof": {
+      "summary": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-run-summary.json",
+      "action_packet": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-action-packet.json",
+      "api_connections_after": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-api-connections-after.json"
+    }
+  },
+  "fresh_regression": {
+    "file": "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py",
+    "test_name": "test_api_route_connect_adopts_existing_primary_route_without_add",
+    "line": 1746,
+    "branch_proved": "adopted_existing_route",
+    "add_status": "not_run",
+    "validate_status": "ok"
+  },
+  "tests": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "pass"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_creates_server_owned_route_without_browser_args tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_adopts_existing_primary_route_without_add tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_missing_credential_triggers_owner_admit tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_admit_failure_blocks_route_add tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_rejects_forbidden_browser_fields tests.test_web_design_live_server.WebDesignLiveServerTests.test_real_json_runner_supports_sandbox_api_route_connect_from_profile_cwd tests.test_web_design_live_server.WebDesignLiveServerTests.test_api_route_connect_adapter_spec_uses_server_owned_file_arg tests.test_web_design_ui.WebDesignUiTests.test_api_connections_screen_is_readonly_and_product_safe tests.test_web_design_ui.WebDesignUiTests.test_api_route_connect_does_not_render_onboard_login_overlay tests.test_web_design_ui.WebDesignUiTests.test_api_route_refresh_uses_api_snapshot_from_quick_start_composite_payload tests.test_web_design_command_adapter.WebDesignCommandAdapterTests.test_external_models_credential_bridge_commands_are_internal_only_and_exact -q",
+      "result": "pass",
+      "count": 11
+    }
+  ],
+  "factual_findings": [
+    "bounded server-owned route create/adopt lane already existed in current repo state",
+    "browser payload for api_route_connect remains bounded to ui_action only",
+    "generic route builder remains deferred and not admitted",
+    "create path and adopt path are both now directly evidenced by tests and prior browser artifacts"
+  ]
+}

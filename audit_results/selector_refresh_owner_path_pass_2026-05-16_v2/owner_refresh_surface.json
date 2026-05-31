@@ -1,0 +1,14 @@
+{
+  "command_surface": "python3 -m wild_boar_proxy sync --json",
+  "named_before_execution": true,
+  "canonical": true,
+  "supporting_contract_excerpt": {
+    "surface": "COMMAND_API.md",
+    "meaning": "selected_backend_snapshot materialization owner path"
+  },
+  "forbidden_alternatives": [
+    "manual supervisor-state edit",
+    "synthetic selected_backend_ids injection",
+    "runtime reproof as selector refresh surrogate"
+  ]
+}

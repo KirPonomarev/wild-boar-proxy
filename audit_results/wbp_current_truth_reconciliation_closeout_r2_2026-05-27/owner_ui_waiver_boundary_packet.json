@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-27T13:56:39Z",
+  "packet_kind": "owner_ui_waiver_boundary",
+  "status": "ok",
+  "owner_waives_machine_ui": true,
+  "manual_ui_confirmation_allowed": true,
+  "manual_ui_confirmation_replaces_route_trace": false,
+  "route_trace_replaces_owner_ux_confirmation": false,
+  "machine_ui_proof_claimed": false,
+  "owner_confirmation_imported": true,
+  "current_owner_action_collected": false,
+  "waiver_closes_only": [
+    "owner_visible_ux_confirmation_boundary"
+  ],
+  "waiver_does_not_close": [
+    "route_trace_proof",
+    "network_egress_proof",
+    "model_availability_proof",
+    "machine_ui_input_field_proof",
+    "machine_observed_response_text_proof"
+  ],
+  "source_packets": [
+    "audit_results/wbp_native_custom_owner_ux_readiness_handoff_r1_2026-05-26/machine_ui_waiver_packet.json",
+    "audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_usability_summary_packet.json"
+  ]
+}

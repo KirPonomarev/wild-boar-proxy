@@ -1,0 +1,47 @@
+{
+  "captured_at_utc": "2026-05-23T15:27:24.258605+00:00",
+  "contour": "CODEX_CUSTOM_APP_REPEATABLE_OPERATOR_PROMPT_FLOW_PASS",
+  "secret_value_recorded": false,
+  "transcript": [
+    {
+      "actual_exact": "WBP_ONE",
+      "exact_match": true,
+      "exit_code": 0,
+      "expected_exact": "WBP_ONE",
+      "jsonl_event_types": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "prompt_id": "prompt_1",
+      "prompt_text_sha256": "ad28e057df03824cad79ecf97bda9b22075ad550a34e688a823a918292090626",
+      "secret_value_recorded": false,
+      "stderr_warning_classes": [
+        "remote_plugin_sync_warning",
+        "remote_plugin_sync_401"
+      ],
+      "timed_out": false
+    },
+    {
+      "actual_exact": "WBP_TWO",
+      "exact_match": true,
+      "exit_code": 0,
+      "expected_exact": "WBP_TWO",
+      "jsonl_event_types": [
+        "thread.started",
+        "turn.started",
+        "item.completed",
+        "turn.completed"
+      ],
+      "prompt_id": "prompt_2",
+      "prompt_text_sha256": "61af56045fdf4b27b7f5c02b328010b2dfe9fe76c3e7c49dc1f2991ac9b8f3d9",
+      "secret_value_recorded": false,
+      "stderr_warning_classes": [
+        "remote_plugin_sync_warning",
+        "remote_plugin_sync_401"
+      ],
+      "timed_out": false
+    }
+  ]
+}

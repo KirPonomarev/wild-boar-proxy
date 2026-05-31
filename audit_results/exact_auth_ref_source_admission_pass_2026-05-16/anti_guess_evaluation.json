@@ -1,0 +1,19 @@
+{
+  "contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "guess_risk": "high_if_forced",
+  "forbidden_inferences": [
+    "do not infer one exact auth-ref from approved-target runtime success alone",
+    "do not infer one exact auth-ref from multi-backend selector participation evidence",
+    "do not infer one exact auth-ref from stable_default_backend_id while 15 selected backends remain active in the snapshot"
+  ],
+  "allowed_conclusions": [
+    "runtime consumer truth is aligned",
+    "selector participation evidence is fresh",
+    "the current exact-source basis is still multi-candidate",
+    "a narrower exact-source diagnose contour is earned"
+  ],
+  "hallucination_guard": {
+    "nonexistent_command_must_not_be_used": "python3 -m wild_boar_proxy auth ref-source admission --json",
+    "why": "the current CLI exposes no such parser or dispatch surface"
+  }
+}

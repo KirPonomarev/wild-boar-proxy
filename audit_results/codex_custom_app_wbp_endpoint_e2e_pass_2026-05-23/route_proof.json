@@ -1,0 +1,15 @@
+{
+  "app_launcher_exit_code": 0,
+  "captured_at_utc": "2026-05-23T15:14:55.438166+00:00",
+  "chosen_model": "gpt-5.3-codex",
+  "chosen_model_visible_in_wbp_models": true,
+  "claim_scope": "disposable app launcher -> isolated Codex engine -> WBP endpoint",
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "deepseek_only_success_path": false,
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "engine_final_message_exact_wbp_ok": true,
+  "local_proxy_env_stripped": true,
+  "no_proxy_for_localhost": true,
+  "not_gui_desktop_claim": true,
+  "not_provider_route_claim": true
+}

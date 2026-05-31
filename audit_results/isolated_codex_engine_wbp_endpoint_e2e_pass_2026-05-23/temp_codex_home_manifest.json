@@ -1,0 +1,17 @@
+{
+  "auth_json_copied": false,
+  "captured_at_utc": "2026-05-23T15:05:32.282071+00:00",
+  "config_secret_free": true,
+  "config_written": true,
+  "contour": "ISOLATED_CODEX_ENGINE_WBP_ENDPOINT_E2E_PASS",
+  "local_proxy_env_stripped": true,
+  "no_proxy_for_localhost": true,
+  "openai_api_key_source": "managed_stable_runtime_generated_config_api_key",
+  "reasoning_effort": "low",
+  "secret_value_recorded": false,
+  "temp_codex_home": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-engine-e2e-n3sly3ks/codex-home",
+  "temp_home": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-engine-e2e-n3sly3ks/home",
+  "temp_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-engine-e2e-n3sly3ks",
+  "temp_work_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-engine-e2e-n3sly3ks/work",
+  "will_cleanup_temp_root": true
+}

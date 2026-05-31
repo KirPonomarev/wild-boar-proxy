@@ -1,0 +1,24 @@
+{
+  "actual_row_count": 4,
+  "blocked_row_ids": [
+    "direct-mistral-devstral-2512",
+    "wbp-disabled-route"
+  ],
+  "captured_at_utc": "2026-05-29T12:05:51.454172Z",
+  "live_provider_calls_attempted": false,
+  "narrower_than_target_honestly_recorded": true,
+  "packet_kind": "provider_smoke_matrix",
+  "passing_row_ids": [
+    "native-looking-external",
+    "wbp:deepseek-max"
+  ],
+  "provider_family_compatibility_claimed": false,
+  "row_pass_means_plain_response_smoke_only": true,
+  "session_runtime_harness_only": true,
+  "status": "ok",
+  "streaming_compatibility_claimed": false,
+  "target_max_rows": 12,
+  "target_min_rows": 8,
+  "tool_compatibility_claimed": false,
+  "upstream_provider_acceptance_proven": false
+}

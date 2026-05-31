@@ -1,0 +1,36 @@
+ЖУРНАЛ ДЕЙСТВИЙ
+Текущая UI-сессия
+
+Command result не является runtime truth. Reload очищает этот журнал.
+
+Все
+Ошибки
+Требуют refresh
+Очистить
+Command results
+UI-session memory only · не persistent audit history
+не сохраняется
+quick_start_check_all · -
+02:53:21
+подтверждено
+quick_start_check_all · -
+02:53:15
+выполняется
+Snapshot commands
+overview snapshot · live_readonly · command packet outcome only
+5 summaries
+accounts_list · primary_truth
+live_readonly
+ok
+healthcheck · runtime_detail
+live_readonly
+ok
+mode_get · primary_truth
+live_readonly
+ok
+rollout_rotation_inspect · rollout_evidence
+live_readonly
+command_error
+status · primary_truth
+live_readonly
+ok

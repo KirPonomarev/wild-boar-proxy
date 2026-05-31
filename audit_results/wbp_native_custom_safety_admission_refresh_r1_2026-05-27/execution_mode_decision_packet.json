@@ -1,0 +1,26 @@
+{
+  "allowed_execution_modes": [
+    "inspection_only",
+    "temp_surface_probe",
+    "native_launch"
+  ],
+  "captured_at_utc": "2026-05-26T21:34:22.675291Z",
+  "conditional_packets_required": [],
+  "decision_basis": "canonical_platform_safe_work_before_live_native_egress",
+  "execution_mode": "inspection_only",
+  "forbidden_launch_packet_kinds_in_inspection_only": [
+    "native_custom_dispatch",
+    "native_process_observation",
+    "native_window_observation",
+    "native_route_trace_binding",
+    "native_direct_egress_claim"
+  ],
+  "inspection_only": true,
+  "native_launch_allowed": false,
+  "native_launch_attempted": false,
+  "native_launch_required_for_pass": false,
+  "packet_kind": "native_safety_execution_mode_decision",
+  "reason_class": "",
+  "status": "ok",
+  "temp_surface_action_performed": false
+}

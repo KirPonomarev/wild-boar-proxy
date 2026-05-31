@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "packet_kind": "owner_manual_prompt_observation",
+  "owner_assisted_input": true,
+  "owner_reported_prompt_typed_in_custom_codex": true,
+  "owner_reported_custom_codex_thought_then_failed": true,
+  "machine_ui_input_proof_claimed": false,
+  "manual_input_substitutes_for_wbp_trace": false,
+  "wbp_trace_required_for_routing_claim": true,
+  "prompt_marker": "WBP_OWNER_ASSISTED_NATIVE_ROUTE_RETRY_20260526_OK",
+  "secret_value_recorded": false
+}

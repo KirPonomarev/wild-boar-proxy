@@ -79,6 +79,12 @@ PROVIDERS = {
         "label": "Mistral",
         "api_key_env": "MISTRAL_API_KEY",
         "models": {
+            "direct-mistral-devstral-2512": {
+                "url": "https://api.mistral.ai/v1/chat/completions",
+                "upstream_model": "devstral-2512",
+                "max_tokens": 8192,
+                "cost_class": "paid_direct",
+            },
             "direct-mistral-small-latest": {
                 "url": "https://api.mistral.ai/v1/chat/completions",
                 "upstream_model": "mistral-small-latest",
@@ -181,6 +187,9 @@ MODEL_ALIASES = {
     "cerebras-qwen-3-235b-a22b-instruct-2507-direct": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
     "cerebras-gpt-oss-120b-direct": "direct-cerebras-gpt-oss-120b",
     "mistral-small-latest-direct": "direct-mistral-small-latest",
+    "mistral-devstral-2512-direct": "direct-mistral-devstral-2512",
+    "devstral-small-2512-direct": "direct-mistral-devstral-2512",
+    "devstral-2512-direct": "direct-mistral-devstral-2512",
 }
 
 DEFAULT_MODEL = "glm-4.7-flash"

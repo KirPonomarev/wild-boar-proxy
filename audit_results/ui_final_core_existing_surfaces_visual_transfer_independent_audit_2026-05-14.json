@@ -1,0 +1,33 @@
+{
+  "contour": "UI_FINAL_CORE_EXISTING_SURFACES_VISUAL_TRANSFER",
+  "date": "2026-05-14",
+  "auditor": "independent_read_only_subagent",
+  "verdict": "PASS",
+  "facts": {
+    "tracked_diff_limited_to": [
+      "tests/test_web_design_ui.py",
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/styles/overview.css"
+    ],
+    "forbidden_files_changed": [],
+    "screen_registry_changed": false,
+    "static_data_ui_action_value_set_changed": false,
+    "new_fetch_endpoint_introduced": false,
+    "new_command_surface_introduced": false,
+    "raw_command_payload_introduced": false,
+    "runtime_truth_file_access_introduced": false,
+    "desktop_scope_touched": false
+  },
+  "auditor_evidence": [
+    "SCREENS remains pinned by tests/test_web_design_ui.py and no source diff changes that constant.",
+    "Settings action buttons still use the existing six static data-ui-action values: set_mode_stable, set_mode_managed, stable_repair_plan, launch_smoke, launch_client_dispatch, export_diagnostics.",
+    "UI tests still forbid command_id, client_path, config.toml, state.json, supervisor-state, and stable_repair_apply in the relevant static surfaces.",
+    "The visual edit is confined to the existing settings screen block plus CSS layout support."
+  ],
+  "auditor_test": {
+    "command": "python3 -m unittest tests.test_web_design_ui -q",
+    "result": "PASS",
+    "summary": "Ran 25 tests; OK"
+  },
+  "resume_from_here": "Proceed with full local verification, leak scan, closeout, commit, and push."
+}

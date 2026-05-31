@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-27T05:41:58.598062Z",
+  "modes": {
+    "ephemeral_custom": {
+      "cleanup_required": true,
+      "launcher_identity": "fresh_or_temp",
+      "profile_lifetime": "single_contour",
+      "thread_history_claim": "not_preserved_or_unproven"
+    },
+    "original_codex": {
+      "cleanup_required": "forbidden",
+      "launcher_identity": "original_app_concern_only",
+      "profile_lifetime": "user_owned",
+      "thread_history_claim": "original_app_only"
+    },
+    "persistent_custom": {
+      "cleanup_required": false,
+      "launcher_identity": "stable_profile_id_required",
+      "profile_lifetime": "long_lived",
+      "thread_history_claim": "requires_future_relaunch_storage_proof"
+    }
+  },
+  "modes_distinguishable": true,
+  "original_profile_shortcut_allowed": false,
+  "packet_kind": "custom_profile_storage_modes",
+  "silent_persistent_to_ephemeral_fallback_allowed": false,
+  "status": "ok"
+}

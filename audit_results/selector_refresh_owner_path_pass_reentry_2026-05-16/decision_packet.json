@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "reentry_v1",
+  "status": "stopped",
+  "fresh_selector_truth_earned": false,
+  "machine_reason": "LOCK_HELD_NO_SELECTOR_PROGRESS",
+  "sync_changed_files": [],
+  "rotation_before_status": "ROTATION_EVIDENCE_STALE",
+  "rotation_after_status": "ROTATION_EVIDENCE_STALE",
+  "runtime_truth_after_sync": {
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear"
+  },
+  "provisional_next_contour": "STOP_AND_DIAGNOSE",
+  "provisional_next_action": "localize transient selector owner-path lock and decide whether a fresh retry contour is admissible without violating anti-loop rule"
+}

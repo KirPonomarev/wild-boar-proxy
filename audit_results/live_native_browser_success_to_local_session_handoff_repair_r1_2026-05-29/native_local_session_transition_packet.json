@@ -1,0 +1,12 @@
+{
+  "auth_materialized": false,
+  "auth_ref_present": false,
+  "captured_at_utc": "2026-05-29T03:57:45.441843Z",
+  "classification": "handoff_received_but_session_not_promoted",
+  "failure_reason": "device_handoff_process_exited_before_auth_materialized",
+  "local_session_transition_observed": true,
+  "login_status": "failed",
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "session_id": "codex-17972f09dad048d09e2e0d9d52ce5e8d",
+  "session_process_alive": false
+}

@@ -1,0 +1,33 @@
+{
+  "rule": "progress requires machine-carried improvement in at least two key runtime surfaces relative to the post-reconciliation pre-state",
+  "surfaces": [
+    {
+      "surface": "claim_gate",
+      "pre": "blocked",
+      "post": "clear",
+      "improved": true
+    },
+    {
+      "surface": "policy_drift",
+      "pre": "detected",
+      "post": "clear",
+      "improved": true
+    },
+    {
+      "surface": "effective runtime source truth",
+      "pre": "observed_source_active",
+      "post": "approved_target_active_by_activation_evidence",
+      "improved": true
+    },
+    {
+      "surface": "consumer_activation_readiness",
+      "pre": "activation_pending",
+      "post": "aligned",
+      "improved": true
+    }
+  ],
+  "improved_surface_count": 4,
+  "threshold": 2,
+  "passes": true,
+  "note": "remaining blocker is selector freshness only"
+}

@@ -1,0 +1,56 @@
+{
+  "healthcheck": {
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "launch_readiness_status": "ready",
+    "policy_drift_status": "detected",
+    "claim_gate_status": null,
+    "desired_source_status": "approved_target_selected",
+    "effective_source_status": "observed_source_active",
+    "consumer_activation_readiness_status": "activation_pending",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+    ]
+  },
+  "launch_smoke": {
+    "machine_error_code": "OK",
+    "launcher_exit_code": 0,
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "effective_source_status": "approved_target_active_by_activation_evidence",
+    "effective_source_kind": "approved_repair_target",
+    "consumer_activation_readiness_status": "aligned",
+    "activation_snapshot_freshness": "fresh",
+    "activation_outcome": "approved_target_activated",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+    ]
+  },
+  "post_status": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "claim_gate_sources": [],
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "desired_source_status": "approved_target_selected",
+    "effective_source_status": "approved_target_active_by_activation_evidence",
+    "consumer_activation_readiness_status": "aligned",
+    "changed_files": []
+  },
+  "post_rotation": {
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "policy_drift_status": "clear",
+    "selected_backend_count": 15,
+    "active_routing_candidate_count": 15,
+    "changed_files": []
+  }
+}

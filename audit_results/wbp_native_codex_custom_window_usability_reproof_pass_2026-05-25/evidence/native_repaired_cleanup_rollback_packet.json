@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:35:53.767909Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_WINDOW_USABILITY_REPROOF_PASS_R2",
+  "dispatch_scope": "custom_only_phase_3_reproof",
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "route_inference_attempted": false,
+  "native_launch_complete": false,
+  "ui_mutation_performed": false,
+  "product_status_upgraded": false,
+  "packet_kind": "native_repaired_cleanup_rollback",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "cleanup_attempted": true,
+  "rollback_attempted": false,
+  "cleanup_or_rollback_status": "ok",
+  "target_process_group_id": 98705
+}

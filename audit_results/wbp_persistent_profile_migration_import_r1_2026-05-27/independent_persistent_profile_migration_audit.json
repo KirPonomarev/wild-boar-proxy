@@ -1,0 +1,25 @@
+{
+  "auth_proof_claimed": false,
+  "captured_at_utc": "2026-05-27T11:51:29.462514Z",
+  "current_live_migration_execution_collected": false,
+  "current_owner_action_collected": false,
+  "final_e2e_claimed": false,
+  "migration_execution_proven": false,
+  "packet_kind": "independent_persistent_profile_migration_audit",
+  "persistent_continuity_claimed": false,
+  "referenced_packets": [
+    "source_persistent_migration_evidence_inventory_packet.json",
+    "source_persistent_migration_validation_packet.json",
+    "persistent_profile_migration_scope_packet.json",
+    "persistent_profile_migration_trigger_packet.json",
+    "persistent_profile_source_target_packet.json",
+    "persistent_profile_state_copy_matrix.json",
+    "persistent_profile_migration_recovery_policy_packet.json",
+    "persistent_profile_migration_verification_packet.json",
+    "persistent_profile_migration_classification_packet.json",
+    "persistent_profile_migration_false_green_audit.json",
+    "scanner_agent_fact_report_packet.json"
+  ],
+  "route_proof_claimed": false,
+  "status": "ok"
+}

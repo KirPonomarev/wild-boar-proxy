@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_CONFIRMED_BASIC_ACTIONS",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "auditor": "Linnaeus",
+  "result": "PASS",
+  "findings": [
+    "staged snapshot excludes runtime.py, web_ui.py, and ui_shell.py",
+    "browser posts JSON.stringify({ ui_action: uiAction }) and server blocks command_id payloads",
+    "/api/actions metadata does not expose adapter_command_id",
+    "sync_runtime, set_mode_stable, and set_mode_managed require confirmation and post-action refresh",
+    "launch_smoke is check-only, does not require confirmation, and does not claim host-client launch success",
+    "action panel is separate from live overview truth and live refresh still comes from /api/live-readonly",
+    "forbidden launch_client, stable_repair_apply, account lifecycle, and rollout/stage actions are not exposed as data-ui-action",
+    "no direct state/log/runtime file reads were introduced",
+    "tests and contour artifacts are staged"
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py is dirty outside this contour and must remain unstaged",
+    "live runtime mutation browser smoke was intentionally avoided without a separate owner live-mutation marker; fake runner smoke was used for UI behavior",
+    "launch_smoke still invokes launch smoke --json; this is accepted only as a check-only runtime smoke action and not host-client launch success"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-28T08:10:11.928651Z",
+  "changed_target_count": 2,
+  "packet_kind": "persistent_restore_r5_target_delta",
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "retained_target_count": 2,
+  "status": "ok",
+  "target_delta_rows": [
+    {
+      "changed_after_owner_action": true,
+      "raw_content_recorded": false,
+      "relative_path": "session_index.jsonl",
+      "retained_after_relaunch": true,
+      "target_delta_counts_as_durable_restoration_proof": false,
+      "target_delta_counts_as_participation_proof": false
+    },
+    {
+      "changed_after_owner_action": true,
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-04-47-019e6d9d-5430-7fd1-aeeb-33d95682f388.jsonl",
+      "retained_after_relaunch": true,
+      "target_delta_counts_as_durable_restoration_proof": false,
+      "target_delta_counts_as_participation_proof": false
+    }
+  ],
+  "target_file_changed_counts_as_participation_proof": false,
+  "target_file_retained_counts_as_participation_proof": false
+}

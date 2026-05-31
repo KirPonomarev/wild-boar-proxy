@@ -1,0 +1,54 @@
+{
+  "audited_at_utc": "2026-05-11T18:38:09Z",
+  "scope_files_used": [
+    "/Volumes/Work/wild-boar-proxy/CANON.md",
+    "/Volumes/Work/wild-boar-proxy/MASTER_PLAN.md",
+    "/Volumes/Work/wild-boar-proxy/RUNTIME_CONTRACT.md",
+    "/Volumes/Work/wild-boar-proxy/COMMAND_API.md",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c22_integration_preflight_packet_2026-05-11.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c24_precondition_packet_2026-05-11.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c24_operation_declaration_2026-05-11.md",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c24_live_matrix_2026-05-11.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/external_lab_c24_decision_packet_2026-05-11.json"
+  ],
+  "scope_drift_detected": false,
+  "overclaim_detected": false,
+  "invalid_status_transitions": false,
+  "mandatory_criteria_statuses": {
+    "closed_by_evidence": [
+      "same_day_live_20_account_contour_executed",
+      "20_accounts_registered_across_active_and_reserve",
+      "staged_promotion_passes_rollback_points",
+      "bounded_probing_works_without_request_storm",
+      "c24_hard_check_suite_clean_or_explicitly_adjudicated"
+    ],
+    "evidence_progress": [],
+    "blocked_by_runtime_precondition": [
+      "no_contradictory_machine_signal_reopens_gate_a_closure"
+    ],
+    "live_only_pending": []
+  },
+  "unresolved_mandatory_count": 1,
+  "consistency_checks": {
+    "matrix_unresolved": 1,
+    "decision_unresolved": 1,
+    "match": true
+  },
+  "gate_b_status_check": {
+    "present": true,
+    "status": "out_of_scope_or_not_closed",
+    "valid": true
+  },
+  "secondary_debug_fact_check": {
+    "recommended_c24_outcome": "HOLD_WITH_EXACT_BLOCKERS",
+    "contradictory_machine_signal_reopens_gate_a": true,
+    "quota_rule_respected": true
+  },
+  "final_verdict": "CANONICALLY_JUSTIFIED_HOLD_WITH_EXACT_BLOCKERS",
+  "notes": [
+    "Live matrix and decision packet align on one unresolved Gate A blocker: policy_drift-driven claim_gate/rotation contradiction.",
+    "Gate B remains out of scope/not closed.",
+    "Quota exhaustion is treated as non-blocking under the declared contour."
+  ]
+}

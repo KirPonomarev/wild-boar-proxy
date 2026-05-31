@@ -1,0 +1,25 @@
+{
+  "current_head": "f11bcd1",
+  "comparison_commit": "f11bcd1",
+  "current_returncode": 1,
+  "head_returncode": 1,
+  "current_failures": [
+    "test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof",
+    "test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof",
+    "test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+    "test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success",
+    "test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible",
+    "test_sync_does_not_expose_deterministic_stable_recovery_result"
+  ],
+  "head_failures": [
+    "test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof",
+    "test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof",
+    "test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+    "test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success",
+    "test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible",
+    "test_sync_does_not_expose_deterministic_stable_recovery_result"
+  ],
+  "same_failure_names": true,
+  "current_failure_count": 6,
+  "head_failure_count": 6
+}

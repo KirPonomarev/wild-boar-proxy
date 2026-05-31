@@ -1,0 +1,18 @@
+{
+  "blocked_packet_count": 0,
+  "captured_at_utc": "2026-05-28T09:08:11.649102Z",
+  "ok_packet_count": 9,
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "top_level_packet_statuses": {
+    "availability_claim_boundary_packet.json": "ok",
+    "browser_selection_payload_negative_packet.json": "ok",
+    "false_green_audit.json": "ok",
+    "independent_model_grid_audit.json": "ok",
+    "model_catalog_contract_packet.json": "ok",
+    "model_grid_bound_authority_summary_packet.json": "ok",
+    "model_grid_visibility_boundary_packet.json": "ok",
+    "server_selection_binding_packet.json": "ok",
+    "sync_gate_packet.json": "ok"
+  }
+}

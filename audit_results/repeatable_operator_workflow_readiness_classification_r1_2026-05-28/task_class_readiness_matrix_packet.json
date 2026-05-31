@@ -1,0 +1,51 @@
+{
+  "baseline_only_preferred_count": 1,
+  "captured_at_utc": "2026-05-28T13:58:15.624050Z",
+  "ceremony_only_count": 0,
+  "class_count_summary_is_readiness_proof": false,
+  "indeterminate_count": 0,
+  "packet_kind": "task_class_readiness_matrix",
+  "rows": [
+    {
+      "baseline_completed": true,
+      "baseline_only_preferred": true,
+      "ceremony_only": false,
+      "chain_completed": true,
+      "classification": "baseline_only_preferred",
+      "indeterminate": false,
+      "preferred_by_default_proven": false,
+      "task_class_id": "route_selection",
+      "useful_with_limits": false
+    },
+    {
+      "baseline_completed": true,
+      "baseline_only_preferred": false,
+      "ceremony_only": false,
+      "chain_completed": true,
+      "classification": "useful_with_limits",
+      "indeterminate": false,
+      "preferred_by_default_proven": false,
+      "task_class_id": "coding_artifact_skeleton",
+      "useful_with_limits": true
+    },
+    {
+      "baseline_completed": true,
+      "baseline_only_preferred": false,
+      "ceremony_only": false,
+      "chain_completed": true,
+      "classification": "useful_with_limits",
+      "indeterminate": false,
+      "preferred_by_default_proven": false,
+      "task_class_id": "review_return_artifact",
+      "useful_with_limits": true
+    }
+  ],
+  "status": "ok",
+  "task_class_count": 3,
+  "task_class_ids": [
+    "route_selection",
+    "coding_artifact_skeleton",
+    "review_return_artifact"
+  ],
+  "useful_with_limits_count": 2
+}

@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T12:04:26.821163Z",
+  "failure_semantics_counts_as_family_wide_compatibility": false,
+  "packet_kind": "provider_failure_semantics_matrix",
+  "rows": [
+    {
+      "failure_taxonomy_counts_as_provider_family_compatibility": false,
+      "generic_failure_semantics_classified": true,
+      "provider_family": "deepseek",
+      "provider_specific_failure_semantics_proven": false
+    },
+    {
+      "failure_taxonomy_counts_as_provider_family_compatibility": false,
+      "generic_failure_semantics_classified": true,
+      "provider_family": "openrouter",
+      "provider_specific_failure_semantics_proven": false
+    }
+  ],
+  "status": "ok"
+}

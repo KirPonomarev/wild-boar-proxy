@@ -1,0 +1,35 @@
+{
+  "captured_at_utc": "2026-05-27T12:38:54.323469Z",
+  "historical_source_packet_chain": true,
+  "invalid_json_packets": {
+    "app_server_bridge": [],
+    "design_gate": [],
+    "design_gate_proof": [],
+    "provider_benchmark": [],
+    "provider_matrix": [],
+    "remote_gate": [],
+    "stage20_verify": []
+  },
+  "loaded_packet_count": 7,
+  "missing_packets": {
+    "app_server_bridge": [],
+    "design_gate": [],
+    "design_gate_proof": [],
+    "provider_benchmark": [],
+    "provider_matrix": [],
+    "remote_gate": [],
+    "stage20_verify": []
+  },
+  "new_scope_invented_in_this_contour": false,
+  "packet_kind": "optional_annex_source_inventory",
+  "source_paths": {
+    "app_server_bridge": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_app_server_bridge_research_classification_r1_2026-05-27",
+    "design_gate": "/Volumes/Work/wild-boar-proxy/audit_results/web_design_gate_admission_check_pass_2026-05-16",
+    "design_gate_proof": "/Volumes/Work/wild-boar-proxy/audit_results/web_design_finish_pass_reentry_reconciliation_2026-05-24",
+    "provider_benchmark": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_benchmarking_admission_classification_r1_2026-05-27",
+    "provider_matrix": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_adapter_matrix_classification_r1_2026-05-27",
+    "remote_gate": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_remote_control_readiness_gate_classification_r1_2026-05-27",
+    "stage20_verify": "/Volumes/Work/wild-boar-proxy/audit_results/stage20_c6_verification_packet.json"
+  },
+  "status": "ok"
+}

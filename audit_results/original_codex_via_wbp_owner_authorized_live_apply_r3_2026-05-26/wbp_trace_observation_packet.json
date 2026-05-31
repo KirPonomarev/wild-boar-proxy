@@ -1,0 +1,19 @@
+{
+  "auth_header_recorded": false,
+  "captured_at_utc": "2026-05-26T14:53:19.652456Z",
+  "forwarded_to_wbp": false,
+  "model_id": "",
+  "packet_kind": "wbp_trace_observation",
+  "raw_auth_recorded": false,
+  "raw_prompt_recorded": false,
+  "request_body_sha256": "",
+  "request_observed": false,
+  "response_body_sha256": "",
+  "response_hash_recorded": false,
+  "response_observed": false,
+  "route_status": "missing",
+  "status": "blocked",
+  "trace_path": "",
+  "upstream_status": null,
+  "upstream_status_ok": false
+}

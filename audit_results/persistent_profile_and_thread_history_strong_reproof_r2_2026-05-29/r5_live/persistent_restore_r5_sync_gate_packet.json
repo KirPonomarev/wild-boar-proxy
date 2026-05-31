@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-29T05:47:03.160325Z",
+  "git_branch": "SKIPPED_FOR_TEST",
+  "git_head": "SKIPPED_FOR_TEST",
+  "git_status_short": [],
+  "live_mutation_attempted": false,
+  "master_plan_written_to_repo": false,
+  "native_launch_attempted": false,
+  "packet_kind": "persistent_restore_r5_sync_gate",
+  "quarantined_entry_count": 0,
+  "status": "ok",
+  "unexpected_dirty_entries": []
+}

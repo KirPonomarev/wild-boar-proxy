@@ -1,0 +1,14 @@
+{
+  "auth_command_path": "/Volumes/Work/wild-boar-proxy/wbp_codex_auth_command.py",
+  "browser_supplied": false,
+  "captured_at_utc": "2026-05-26T12:44:31.779044Z",
+  "expected_output_shape": "plain_token_stdout",
+  "json_access_token_stdout": false,
+  "native_live_invocation_attempted": false,
+  "output_shape": "plain_token_stdout",
+  "packet_kind": "auth_command_output_format",
+  "plain_token_stdout": true,
+  "raw_upstream_secret": false,
+  "secret_value_emitted_in_packet": false,
+  "status": "ok"
+}

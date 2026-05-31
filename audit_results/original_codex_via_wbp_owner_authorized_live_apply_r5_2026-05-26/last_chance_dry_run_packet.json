@@ -1,0 +1,16 @@
+{
+  "candidate_sha256": "cc5f6308ca7d19b7b18a57d66c77e985d6cd160beca273c4950f4ade96ffb5b8",
+  "candidate_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "captured_at_utc": "2026-05-26T14:57:06.625662Z",
+  "dry_run_performed": true,
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "failed_checks": [],
+  "original_profile_write_performed": false,
+  "owner_authorization_current_after_dry_run": true,
+  "packet_kind": "original_live_last_chance_dry_run",
+  "raw_auth_token_recorded": false,
+  "reason_class": "",
+  "status": "ok",
+  "temporary_route_apply_allowed": true,
+  "temporary_route_apply_performed": false
+}

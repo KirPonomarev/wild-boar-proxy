@@ -1,0 +1,60 @@
+{
+  "date": "2026-05-12",
+  "auditor": "Dalton",
+  "mode": "independent_read_only_audit",
+  "overall_verdict": "hold_packet_valid_after_blocker_normalization",
+  "findings": [
+    {
+      "priority": "P1",
+      "title": "Current live/raw state does not support reopening on status truth alone",
+      "sources": [
+        "audit_results/latest_status_raw.json:1",
+        "audit_results/latest_rotation_inspect_raw.json:1",
+        "audit_results/latest_accounts_list_raw.json:1"
+      ],
+      "detail": "Status is green/clear, but rotation evidence remains insufficient and accounts still show no reserve posture."
+    },
+    {
+      "priority": "P1",
+      "title": "Alias drift exists between stage20_c6, step42, and latest raw state",
+      "sources": [
+        "audit_results/stage20_c6_verification_packet.json:119-123",
+        "audit_results/step42_decision_packet.json:26-31",
+        "audit_results/step42_normalization_decision_packet.json:7-31"
+      ],
+      "detail": "The hold packet must distinguish active current blockers from historical/inherited labels that are now clear in latest status."
+    },
+    {
+      "priority": "P2",
+      "title": "Reopen conditions must be packet/state changes rather than narrative milestones",
+      "sources": [
+        "audit_results/stage20_c6_verification_packet.json:125-129",
+        "audit_results/latest_rotation_inspect_raw.json:1",
+        "audit_results/latest_accounts_list_raw.json:1"
+      ],
+      "detail": "The first admissible reopen point is conditioned on observable reserve posture, rotation evidence, and contradiction resolution."
+    }
+  ],
+  "wording_risks": [
+    {
+      "priority": "P1",
+      "detail": "Do not soften the hold by leaning on latest green status alone."
+    },
+    {
+      "priority": "P2",
+      "detail": "Do not collapse CLAIM_GATE_BLOCKED, INSUFFICIENT_ELIGIBLE_POOL, and NO_EXPLICIT_RESERVE_POSTURE into a generic 'blocker fixed' narrative."
+    }
+  ],
+  "recommended_state_model": {
+    "active_current_blockers": [
+      "OWNER_SURFACE_CONTRADICTION",
+      "ROTATION_EVIDENCE_INSUFFICIENT",
+      "NO_EXPLICIT_RESERVE_POSTURE",
+      "INSUFFICIENT_ELIGIBLE_POOL"
+    ],
+    "historical_or_inherited_related_labels_now_clear": [
+      "CLAIM_GATE_BLOCKED",
+      "STABLE_POLICY_DRIFT"
+    ]
+  }
+}

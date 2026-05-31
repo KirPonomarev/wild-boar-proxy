@@ -1,0 +1,39 @@
+{
+  "contour": "UI_WEB_DIAGNOSTICS_CANONICAL_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent read-only subagent",
+  "verdict": "no_findings",
+  "scope": {
+    "modified_runtime_files": false,
+    "modified_command_adapter_files": false,
+    "modified_live_server_files": false,
+    "modified_desktop_files": false,
+    "modified_ui_files": true,
+    "modified_tests": true
+  },
+  "command_boundary": {
+    "diagnostics_live_server_allowlist_export_only": true,
+    "diagnostics_screen_export_action_only": true,
+    "full_check_disabled": true,
+    "lifecycle_actions_absent_from_diagnostics_markup": true
+  },
+  "metrics_review": {
+    "states_reviewed": [
+      "fixture_healthy",
+      "fixture_degraded",
+      "fixture_down",
+      "fixture_stale",
+      "live_integration_failure"
+    ],
+    "diagnostics_screen_bottom_px": 929,
+    "telemetry_tick_count": 48,
+    "visible_svg_icons": 0,
+    "telemetry_scale_width_px_min": 712,
+    "after_screenshots_present": true
+  },
+  "evidence": {
+    "after_metrics": "audit_results/ui_web_diagnostics_canonical_recomposition_pass_2026-05-14/after_metrics.json",
+    "after_screenshots": "audit_results/ui_web_diagnostics_canonical_recomposition_pass_2026-05-14/screenshots/after/",
+    "ui_test_boundary": "tests/test_web_design_ui.py:605-676"
+  }
+}

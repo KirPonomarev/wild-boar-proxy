@@ -1,0 +1,11 @@
+{
+  "captured_at": "2026-05-15T15:03:29.247931+00:00",
+  "source_contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "original_machine_error_code": "MISSING_ONBOARD_BIN",
+  "original_missing_paths": [
+    "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+    "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts",
+    "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status",
+    "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh"
+  ]
+}

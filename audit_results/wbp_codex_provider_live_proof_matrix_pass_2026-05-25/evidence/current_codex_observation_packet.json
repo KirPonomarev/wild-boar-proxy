@@ -1,0 +1,77 @@
+{
+  "captured_at_utc": "2026-05-25T12:32:46.367390Z",
+  "packet_kind": "current_codex_observation",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "schema_version": 1,
+  "variants_compared": [
+    "variant_a_env_key",
+    "variant_b_auth_command"
+  ],
+  "comparisons_variant_a": {
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    }
+  },
+  "comparisons_variant_b": {
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    }
+  },
+  "current_codex_untouched_on_targeted_files": true,
+  "secret_value_recorded": false
+}

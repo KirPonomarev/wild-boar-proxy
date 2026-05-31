@@ -1,0 +1,16 @@
+{
+  "status": "blocked_no_reusable_session_found",
+  "current_files_tested": 25,
+  "stable_repair_target_files_tested": 15,
+  "success_count": 0,
+  "class_counts": {
+    "current_cli_proxy_auth_dir|failed|deactivated_workspace": 5,
+    "current_cli_proxy_auth_dir|failed|token_expired": 2,
+    "current_cli_proxy_auth_dir|failed|auth_invalidated": 9,
+    "current_cli_proxy_auth_dir|failed|quota_exhausted": 9,
+    "stable_repair_target_copy|failed|token_expired": 15
+  },
+  "live_proxy_chat_status": "failed",
+  "live_proxy_failure_class": "auth_unavailable",
+  "blocked_resolution_class": "owner_reauth_only_for_needed_accounts"
+}

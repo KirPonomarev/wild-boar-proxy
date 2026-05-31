@@ -1,0 +1,26 @@
+{
+  "endpoint": "/api/codex/custom/recovery/rollback-point/verify",
+  "method": "GET",
+  "browser_payload_allowed": false,
+  "browser_payload_allowed_keys": [],
+  "browser_forbidden_fields_rejected": true,
+  "query_payload_rejected": {
+    "status": "blocked",
+    "machine_error_code": "ROLLBACK_POINT_VERIFY_BROWSER_FIELD_REJECTED",
+    "forbidden_fields": [
+      "artifact_id",
+      "digest",
+      "path"
+    ],
+    "filesystem_read_performed": false,
+    "filesystem_write_performed": false
+  },
+  "post_verify_status": 404,
+  "ui_projection": {
+    "allowlisted_packet_fields_only": true,
+    "no_browser_artifact_id_input": true,
+    "no_browser_artifact_path_input": true,
+    "no_browser_digest_input": true,
+    "no_browser_session_id_input": true
+  }
+}

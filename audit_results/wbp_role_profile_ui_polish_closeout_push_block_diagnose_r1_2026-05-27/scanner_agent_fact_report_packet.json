@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T13:04:30.348353Z",
+  "facts": [
+    "remote GitHub API branch read is healthy",
+    "remote branch head before push attempts: d3f0643a96ddf0fb42f3f1e6753e96fda42b02db",
+    "remote branch head after push attempts: d3f0643a96ddf0fb42f3f1e6753e96fda42b02db",
+    "local branch head is d3f0643a96ddf0fb42f3f1e6753e96fda42b02db",
+    "ls-remote read-path checks were skipped or incomplete",
+    "helpered push path was not exercised because remote already matched local head"
+  ],
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok"
+}

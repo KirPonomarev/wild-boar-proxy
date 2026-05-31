@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-26T08:14:28.614867Z",
+  "catalog_schema_version": 1,
+  "required_top_level_fields_checked": [
+    "schema_version",
+    "status",
+    "machine_error_code",
+    "contract_scope",
+    "model_provider",
+    "base_url",
+    "wire_api",
+    "default_model",
+    "model_count",
+    "models",
+    "allowed_claims",
+    "forbidden_claims",
+    "claim_limits"
+  ],
+  "schema_version": 1,
+  "validation_findings": [],
+  "validation_passed": true,
+  "validator": "validate_wbp_model_catalog_contract"
+}

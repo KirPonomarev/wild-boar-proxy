@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "reused_as_settled_truth": true,
+  "source_artifact_ref": "/Volumes/Work/wild-boar-proxy/audit_results/external_route_responses_adapter_and_live_proof_pass_2026-05-25/evidence/prompt_packet.json",
+  "route_class": "external_api",
+  "live_prompt_full_success": true,
+  "wbp_path_proven": true,
+  "route_provenance_proven": true,
+  "current_codex_touched": false,
+  "expected_marker": "WBP_CUSTOM_EXTERNAL_API_OK"
+}

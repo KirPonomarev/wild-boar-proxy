@@ -1,0 +1,310 @@
+{
+  "initial_modal": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 79,
+    "targetBottom": 834,
+    "targetWidth": 640,
+    "targetHeight": 755,
+    "modalHidden": false,
+    "flowHidden": true,
+    "actionPanelClass": "action-panel neutral compact-action-panel",
+    "bannerClass": "onboarding-result-banner neutral",
+    "bannerText": "Результат подключения ещё не получен.",
+    "selectedBackend": "-",
+    "reserveProof": "-",
+    "statusProof": "-",
+    "refreshState": "pending",
+    "activeButtons": [
+      "Отмена",
+      "Добавить в резерв"
+    ],
+    "disabledButtons": [],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 1,
+    "overflows": []
+  },
+  "running": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel neutral onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner neutral",
+    "bannerText": "Результат подключения недостаточен для зелёного вывода; UI не достраивает успех.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh not required",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "reserve_only_success": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel green onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner green",
+    "bannerText": "Аккаунт добавлен в резерв. Активная маршрутизация не изменялась.",
+    "selectedBackend": "acct-new",
+    "reserveProof": "доказано",
+    "statusProof": "confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "no_new_auth": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel amber onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner amber",
+    "bannerText": "Новых auth-данных не найдено. Действие не добавило аккаунт.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "ambiguous": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel amber onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner amber",
+    "bannerText": "Требуется действие оператора: найдено несколько возможных кандидатов.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "validation_failed": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel red onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner red",
+    "bannerText": "Проверка не пройдена. Аккаунт не используется для маршрутизации.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "sync_skipped": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel green onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner green",
+    "bannerText": "Аккаунт добавлен в резерв. Активная маршрутизация не изменялась.",
+    "selectedBackend": "acct-sync",
+    "reserveProof": "доказано",
+    "statusProof": "confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "status_proof_failed": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel red onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner red",
+    "bannerText": "Статус не подтверждён. Результат onboarding не считается runtime truth.",
+    "selectedBackend": "-",
+    "reserveProof": "доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "command_error": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel red onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner red",
+    "bannerText": "reserve_only_success: команда не дала безопасный reserve-first успех.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh pending",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  },
+  "invalid_json_timeout": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 913,
+    "mainScrollHeight": 855,
+    "mainClientHeight": 855,
+    "targetTop": 86,
+    "targetBottom": 873,
+    "targetWidth": 1216,
+    "targetHeight": 787,
+    "modalHidden": true,
+    "flowHidden": false,
+    "actionPanelClass": "action-panel compact-action-panel red onboarding-result-expanded",
+    "bannerClass": "onboarding-result-banner red",
+    "bannerText": "Результат подключения недостаточен для зелёного вывода; UI не достраивает успех.",
+    "selectedBackend": "-",
+    "reserveProof": "не доказано",
+    "statusProof": "not confirmed",
+    "refreshState": "refresh not required",
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Проверить аккаунт · отдельное действие",
+      "Открыть аккаунт · после refresh"
+    ],
+    "inputs": 0,
+    "fileInputs": 0,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 5,
+    "overflows": []
+  }
+}

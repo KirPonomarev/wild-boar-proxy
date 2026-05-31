@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T19:41:29.643490Z",
+  "direct_egress_absence_proven": false,
+  "fresh_route_reproved_in_this_contour": false,
+  "historical_or_incidental_context_only": true,
+  "historical_route_context_present": false,
+  "historical_route_context_status": "not_collected",
+  "incidental_wbp_request_observed": false,
+  "model_availability_proven": false,
+  "owner_observation_replaces_route_trace": false,
+  "packet_kind": "historical_or_incidental_route_context",
+  "response_accepted_by_codex_proven": false,
+  "routing_proven": false,
+  "status": "ok"
+}

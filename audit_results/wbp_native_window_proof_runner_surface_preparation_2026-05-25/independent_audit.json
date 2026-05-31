@@ -1,0 +1,53 @@
+{
+  "audit_id": "INDEPENDENT_AUDIT_WBP_NATIVE_WINDOW_PROOF_RUNNER_SURFACE_PREPARATION_2026-05-25",
+  "audit_date": "2026-05-25",
+  "auditor": "opencode-orchestrator",
+  "status": "ok",
+  "binary_verdict": "PHASE9_WINDOW_PROOF_BLOCKED_PENDING_RUNNER_PREPARATION",
+  "forced_by": [
+    {
+      "file": "wild_boar_proxy/native_launch_contract.py",
+      "facts": {
+        "admission_scope": "admission_only_no_runtime_launch",
+        "live_launch_performed": false,
+        "native_window_observed": false,
+        "route_trace_bound": false
+      }
+    },
+    {
+      "file": "wild_boar_proxy/native_launch_dispatch.py",
+      "facts": {
+        "does_not_execute_os_launch_commands": true,
+        "live_runtime_surface": "bounded_dispatch_only",
+        "native_launch_complete": false,
+        "product_status_upgraded": false
+      }
+    },
+    {
+      "file": "wild_boar_proxy/cli_runner.py",
+      "facts": {
+        "runner_surface_kind": "non_native_cli_only",
+        "reusable_runner_surface_present": true
+      }
+    },
+    {
+      "file": "audit_results/wbp_native_codex_custom_authorized_process_window_usability_proof_pass_2026-05-25/evidence/native_custom_live_dispatch_packet.json",
+      "facts": {
+        "process_observed": true,
+        "window_observed": false,
+        "window_observation_blocked_reason_class": "pid_visible_but_accessible_window_absent",
+        "current_codex_touched": true
+      }
+    },
+    {
+      "file": "audit_results/wbp_native_codex_custom_window_usability_reproof_pass_2026-05-25/evidence/native_repaired_window_observation_packet.json",
+      "facts": {
+        "window_observed": false,
+        "window_pid_bound_to_launch": false,
+        "window_observation_source": "AX/System Events process by unix id over launch process group",
+        "machine_error_code": "NATIVE_WINDOW_OBSERVATION_NOT_PROVEN"
+      }
+    }
+  ],
+  "final_verdict": "closed_success"
+}

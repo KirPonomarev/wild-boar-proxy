@@ -1,0 +1,14 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "head_before_contour": "a884b20",
+  "sandbox_fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "pre_reproof_basis": {
+    "approved_target_reference_status": "materialized_aligned",
+    "desired_source_kind": "approved_repair_target",
+    "effective_source_kind": "observed_stable_inventory_source",
+    "activation_readiness_status": "activation_pending",
+    "policy_drift_status": "clear",
+    "claim_gate_status": "blocked"
+  },
+  "contour_rule": "prefer healthcheck truth first, then use launch smoke only if effective runtime truth remains unsettled"
+}

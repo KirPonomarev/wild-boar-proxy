@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_ACCOUNTS_HOLD_RELEASE_ACTION_GATE",
+  "captured_at_utc": "2026-05-12T19:20:03Z",
+  "status": "pass_with_unrelated_dirty_worktree_note",
+  "scope": {
+    "implemented": [
+      "accounts_hold command adapter entry using structured account_id",
+      "accounts_release command adapter entry using structured account_id",
+      "hold_account and release_account UI action metadata",
+      "server-side payload allowlist limited to ui_action plus account_id for account actions",
+      "server-side safe account_id validation",
+      "server-side accounts list preflight before hold/release",
+      "server-side eligibility checks for manual_hold and retired pool",
+      "accounts screen hold/release buttons with confirmation",
+      "post-action accounts readonly refresh"
+    ],
+    "forbidden_scope_not_implemented": [
+      "desktop transfer",
+      "runtime.py changes by this contour",
+      "direct state/log reads",
+      "browser command_id or raw argv submission",
+      "account promote/demote/retire/onboard controls",
+      "post-action sync"
+    ]
+  },
+  "browser_smoke": {
+    "server": "fake-runner local ThreadingHTTPServer",
+    "url_shape": "http://127.0.0.1:<port>/?source=live&screen=accounts",
+    "hold_button_selector": "button.account-action[data-ui-action=\"hold_account\"][data-account-id=\"acct-active\"]",
+    "release_button_selector": "button.account-action[data-ui-action=\"release_account\"][data-account-id=\"acct-hold\"]",
+    "hold_button_count": 1,
+    "hold_button_enabled": true,
+    "release_button_count": 1,
+    "release_button_enabled": true,
+    "hold_confirmation": {
+      "ui_action": "hold_account",
+      "account_id": "acct-active"
+    },
+    "hold_result": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "account_id": "acct-active",
+      "post_action_refresh": "live refresh ok"
+    },
+    "release_confirmation": {
+      "ui_action": "release_account",
+      "account_id": "acct-hold"
+    },
+    "release_result": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "account_id": "acct-hold",
+      "post_action_refresh": "live refresh ok"
+    },
+    "runner_calls": [
+      ["accounts", "list", "--json"],
+      ["accounts", "list", "--json"],
+      ["accounts", "hold", "acct-active", "--json"],
+      ["accounts", "list", "--json"],
+      ["accounts", "list", "--json"],
+      ["accounts", "release", "acct-hold", "--json"],
+      ["accounts", "list", "--json"]
+    ],
+    "runner_calls_meaning": [
+      "initial accounts live render",
+      "hold target preflight",
+      "bounded account hold command",
+      "post-hold accounts refresh",
+      "release target preflight",
+      "bounded account release command",
+      "post-release accounts refresh"
+    ]
+  },
+  "verification": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "ok"
+    },
+    "targeted_adapter_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_command_adapter",
+      "tests": 17,
+      "status": "ok"
+    },
+    "targeted_live_server_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_live_server",
+      "tests": 20,
+      "status": "ok"
+    },
+    "targeted_ui_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_ui",
+      "tests": 12,
+      "status": "ok"
+    },
+    "combined_web_tests": {
+      "command": "python3 -m unittest -q tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+      "tests": 49,
+      "status": "ok"
+    },
+    "full_discover_tests": {
+      "command": "python3 -m unittest discover -s tests -p 'test_*.py' -q",
+      "tests": null,
+      "duration_seconds": null,
+      "status": "failed_before_local_proxy_bypass",
+      "failure_summary": "urllib local HTTP tests received 503 from system HTTP proxy 127.0.0.1:10809"
+    },
+    "full_discover_tests_after_proxy_bypass": {
+      "command": "python3 -m unittest discover -s tests -p 'test_*.py' -q",
+      "tests": 543,
+      "duration_seconds": 252.863,
+      "status": "ok"
+    },
+    "zero_test_guard": {
+      "command": "python3 -m unittest -q",
+      "tests": 0,
+      "status": "rejected_as_not_success"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "status": "ok"
+    }
+  },
+  "independent_audit": {
+    "agent": "Hubble",
+    "status": "pass",
+    "risk_note": "nonblocking banner copy drift was fixed after audit"
+  },
+  "diagnostic_fix": {
+    "reason": "macOS/system urllib proxies routed local test HTTP requests through 127.0.0.1:10809 and produced 503",
+    "change": "test local HTTP helpers use urllib ProxyHandler({}) for localhost test servers"
+  },
+  "known_unrelated_dirty_state": [
+    "wild_boar_proxy/runtime.py",
+    "external_agent_lab/legacy/agent_eval.py",
+    "external_agent_lab/legacy/proxy_server.py",
+    "external_agent_lab/legacy/run_lab.py",
+    "external_agent_lab/model_registry_seed.json",
+    "tests/test_external_agent_lab.py",
+    "pre-existing external_lab audit artifacts"
+  ],
+  "next_action": "commit_only_this_contour_files"
+}

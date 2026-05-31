@@ -1,0 +1,19 @@
+{
+  "bounded_non_equivalence_explicit": true,
+  "broad_original_filesystem_innocence_claimed": false,
+  "captured_at_utc": "2026-05-27T16:17:17.277131Z",
+  "current_original_profile_write_performed": false,
+  "final_e2e_claimed": false,
+  "final_status": "ORIGINAL_CODEX_VIA_WBP_PROVEN_REVERSIBLE",
+  "general_original_works_claimed": false,
+  "historical_reversibility_imported": true,
+  "original_codex_profile_dependency": false,
+  "original_equivalence_claimed": false,
+  "packet_kind": "custom_original_codex_drift",
+  "reversibility_proven_on_declared_observed_surfaces_only": true,
+  "source_classification_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_original_codex_via_wbp_reversibility_import_r1_2026-05-27/original_wbp_reversibility_classification_packet.json",
+  "source_live_pass_imported": true,
+  "source_original_non_dependency_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/original_codex_profile_non_dependency_packet.json",
+  "source_summary_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_original_codex_via_wbp_reversibility_import_r1_2026-05-27/original_wbp_reversibility_summary_packet.json",
+  "status": "ok"
+}

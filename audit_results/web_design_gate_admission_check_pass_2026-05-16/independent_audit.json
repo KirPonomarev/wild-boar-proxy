@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_DESIGN_GATE_ADMISSION_CHECK_PASS",
+  "date": "2026-05-16",
+  "primary_audit": {
+    "auditor": "Sagan",
+    "verdict": "PASS",
+    "proposed_conclusion_audited": "DESIGN_GATE_ADMITTED",
+    "summary": "Blocked live truths do not automatically revoke the gate under the repo's own stage20_c6 evidence; the token remains earned while later live blockers stay explicit."
+  },
+  "dissenting_audit": {
+    "auditor": "Franklin",
+    "verdict": "FAIL",
+    "proposed_conclusion_audited": "DESIGN_GATE_ADMITTED",
+    "summary": "Treated claim_gate/policy_drift/rotation/pool blockers as incompatible with gate admission."
+  },
+  "adjudication": {
+    "selected_verdict": "PASS",
+    "resolution": "Accepted the PASS audit because stage20_c6 expressly records a non-repo-owned NO_GO path where the design gate is earned and later live blockers remain separate, and no higher-priority source explicitly revokes that token."
+  }
+}

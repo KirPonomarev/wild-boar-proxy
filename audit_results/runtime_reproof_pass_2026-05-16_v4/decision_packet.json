@@ -1,0 +1,18 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v4",
+  "status": "completed",
+  "final_verdict": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "why": [
+    "healthcheck --json confirmed healthy runtime attestation but did not invoke the stable recovery lane or settle the runtime-consumer gap",
+    "launch smoke --json succeeded with launcher_exit_code=0 and promoted effective stable runtime consumer truth back to approved_target_active_by_activation_evidence",
+    "post-smoke status --json cleared claim_gate and policy_drift while desired and effective runtime truth both aligned on the approved repair target",
+    "post-smoke rollout rotation inspect --json remained stale because selected_backend_snapshot stayed outside the freshness window"
+  ],
+  "next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "sandbox auth.json materialization",
+    "repeating launch smoke without new runtime regression evidence"
+  ]
+}

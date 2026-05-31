@@ -1,0 +1,21 @@
+{
+  "blocked_reasons": [
+    "custom native contract still requires isolated_home_plan=true",
+    "FILE_AUTH native lane is not statically proven or admitted in current contract surfaces"
+  ],
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "external_strategy_id": "A1_external_real_home_file_auth",
+  "fallback_only": true,
+  "fallback_role_preserved": true,
+  "live_launch_performed": false,
+  "machine_error_code": "A1_NOT_ADMISSION_READY_UNDER_CURRENT_CONTRACT",
+  "packet_kind": "strategy_a1_fallback",
+  "ref_lines": [
+    "wild_boar_proxy/native_launch_contract.py:124-139",
+    "wild_boar_proxy/native_launch_contract.py:441-460"
+  ],
+  "repo_canon_alignment": false,
+  "runtime_claims_deferred": true,
+  "schema_version": 1,
+  "status": "blocked"
+}

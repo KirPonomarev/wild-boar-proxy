@@ -1,0 +1,37 @@
+{
+  "agent_verdict_counted": false,
+  "audit_mode": "local_materialized_packet_plus_optional_agent_report",
+  "captured_at_utc": "2026-05-28T15:02:21.843328Z",
+  "findings": [
+    {
+      "evidence": "protected_surface_recheck_packet.json",
+      "id": "repo_dirt_not_counted_as_protected_surface_drift",
+      "severity": "info",
+      "status": "ok"
+    },
+    {
+      "evidence": "integrity_strengthening_packet.json",
+      "id": "imported_safety_not_promoted_to_reproven_truth",
+      "severity": "info",
+      "status": "ok"
+    },
+    {
+      "evidence": "original_codex_untouched_packet.json",
+      "id": "current_contour_non_mutation_remains_bounded_scope_only",
+      "severity": "info",
+      "status": "ok"
+    },
+    {
+      "evidence": "original_codex_untouched_packet.json",
+      "id": "bundle_hash_scope_only_not_full_runtime_integrity",
+      "severity": "medium",
+      "status": "open_with_limits"
+    }
+  ],
+  "imported_final_e2e_integrity_status": "ok",
+  "integrity_strengthening_classification": "integrity_blocker_localized_as_ambient_external",
+  "original_codex_untouched_classification": "inspection_only_untouched_with_ambient_drift_blocker",
+  "packet_kind": "stronger_integrity_recheck_independent_audit",
+  "protected_surface_recheck_classification": "attribution_localized_with_limits",
+  "status": "ok"
+}

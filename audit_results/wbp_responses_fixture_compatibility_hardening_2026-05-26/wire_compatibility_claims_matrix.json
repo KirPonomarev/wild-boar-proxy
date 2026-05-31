@@ -1,0 +1,27 @@
+{
+  "allowed_claims": [
+    "WBP Responses fixture assets exist",
+    "non-stream Responses shape is fixture-compatible",
+    "stream text SSE sequence is fixture-compatible",
+    "upstream 4xx/5xx and unknown model errors are not green",
+    "function_call input is translated to chat-completions tool_calls",
+    "function_call_output follow-up is translated to tool message shape",
+    "reasoning items are classified as ignored/not passthrough without leaking reasoning summary",
+    "prompt/auth logging boundary is fixture-tested"
+  ],
+  "captured_at_utc": "2026-05-26T07:53:04.804950Z",
+  "forbidden_claims": [
+    "native Codex.app works",
+    "Codex CLI consumer works",
+    "Original Codex via WBP works",
+    "direct egress absent",
+    "all models work",
+    "GPT-5.5 works",
+    "full provider compatibility",
+    "full final E2E",
+    "complete hosted tool compatibility",
+    "reasoning passthrough compatibility"
+  ],
+  "machine_error_code": "WBP_RESPONSES_FIXTURE_COMPATIBILITY_HARDENED",
+  "status": "ok"
+}

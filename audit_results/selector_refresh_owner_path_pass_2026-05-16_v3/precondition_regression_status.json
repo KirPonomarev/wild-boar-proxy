@@ -1,0 +1,17 @@
+{
+  "fresh_status_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "effective_stable_runtime_consumer_source": "observed_source_active",
+    "consumer_activation_readiness": "activation_pending",
+    "activation_evidence_surface_status": "snapshot_stale",
+    "activation_snapshot_observed_at_utc": "2026-05-15T23:51:17.705624+00:00"
+  },
+  "precondition_result": {
+    "runtime_green_before_selector_refresh": false,
+    "selector_refresh_contour_can_continue_honestly": false
+  }
+}

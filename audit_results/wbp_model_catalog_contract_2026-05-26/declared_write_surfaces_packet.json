@@ -1,0 +1,21 @@
+{
+  "allowed_write_surfaces": [
+    "wild_boar_proxy/codex_model_registry.py",
+    "tests/test_wbp_model_catalog_contract.py",
+    "tests/test_codex_model_registry.py",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/*"
+  ],
+  "captured_at_utc": "2026-05-26T08:14:28.614546Z",
+  "contour": "WBP_MODEL_CATALOG_CONTRACT_CONTOUR_R1",
+  "forbidden_write_surfaces": [
+    "~/.codex",
+    "~/Library/Application Support/Codex",
+    "~/Library/Caches/com.openai.codex",
+    "~/Library/HTTPStorages/com.openai.codex",
+    "Codex.app bundle",
+    "CLIProxyAPI live account files"
+  ],
+  "live_runtime_mutation": false,
+  "rollback_expectation": "remove code/test/evidence changes from this contour only; no runtime rollback required",
+  "schema_version": 1
+}

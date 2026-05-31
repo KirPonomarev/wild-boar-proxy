@@ -1,0 +1,59 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_READONLY_SCREEN",
+  "date": "2026-05-12",
+  "status": "pass",
+  "truth_surface": "accounts list --json via accounts_list adapter command",
+  "implemented_surfaces": {
+    "web_navigation": "Overview <-> Accounts via screen query/data-screen",
+    "live_endpoint": "/api/accounts-readonly",
+    "fixture_mode": "accounts fixture synthesized from selected overview fixture",
+    "redaction": "server-side account label/path/error minimization"
+  },
+  "browser_smoke": {
+    "server": "fake MappingRunner, no real runtime mutation",
+    "fixture_url": "http://127.0.0.1:<ephemeral>/?screen=accounts&source=fixture&state=healthy",
+    "live_url": "http://127.0.0.1:<ephemeral>/?screen=accounts&source=live&state=healthy",
+    "fixture_observed": {
+      "accounts_nav_count": 1,
+      "accounts_table_count": 1,
+      "overview_hidden_count": 1,
+      "accounts_visible_count": 1,
+      "private_leak": false,
+      "lifecycle_command_visible": false
+    },
+    "live_observed": {
+      "accounts_visible_count": 1,
+      "table_rows": 4,
+      "registry_text": "registry identity: ok · OK",
+      "banner_text": "Accounts live read-only. Truth comes only from the canonical accounts JSON packet; lifecycle actions are deferred.",
+      "active_chip": "1 активных",
+      "private_leak": false,
+      "lifecycle_command_visible": false
+    }
+  },
+  "verification": {
+    "node_check": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "targeted_tests": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter",
+    "targeted_tests_result": "Ran 41 tests OK",
+    "combined_regression": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui",
+    "combined_regression_result": "Ran 148 tests OK",
+    "diff_check": "git diff --check",
+    "diff_check_result": "OK",
+    "independent_audit": "PASS"
+  },
+  "layer_checks": {
+    "desktop_transfer_started": false,
+    "account_lifecycle_actions_enabled": false,
+    "browser_sends_command_id": false,
+    "browser_sends_client_path": false,
+    "direct_state_or_log_reads": false,
+    "runtime_py_touched_by_contour": false,
+    "ui_shell_touched_by_contour": false,
+    "web_ui_touched_by_contour": false
+  },
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py remains dirty outside this contour and was not staged.",
+    "Visual parity is baseline only; typography and full design polish remain future work.",
+    "Account lifecycle controls remain deferred to a separate contour."
+  ]
+}

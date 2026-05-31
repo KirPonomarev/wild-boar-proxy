@@ -1,0 +1,42 @@
+{
+  "contour": "UI_WEB_GLOBAL_CANONICAL_SURFACE_AUDIT_PASS",
+  "date": "2026-05-15",
+  "scans": [
+    {
+      "name": "private external-reference trace scan",
+      "command": "rg -n forbidden external-reference terms wild_boar_proxy tests audit_results/ui_web_global_canonical_surface_audit_pass_2026-05-15",
+      "status": "PASS",
+      "classification": "No matches in scanned paths."
+    },
+    {
+      "name": "release and desktop claim scan",
+      "command": "rg -n fake release/desktop claims wild_boar_proxy/web_design_ui tests/test_web_design_ui.py",
+      "status": "PASS_WITH_BENIGN_TEST_HITS",
+      "classification": "Matches were negative assertions in tests only. UI markup and runtime JavaScript had no forbidden release or desktop readiness claim."
+    },
+    {
+      "name": "browser input and raw read scan",
+      "command": "rg -n tail|readFile|logs|diagnostics.*bundle|localStorage|sessionStorage|readAsText|showOpenFilePicker|webkitdirectory|type=file|contenteditable|textarea|input",
+      "status": "PASS_WITH_BENIGN_HITS",
+      "classification": "UI hits are details elements, CSS selectors, safe redaction labels, and preview-only source/state selects. No file picker, editable path, token, secret, or raw config editor is active in the audited surfaces."
+    },
+    {
+      "name": "raw config and JSON editor scan",
+      "command": "rg -n raw_route_json|route_config|client_path|source_dir|data_dir|base_url|endpoint_path|config.toml|state.json|routes.json|secrets.env",
+      "status": "PASS_WITH_BENIGN_TEST_AND_FIXTURE_HITS",
+      "classification": "UI markup and runtime JavaScript do not expose editable raw config surfaces. Test hits are negative assertions or redaction fixtures. Route secret_ref appears only as a reference label, not a secret value."
+    },
+    {
+      "name": "visible icon scan",
+      "command": "Chrome DevTools Protocol DOM metrics at 1600x1000",
+      "status": "PASS",
+      "classification": "visibleSvgIcons=0 on audited routes; visibleImgIcons were present."
+    }
+  ],
+  "truth_boundary": {
+    "command_ok_is_not_runtime_truth": "Covered by existing action ledger and onboarding tests; no runtime or command surface changed in this contour.",
+    "stale_green": "State matrix shows stale banners on primary planned routes. Some green sub-statuses remain on diagnostics/setup where they describe component-level admitted/OK facts, not global runtime health.",
+    "live_runtime": "No live mutation was performed."
+  },
+  "verdict": "PASS_WITH_DOCUMENTED_FOLLOWUPS"
+}

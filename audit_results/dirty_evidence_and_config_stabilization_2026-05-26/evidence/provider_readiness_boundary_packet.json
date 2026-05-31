@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "provider_repair_in_scope": false,
+  "provider_availability_proven_by_this_contour": false,
+  "native_routing_proven_by_this_contour": false,
+  "open_code_evidence_in_scope": false,
+  "basis": [
+    "commit e75de850 recorded CLIProxy session recovery audit with no reusable session found under lab conditions",
+    "this contour did not run OAuth, account mutation, provider repair, native Codex launch, or prompt-response proof"
+  ],
+  "allowed_statement": "provider availability remains unproven by this contour",
+  "forbidden_statements": [
+    "working provider",
+    "native routing re-proven",
+    "accounts repaired",
+    "OpenCode proves Codex Custom"
+  ]
+}

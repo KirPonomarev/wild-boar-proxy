@@ -1,0 +1,93 @@
+{
+  "captured_at_utc": "2026-05-25T13:40:42.979543Z",
+  "machine_error_code": "OK",
+  "packet_kind": "current_codex_observation",
+  "payload": {
+    "after": {
+      "codex_auth": {
+        "exists": true,
+        "is_dir": false,
+        "mtime_ns": 1779424645682385204,
+        "path_label": "~/.codex/auth.json",
+        "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+        "size": 4697
+      },
+      "codex_config": {
+        "exists": true,
+        "is_dir": false,
+        "mtime_ns": 1779714910541729434,
+        "path_label": "~/.codex/config.toml",
+        "sha256": "2164191e6198ef9d66dedf5a7a12ba8fea5b40068f1f5084ba4bac704d95f6d0",
+        "size": 5606
+      }
+    },
+    "before": {
+      "codex_auth": {
+        "exists": true,
+        "is_dir": false,
+        "mtime_ns": 1779424645682385204,
+        "path_label": "~/.codex/auth.json",
+        "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+        "size": 4697
+      },
+      "codex_config": {
+        "exists": true,
+        "is_dir": false,
+        "mtime_ns": 1779714910541729434,
+        "path_label": "~/.codex/config.toml",
+        "sha256": "2164191e6198ef9d66dedf5a7a12ba8fea5b40068f1f5084ba4bac704d95f6d0",
+        "size": 5606
+      }
+    },
+    "comparisons": {
+      "codex_auth": {
+        "after": {
+          "exists": true,
+          "is_dir": false,
+          "mtime_ns": 1779424645682385204,
+          "path_label": "~/.codex/auth.json",
+          "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+          "size": 4697
+        },
+        "before": {
+          "exists": true,
+          "is_dir": false,
+          "mtime_ns": 1779424645682385204,
+          "path_label": "~/.codex/auth.json",
+          "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+          "size": 4697
+        },
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": true,
+        "size_unchanged": true
+      },
+      "codex_config": {
+        "after": {
+          "exists": true,
+          "is_dir": false,
+          "mtime_ns": 1779714910541729434,
+          "path_label": "~/.codex/config.toml",
+          "sha256": "2164191e6198ef9d66dedf5a7a12ba8fea5b40068f1f5084ba4bac704d95f6d0",
+          "size": 5606
+        },
+        "before": {
+          "exists": true,
+          "is_dir": false,
+          "mtime_ns": 1779714910541729434,
+          "path_label": "~/.codex/config.toml",
+          "sha256": "2164191e6198ef9d66dedf5a7a12ba8fea5b40068f1f5084ba4bac704d95f6d0",
+          "size": 5606
+        },
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": true,
+        "size_unchanged": true
+      }
+    },
+    "targeted_files_unchanged": true
+  },
+  "secret_value_recorded": false,
+  "status": "ok",
+  "targeted_files_unchanged": true
+}

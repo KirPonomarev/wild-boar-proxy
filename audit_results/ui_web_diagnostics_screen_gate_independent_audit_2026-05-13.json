@@ -1,0 +1,41 @@
+{
+  "contour_id": "UI_WEB_DIAGNOSTICS_SCREEN_GATE",
+  "auditor": "Bernoulli",
+  "date": "2026-05-13",
+  "mode": "read_only_independent_audit",
+  "verdict": "no blocking findings in diagnostics-screen scope",
+  "findings": [
+    {
+      "severity": "high",
+      "scope": "unrelated_dirty_tail",
+      "paths": [
+        "wild_boar_proxy/runtime.py"
+      ],
+      "summary": "Dirty runtime.py changes exist in the worktree and are outside the diagnostics-screen contour.",
+      "adjudication": "Valid scope warning; do not stage or include in this UI commit."
+    },
+    {
+      "severity": "medium",
+      "scope": "unrelated_dirty_tail",
+      "paths": [
+        "external_agent_lab/legacy/agent_eval.py",
+        "external_agent_lab/legacy/proxy_server.py",
+        "external_agent_lab/model_registry_seed.json",
+        "tests/test_external_agent_lab.py"
+      ],
+      "summary": "Dirty external-agent lab changes exist in the worktree and are outside the diagnostics-screen contour.",
+      "adjudication": "Valid scope warning; do not stage or include in this UI commit."
+    }
+  ],
+  "diagnostics_scope_assessment": {
+    "web_design_ui_changes_boundary_aligned": true,
+    "tests_cover_support_artifact_contract": true,
+    "allowlist_metadata_checked": true,
+    "command_id_and_path_payload_rejection_checked": true,
+    "no_direct_runtime_or_bundle_reads_found_in_patch": true
+  },
+  "residual_risks": [
+    "Visual parity was smoke-checked by DOM only; full screenshot review remains for the later visual stabilization contour.",
+    "The worktree still contains unrelated runtime and external-agent lab dirty tail that must remain excluded from UI commits."
+  ]
+}

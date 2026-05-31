@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "bounded_proxy_load": {
+    "total_requests": 20,
+    "concurrency": 3,
+    "success_count": 20,
+    "failure_count": 0,
+    "latency_ms": {
+      "min": 1394.8,
+      "max": 2909.3,
+      "avg": 1783.7
+    }
+  },
+  "owner_smoke": {
+    "single_latency_ms": 1705.9,
+    "concurrent_probe_classification": "owner_lane_serializes_via_lock",
+    "concurrent_probe_machine_error_codes": [
+      "LOCK_HELD",
+      "OK"
+    ]
+  }
+}

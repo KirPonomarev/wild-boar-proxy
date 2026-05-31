@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-05-28T14:52:29.363325Z",
+  "no_product_readiness_claim": true,
+  "open_native_visible_restore_gap": true,
+  "packet_kind": "history_restore_gap_matrix",
+  "rows": [
+    {
+      "claim_boundary": "profile identity only; not thread restore by itself",
+      "id": "stable_profile_identity",
+      "status": "reduced"
+    },
+    {
+      "claim_boundary": "helper reload only; not native visible restore",
+      "id": "helper_reload_continuity",
+      "status": "reduced"
+    },
+    {
+      "claim_boundary": "requires direct native/user-visible observation",
+      "id": "native_visible_restore",
+      "status": "open_with_limits"
+    },
+    {
+      "claim_boundary": "slot reload remains separate from thread history",
+      "id": "history_slot_separation",
+      "status": "reduced"
+    }
+  ],
+  "status": "ok",
+  "synthetic_storage_limiter_reduced": true
+}

@@ -1,0 +1,33 @@
+{
+  "contour_id": "WBP_NATIVE_WINDOW_HOST_CAPABILITY_RESOLUTION_PASS",
+  "date": "2026-05-25",
+  "status": "closed_success",
+  "binary_verdict": "NATIVE_WINDOW_OBSERVATION_CAPABILITY_NOT_PROVEN",
+  "host_checks": {
+    "quartz_import": {
+      "status": "blocked",
+      "error_class": "ModuleNotFoundError",
+      "error": "No module named 'Quartz'"
+    },
+    "application_services_import": {
+      "status": "blocked",
+      "error_class": "ModuleNotFoundError",
+      "error": "No module named 'ApplicationServices'"
+    },
+    "system_events_ui_elements_enabled": {
+      "status": "ok",
+      "value": false
+    }
+  },
+  "historical_evidence": {
+    "window_contour_blocked": true,
+    "alternate_observation_blocked": true,
+    "formal_blocker": "input_capable_window_not_proven_for_pid"
+  },
+  "non_claims": [
+    "native_window_proven",
+    "provider_routing_proven",
+    "prompt_response_proven",
+    "Original_Codex_via_WBP_proven"
+  ]
+}

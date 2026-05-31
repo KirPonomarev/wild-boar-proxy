@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-29T04:28:55.513532Z",
+  "session_id": "codex-f43e4142d69e4e728fd666f18e8d8868",
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "handoff_observed": true,
+  "device_url": "https://auth.openai.com/codex/device",
+  "device_code_present": true,
+  "session_process_alive": false,
+  "classification": "browser_success_handoff_reearned_and_consumed"
+}

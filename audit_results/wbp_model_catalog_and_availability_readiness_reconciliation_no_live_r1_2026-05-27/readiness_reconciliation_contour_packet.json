@@ -1,0 +1,11 @@
+{
+  "actual_evidence_path": "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27",
+  "captured_at_utc": "2026-05-27T09:06:05.232867Z",
+  "contour_name": "WBP_MODEL_CATALOG_AND_AVAILABILITY_READINESS_RECONCILIATION_NO_LIVE_R1",
+  "contour_target_status": "WBP_MODEL_CATALOG_AND_AVAILABILITY_READINESS_RECONCILIATION_NO_LIVE_R1_CLASSIFIED",
+  "no_live_contour": true,
+  "packet_kind": "model_availability_readiness_reconciliation_contour",
+  "planned_evidence_path": "audit_results/wbp_model_catalog_and_availability_readiness_reconciliation_no_live_r1_2026-05-27",
+  "planned_path_used": true,
+  "status": "ok"
+}

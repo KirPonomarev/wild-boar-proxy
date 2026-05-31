@@ -1,0 +1,18 @@
+{
+  "assistant_followup_after_tool_observed": true,
+  "captured_at_utc": "2026-05-27T08:51:25.022089Z",
+  "failure_cause": "none",
+  "followup_response_shape_accepted": true,
+  "followup_response_status": "completed",
+  "followup_upstream_status_code": 200,
+  "machine_error_code": "OK",
+  "packet_kind": "responses_tool_loop",
+  "request_attempted": true,
+  "status": "ok",
+  "tool_call_emitted_counts_as_tool_loop": false,
+  "tool_call_observed": true,
+  "tool_loop_shape_accepted": true,
+  "tool_loop_success_counts_as_model_availability": false,
+  "tool_result_roundtrip_observed": true,
+  "upstream_status_code": 200
+}

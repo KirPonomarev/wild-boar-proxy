@@ -1,0 +1,19 @@
+{
+  "contour_id": "WBP_CODEX_SHIM_REFERENCE_EXTRACTION_AND_ADOPTION_MATRIX_PASS",
+  "date": "2026-05-25",
+  "status": "closed_success",
+  "priority_recommendation": "does_not_change_current_critical_path",
+  "bucket_counts": {
+    "adopt_now": 5,
+    "defer_until_later_phase": 6,
+    "reject_for_canon_conflict": 3,
+    "needs_separate_risk_contour": 2
+  },
+  "critical_path_unchanged": true,
+  "core_rule_alignment": {
+    "engine_remains_CLIProxyAPI": true,
+    "managing_layer_remains_WBP": true,
+    "shim_not_runtime_truth": true,
+    "native_proof_layers_not_skipped": true
+  }
+}

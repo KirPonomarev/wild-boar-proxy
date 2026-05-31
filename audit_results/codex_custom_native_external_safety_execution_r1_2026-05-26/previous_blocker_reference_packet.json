@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T18:14:50.274122Z",
+  "packet_kind": "previous_blocker_reference",
+  "referenced_commit": "f7a4eb7297e8c6096486318dd757b1c3b3cfc3ea",
+  "referenced_native_launch_attempted": false,
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_2026-05-26/native_safety_blocker_packet.json",
+  "referenced_packet_status": "present",
+  "referenced_status": "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_HOSTED_EXECUTOR_CONTEXT",
+  "status": "ok"
+}

@@ -1,0 +1,33 @@
+{
+  "blocked_observer_counted_as_pass": false,
+  "captured_at_utc": "2026-05-26T13:54:59.427404Z",
+  "checks": [
+    {
+      "name": "historical_route_trace_not_current_egress_proof",
+      "passed": true
+    },
+    {
+      "name": "owner_ux_not_network_proof",
+      "passed": true
+    },
+    {
+      "name": "screenshot_not_network_proof",
+      "passed": true
+    },
+    {
+      "name": "observer_feasibility_not_absence_claim",
+      "passed": true
+    },
+    {
+      "name": "no_api_or_full_network_absence_claim",
+      "passed": true
+    },
+    {
+      "name": "no_live_native_launch_claim",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "native_egress_observer_false_green_audit",
+  "status": "ok"
+}

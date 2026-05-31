@@ -1,0 +1,36 @@
+{
+  "audit_actor": "gpt-5.4-mini explorer Huygens",
+  "audit_scope": "WBP_NATIVE_CUSTOM_EXTERNAL_DETACHED_SAFETY_EXECUTION_EVIDENCE_R1",
+  "captured_at_utc": "2026-05-26T10:50:00Z",
+  "commands_reported_by_auditor": [
+    "pytest targeted entrypoint test returned 1 passed, 68 deselected"
+  ],
+  "expected_result": "EXTERNAL_NATIVE_SAFETY_EXECUTION_NO_EVIDENCE_PRODUCED",
+  "finding_count": 0,
+  "findings": [],
+  "packet_kind": "independent_audit",
+  "referenced_files": [
+    "wild_boar_proxy/native_filesystem_probe.py",
+    "tests/test_native_filesystem_probe.py",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/execution_scope_boundary_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_execution_summary_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_execution_observation_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_execution_command_verification_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_execution_result_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/external_evidence_presence_packet.json",
+    "audit_results/wbp_native_custom_external_execution_evidence_2026-05-26/historical_dirt_quarantine_packet.json"
+  ],
+  "status": "PASS",
+  "verified_claims": {
+    "execution_evidence_only": true,
+    "external_evidence_missing_classified": true,
+    "filesystem_safety_classified": false,
+    "historical_dirty_evidence_quarantined": true,
+    "native_launch_from_current_thread": false,
+    "native_safety_pass_claimed": false,
+    "no_auth_model_reproof_claim": true,
+    "no_current_thread_external_command": true,
+    "no_route_ux_egress_claim": true,
+    "safety_result_imported": false
+  }
+}

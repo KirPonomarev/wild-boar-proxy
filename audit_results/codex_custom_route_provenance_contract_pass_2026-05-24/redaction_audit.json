@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_ROUTE_PROVENANCE_CONTRACT_PASS",
+  "status": "passed",
+  "raw_secret_findings": [],
+  "raw_provider_credential_findings": [],
+  "raw_account_auth_findings": [],
+  "notes": [
+    "No live command was run.",
+    "No provider credential was read or written.",
+    "No runtime credential file was copied into artifacts.",
+    "Final regex scan passed with no findings."
+  ]
+}

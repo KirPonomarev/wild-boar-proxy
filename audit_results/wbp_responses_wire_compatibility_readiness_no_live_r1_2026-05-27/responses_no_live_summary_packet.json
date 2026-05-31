@@ -1,0 +1,31 @@
+{
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T06:58:39.431152Z",
+  "codex_consumer_acceptance_proven": false,
+  "direct_egress_absence_proven": false,
+  "does_not_close": [
+    "WBP_RESPONSES_LIVE_COMPATIBILITY_CLASSIFIED",
+    "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+    "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+    "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED",
+    "WBP_NATIVE_CODEX_APP_LAUNCH_COMPLETE"
+  ],
+  "failure_semantics_fixture_ok": true,
+  "final_e2e_proven": false,
+  "final_status": "WBP_RESPONSES_WIRE_COMPATIBILITY_READINESS_NO_LIVE_R1_CLASSIFIED",
+  "live_full_failure_semantics_compatibility_proven": false,
+  "live_full_streaming_compatibility_proven": false,
+  "live_full_tool_call_loop_compatibility_proven": false,
+  "missing_required_packets": [],
+  "model_availability_proven": false,
+  "native_codex_acceptance_proven": false,
+  "non_stream_fixture_ok": true,
+  "packet_kind": "responses_no_live_summary",
+  "parent_master_target": "WBP_RESPONSES_LIVE_COMPATIBILITY_CLASSIFIED",
+  "parent_master_target_closed": false,
+  "provider_reachability_proven": false,
+  "status": "ok",
+  "stream_fixture_ok": true,
+  "tool_loop_fixture_ok": true,
+  "transform_profile_fixture_ok": true
+}

@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-25T10:59:29.253113Z",
+  "cleanup_custom_owned_only": true,
+  "cleanup_error": "",
+  "machine_error_code": "OK",
+  "matched_pids_after_term": [
+    11180
+  ],
+  "matched_pids_before_cleanup": [
+    11180
+  ],
+  "packet_kind": "cleanup_reversibility",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok",
+  "temp_root_removed": true
+}

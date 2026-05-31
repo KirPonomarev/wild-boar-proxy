@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_PASS",
+  "status": "passed_for_blocked_run",
+  "current_codex_touched": false,
+  "runtime_auth_files_touched": false,
+  "provider_credentials_read": false,
+  "provider_credentials_written": false,
+  "repo_secret_written": false,
+  "live_network_call_made": false,
+  "live_prompt_call_made": false
+}

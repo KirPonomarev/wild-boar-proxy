@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-29T12:05:51.454179Z",
+  "consumer_streaming_accepted": false,
+  "consumer_tool_semantics_accepted": false,
+  "model_driven_function_tool_protocol_supported": false,
+  "packet_kind": "provider_semantic_limits_inheritance",
+  "plain_text_only_inherited": true,
+  "reference_mode": "reproved_via_current_probe_code",
+  "semantic_limits_dropped_from_passing_rows": false,
+  "status": "ok",
+  "streaming_classification_inherited": "current_adapter_sse_only_with_limits"
+}

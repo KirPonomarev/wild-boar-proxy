@@ -1,0 +1,58 @@
+{
+  "pre_state": {
+    "stable_repair": {
+      "surface": "stable repair --dry-run --json",
+      "machine_error_code": "OK",
+      "would_change": true,
+      "target_would_add_count": 6,
+      "target_would_prune_count": 2
+    },
+    "status": {
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "desired_source_kind": "observed_stable_inventory_source",
+      "effective_source_status": "observed_source_active"
+    },
+    "rotation": {
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "evidence_reason": "policy_drift_detected",
+      "policy_drift_status": "detected"
+    }
+  },
+  "owner_action": {
+    "surface": "stable repair --apply --json",
+    "machine_error_code": "STABLE_REPAIR_APPLIED",
+    "would_change": false,
+    "changed_files_count": 8,
+    "changed_files_scope": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/codex-*.json",
+    "target_would_add_count": 0,
+    "target_would_prune_count": 0
+  },
+  "post_state": {
+    "status": {
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "claim_gate_sources": [
+        "policy_drift"
+      ],
+      "desired_source_status": "approved_target_selected",
+      "desired_source_kind": "approved_repair_target",
+      "effective_source_status": "observed_source_active",
+      "effective_source_kind": "observed_stable_inventory_source",
+      "consumer_activation_readiness_status": "activation_pending",
+      "activation_evidence_surface_status": "snapshot_stale"
+    },
+    "rotation": {
+      "machine_error_code": "ROTATION_EVIDENCE_STALE",
+      "evidence_reason": "selected_backend_snapshot_stale",
+      "policy_drift_status": "clear",
+      "policy_drift_claim_surface_source": "approved_repair_target",
+      "selected_backend_count": 15,
+      "active_routing_candidate_count": 15
+    }
+  }
+}

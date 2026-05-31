@@ -1,0 +1,244 @@
+{
+  "contour_id": "UI_DONE_WORK_SCREEN_AND_ACTION_PASSPORT_BACKFILL",
+  "generated_on": "2026-05-12",
+  "repo_root": "/Volumes/Work/wild-boar-proxy",
+  "source_head": "0159955",
+  "work_type": "artifact_backfill_only",
+  "behavior_changes": false,
+  "canon_alignment": {
+    "runtime_truth": "Strict JSON command packets remain authoritative.",
+    "ui_truth_boundary": "The browser renders fixture or live command packets; it does not read state files or logs.",
+    "command_boundary": "Browser requests use ui_action with structured payload only. Adapter command ids and argv stay server-side.",
+    "desktop_boundary": "No desktop renderer files are introduced or modified by this contour.",
+    "dirty_tail_boundary": "Known external-agent/runtime dirty tail is out of scope for this UI artifact contour."
+  },
+  "screens": [
+    {
+      "screen_id": "01_overview_dashboard",
+      "implementation_status": "implemented",
+      "entry_points": {
+        "html": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:156",
+        "script": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:124",
+        "server": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:393"
+      },
+      "source_modes": [
+        {
+          "mode": "fixture",
+          "description": "Local JSON fixtures cover healthy, degraded, down, stale, unknown, integration failure, mode mismatch, and command error states.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:4",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:830"
+          ]
+        },
+        {
+          "mode": "live_readonly",
+          "endpoint": "/api/live-readonly",
+          "description": "Server executes the readonly command set and returns a normalized dashboard packet.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:393",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:126"
+          ]
+        }
+      ],
+      "truth_surfaces": [
+        {
+          "adapter_command_id": "status",
+          "argv": ["status", "--json"],
+          "purpose": "primary runtime status"
+        },
+        {
+          "adapter_command_id": "mode_get",
+          "argv": ["mode", "get", "--json"],
+          "purpose": "mode truth"
+        },
+        {
+          "adapter_command_id": "accounts_list",
+          "argv": ["accounts", "list", "--json"],
+          "purpose": "account pool summary"
+        },
+        {
+          "adapter_command_id": "healthcheck",
+          "argv": ["healthcheck", "--json"],
+          "purpose": "supporting health detail"
+        },
+        {
+          "adapter_command_id": "rollout_rotation_inspect",
+          "argv": ["rollout", "rotation", "inspect", "--json"],
+          "purpose": "supporting rotation detail"
+        }
+      ],
+      "implemented_ui_actions": [
+        "refresh_health_detail",
+        "export_diagnostics",
+        "stable_repair_plan",
+        "sync_runtime",
+        "set_mode_stable",
+        "set_mode_managed",
+        "launch_smoke",
+        "launch_client_dispatch"
+      ],
+      "deferred_or_bounded_controls": [
+        {
+          "control": "launch_client_dispatch",
+          "state": "bounded",
+          "reason": "Enabled only when server metadata exposes a server-owned launch_client_path; browser never submits arbitrary path.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:131",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:318",
+            "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:541"
+          ]
+        },
+        {
+          "control": "stable_repair_apply",
+          "state": "deferred",
+          "reason": "Adapter has a spec, but the UI action is not allowlisted in this completed contour.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:126",
+            "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580"
+          ]
+        },
+        {
+          "control": "diagnostics_navigation",
+          "state": "deferred",
+          "reason": "Navigation item is visible but disabled until the diagnostics screen contour.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:44"
+          ]
+        },
+        {
+          "control": "settings_navigation",
+          "state": "deferred",
+          "reason": "Navigation item is visible but disabled until the bounded settings contour.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:50"
+          ]
+        }
+      ],
+      "known_limits": [
+        "The overview remains a transferable web-rendered prototype, not the desktop app.",
+        "The UI may display action results, but canonical runtime truth still comes from command refresh packets.",
+        "Visual parity is not closed by this passport backfill contour."
+      ]
+    },
+    {
+      "screen_id": "04_accounts",
+      "implementation_status": "implemented_readonly_with_bounded_validate_hold_release",
+      "entry_points": {
+        "html": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:271",
+        "script": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:593",
+        "server": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:396"
+      },
+      "source_modes": [
+        {
+          "mode": "fixture_derived_accounts",
+          "description": "Accounts fixture is derived from overview fixture data; account actions are disabled in fixture mode.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:514",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:593"
+          ]
+        },
+        {
+          "mode": "accounts_live_readonly",
+          "endpoint": "/api/accounts-readonly",
+          "description": "Server executes accounts list --json only and returns the canonical accounts packet.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:38",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:396",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:162"
+          ]
+        }
+      ],
+      "truth_surfaces": [
+        {
+          "adapter_command_id": "accounts_list",
+          "argv": ["accounts", "list", "--json"],
+          "purpose": "canonical account pool and account registry truth"
+        }
+      ],
+      "implemented_ui_actions": [
+        "validate_account",
+        "hold_account",
+        "release_account"
+      ],
+      "action_visibility_rules": [
+        {
+          "rule": "per_row_account_actions_require_live_source",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:283",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:723"
+          ]
+        },
+        {
+          "rule": "retired_accounts_do_not_get_hold_or_release_buttons",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:713"
+          ]
+        },
+        {
+          "rule": "manual_hold_accounts_get_release; other non-retired accounts get hold",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:715"
+          ]
+        }
+      ],
+      "data_handling": [
+        {
+          "rule": "private account labels and paths are redacted before display",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:754"
+          ]
+        },
+        {
+          "rule": "account live mode copy states that canonical accounts JSON remains truth",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:625"
+          ]
+        }
+      ],
+      "deferred_or_bounded_controls": [
+        {
+          "control": "bulk_validate_selected",
+          "state": "deferred",
+          "reason": "Bulk account lifecycle action remains disabled in this contour.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:137",
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:678"
+          ]
+        },
+        {
+          "control": "add_account",
+          "state": "deferred",
+          "reason": "Onboarding modal is planned as a later contour.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:144"
+          ]
+        },
+        {
+          "control": "promote_demote_retire_onboard",
+          "state": "deferred",
+          "reason": "These actions are absent or blocked by current tests and belong to later action-gate contours.",
+          "refs": [
+            "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:212",
+            "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580"
+          ]
+        }
+      ],
+      "known_limits": [
+        "Accounts is no longer purely visual readonly when live mode is active; it includes bounded per-row validate/hold/release requests.",
+        "No promote, demote, retire, onboard, or bulk lifecycle implementation is admitted by this passport.",
+        "Visual and interaction gaps are intentionally deferred to the next gap-review contour."
+      ]
+    }
+  ],
+  "verification_basis": {
+    "tests_cover": [
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:335",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:413",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:465",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:179"
+    ],
+    "independent_readonly_inspection": "completed",
+    "expected_code_delta": "none"
+  }
+}

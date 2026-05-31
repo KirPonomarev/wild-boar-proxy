@@ -1,0 +1,26 @@
+{
+  "input": [
+    {
+      "arguments": "{\"cmd\":\"pwd\"}",
+      "call_id": "call_fixture_1",
+      "name": "shell",
+      "type": "function_call"
+    },
+    {
+      "call_id": "call_fixture_1",
+      "output": "/tmp/wbp-fixture",
+      "type": "function_call_output"
+    },
+    {
+      "content": [
+        {
+          "text": "Summarize the tool output",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "model": "wbp-fixture-route"
+}

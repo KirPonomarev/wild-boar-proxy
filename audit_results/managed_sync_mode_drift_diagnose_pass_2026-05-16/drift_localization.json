@@ -1,0 +1,50 @@
+{
+  "classification": "sync_owned_managed_write_surface_regression",
+  "transient_or_actionable": "actionable",
+  "primary_offending_surface": {
+    "name": "runtime-effective-mode authoritative file",
+    "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "written_by": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-healthcheck.sh:50-144",
+    "invoked_with": "managed at line 350",
+    "why_primary": "get_effective_mode reads this file before supervisor-state fallback"
+  },
+  "secondary_mirroring_surfaces": [
+    {
+      "name": "supervisor-state effective_mode",
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "written_by": [
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-healthcheck.sh:50-144",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-sync.sh:271-335"
+      ],
+      "invoked_with": [
+        "managed at supervisor-healthcheck.sh:350",
+        "managed at supervisor-sync.sh:1069"
+      ]
+    },
+    {
+      "name": "config.toml base_url",
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "written_by": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-healthcheck.sh:90-114",
+      "invoked_with": "managed endpoint base_url at line 350"
+    }
+  ],
+  "not_the_problem": [
+    {
+      "surface": "selected_backend_snapshot",
+      "reason": "fresh participation evidence is present and rotation inspect reports OK"
+    },
+    {
+      "surface": "stable_runtime_consumer_snapshot payload shape",
+      "reason": "snapshot still records approved_target_activated, but status cannot use it while live effective_mode remains managed"
+    }
+  ],
+  "propagation_chain": [
+    "sync --json shells out to supervisor-sync.sh",
+    "supervisor-sync.sh runs supervisor-healthcheck.sh",
+    "supervisor-healthcheck.sh rewrites runtime-effective-mode.txt, supervisor-state.effective_mode, and config.toml base_url to managed surfaces",
+    "supervisor-sync.sh final write_state also stamps supervisor-state.effective_mode = managed",
+    "status --json delegates to run_healthcheck, which reads runtime-effective-mode.txt first",
+    "because health payload effective_mode is managed, should_use_approved_target_policy_drift returns false",
+    "status falls back to observed auth-dir policy drift and blocks claim_gate"
+  ]
+}

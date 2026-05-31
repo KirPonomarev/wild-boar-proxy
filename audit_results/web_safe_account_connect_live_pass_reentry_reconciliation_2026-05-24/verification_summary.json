@@ -1,0 +1,43 @@
+{
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS_REENTRY_RECONCILIATION",
+  "head": "3a5617fe",
+  "checks": [
+    {
+      "name": "targeted live-server tests",
+      "command": "bundled python -m unittest -q 9 live-server tests",
+      "status": "pass",
+      "tests": 9
+    },
+    {
+      "name": "targeted UI tests",
+      "command": "bundled python -m unittest -q 5 UI tests",
+      "status": "pass",
+      "tests": 5
+    },
+    {
+      "name": "node syntax",
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "pass"
+    },
+    {
+      "name": "diff whitespace",
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "name": "local handler packets",
+      "command": "curl packets for actions metadata, start, status, complete, blocked auth_ref, invalid session id",
+      "status": "pass"
+    },
+    {
+      "name": "browser smoke",
+      "command": "Quick Start page live-connect modal and confirmation overlay check in browser",
+      "status": "pass"
+    }
+  ],
+  "result": {
+    "repo_owned_gap_found": false,
+    "slot_4_classification": "materially_satisfied_and_ready_for_canonical_reconciliation_closeout",
+    "next_slot": "WEB_SAFE_COMMANDS_EXPANSION_PASS"
+  }
+}

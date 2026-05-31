@@ -1,0 +1,75 @@
+{
+  "contour": "DESKTOP_APP_PACKAGE_PASS_REENTRY_RECONCILIATION",
+  "status": "closed_success",
+  "final_verdict": "DESKTOP_PACKAGE_SLOT_8_MATERIALLY_SATISFIED_BY_CURRENT_PACKAGE_CHAIN_WITH_RECONCILIATION_CLOSURE",
+  "classification": "desktop_package_closure_pass_needed",
+  "factual_conclusions": [
+    {
+      "id": "slot_8_material_equivalence",
+      "verdict": "proven",
+      "summary": "Current package proof and current tests materially satisfy master-plan slot 8 for the admitted package slice."
+    },
+    {
+      "id": "new_packaging_implementation_required",
+      "verdict": "not_required",
+      "summary": "No fresh repo-owned packaging implementation gap was proven during this reconciliation pass."
+    },
+    {
+      "id": "closure_drift_present",
+      "verdict": "proven",
+      "summary": "Existing package closeout contains stale git metadata and old push state that required a fresh reconciliation packet."
+    }
+  ],
+  "verification": {
+    "branch_sync": {
+      "head": "c1e151c",
+      "origin_head": "c1e151c",
+      "verdict": "in_sync"
+    },
+    "commit_ancestry": {
+      "package_head_recorded_contained_on_origin": true,
+      "package_commit_recorded_contained_on_origin": false
+    },
+    "commands": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_ui_shell -q",
+        "result": "pass",
+        "evidence": "Ran 116 tests ... OK"
+      },
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli.CliTests.test_package_launchable_launcher_smoke_packaged_continuity_json_works -q",
+        "result": "pass",
+        "evidence": "Ran 1 test ... OK"
+      },
+      {
+        "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "result": "pass"
+      },
+      {
+        "command": "git diff --check",
+        "result": "pass"
+      },
+      {
+        "command": "python3 tools/check_closeout_resilience.py audit_results/desktop_app_package_pass_2026-05-21/closeout.md audit_results/desktop_app_port_pass_reentry_reconciliation_2026-05-23/closeout.md",
+        "result": "pass"
+      }
+    ]
+  },
+  "supporting_evidence": {
+    "master_plan": "MASTER_PLAN.md:240-255",
+    "package_code": [
+      "wild_boar_proxy/runtime.py:4559",
+      "wild_boar_proxy/runtime.py:4861",
+      "wild_boar_proxy/runtime.py:4968",
+      "wild_boar_proxy/ui_shell.py:3265-3417",
+      "tests/test_ui_shell.py:2724-3077",
+      "tests/test_cli.py:1779",
+      "tests/test_cli.py:2040"
+    ],
+    "prior_packets": [
+      "audit_results/desktop_app_package_pass_2026-05-21/evidence/desktop_packaged_continuity_smoke.json",
+      "audit_results/desktop_app_package_pass_2026-05-21/evidence/package_contents_scan.json"
+    ],
+    "slot_7_reconciliation": "audit_results/desktop_app_port_pass_reentry_reconciliation_2026-05-23/closeout.md"
+  }
+}

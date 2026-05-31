@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-29T04:28:55.513532Z",
+  "session_id": "codex-f43e4142d69e4e728fd666f18e8d8868",
+  "classification": "native_stable_runtime_reproved",
+  "healthcheck_machine_error_code": "OK",
+  "status_machine_error_code": "OK",
+  "direct_native_probe_status": "ok",
+  "direct_native_probe_http_status": 200,
+  "responses_probe_passed": true
+}

@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-23T15:05:48.585865+00:00",
+  "checks": {
+    "ambient_proxy_hazard_fixed_for_probe_and_child": true,
+    "chosen_gpt_model_visible": true,
+    "current_codex_profile_unchanged": true,
+    "deepseek_only_success_path": false,
+    "engine_exit_zero": true,
+    "engine_ran": true,
+    "final_message_exact_wbp_ok": true,
+    "post_healthcheck_ok": true,
+    "post_status_ok": true,
+    "provider_route_claim_not_made": true,
+    "reasoning_effort_low_supported": true
+  },
+  "contour": "ISOLATED_CODEX_ENGINE_WBP_ENDPOINT_E2E_PASS",
+  "subagent_summary": {
+    "agent": {
+      "id": "019e554f-f5eb-7ea2-ae73-405898c06937",
+      "model_class": "5.4-mini scanner",
+      "nickname": "Nash"
+    },
+    "findings": [
+      "Do not mix GPT-facing runtime proof with GPT provider-route proof.",
+      "DeepSeek provider route proof is separate.",
+      "Runtime claims need status + healthcheck packet truth.",
+      "Route validate/check is not listener readiness or account routing proof."
+    ],
+    "integrated_into_this_contour": true
+  },
+  "verdict": "pass"
+}

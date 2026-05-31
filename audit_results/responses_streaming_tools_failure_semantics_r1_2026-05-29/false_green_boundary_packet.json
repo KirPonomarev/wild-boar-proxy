@@ -1,0 +1,11 @@
+{
+  "adapter_function_tool_admission_treated_as_model_driven_tool_support": false,
+  "adapter_normalized_success_treated_as_upstream_native_compatibility": false,
+  "adapter_sse_treated_as_upstream_streaming": false,
+  "adapter_tool_shape_treated_as_consumer_tool_execution": false,
+  "captured_at_utc": "2026-05-29T04:43:04.124747Z",
+  "failure_classification_treated_as_fallback_policy": false,
+  "packet_kind": "false_green_boundary",
+  "status": "ok",
+  "text_success_treated_as_structured_semantics": false
+}

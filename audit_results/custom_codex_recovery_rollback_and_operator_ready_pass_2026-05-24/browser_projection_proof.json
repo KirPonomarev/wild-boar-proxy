@@ -1,0 +1,36 @@
+{
+  "artifact_payload_sha256": "b5b68df59fe2145fb1a7b2fe501ff55c3c48da1f3a68ae806ebb6aef2a5a54e3",
+  "dom_checks": {
+    "codexCustomRecoveryOperatorMatrix": true,
+    "codexCustomRecoveryOperatorMatrixAction": true,
+    "codexCustomRecoveryOperatorMatrixPacket": true,
+    "packet_preview_has_bounded_ready_field": true,
+    "visible_text_has_operator_matrix": true
+  },
+  "endpoint": {
+    "bounded_local_operator_surface_ready": true,
+    "diagnostics_export_redacted": true,
+    "final_verdict": "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_SURFACE_READY_FOR_BOUNDED_LOCAL_USE",
+    "machine_error_code": "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_READY",
+    "operator_ready_claimed": false,
+    "process_kill_claimed": false,
+    "status": "ok"
+  },
+  "forbidden_query_probe": {
+    "bounded_local_operator_surface_ready": false,
+    "forbidden_fields": [
+      "auth",
+      "path",
+      "pid"
+    ],
+    "machine_error_code": "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BROWSER_FIELD_REJECTED",
+    "status": "blocked"
+  },
+  "post_probe": {
+    "http_status": 404
+  },
+  "schema_version": 1,
+  "status": "passed",
+  "tool": "Browser plugin via node_repl/iab",
+  "url": "http://127.0.0.1:8791/"
+}

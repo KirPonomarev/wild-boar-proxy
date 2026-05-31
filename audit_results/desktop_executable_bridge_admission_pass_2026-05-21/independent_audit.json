@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "contour": "DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS",
+  "date": "2026-05-21",
+  "auditor": "independent_repo_scan",
+  "verdict": "pass_with_minor_risks",
+  "scope_ok": true,
+  "recommended_status": "continue",
+  "findings": [
+    "The new lane is admission-only: it selects a route from refreshed truth, asks for confirmation, and dispatches `external-models profile codex-desktop --route <route> --json` without adding desktop file-path or native-bridge inputs.",
+    "The minimal packet+refresh proof is explicit: `run_external_profile_and_refresh()` runs the profile packet first and then refreshes `external-models` truth through status/models/routes packets.",
+    "The new payload helpers stay packet-bounded and only render `profile_packet_only` when the packet proves a non-mutating Codex Desktop profile contract."
+  ],
+  "risks": [
+    "The shell now loads external-models snapshot during ordinary refresh, which is broader than the single new admission lane, though still readonly and non-blocking.",
+    "Static audit could not itself execute Tk in the auditor environment; executable proof is supplied separately by the bundled-runtime smoke evidence."
+  ]
+}

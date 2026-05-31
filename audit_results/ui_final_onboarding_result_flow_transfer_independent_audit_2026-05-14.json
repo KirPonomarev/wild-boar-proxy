@@ -1,0 +1,56 @@
+{
+  "contour_id": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER",
+  "date": "2026-05-14",
+  "auditor": "subagent:019e26b1-6db0-7a70-8a4b-c84e304106d7",
+  "auditor_model": "gpt-5.4-mini",
+  "verdict": "PASS",
+  "audited_files": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "audit_results/ui_final_render_package_completeness_matrix_2026-05-14.json",
+    "audit_results/ui_final_render_surface_registry_2026-05-14.json",
+    "audit_results/ui_final_screen_passports_2026-05-14.json"
+  ],
+  "checks": [
+    {
+      "claim": "result flow is UI-only and rendered from payload.result.onboarding",
+      "result": "PASS"
+    },
+    {
+      "claim": "no command adapter/browser payload widening",
+      "result": "PASS"
+    },
+    {
+      "claim": "no direct runtime/state/log reads",
+      "result": "PASS"
+    },
+    {
+      "claim": "no active/promoted success claim",
+      "result": "PASS"
+    },
+    {
+      "claim": "reserve-first semantics only",
+      "result": "PASS"
+    }
+  ],
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "finding": "Second column min width could be tight on narrow viewports.",
+      "resolution": "Reduced the second result-grid column min width from 300px to 260px."
+    },
+    {
+      "finding": "Diff also contains already-existing metadata changes for 03_account_detail_drawer in shared registry/passport files.",
+      "resolution": "Not changed in this contour; tracked as shared package metadata already present in the working tree."
+    }
+  ],
+  "post_audit_hardening": [
+    {
+      "change": "Green success now also requires final_outcome=admitted.",
+      "file": "wild_boar_proxy/web_design_ui/scripts/overview.js"
+    }
+  ],
+  "final_result": "PASS"
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_OBSERVER_AND_LIVE_PROMPT_PASS",
+  "status": "blocked_by_operator_authorization",
+  "exact_phrase_required": "разрешаю тебе любые законные действия в рамках разработки проекта",
+  "exact_phrase_present_in_active_thread": false,
+  "near_miss_phrases_are_rejected": true,
+  "default_authorized_state": false,
+  "live_prompt_executed": false,
+  "prompt_runner_called": false,
+  "network_calls_made": false,
+  "provider_called": false,
+  "token_burn": 0,
+  "next_action": "owner_must_provide_exact_authorization_phrase_before_live_prompt"
+}

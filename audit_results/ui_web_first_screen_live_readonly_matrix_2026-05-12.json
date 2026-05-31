@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_LIVE_READONLY_BINDING",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "live_endpoint": "/api/live-readonly",
+  "source_modes": ["fixture", "live_readonly"],
+  "required_read_command_ids": [
+    "status",
+    "healthcheck",
+    "mode_get",
+    "accounts_list",
+    "rollout_rotation_inspect"
+  ],
+  "forbidden_commands": [
+    "launch_client",
+    "sync",
+    "mode_stable",
+    "mode_managed",
+    "smoke",
+    "stable_repair_dry_run",
+    "stable_repair_apply",
+    "diagnostics_export"
+  ],
+  "guardrails": {
+    "browser_command_id_submission": "not_supported",
+    "arbitrary_shell_from_browser": "not_supported",
+    "direct_state_file_truth": "not_introduced",
+    "stale_green_after_error": "blocked",
+    "action_buttons": "disabled",
+    "runtime_core_changes": "forbidden"
+  },
+  "real_smoke_observation": {
+    "local_url": "http://127.0.0.1:8788/?source=live",
+    "endpoint_status": "integration_failure",
+    "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "interpretation": "live read-only binding worked and refused to render green because rollout rotation inspect returned a command error"
+  }
+}

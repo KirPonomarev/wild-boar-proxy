@@ -1,0 +1,25 @@
+{
+  "contour": "RUNTIME_SELECTOR_PREREQUISITE_REGRESSION_DIAGNOSE_PASS",
+  "authority_order": [
+    {
+      "surface": "status --json",
+      "role": "authoritative current runtime truth",
+      "current_blocker_signal": "claim_gate blocked plus observed_source_active plus activation_pending"
+    },
+    {
+      "surface": "stable_runtime_consumer activation evidence contract",
+      "role": "authoritative explanation for whether approved_target policy surface may be used",
+      "current_blocker_signal": "activation_evidence snapshot stale"
+    },
+    {
+      "surface": "rollout rotation inspect --json",
+      "role": "authoritative selector freshness and participation evidence surface",
+      "current_blocker_signal": "selected_backend_snapshot_stale"
+    },
+    {
+      "surface": "stable repair --dry-run --json",
+      "role": "supporting family/policy surface only",
+      "current_blocker_signal": "would_change=false but lock held and no runtime recovery implied"
+    }
+  ]
+}

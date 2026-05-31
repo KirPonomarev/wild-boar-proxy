@@ -1,0 +1,26 @@
+{
+  "auth_command_output_is_raw_upstream_secret": false,
+  "auth_command_output_recorded_raw": false,
+  "captured_at_utc": "2026-05-27T04:34:56.213682Z",
+  "checks": [
+    {
+      "name": "wbp_local_token_not_upstream_secret",
+      "passed": true
+    },
+    {
+      "name": "auth_command_scope_local",
+      "passed": true
+    },
+    {
+      "name": "redacted_config_has_no_secret",
+      "passed": true
+    }
+  ],
+  "packet_kind": "auth_token_boundary",
+  "status": "ok",
+  "upstream_provider_secret_in_browser_payload": false,
+  "upstream_provider_secret_in_codex_config": false,
+  "upstream_provider_secret_in_evidence": false,
+  "upstream_provider_secret_in_remote_payload": false,
+  "wbp_local_bearer_token_is_upstream_provider_secret": false
+}

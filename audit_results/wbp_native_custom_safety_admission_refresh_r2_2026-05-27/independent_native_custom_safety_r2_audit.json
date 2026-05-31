@@ -1,0 +1,9 @@
+{
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T05:21:32.229726Z",
+  "forbidden_true_fields": [],
+  "native_launch_forbidden_scan_passed": true,
+  "packet_kind": "independent_native_custom_safety_r2_audit",
+  "status": "ok",
+  "text_only_report_counted_as_evidence": false
+}

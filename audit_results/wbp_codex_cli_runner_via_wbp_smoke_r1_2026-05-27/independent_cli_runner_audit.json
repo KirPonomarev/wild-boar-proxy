@@ -1,0 +1,13 @@
+{
+  "blocked_packets": [],
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "contour_validation_failures": [],
+  "created_at_utc": "2026-05-27T09:46:49.144248Z",
+  "egress_absence_claimed": false,
+  "native_app_claimed": false,
+  "packet_kind": "independent_cli_runner_audit",
+  "status": "passed",
+  "streaming_claimed": false,
+  "text_only_audit_counted_as_pass": false,
+  "tool_loop_claimed": false
+}

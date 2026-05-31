@@ -1,0 +1,11 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "classification": "expected_sync_managed_lane_switch_with_reopened_stable_policy_runtime_drift",
+  "basis": [
+    "selected_backend_snapshot is canonically materialized/refreshed only by sync --json after sync succeeded with managed-listener health verified",
+    "sync --json succeeded and set effective_mode=managed",
+    "fresh participation evidence is therefore managed-lane truth, not proof that the stable-chain auth path is restored",
+    "post-sync status and rotation both report policy_drift detected and claim_gate blocked",
+    "stable repair dry-run again reports would_change=true against the approved target inventory"
+  ]
+}

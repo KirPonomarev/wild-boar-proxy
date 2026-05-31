@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "contour": "NATIVE_CUSTOM_ROUTING_SMOKE_AFTER_AUTH_FIX_R1",
+  "status": "blocked_with_route_trace_evidence",
+  "machine_error_code": "KEYCHAIN_PROMPT_OBSERVED|WBP_UPSTREAM_503|PROTECTED_SURFACE_GUARD_UNSTABLE",
+  "verdict": "NATIVE_CUSTOM_OWNER_ASSISTED_WBP_FORWARD_PROVEN_BUT_CONTOUR_BLOCKED",
+  "positive_findings": {
+    "custom_process_observed": true,
+    "owner_assisted_prompt_input": true,
+    "trace_observer_request_observed": true,
+    "trace_path": "/v1/responses",
+    "forwarded_to_wbp": true,
+    "trace_upstream_status": 503,
+    "honest_route_error": true,
+    "cleanup_residual_removed": true
+  },
+  "blocking_findings": {
+    "keychain_prompt_observed": true,
+    "prompt_response_success": false,
+    "direct_egress_absence_proven": false,
+    "protected_surface_guard_changed_or_unstable": true,
+    "machine_ui_input_proof_claimed": false
+  },
+  "allowed_final_claim": "owner-assisted native Custom request reached WBP and received a 503 route error; full native/provider pass is blocked",
+  "non_claims": [
+    "prompt_response_success",
+    "machine_ui_input_proof",
+    "full_native_app_ux_pass",
+    "full_provider_network_pass",
+    "protected_surface_safety_pass",
+    "all_models_work",
+    "auth_command_contract_proven",
+    "Original_Codex_via_WBP",
+    "final_E2E"
+  ],
+  "secret_value_recorded": false
+}

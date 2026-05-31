@@ -1,0 +1,28 @@
+{
+  "auth_command_invoked": true,
+  "auth_command_stamp_raw_recorded": false,
+  "command_json_mode": true,
+  "command_kind": "codex_exec_json_stdin_prompt",
+  "command_uses_stdin_dash": true,
+  "completed_at_utc": "2026-05-26T15:43:28.794656Z",
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "exit_code": 0,
+  "expected_response_match_observed": true,
+  "last_message_len": 17,
+  "last_message_raw_recorded": false,
+  "last_message_sha256": "ee224c79058b24b34fa7a1599cb1d690ad4c4d9c6a715842aa88cd4d1f00ea51",
+  "raw_prompt_recorded": false,
+  "raw_stderr_recorded": false,
+  "raw_stdout_recorded": false,
+  "started_at_utc": "2026-05-26T15:43:26.403428Z",
+  "stderr_len": 1141,
+  "stderr_sha256": "24f5105a7afb3152f04ec33eb65e619955c69001787a727fbdb48ecd89c0dfbc",
+  "stdin_prompt_len": 68,
+  "stdin_prompt_sha256": "3b3fd2161d1f7068241f4a2ae62873369f4bec35afa8d45e3ec4e1a90bc64bea",
+  "stdout_len": 331,
+  "stdout_sha256": "fbe9829a5479b8c39c6b09fcab1802f5a95daacc232430500cdeb7fa7a753f61",
+  "warning_classes": [
+    "remote_plugin_sync_401",
+    "model_refresh_warning"
+  ]
+}

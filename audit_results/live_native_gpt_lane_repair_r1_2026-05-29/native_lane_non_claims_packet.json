@@ -1,0 +1,11 @@
+{
+  "all_listed_native_models_are_healthy": false,
+  "api_lane_success_repairs_native_lane": false,
+  "captured_at_utc": "2026-05-28T22:42:43.943307Z",
+  "launched_bridge_success_repairs_stable_runtime_native_path": false,
+  "owner_visible_model_presence_proves_native_responses_success": false,
+  "packet_kind": "native_lane_non_claims",
+  "status": "ok",
+  "this_contour_alone_closes_dual_lane_owner_visible_final_acceptance": false,
+  "visible_picker_entry_proves_live_success": false
+}

@@ -1,0 +1,31 @@
+{
+  "href": "http://127.0.0.1:8767/?screen=settings&section=client&state=down",
+  "screen": "settings",
+  "settingsSection": "client",
+  "documentScrollWidth": 1600,
+  "documentScrollHeight": 1000,
+  "mainScrollHeight": 942,
+  "mainClientHeight": 942,
+  "panelBottom": 918,
+  "panelHidden": false,
+  "hubHidden": true,
+  "visibleSvgIcons": 0,
+  "visibleImgIcons": 18,
+  "hasInput": 0,
+  "hasTextarea": 0,
+  "hasSelect": 0,
+  "hasCanvas": 0,
+  "buttonOverflow": [],
+  "chipOverflow": [],
+  "contentOverflow": [],
+  "pathOverflow": false,
+  "bannerClass": "fixture-banner red",
+  "panelChip": "ready preview",
+  "selectedChip": "unknown",
+  "dispatchChip": "dispatch disabled",
+  "dataActions": [
+    "launch_client_dispatch",
+    "launch_smoke"
+  ],
+  "falseClaims": false
+}

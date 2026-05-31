@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_LIVE_READONLY_BINDING",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "auditor": "independent_explorer",
+  "result": "PASS",
+  "facts": [
+    "web_design_live_server exposes only /api/live-readonly plus static assets",
+    "browser live mode fetches only api/live-readonly and does not submit command_id",
+    "live snapshot calls only status, healthcheck, mode_get, accounts_list, and rollout_rotation_inspect",
+    "launch_client, sync, mode set, and stable repair commands are not reachable through the live-readonly endpoint",
+    "tests cover stale-green failure, ignored command_id query, mode/status mismatch, and static live source wiring"
+  ],
+  "tests_observed_by_auditor": [
+    {
+      "command": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui",
+      "result": "Ran 13 tests OK"
+    }
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py remains dirty outside this contour",
+    "web_design_command_adapter contains action command specs for later contours, so this contour relies on web_design_live_server never calling them",
+    "direct file-read prohibition is proven by code/test inspection, not dynamic tracing of every imported module"
+  ]
+}

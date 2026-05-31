@@ -1,0 +1,21 @@
+{
+  "packet_kind": "codex_auth_command_invocation",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "command_path": "/Volumes/Work/wild-boar-proxy/wbp_codex_auth_command.py",
+  "command_path_sha256": "18254ca49f5f644c2f2952b1ed9d368dfcecc39481da1e8ca9061f809716c1d8",
+  "config_sha256": "d1d0a17d0a532975dc0d949eb50a60d0a6ce517bc1ff9c13d0758018513ccf63",
+  "active_config_in_temp_codex_home": true,
+  "auth_command_invoked": true,
+  "auth_command_output_shape_tested": "plain_token_stdout",
+  "wrong_token_control_invoked": true,
+  "wrong_token_control_rejected": true,
+  "provider_request_succeeded_after_auth_command": true,
+  "stamp_file_present": true,
+  "stamp_file_sha256": "72118957222046503b1a41d7c952b89e895aab39d0ea41ed7c00bfe2b15e20a3",
+  "exit_code": 0,
+  "final_message": "WBP_PROVIDER_LIVE_OK",
+  "captured_at_utc": "2026-05-25T12:57:35.132488Z",
+  "schema_version": 1,
+  "secret_value_recorded": false
+}

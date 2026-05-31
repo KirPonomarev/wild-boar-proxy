@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T12:35:21.728213Z",
+  "configured_provider": "cliproxy",
+  "counts_as_api_lane_truth": false,
+  "current_execution_slot_id": "primary_model_slot",
+  "live_prompt_full_success": true,
+  "model_id": "gpt-5.3-codex",
+  "packet_kind": "chatgpt_lane_runtime",
+  "same_session_identity_proven": true,
+  "selected_backend_server_issued": true,
+  "selected_route_server_issued": false,
+  "selected_source_class": "gpt_account",
+  "selected_source_provenance": "backend_proven",
+  "session_id": "ccs-706f0da2285b4da4b252",
+  "status": "ok"
+}

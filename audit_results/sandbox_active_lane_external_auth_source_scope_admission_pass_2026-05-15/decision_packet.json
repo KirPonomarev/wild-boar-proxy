@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "status": "ok",
+  "final_verdict": "GO_TO_EXACT_NEXT_REPAIR_CONTOUR",
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "machine_rationale": {
+    "external_source_path_admitted": true,
+    "exact_external_source_path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "rebind_required_by_current_fact": false,
+    "combined_scope_required": false,
+    "secret_bearing_scope_explicitly_declared": true
+  },
+  "declared_next_contour_read_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/auth.json"
+  ],
+  "declared_next_contour_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/auth.json"
+  ],
+  "declared_next_contour_rollback_expectations": [
+    "snapshot sandbox auth.json before mutation",
+    "restore sandbox auth.json byte-for-byte if post-import owner truth remains blocked",
+    "do not mutate the external source path"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "healthcheck_only_outcome": {
+    "classification": "insufficient_for_effective_runtime_settlement",
+    "reason": "desired source remained approved target while effective source remained observed and activation readiness stayed pending"
+  },
+  "launch_smoke_outcome": {
+    "classification": "runtime_truth_settled",
+    "reason": "live runtime observation plus fresh activation evidence confirmed approved target as the effective runtime consumer source"
+  },
+  "final_runtime_truth": {
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "desired_source_kind": "approved_repair_target",
+    "effective_source_kind": "approved_repair_target",
+    "effective_source_status": "approved_target_active_by_activation_evidence",
+    "consumer_activation_readiness_status": "aligned"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "captured_at_utc": "2026-05-27T09:45:20Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "passed",
+  "agent_id": "019e68bf-c80f-7143-ae6a-7d4590c87536",
+  "agent_role": "read_only_scanner",
+  "agent_model": "gpt-5.4-mini",
+  "edited_files": [],
+  "historical_audit_results_used_as_current_truth": false,
+  "factual_findings": [
+    {
+      "finding": "The canonical CLI runner command surface is python3 -m wild_boar_proxy codex-runner smoke --json --prompt <text> and it is exposed through the repo CLI dispatcher.",
+      "evidence_refs": [
+        "COMMAND_API.md",
+        "wild_boar_proxy/cli.py",
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_command_contract_packet.json"
+      ]
+    },
+    {
+      "finding": "The prior smoke proof path was proving a direct Codex binary launch rather than the explicit CLI runner command surface required by the contour.",
+      "evidence_refs": [
+        "tools/cli_runner_via_wbp_smoke_probe.py",
+        "wild_boar_proxy/cli_runner.py"
+      ]
+    },
+    {
+      "finding": "The current contour now invokes the actual CLI runner surface and correlates it to WBP route trace evidence on /v1/responses with upstream_status=200.",
+      "evidence_refs": [
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_invocation_packet.json",
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_wbp_trace_correlation_packet.json",
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_summary_packet.json"
+      ]
+    },
+    {
+      "finding": "The auth boundary is packet-proven as auth.command with ambient OPENAI_API_KEY blocked and current Codex auth.json unused.",
+      "evidence_refs": [
+        "wild_boar_proxy/provider_auth_strategy.py",
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_auth_boundary_packet.json",
+        "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/no_ambient_authority_packet.json"
+      ]
+    },
+    {
+      "finding": "The remaining code fixes were narrow: preserve auth/output artifacts before temp cleanup, prefer a GPT server-issued model over blocked external route fallback for this lane, and emit the newly required R3_5 packet set.",
+      "evidence_refs": [
+        "wild_boar_proxy/cli_runner.py",
+        "wild_boar_proxy/cli_runner_via_wbp.py",
+        "wild_boar_proxy/codex_custom_sessions.py",
+        "tests/test_cli_runner.py"
+      ]
+    }
+  ],
+  "reported_gaps_closed_in_this_contour": [
+    "actual CLI runner command surface proven instead of adjacent direct-binary proof",
+    "auth.command boundary packetized for the CLI lane",
+    "WBP trace correlation packetized for the CLI lane",
+    "false-green checks kept bounded to non-native consumer claims only",
+    "current evidence bundle refreshed with required contour packet names"
+  ],
+  "orchestrator_assessment": {
+    "agent_claims_rechecked_against_current_code": true,
+    "text_only_audit_counted_as_pass": false,
+    "additional_worker_spawned": false,
+    "reason_no_worker_spawned": "the scanner localized the contract gap and the remaining work was a bounded execution-core repair plus evidence refresh"
+  }
+}

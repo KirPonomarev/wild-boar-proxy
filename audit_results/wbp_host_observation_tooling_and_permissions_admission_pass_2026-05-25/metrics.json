@@ -1,0 +1,46 @@
+{
+  "contour_id": "WBP_HOST_OBSERVATION_TOOLING_AND_PERMISSIONS_ADMISSION_PASS",
+  "date": "2026-05-25",
+  "status": "closed_success",
+  "binary_verdict": "HOST_TOOLING_AND_PERMISSIONS_PATH_NOT_ADMITTED",
+  "host_capability_gaps": {
+    "quartz_import": {
+      "status": "blocked",
+      "required_for_native_window_proof": true,
+      "host_mutation_required": true,
+      "write_surface": "system_python_or_host_package_environment",
+      "rollback_known": false,
+      "permission_change_required": false,
+      "security_risk_level": "medium",
+      "admissible_now": false,
+      "requires_separate_live_host_contour": true,
+      "reason_class": "HOST_TOOLING_ABSENT_WITH_UNDECLARED_MUTATION"
+    },
+    "application_services_import": {
+      "status": "blocked",
+      "required_for_native_window_proof": true,
+      "host_mutation_required": true,
+      "write_surface": "python_runtime_or_host_package_environment",
+      "rollback_known": false,
+      "permission_change_required": false,
+      "security_risk_level": "medium",
+      "admissible_now": false,
+      "requires_separate_live_host_contour": true,
+      "reason_class": "HOST_TOOLING_ABSENT_WITH_UNDECLARED_MUTATION"
+    },
+    "accessibility_ui_scripting": {
+      "status": "blocked",
+      "required_for_native_window_proof": true,
+      "host_mutation_required": true,
+      "write_surface": "macos_tcc_accessibility_permission_state",
+      "rollback_known": false,
+      "permission_change_required": true,
+      "security_risk_level": "high",
+      "admissible_now": false,
+      "requires_separate_live_host_contour": true,
+      "reason_class": "HOST_PERMISSION_CHANGE_REQUIRED_WITH_UNCLEAR_ROLLBACK"
+    }
+  },
+  "critical_path_unchanged": true,
+  "host_mutation_in_band_admitted": false
+}

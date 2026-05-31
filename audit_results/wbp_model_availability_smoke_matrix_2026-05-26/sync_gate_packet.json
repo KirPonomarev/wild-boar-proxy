@@ -1,0 +1,15 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-26T09:37:48.266290Z",
+  "contour_owned_paths": [
+    "wild_boar_proxy/model_availability.py",
+    "tests/test_model_availability.py",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/"
+  ],
+  "head": "3db0431cff061fbf676e4218fac3116da5657149",
+  "historical_dirty_residue_present": true,
+  "historical_dirty_residue_quarantined": true,
+  "packet_kind": "sync_gate",
+  "status": "ok_with_quarantined_historical_residue",
+  "working_tree_clean": false
+}

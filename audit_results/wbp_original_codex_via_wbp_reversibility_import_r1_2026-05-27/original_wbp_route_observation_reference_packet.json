@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T10:36:04.248188Z",
+  "forwarded_to_wbp": true,
+  "packet_kind": "original_wbp_route_observation_reference",
+  "request_observed": true,
+  "response_observed": true,
+  "route_observation_counts_as_reversibility_proof": false,
+  "route_observation_reopens_runtime_route_proof": false,
+  "route_observation_supporting_only": true,
+  "route_status": "confirmed",
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26/wbp_trace_observation_packet.json",
+  "status": "ok",
+  "upstream_status": 200
+}

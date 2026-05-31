@@ -1,0 +1,23 @@
+{
+  "url": "http://127.0.0.1:8796/",
+  "interaction_note": "Cropped screenshots intentionally exclude the prompt textarea so prompt text is not stored as screenshot evidence.",
+  "screenshots": [
+    "evidence/browser_session_prompt_dry_run.png",
+    "evidence/browser_session_cleanup.png"
+  ],
+  "prompt_state": {
+    "inference": "not claimed",
+    "response": "{\n  \"status\": \"ok\",\n  \"machine_error_code\": \"OK\",\n  \"session_id\": \"<session-id>\",\n  \"model_id\": \"gpt-5.3-codex\",\n  \"model_server_issued\": true,\n  \"selection_proven\": true,\n  \"selected_backend_server_issued\": true,\n  \"prompt_admitted\": true,\n  \"prompt_present\": true,\n  \"prompt_length\": 30,\n  \"prompt_sha256\": \"dc540054ce49094f43b7cadd3277fb644801504ec0f3041eee9a4d4668ec31a5\",\n  \"prompt_preview_redacted\": \"<prompt:30:dc540054>\",\n  \"transcript_kind\": \"\",\n  \"model_response_present\": false,\n  \"cleanup_performed\": false,\n  \"arbitrary_path_accepted\": false,\n  \"process_kill_claimed\": false,\n  \"inference_proven\": false,\n  \"runtime_meter_attached\": false,\n  \"token_burn\": 0,\n  \"next_action\": \"codex_custom_gpt_api_e2e_pass\"\n}",
+    "selected": "<session-id>",
+    "status": "prompt_admitted_dry_run",
+    "tokenBurn": "0",
+    "transcript": "{\n  \"status\": \"ok\",\n  \"transcript_kind\": \"service_ledger_only\",\n  \"model_response_present\": false,\n  \"inference_proven\": false,\n  \"entries\": [\n    {\n      \"captured_at_utc\": \"2026-05-23T18:39:53.035703Z\",\n      \"event\": \"session_created\",\n      \"session_id\": \"<session-id>\"\n    },\n    {\n      \"captured_at_utc\": \"2026-05-23T18:39:56.157824Z\",\n      \"event\": \"prompt_admitted_dry_run\",\n      \"inference_proven\": false,\n      \"model_response_present\": false,\n      \"prompt_length\": 30,\n      \"prompt_present\": true,\n      \"prompt_preview_redacted\": \"<prompt:30:dc540054>\",\n      \"prompt_sha256\": \"dc540054ce49094f43b7cadd3277fb644801504ec0f3041eee9a4d4668ec31a5\",\n      \"runtime_meter_attached\": false,\n      \"session_id\": \"<session-id>\",\n      \"token_burn\": 0\n    }\n  ]\n}"
+  },
+  "cleanup_state": {
+    "count": "1",
+    "response": "{\n  \"status\": \"ok\",\n  \"machine_error_code\": \"OK\",\n  \"session_id\": \"<session-id>\",\n  \"model_id\": \"gpt-5.3-codex\",\n  \"model_server_issued\": true,\n  \"selection_proven\": true,\n  \"selected_backend_server_issued\": true,\n  \"prompt_admitted\": false,\n  \"prompt_present\": false,\n  \"prompt_length\": 0,\n  \"prompt_sha256\": \"\",\n  \"prompt_preview_redacted\": \"\",\n  \"transcript_kind\": \"\",\n  \"model_response_present\": false,\n  \"cleanup_performed\": true,\n  \"arbitrary_path_accepted\": false,\n  \"process_kill_claimed\": false,\n  \"inference_proven\": false,\n  \"runtime_meter_attached\": false,\n  \"token_burn\": 0,\n  \"next_action\": \"none\"\n}",
+    "selected": "<session-id>",
+    "status": "cleaned",
+    "transcript": "{\n  \"status\": \"ok\",\n  \"transcript_kind\": \"service_ledger_only\",\n  \"model_response_present\": false,\n  \"inference_proven\": false,\n  \"entries\": [\n    {\n      \"captured_at_utc\": \"2026-05-23T18:39:53.035703Z\",\n      \"event\": \"session_created\",\n      \"session_id\": \"<session-id>\"\n    },\n    {\n      \"captured_at_utc\": \"2026-05-23T18:39:56.157824Z\",\n      \"event\": \"prompt_admitted_dry_run\",\n      \"inference_proven\": false,\n      \"model_response_present\": false,\n      \"prompt_length\": 30,\n      \"prompt_present\": true,\n      \"prompt_preview_redacted\": \"<prompt:30:dc540054>\",\n      \"prompt_sha256\": \"dc540054ce49094f43b7cadd3277fb644801504ec0f3041eee9a4d4668ec31a5\",\n      \"runtime_meter_attached\": false,\n      \"session_id\": \"<session-id>\",\n      \"token_burn\": 0\n    },\n    {\n      \"captured_at_utc\": \"2026-05-23T18:40:02.586173Z\",\n      \"event\": \"cancel_requested\",\n      \"process_kill_claimed\": false,\n      \"session_id\": \"<session-id>\"\n    }\n  ]\n}"
+  }
+}

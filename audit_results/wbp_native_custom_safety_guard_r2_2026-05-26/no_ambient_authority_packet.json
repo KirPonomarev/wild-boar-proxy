@@ -1,0 +1,17 @@
+{
+  "ambient_authority_present_but_not_used": false,
+  "ambient_authority_used_for_consumer_launch": false,
+  "ambient_env_clean": true,
+  "browser_token_path_model_provider_authority": false,
+  "captured_at_utc": "2026-05-26T18:56:51.819672Z",
+  "current_codex_auth_json_runtime_input": false,
+  "native_launch_attempted": false,
+  "openai_api_key_forwarded_to_consumer": false,
+  "packet_kind": "no_ambient_authority",
+  "proxy_env_forwarded_to_consumer": false,
+  "reason_class": "",
+  "remote_token_path_model_provider_authority": false,
+  "source_packet_status": "ok",
+  "source_reason_class": "",
+  "status": "ok"
+}

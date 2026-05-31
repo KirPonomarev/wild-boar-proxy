@@ -1,0 +1,98 @@
+{
+  "baseline_before_import": {
+    "healthcheck": {
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "machine_error_code": "ATTESTATION_FAILED"
+    },
+    "status": {
+      "attestation_source": "healthcheck --json",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "machine_error_code": "ATTESTATION_FAILED"
+    }
+  },
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "external_models_foundation_truth": {
+    "models": {
+      "count": 0,
+      "machine_error_code": "OK",
+      "source": "local_routes_registry"
+    },
+    "routes": {
+      "count": 0,
+      "machine_error_code": "OK"
+    },
+    "status": {
+      "adapter_runtime_available": false,
+      "adapter_state": "stopped",
+      "foundation_phase": "C3",
+      "listener_proven": false,
+      "local_auth": {
+        "token_present": false,
+        "token_ref": "managed_local_token"
+      },
+      "machine_error_code": "OK",
+      "observed_routes_count": 0,
+      "profile_ready": false,
+      "routes_count": 0,
+      "runtime_claim_blocked": true
+    }
+  },
+  "finding": {
+    "direct_lifecycle_rerun_earned": false,
+    "owner_truth_still_blocked_after_import": true,
+    "primary_http_401_cleared_by_real_import": true,
+    "registry_rebinding_needed_by_current_fact": false,
+    "rollback_required_and_completed": true,
+    "secondary_blocker_after_import": "external_models_foundation_provider_or_route_unavailable"
+  },
+  "post_import_owner_truth": {
+    "healthcheck": {
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+      "launch_readiness_blocking_reason": "usable_auth_pool_empty",
+      "launch_readiness_failed_checks": [
+        "usable_auth_pool_empty",
+        "responses_probe_failed"
+      ],
+      "listener_ok": true,
+      "machine_error_code": "ATTESTATION_FAILED",
+      "models_ok": true,
+      "responses_ok": false,
+      "status": "error"
+    },
+    "status": {
+      "attestation_source": "healthcheck --json",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+      "launch_readiness_blocking_reason": "usable_auth_pool_empty",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "status": "error"
+    }
+  },
+  "post_restore_owner_truth": {
+    "healthcheck": {
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "launch_readiness_blocking_reason": "models_surface_unavailable_or_invalid",
+      "listener_ok": true,
+      "machine_error_code": "ATTESTATION_FAILED",
+      "models_ok": false,
+      "responses_ok": false,
+      "status": "error"
+    },
+    "status": {
+      "attestation_source": "healthcheck --json",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "launch_readiness_blocking_reason": "models_surface_unavailable_or_invalid",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "status": "error"
+    }
+  },
+  "schema_version": 1
+}

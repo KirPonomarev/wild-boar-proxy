@@ -1,0 +1,25 @@
+{
+  "raw_status_truth": {
+    "status": "error",
+    "machine_error_code": "ATTESTATION_FAILED",
+    "liveness": "degraded",
+    "launch_blocking_reason": "models_surface_unavailable_or_invalid",
+    "launch_failed_checks": [
+      "models_surface_unavailable_or_invalid"
+    ],
+    "auth_pool_hygiene_status": "launch_capable_empty",
+    "auth_pool_hygiene_blocking_reason": "no_live_capable_active_backends"
+  },
+  "new_onboarding_lifecycle_admission_truth": {
+    "status": "ready",
+    "reason": "reserve_only_launch_gap",
+    "selected_backend_id": "auth",
+    "selected_backend_pool": "reserve"
+  },
+  "separation_contract": {
+    "raw_status_truth_unchanged": true,
+    "launch_attestation_weakened": false,
+    "classification_boundary_repaired": true,
+    "truth_drift_or_listener_failure_can_still_block": true
+  }
+}

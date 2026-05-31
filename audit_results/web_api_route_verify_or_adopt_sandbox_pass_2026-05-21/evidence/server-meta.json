@@ -1,0 +1,9 @@
+{
+  "root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-api-ui-evidence-8tf9twa0",
+  "profile_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-api-ui-evidence-8tf9twa0/profile",
+  "data_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-api-ui-evidence-8tf9twa0/managed",
+  "external_models_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-api-ui-evidence-8tf9twa0/managed/external-models",
+  "mock_port": 56581,
+  "web_port": 56582,
+  "install_status": "ok"
+}

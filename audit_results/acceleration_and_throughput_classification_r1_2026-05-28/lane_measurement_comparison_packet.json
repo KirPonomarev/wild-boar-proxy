@@ -1,0 +1,15 @@
+{
+  "api_lane_measured": true,
+  "captured_at_utc": "2026-05-28T13:19:22.302445Z",
+  "chatgpt_lane_measured": true,
+  "clean_acceleration_ordering_claimed": false,
+  "comparison_admitted": false,
+  "comparison_blocker": "lane_paths_and_timing_sources_are_not_cleanly_comparable_for_acceleration_claims",
+  "comparison_status": "limited_or_not_admitted",
+  "current_only_measurements_remain_useful": true,
+  "packet_kind": "lane_measurement_comparison",
+  "same_execution_path": false,
+  "same_guard_conditions": true,
+  "same_harness_conditions": true,
+  "status": "ok"
+}

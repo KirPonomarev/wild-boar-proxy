@@ -1,0 +1,45 @@
+{
+  "block_reasons_are_admission_only": true,
+  "blocked_rows": [],
+  "captured_at_utc": "2026-05-27T06:30:39.437698Z",
+  "packet_kind": "persistent_pre_live_block_reason_matrix",
+  "rows": [
+    {
+      "blocked_final_status": false,
+      "blocked_reference_status": false,
+      "contour_key": "r1_launcher_contract",
+      "missing_hash": false,
+      "missing_reference": false,
+      "missing_supporting_packets": [],
+      "non_claim_overclaims": []
+    },
+    {
+      "blocked_final_status": false,
+      "blocked_reference_status": false,
+      "contour_key": "r2_dry_run_enforcement",
+      "missing_hash": false,
+      "missing_reference": false,
+      "missing_supporting_packets": [],
+      "non_claim_overclaims": []
+    },
+    {
+      "blocked_final_status": false,
+      "blocked_reference_status": false,
+      "contour_key": "r3_state_diff",
+      "missing_hash": false,
+      "missing_reference": false,
+      "missing_supporting_packets": [],
+      "non_claim_overclaims": []
+    },
+    {
+      "blocked_final_status": false,
+      "blocked_reference_status": false,
+      "contour_key": "r4_backup_restore",
+      "missing_hash": false,
+      "missing_reference": false,
+      "missing_supporting_packets": [],
+      "non_claim_overclaims": []
+    }
+  ],
+  "status": "ok"
+}

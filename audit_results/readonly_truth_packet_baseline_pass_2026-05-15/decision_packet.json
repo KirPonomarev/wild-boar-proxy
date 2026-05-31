@@ -1,0 +1,20 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "blocked_by": [
+    "owner truth instability across repeated readonly captures",
+    "healthcheck/status drift between healthy OK and ATTESTATION_FAILED in the same contour"
+  ],
+  "reasons": [
+    "all required readonly command surfaces were captured as valid JSON",
+    "mode/accounts/external-models support packets remained structurally coherent",
+    "rollout contradiction remained warning evidence only",
+    "but healthcheck --json and delegated status --json flipped materially across repeated captures inside the same baseline contour"
+  ],
+  "required_next_preconditions": [
+    "preserve owner truth drift evidence",
+    "diagnose runtime attestation instability before sandbox-boundary work",
+    "do not treat a later transient OK packet as stable baseline truth without drift adjudication"
+  ],
+  "recommended_follow_up": "STOP_AND_DIAGNOSE on readonly runtime truth drift before SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS"
+}

@@ -1,0 +1,242 @@
+{
+  "contour": "UI_WEB_QUICK_START_DENSITY_POLISH_PASS",
+  "date": "2026-05-20",
+  "primary": {
+    "accountRows": {
+      "allFitTarget": true,
+      "count": 4,
+      "maxHeight": 58
+    },
+    "apiTitle": {
+      "noBrokenWrap": true,
+      "rect": {
+        "bottom": 261,
+        "height": 22,
+        "left": 1085,
+        "right": 1200,
+        "top": 239,
+        "width": 115,
+        "x": 1085,
+        "y": 239
+      },
+      "text": "Основной API"
+    },
+    "appWindow": {
+      "bottom": 972,
+      "height": 944,
+      "left": 28,
+      "right": 1572,
+      "top": 28,
+      "width": 1544,
+      "x": 28,
+      "y": 28
+    },
+    "brokenImages": [],
+    "buttons": {
+      "clipped": [],
+      "count": 5,
+      "values": [
+        {
+          "bottom": 105,
+          "className": "button quick-start-only",
+          "disabled": true,
+          "height": 40,
+          "left": 1375,
+          "right": 1535,
+          "text": "Проверить всё",
+          "top": 65,
+          "width": 160,
+          "x": 1375,
+          "y": 65
+        },
+        {
+          "bottom": 672,
+          "className": "button primary onboard-action",
+          "disabled": false,
+          "height": 40,
+          "left": 392,
+          "right": 591,
+          "text": "Подключить аккаунт",
+          "top": 632,
+          "width": 199,
+          "x": 392,
+          "y": 632
+        },
+        {
+          "bottom": 672,
+          "className": "button small disabled",
+          "disabled": true,
+          "height": 40,
+          "left": 601,
+          "right": 717,
+          "text": "Проверить",
+          "top": 632,
+          "width": 116,
+          "x": 601,
+          "y": 632
+        },
+        {
+          "bottom": 740,
+          "className": "button small",
+          "disabled": false,
+          "height": 40,
+          "left": 1058,
+          "right": 1203,
+          "text": "Настроить API",
+          "top": 700,
+          "width": 145,
+          "x": 1058,
+          "y": 700
+        },
+        {
+          "bottom": 740,
+          "className": "button small api-route-action",
+          "disabled": true,
+          "height": 40,
+          "left": 1213,
+          "right": 1437,
+          "text": "Проверить API",
+          "top": 700,
+          "width": 224,
+          "x": 1213,
+          "y": 700
+        }
+      ]
+    },
+    "cards": [
+      {
+        "bottom": 695,
+        "card": "accounts",
+        "height": 479,
+        "left": 369,
+        "right": 1011,
+        "top": 216,
+        "width": 642,
+        "x": 369,
+        "y": 216
+      },
+      {
+        "bottom": 791,
+        "card": "api",
+        "height": 575,
+        "left": 1035,
+        "right": 1535,
+        "top": 216,
+        "width": 500,
+        "x": 1035,
+        "y": 216
+      }
+    ],
+    "checkAllNotPrimary": true,
+    "chips": {
+      "clipped": [],
+      "count": 9
+    },
+    "documentClientWidth": 1600,
+    "documentScrollWidth": 1600,
+    "gridColumns": "642px 500px",
+    "main": {
+      "clientHeight": 942,
+      "fits": true,
+      "rect": {
+        "bottom": 971,
+        "height": 942,
+        "left": 333,
+        "right": 1571,
+        "top": 29,
+        "width": 1238,
+        "x": 333,
+        "y": 29
+      },
+      "scrollHeight": 942
+    },
+    "noHorizontalOverflow": true,
+    "quickStart": {
+      "bottomWithinWindowMinus24": true,
+      "rect": {
+        "bottom": 833,
+        "height": 683,
+        "left": 369,
+        "right": 1535,
+        "top": 150,
+        "width": 1166,
+        "x": 369,
+        "y": 150
+      }
+    },
+    "url": "http://127.0.0.1:8765/?screen=quick-start&source=live",
+    "viewport": {
+      "height": 1000,
+      "width": 1600
+    },
+    "visibleImgIcons": 19,
+    "visibleSvgIcons": 0
+  },
+  "responsiveProbe": {
+    "viewport1600x1000": {
+      "apiTitleNoBrokenWrap": true,
+      "brokenImages": [],
+      "documentScrollWidth": 1600,
+      "gridColumns": "642px 500px",
+      "main": {
+        "clientHeight": 942,
+        "rect": {
+          "bottom": 971,
+          "height": 942,
+          "left": 333,
+          "right": 1571,
+          "top": 29,
+          "width": 1238
+        },
+        "scrollHeight": 942
+      },
+      "mainFits": true,
+      "noHorizontalOverflow": true,
+      "viewport": {
+        "height": 1000,
+        "width": 1600
+      },
+      "visibleSvgIcons": 0
+    },
+    "viewport1500x900": {
+      "apiTitleNoBrokenWrap": true,
+      "brokenImages": [],
+      "documentScrollWidth": 1500,
+      "gridColumns": "1066px",
+      "main": {
+        "clientHeight": 842,
+        "rect": {
+          "bottom": 871,
+          "height": 842,
+          "left": 333,
+          "right": 1471,
+          "top": 29,
+          "width": 1138
+        },
+        "scrollHeight": 1271
+      },
+      "mainFits": false,
+      "noHorizontalOverflow": true,
+      "viewport": {
+        "height": 900,
+        "width": 1500
+      },
+      "visibleSvgIcons": 0
+    }
+  },
+  "gates": {
+    "viewport1600x1000": true,
+    "noHorizontalOverflow": true,
+    "mainFits1600x1000": true,
+    "quickStartBottomInsideWindowMinus24": true,
+    "noClippedButtons": true,
+    "noClippedChips": true,
+    "apiTitleNoBrokenWrap": true,
+    "accountRowsFourAndCompact": true,
+    "visibleSvgIconsZero": true,
+    "visibleImgIconsPresent": true,
+    "brokenImagesEmpty": true,
+    "disabledCheckAllNotPrimary": true,
+    "responsive1500NoHorizontalOverflow": true
+  }
+}

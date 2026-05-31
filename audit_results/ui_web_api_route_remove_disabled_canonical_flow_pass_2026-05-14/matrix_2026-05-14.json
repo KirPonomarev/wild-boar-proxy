@@ -1,0 +1,61 @@
+{
+  "contour": "UI_WEB_API_ROUTE_REMOVE_DISABLED_CANONICAL_FLOW_PASS",
+  "date": "2026-05-14",
+  "verdict": "PASS",
+  "checks": [
+    {
+      "id": "disabled_route_entry",
+      "status": "PASS",
+      "evidence": "routeActionButtons emits api_route_remove only when route.enabled === false"
+    },
+    {
+      "id": "enabled_route_blocked",
+      "status": "PASS",
+      "evidence": "enabled routes receive disabled remove control and applyActionAvailability requires disabled route state"
+    },
+    {
+      "id": "unproven_route_blocked",
+      "status": "PASS",
+      "evidence": "api-route buttons include routeStateProven and disabled actions require routeStateProven === true"
+    },
+    {
+      "id": "bounded_payload",
+      "status": "PASS",
+      "evidence": "boundedUiActionPayload copies only account_id and route_id; remove click passes only route_id"
+    },
+    {
+      "id": "readonly_preflight_summary",
+      "status": "PASS",
+      "evidence": "confirmation modal includes apiRouteRemovePreflight and copy says server rechecks disabled-state"
+    },
+    {
+      "id": "server_authority_preserved",
+      "status": "PASS",
+      "evidence": "no command adapter/live server code changed; existing server preflight remains authoritative"
+    },
+    {
+      "id": "refresh_mismatch_not_green",
+      "status": "PASS",
+      "evidence": "refresh_mismatch display state maps to amber and ledger refresh filter includes mismatch"
+    },
+    {
+      "id": "tests",
+      "status": "PASS",
+      "evidence": "node --check and full web_design_ui/live_server/command_adapter unittest suite passed"
+    },
+    {
+      "id": "visual_smoke",
+      "status": "PASS",
+      "evidence": "in-app browser screenshots saved under screenshots/"
+    }
+  ],
+  "screenshots": [
+    "audit_results/ui_web_api_route_remove_disabled_canonical_flow_pass_2026-05-14/screenshots/live_no_routes_api_connections.png",
+    "audit_results/ui_web_api_route_remove_disabled_canonical_flow_pass_2026-05-14/screenshots/fixture_routes_api_connections.png",
+    "audit_results/ui_web_api_route_remove_disabled_canonical_flow_pass_2026-05-14/screenshots/fixture_disabled_route_menu.png",
+    "audit_results/ui_web_api_route_remove_disabled_canonical_flow_pass_2026-05-14/screenshots/fixture_disabled_route_menu_after.png"
+  ],
+  "known_limitations": [
+    "Full fake-runner visual command outcome matrix is not captured in this contour; logic is covered by tests and server contracts."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-29T05:48:44.220450Z",
+  "classification": "native_relaunch_observed_with_limits",
+  "counts_as_storage_level_thread_history_proof": false,
+  "custom_process_observed": true,
+  "helper_reload_equals_native_app_relaunch": false,
+  "helper_reload_previously_observed": true,
+  "native_launch_attempted": true,
+  "packet_kind": "relaunch_continuity",
+  "relaunch_attempted": true,
+  "same_persistent_profile_identity": true,
+  "status": "ok"
+}

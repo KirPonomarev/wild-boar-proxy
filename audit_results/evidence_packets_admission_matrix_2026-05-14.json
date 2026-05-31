@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "contour": "EVIDENCE_PACKETS_ADMISSION",
+  "date": "2026-05-14",
+  "final_verdict": "EVIDENCE_PACKETS_DEFERRED_PENDING_STRICTER_PACKET",
+  "screen_id": "29_evidence_packets",
+  "screen_role": "read_only_support_view_of_evidence_packets_and_redaction_status",
+  "evidence_families": [
+    {
+      "family": "route_support_evidence_packet_metadata",
+      "owner_surface": "external-models evidence capture --route ... --json",
+      "current_web_surface": "api_route_evidence_capture",
+      "current_admission": "SUPPORT_METADATA_ALREADY_ADMITTED_IN_EXISTING_ACTION_PANEL",
+      "dedicated_screen_admission": "DEFERRED_PENDING_STRICTER_PACKET",
+      "packet_owned_fields_seen_today": [
+        "network_dependent_evidence",
+        "evidence_path"
+      ],
+      "blocking_reasons": [
+        "current live-server/test surface still carries raw evidence_path in packet data",
+        "UI trims path to basename for display, but that is not a server-owned evidence reference contract",
+        "no packet-owned evidence index exists for screen-level navigation or selection"
+      ]
+    },
+    {
+      "family": "diagnostics_support_bundle_metadata",
+      "owner_surface": "diagnostics export --json",
+      "current_web_surface": "export_diagnostics",
+      "current_admission": "SUPPORT_ARTIFACT_METADATA_ALREADY_ADMITTED",
+      "dedicated_screen_admission": "DEFERRED_PENDING_STRICTER_PACKET",
+      "packet_owned_fields_seen_today": [
+        "bundle_path"
+      ],
+      "blocking_reasons": [
+        "family is support artifact metadata, not canonical evidence-screen truth",
+        "diagnostics export success must not imply runtime health or proof",
+        "no unified evidence index binds diagnostics bundle metadata with other evidence families"
+      ]
+    },
+    {
+      "family": "rollout_field_evidence_packet_truth",
+      "owner_surface": "rollout evidence capture 16 --json",
+      "current_web_surface": "none",
+      "current_admission": "CLI_OWNER_SURFACE_ONLY",
+      "dedicated_screen_admission": "DEFERRED_PENDING_STRICTER_PACKET",
+      "packet_owned_fields_seen_today": [
+        "scale_evidence_packet_result.packet_status",
+        "scale_evidence_packet_result.claim_scope",
+        "scale_evidence_packet_result.runtime_attestation_status",
+        "scale_evidence_packet_result.rotation_evidence_status",
+        "scale_evidence_packet_result.diagnostics_redaction_status",
+        "scale_evidence_packet_result.scale_gate_summary",
+        "scale_evidence_packet_result.final_outcome"
+      ],
+      "blocking_reasons": [
+        "UI_READINESS_SPEC explicitly forbids exposing live evidence capture as a normal first-pass UI action",
+        "family belongs to a separate live evidence lane with operator-gated authorization",
+        "no browser-safe readonly packet selector/index is currently established"
+      ]
+    }
+  ],
+  "dedicated_screen_requirements": {
+    "required_before_future_admission": [
+      "bounded evidence packet/index contract",
+      "server-owned evidence identity",
+      "no browser path payload",
+      "no raw file contents",
+      "family-safe selection semantics",
+      "proof-safe copy boundaries"
+    ],
+    "currently_missing": [
+      "unified readonly evidence index",
+      "path-free route evidence shaping at the server boundary",
+      "packet-owned cross-family evidence selector"
+    ]
+  },
+  "browser_payload_rules": {
+    "allowed_now": [
+      "ui_action",
+      "route_id for api_route_evidence_capture only"
+    ],
+    "potentially_allowed_only_after_future_contract": [
+      "bounded evidence packet selector from a packet-owned evidence index"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "path",
+      "token",
+      "secret",
+      "raw evidence body",
+      "raw file location",
+      "basename_or_file_derived_identity"
+    ]
+  },
+  "copy_boundary": {
+    "allowed": [
+      "evidence packet metadata",
+      "support artifact metadata",
+      "local capture result",
+      "diagnostics export metadata",
+      "operator review",
+      "historical",
+      "stale",
+      "unavailable"
+    ],
+    "forbidden": [
+      "proved",
+      "verified",
+      "runtime healthy",
+      "rollout ready",
+      "route ready",
+      "failover confirmed",
+      "evidence accepted as truth"
+    ]
+  }
+}

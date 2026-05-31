@@ -1,0 +1,11 @@
+{
+  "accounts_registry_count": 27,
+  "auth_unavailable_present": true,
+  "captured_at_utc": "2026-05-28T23:01:34.293181Z",
+  "direct_native_probe_http_status": 503,
+  "direct_native_probe_status": "http_error",
+  "health_machine_error_code": "AUTH_UNAVAILABLE",
+  "launch_capable_backend_count": 15,
+  "status_machine_error_code": "AUTH_UNAVAILABLE",
+  "sync_ok": true
+}

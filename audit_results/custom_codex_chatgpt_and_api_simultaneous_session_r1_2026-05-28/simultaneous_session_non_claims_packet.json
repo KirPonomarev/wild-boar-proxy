@@ -1,0 +1,11 @@
+{
+  "all_role_slots_runtime_proven": false,
+  "captured_at_utc": "2026-05-28T12:35:21.728231Z",
+  "concurrent_execution_proven": false,
+  "orchestration_policy_complete": false,
+  "packet_kind": "same_session_non_claims",
+  "persistent_relaunch_continuity_proven": false,
+  "provider_family_compatibility_proven": false,
+  "status": "ok",
+  "tools_or_streaming_parity_proven": false
+}

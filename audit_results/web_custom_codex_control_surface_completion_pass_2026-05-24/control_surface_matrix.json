@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_CUSTOM_CODEX_CONTROL_SURFACE_COMPLETION_PASS",
+  "captured_at_local_date": "2026-05-24",
+  "claim_scope": "functional_web_control_surface_completion_not_runtime_proof",
+  "source_of_truth": "repo_code_and_json_packets",
+  "runtime_live_prompt_executed_in_this_contour": false,
+  "new_load_executed_in_this_contour": false,
+  "control_surfaces": [
+    {
+      "group": "runtime",
+      "surface": "live readonly status",
+      "endpoint": "/api/live-readonly",
+      "ui_anchor": "overview runtime card and UI Readonly Exit",
+      "dispatch": "GET only",
+      "truth_boundary": "command packet summary only"
+    },
+    {
+      "group": "runtime",
+      "surface": "healthcheck",
+      "endpoint": "/api/action via refresh_health_detail",
+      "ui_anchor": "action metadata and action panel",
+      "dispatch": "admitted UI action",
+      "truth_boundary": "healthcheck packet only"
+    },
+    {
+      "group": "codex",
+      "surface": "Original Codex protected baseline",
+      "endpoint": "/api/codex/original/status and /api/codex/original/launch-dry-run",
+      "ui_anchor": "codexLaunchModesPanel",
+      "dispatch": "dry-run only",
+      "truth_boundary": "no proxy env and no custom home claim"
+    },
+    {
+      "group": "codex",
+      "surface": "Codex Custom session manager",
+      "endpoint": "/api/codex/custom/sessions",
+      "ui_anchor": "codexCustomSessionsPanel",
+      "dispatch": "create, prompt dry-run, authorized prompt, cancel, cleanup",
+      "truth_boundary": "session packet and transcript packet"
+    },
+    {
+      "group": "codex",
+      "surface": "bounded load proof display",
+      "endpoint": "none",
+      "ui_anchor": "codexCustomBoundedLoadProofPanel",
+      "dispatch": "inert static display only",
+      "truth_boundary": "sanitized prior audit artifact summary, bounded summary only, not runtime server truth"
+    },
+    {
+      "group": "models_api",
+      "surface": "Codex Custom model registry and API compat",
+      "endpoint": "/api/codex/custom/models and /api/codex/custom/api-compat",
+      "ui_anchor": "codexCustomModelsPanel",
+      "dispatch": "GET plus model dry-run",
+      "truth_boundary": "server-issued model list; browser cannot submit route/backend"
+    },
+    {
+      "group": "accounts",
+      "surface": "accounts truth and account selection",
+      "endpoint": "/api/codex/custom/accounts and /api/codex/custom/account-selection",
+      "ui_anchor": "codexCustomAccountsPanel",
+      "dispatch": "GET plus account selection dry-run",
+      "truth_boundary": "server-side selection proof; browser cannot select backend"
+    },
+    {
+      "group": "diagnostics",
+      "surface": "redacted diagnostics support artifact",
+      "endpoint": "/api/action via export_diagnostics",
+      "ui_anchor": "diagnostics and action panel",
+      "dispatch": "admitted support action",
+      "truth_boundary": "support artifact is not runtime health proof"
+    },
+    {
+      "group": "dangerous_actions",
+      "surface": "deferred dangerous actions",
+      "endpoint": "none",
+      "ui_anchor": "advanced settings dangerous card and disabled account/API buttons",
+      "dispatch": "disabled or preflight-gated",
+      "truth_boundary": "visible reason only; no hidden mutation"
+    }
+  ],
+  "forbidden_claims": [
+    "CODEX_CUSTOM_LOAD_READY",
+    "CODEX_CUSTOM_ROTATION_READY",
+    "CODEX_CUSTOM_DESKTOP_READY",
+    "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+  ],
+  "expected_result_token_if_verified": "WEB_CUSTOM_CODEX_CONTROL_SURFACE_COMPLETION_READY"
+}

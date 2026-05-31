@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-23T17:55:54.476024+00:00",
+  "observed": {
+    "browser_selected_backend": false,
+    "dry_run_inference_proven": false,
+    "dry_run_smoke_admitted": false,
+    "dry_run_token_burn": 0,
+    "forbidden_fields_rejected": true,
+    "launch_capable": 15,
+    "managed": "25 / 25",
+    "panel_exists": true,
+    "selected_source_class": "gpt_account",
+    "selection_proven": true
+  },
+  "screenshots": [
+    "evidence/browser_codex_custom_accounts_panel_after_refresh.png",
+    "evidence/browser_codex_custom_accounts_panel_after_dry_run_final.png"
+  ],
+  "source": "Browser skill against local live server"
+}

@@ -1,0 +1,102 @@
+{
+  "contour_id": "UI_WEB_DIAGNOSTICS_SCREEN_GATE",
+  "status": "implemented_verified",
+  "date": "2026-05-13",
+  "goal": "Transfer the diagnostics screen into the web design UI while keeping diagnostics export as support-artifact metadata, not runtime health truth.",
+  "canon_basis": [
+    "CANON.md: one active truth surface per topic; no false-green or stale-green",
+    "MASTER_PLAN.md: diagnostics is control-layer support/recovery surface, not engine truth or scale proof",
+    "COMMAND_API.md: diagnostics export --json is a strict JSON command surface; invalid JSON is hard integration failure",
+    "AGENTS.md: do not mix UI/runtime/docs/release scope unless the contour requires it"
+  ],
+  "implemented_scope": {
+    "screen": "diagnostics",
+    "source_render": "06_diagnostics.html / 06_diagnostics.png visual baseline",
+    "ui_action": "export_diagnostics",
+    "adapter_command_id": "diagnostics_export",
+    "exact_argv": [
+      "diagnostics",
+      "export",
+      "--json"
+    ],
+    "safe_display_fields": [
+      "status",
+      "exit_code",
+      "human_message",
+      "machine_error_code",
+      "next_action",
+      "changed_files count",
+      "bundle_path basename metadata only"
+    ]
+  },
+  "layer_boundaries": {
+    "ui_reads_runtime_files": false,
+    "ui_reads_logs": false,
+    "ui_reads_diagnostics_bundle": false,
+    "ui_opens_or_uploads_artifact": false,
+    "diagnostics_success_updates_runtime_truth": false,
+    "browser_sends_command_id": false,
+    "browser_sends_raw_argv": false,
+    "browser_sends_path_payload": false,
+    "runtime_core_changed_in_contour": false,
+    "desktop_files_changed_in_contour": false
+  },
+  "tests": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "passed"
+    },
+    "targeted": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter",
+      "result": "passed",
+      "tests_run": 62
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "tests_run": 556,
+      "duration_seconds": 220.132
+    },
+    "browser_smoke": {
+      "target": "http://127.0.0.1:8799/?screen=diagnostics&source=fixture",
+      "result": "passed",
+      "notes": "Verified Diagnostics screen and support-artifact elements are visible. Export button was not clicked because the default local server would execute the real diagnostics command."
+    }
+  },
+  "independent_audit": {
+    "agent": "Bernoulli",
+    "blocking_findings_in_contour_scope": 0,
+    "unrelated_dirty_tail_findings": [
+      "wild_boar_proxy/runtime.py contains pre-existing live-runtime changes outside this UI contour",
+      "external_agent_lab and tests/test_external_agent_lab.py contain pre-existing external lab changes outside this UI contour"
+    ],
+    "adjudication": "Findings are valid dirty-tail observations but are excluded from this UI contour and must not be staged in this commit."
+  },
+  "changed_files_for_this_contour": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py",
+    "audit_results/ui_web_diagnostics_screen_gate_matrix_2026-05-13.json",
+    "audit_results/ui_web_diagnostics_screen_gate_closeout_2026-05-13.md",
+    "audit_results/ui_web_diagnostics_screen_gate_independent_audit_2026-05-13.json"
+  ],
+  "excluded_dirty_tail": [
+    "wild_boar_proxy/runtime.py",
+    "external_agent_lab/**",
+    "tests/test_external_agent_lab.py",
+    "audit_results/external_lab_*",
+    "external_agent_lab/legacy/eval_results/**"
+  ],
+  "acceptance": {
+    "diagnostics_nav_reachable": true,
+    "support_artifact_copy": true,
+    "exact_command_preserved": true,
+    "failure_states_visible": true,
+    "no_runtime_truth_overwrite": true,
+    "no_direct_bundle_or_log_reads": true,
+    "tests_green": true,
+    "ready_for_commit_after_staged_scope_scan": true
+  }
+}

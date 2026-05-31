@@ -1,0 +1,32 @@
+{
+  "contour": "WEB_SAFE_COMMANDS_EXPANSION_PASS_REENTRY_RECONCILIATION",
+  "environment": {
+    "readonly_url": "http://127.0.0.1:8795/?screen=overview&source=live",
+    "full_url_client": "http://127.0.0.1:8794/?screen=settings&section=client&source=live",
+    "full_url_diagnostics": "http://127.0.0.1:8794/?screen=diagnostics&source=live"
+  },
+  "client_launch_panel": {
+    "contains_bounded_dispatch_copy": true,
+    "contains_web_path_payload_forbidden": true,
+    "contains_finder_deferred_copy": true,
+    "contains_launch_dispatch_warning": true,
+    "contains_preflight_first": true,
+    "raw_tmp_visible": false,
+    "raw_auth_ref_visible": false,
+    "raw_token_visible": false
+  },
+  "diagnostics_screen": {
+    "export_button_visible": true,
+    "contains_support_artifact_boundary": true,
+    "contains_runtime_truth_boundary": true,
+    "contains_limited_summary_copy": true,
+    "action_panel_running_state_seen": true,
+    "raw_tmp_visible": false,
+    "raw_auth_ref_visible": false,
+    "raw_token_visible": false
+  },
+  "notes": [
+    "Client section stayed in fixture-preview state during smoke, but bounded-dispatch and deferred human-open copy was visible.",
+    "Packet proof remains primary truth for admitted launch/dispatch status."
+  ]
+}

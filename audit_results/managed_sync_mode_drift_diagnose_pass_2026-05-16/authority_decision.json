@@ -1,0 +1,26 @@
+{
+  "strongest_truth_surface_for_next_move": {
+    "name": "runtime effective-mode write/read family",
+    "components": [
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json#effective_mode",
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml#base_url"
+    ],
+    "reason": "status health payload consumes these surfaces directly or via get_effective_mode and endpoint selection"
+  },
+  "supporting_but_not_sufficient_surfaces": [
+    {
+      "name": "selected_backend_snapshot",
+      "reason": "fresh and valid participation evidence, but bounded to selector truth only"
+    },
+    {
+      "name": "stable_runtime_consumer_snapshot",
+      "reason": "historical activation evidence that status may use only when live runtime remains stable"
+    }
+  ],
+  "decision": {
+    "verdict": "GO_TO_SYNC_MANAGED_MODE_WRITE_SURFACE_REPAIR_PASS",
+    "why_not_stable_runtime_ownership_restoration_diagnose": "the exact offending write surface family is already localized to sync-owned managed writes, with runtime-effective-mode.txt as the primary authoritative seam and mirrored state/config writes as supporting seams",
+    "why_not_stop": "surface ownership is concrete enough to repair without guessed auth-source truth"
+  }
+}

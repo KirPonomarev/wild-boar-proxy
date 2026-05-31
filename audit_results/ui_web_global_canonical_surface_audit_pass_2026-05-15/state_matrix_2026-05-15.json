@@ -1,0 +1,450 @@
+{
+  "viewport": "1600x1000",
+  "rows": [
+    {
+      "screen": "overview",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 902,
+      "banner": "Демо-режим. Данные не являются runtime truth.",
+      "greenText": [
+        "Демо-режим. Данные не являются runtime truth.",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "overview",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 902,
+      "banner": "Демо-режим. Деградация выделена отдельно от рабочего состояния.",
+      "greenText": []
+    },
+    {
+      "screen": "overview",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 902,
+      "banner": "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.",
+      "greenText": []
+    },
+    {
+      "screen": "overview",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 902,
+      "banner": "Данные устарели. Требуется обновление.",
+      "greenText": []
+    },
+    {
+      "screen": "overview",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 902,
+      "banner": "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.",
+      "greenText": []
+    },
+    {
+      "screen": "accounts",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 667,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим аккаунтов. Данные не являются runtime truth.",
+        "10 активных",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "accounts",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 667,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим аккаунтов. Данные не являются runtime truth.",
+        "9 активных",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "accounts",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 667,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим аккаунтов. Данные не являются runtime truth.",
+        "0 активных",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "accounts",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 667,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим аккаунтов. Данные не являются runtime truth.",
+        "10 активных",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "accounts",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 667,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "0 активных",
+        "Работает"
+      ]
+    },
+    {
+      "screen": "api-connections",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 705,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+        "available"
+      ]
+    },
+    {
+      "screen": "api-connections",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 705,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth."
+      ]
+    },
+    {
+      "screen": "api-connections",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 705,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+        "available"
+      ]
+    },
+    {
+      "screen": "api-connections",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 705,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": [
+        "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+        "available"
+      ]
+    },
+    {
+      "screen": "api-connections",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 647,
+      "banner": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "greenText": []
+    },
+    {
+      "screen": "diagnostics",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 929,
+      "banner": "Демо-режим. Данные не являются runtime truth.",
+      "greenText": [
+        "OK",
+        "OK"
+      ]
+    },
+    {
+      "screen": "diagnostics",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 929,
+      "banner": "Демо-режим. Деградация выделена отдельно от рабочего состояния.",
+      "greenText": [
+        "OK",
+        "OK"
+      ]
+    },
+    {
+      "screen": "diagnostics",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 929,
+      "banner": "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.",
+      "greenText": [
+        "OK",
+        "OK"
+      ]
+    },
+    {
+      "screen": "diagnostics",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 929,
+      "banner": "Данные устарели. Требуется обновление.",
+      "greenText": [
+        "OK",
+        "OK"
+      ]
+    },
+    {
+      "screen": "diagnostics",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 929,
+      "banner": "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.",
+      "greenText": [
+        "OK",
+        "OK"
+      ]
+    },
+    {
+      "screen": "settings",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 844,
+      "banner": "Демо-режим. Данные не являются runtime truth.",
+      "greenText": [
+        "Демо-режим настроек. Значения показывают admitted layout, не runtime config truth."
+      ]
+    },
+    {
+      "screen": "settings",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 844,
+      "banner": "Демо-режим. Деградация выделена отдельно от рабочего состояния.",
+      "greenText": []
+    },
+    {
+      "screen": "settings",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 844,
+      "banner": "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.",
+      "greenText": []
+    },
+    {
+      "screen": "settings",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 844,
+      "banner": "Данные устарели. Требуется обновление.",
+      "greenText": []
+    },
+    {
+      "screen": "settings",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 844,
+      "banner": "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.",
+      "greenText": []
+    },
+    {
+      "screen": "setup",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 915,
+      "banner": "Демо-режим. Данные не являются runtime truth.",
+      "greenText": [
+        "admitted"
+      ]
+    },
+    {
+      "screen": "setup",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 915,
+      "banner": "Демо-режим. Деградация выделена отдельно от рабочего состояния.",
+      "greenText": [
+        "admitted"
+      ]
+    },
+    {
+      "screen": "setup",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 915,
+      "banner": "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.",
+      "greenText": [
+        "admitted"
+      ]
+    },
+    {
+      "screen": "setup",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 915,
+      "banner": "Данные устарели. Требуется обновление.",
+      "greenText": [
+        "admitted"
+      ]
+    },
+    {
+      "screen": "setup",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 915,
+      "banner": "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.",
+      "greenText": [
+        "admitted"
+      ]
+    },
+    {
+      "screen": "select-client",
+      "state": "healthy",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 934,
+      "banner": "Демо-режим. Данные не являются runtime truth.",
+      "greenText": []
+    },
+    {
+      "screen": "select-client",
+      "state": "degraded",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 934,
+      "banner": "Демо-режим. Деградация выделена отдельно от рабочего состояния.",
+      "greenText": []
+    },
+    {
+      "screen": "select-client",
+      "state": "down",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 934,
+      "banner": "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.",
+      "greenText": []
+    },
+    {
+      "screen": "select-client",
+      "state": "stale",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 934,
+      "banner": "Данные устарели. Требуется обновление.",
+      "greenText": []
+    },
+    {
+      "screen": "select-client",
+      "state": "integration_failure",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "activeBottom": 934,
+      "banner": "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.",
+      "greenText": []
+    }
+  ]
+}

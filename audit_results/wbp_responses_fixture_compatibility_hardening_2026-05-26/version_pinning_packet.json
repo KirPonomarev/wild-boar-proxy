@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T07:53:04.798500Z",
+  "cliproxyapi_path": "/Users/kirillponomarev/.local/bin/cli-proxy-api",
+  "cliproxyapi_version_stdout": "CLIProxyAPI Version: 6.9.45, Commit: 6ba7c810, BuiltAt: 2026-04-30T04:43:17Z",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version_stdout": "codex-cli 0.128.0",
+  "model_catalog_schema_version": "not_in_scope",
+  "provider_endpoint_version_status": "unit_fixture_adapter_path",
+  "wbp_git_commit": "3458f3a93cfeab10e59f7c75b2e85047354869e2"
+}

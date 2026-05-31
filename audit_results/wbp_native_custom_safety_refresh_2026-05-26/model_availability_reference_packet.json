@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T09:51:52.505776Z",
+  "model_availability_reproved_in_this_contour": false,
+  "packet_kind": "model_availability_reference",
+  "referenced_commit": "9cb099d4cf0e4c3a2ac72e67b2462957881cfaf3",
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_availability_matrix.json",
+  "referenced_packet_status": "present",
+  "referenced_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "selected_safety_model": "gpt-5.5",
+  "status": "ok"
+}

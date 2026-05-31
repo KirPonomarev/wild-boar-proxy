@@ -1,0 +1,46 @@
+{
+  "actual_exact": "UI_ONE",
+  "captured_at_utc": "2026-05-23T15:48:32.959239Z",
+  "command_surface": {
+    "args_shape": [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--ignore-rules",
+      "--sandbox",
+      "read-only",
+      "-C",
+      "<temp-work>",
+      "--json",
+      "-o",
+      "<temp-last-message>",
+      "<prompt>"
+    ],
+    "binary": "<codex>"
+  },
+  "duration_seconds": 6.066,
+  "exact_match": true,
+  "exit_code": 0,
+  "expected_exact": "UI_ONE",
+  "last_message_file_stat": {
+    "exists": true,
+    "size": 6
+  },
+  "local_proxy_env_stripped": true,
+  "no_proxy_for_localhost": true,
+  "prompt_id": "prompt_1",
+  "prompt_text_sha256": "017585e367cc971e23a4d88cf916485efb648c9b84bd4141db4a6986219d1bbc",
+  "secret_value_recorded": false,
+  "stderr_file_stat": {
+    "exists": true,
+    "size": 252
+  },
+  "stderr_warning_classes": [],
+  "stdout_file_stat": {
+    "exists": true,
+    "size": 318
+  },
+  "temp_codex_home_under_tmp": true,
+  "temp_home_under_tmp": true,
+  "timed_out": false
+}

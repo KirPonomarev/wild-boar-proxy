@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-26T10:46:37.115979Z",
+  "current_thread_executed_command": false,
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_dir_exists": false,
+  "filesystem_safety_classified": false,
+  "final_status": "EXTERNAL_NATIVE_SAFETY_EXECUTION_NO_EVIDENCE_PRODUCED",
+  "native_launch_from_current_thread": false,
+  "native_safety_pass_claimed": false,
+  "safety_result_imported": false,
+  "shell_command": "cd /Volumes/Work/wild-boar-proxy && python3 /Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "status": "blocked"
+}

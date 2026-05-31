@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-23T16:05:04.470443Z",
+  "entries": [
+    {
+      "captured_at_utc": "2026-05-23T16:05:04.143593Z",
+      "exit_code": 0,
+      "final_message": "HARDENED_OK",
+      "prompt_id": "prompt_1",
+      "prompt_sha256": "6b76382f560defd0d0fa3f5f7171fc76951f7febe3f3c8d3af54d2097d09c11f",
+      "selected_model": "gpt-5.3-codex",
+      "warning_classes": []
+    }
+  ],
+  "secret_value_recorded": false
+}

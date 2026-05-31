@@ -1,0 +1,170 @@
+[
+  {
+    "case": "privacy_rules_preview",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/privacy_rules_preview_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "export_available",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/export_available_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "export_success_redaction_confirmed",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/export_success_redaction_confirmed_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "redaction_unknown",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/redaction_unknown_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "export_failed",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/export_failed_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "human_open_deferred",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/human_open_deferred_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "live_integration_failure",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/live_integration_failure_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  },
+  {
+    "case": "stale",
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_settings_diagnostics_privacy_subflow_pass_2026-05-15/screenshots/stale_1600x1000.png",
+    "metrics": {
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "panelBottom": 922,
+      "panelWidth": 1158,
+      "clipped": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "dataActions": [
+        "export_diagnostics"
+      ],
+      "inputs": 0,
+      "falseHealthClaims": false
+    },
+    "failures": []
+  }
+]

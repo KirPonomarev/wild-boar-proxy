@@ -1,0 +1,37 @@
+{
+  "contour": "WEB_DESIGN_FINISH_PASS",
+  "date": "2026-05-16",
+  "verdict": "PASS",
+  "ui_only": true,
+  "runtime_backend_contract_expanded": false,
+  "new_action_ids": false,
+  "new_server_payload_fields": false,
+  "touched_files": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "audit_results/web_design_finish_pass_2026-05-16/contour.md",
+    "audit_results/web_design_finish_pass_2026-05-16/decision_packet.json",
+    "audit_results/web_design_finish_pass_2026-05-16/closeout.md",
+    "audit_results/web_design_finish_pass_2026-05-16/independent_audit.json"
+  ],
+  "finished_screens": [
+    "quick-start",
+    "overview",
+    "api-connections",
+    "diagnostics"
+  ],
+  "browser_reverification": {
+    "quick_start_visual_pass": true,
+    "overview_launch_dispatch_surface_pass": true,
+    "accounts_live_connect_modal_pass": true,
+    "api_route_profile_modal_pass": true,
+    "diagnostics_denied_state_pass": true
+  },
+  "tests_run": [
+    "python3 -m unittest -q tests.test_web_design_ui",
+    "python3 -m unittest -q tests.test_web_design_live_server",
+    "git diff --check"
+  ],
+  "independent_audit_required": true,
+  "next_admitted_contour": "DESKTOP_APP_PORT_PASS"
+}

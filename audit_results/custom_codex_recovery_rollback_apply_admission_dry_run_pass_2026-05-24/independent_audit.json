@@ -1,0 +1,22 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_ADMISSION_DRY_RUN_PASS",
+  "scanner": {
+    "agent": "Carver",
+    "model_class": "5.4-mini",
+    "result": "mapped insertion points, required packet fields, tests, and false-green risks",
+    "edits": false
+  },
+  "auditor": {
+    "agent": "Dalton",
+    "model_class": "5.4-mini",
+    "result": [],
+    "edits": false
+  },
+  "auditor_focus": [
+    "false-green live apply readiness",
+    "filesystem/runtime writes",
+    "browser-controlled recovery fields",
+    "GET-only UI fetch and blocked fallback",
+    "current/original Codex and auth/secret touch claims"
+  ]
+}

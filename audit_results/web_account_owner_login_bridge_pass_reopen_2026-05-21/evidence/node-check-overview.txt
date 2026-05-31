@@ -1,0 +1,5 @@
+Command:
+node --check wild_boar_proxy/web_design_ui/scripts/overview.js
+
+Result:
+passed

@@ -1,0 +1,22 @@
+{
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS",
+  "forbidden_dom_findings": [],
+  "raw_secret_findings": [],
+  "reviewed_surfaces": [
+    "baseline.json",
+    "browser_proof.json",
+    "claim_ledger.json",
+    "closeout.md",
+    "evidence/browser_operator_overview.png",
+    "evidence/browser_operator_proof_raw.json",
+    "independent_audit.json",
+    "model_admission.json",
+    "process_isolation_proof.json",
+    "redaction_audit.json",
+    "spec.md",
+    "transcript_redacted.json",
+    "web_action_matrix.json"
+  ],
+  "secret_value_recorded": false,
+  "status": "ok"
+}

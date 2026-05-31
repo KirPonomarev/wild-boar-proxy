@@ -1,0 +1,35 @@
+{
+  "auditor_mode": "local_replay_independent_audit",
+  "external_subagent_attempted": true,
+  "external_subagent_available": false,
+  "external_subagent_blocker": "agent thread limit reached",
+  "verdict": "SUPPORTED",
+  "checks": [
+    {
+      "name": "model_alias",
+      "result": "supported",
+      "fact": "authenticated /v1/models included gpt-5.3-codex, matching WBP configured_model"
+    },
+    {
+      "name": "owner_launch_packet",
+      "result": "supported",
+      "fact": "launch client --json returned dispatch_requested with launch_claim_scope=os_dispatch_only"
+    },
+    {
+      "name": "visual_process",
+      "result": "supported",
+      "fact": "visible Codex GUI process was observed with the temporary --user-data-dir argument"
+    },
+    {
+      "name": "host_boundary_stop",
+      "result": "supported",
+      "fact": "Codex Helper used the default /Users/kirillponomarev/Library/Application Support/Codex user-data surface, so prompt entry was stopped"
+    },
+    {
+      "name": "overclaim_check",
+      "result": "supported",
+      "fact": "packet does not claim GUI Desktop E2E or prompt success"
+    }
+  ],
+  "final_classification": "closed_blocked_by_current_codex_protection_boundary"
+}

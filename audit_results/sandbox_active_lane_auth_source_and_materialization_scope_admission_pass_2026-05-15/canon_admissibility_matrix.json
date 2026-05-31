@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS",
+  "adjudication": {
+    "auth_source": {
+      "admissible_as_next_contour": true,
+      "priority": "first",
+      "why": [
+        "Current live blocker is HTTP 401 from healthcheck/status using sandbox auth file.",
+        "healthcheck --json owns live attestation truth.",
+        "Materialization proof cannot truthfully succeed while primary auth truth remains invalid."
+      ]
+    },
+    "materialization": {
+      "admissible_as_next_contour": false,
+      "priority": "later",
+      "why": [
+        "Materialization is secondary in current blocker split.",
+        "launch smoke/materialization would still be verified through the same live attestation owner path now blocked by HTTP 401.",
+        "Current materialization surfaces are contract-only or absent, but that does not displace the primary auth blocker."
+      ]
+    },
+    "combined": {
+      "admissible_as_next_contour": false,
+      "priority": "rejected_for_scope_integrity",
+      "why": [
+        "Auth-source mutation and launcher/materialization mutation have different write surfaces and rollback domains.",
+        "Canon keeps `healthcheck --json`, `sync --json`, and `launch smoke --json` responsibilities separated.",
+        "No fused owner path comparable to rollout stage-advance exists for this repair."
+      ]
+    },
+    "further_stop": {
+      "admissible_as_next_contour": false,
+      "priority": "not_needed",
+      "why": [
+        "An exact narrower next repair contour is now localizable truthfully.",
+        "The contour can name exact primary write surfaces and rollback expectations without hidden mutation."
+      ]
+    }
+  },
+  "canon_references": [
+    "RUNTIME_CONTRACT.md:43",
+    "RUNTIME_CONTRACT.md:53",
+    "RUNTIME_CONTRACT.md:63",
+    "RUNTIME_CONTRACT.md:114",
+    "COMMAND_API.md:1113",
+    "COMMAND_API.md:1127",
+    "COMMAND_API.md:1166",
+    "wild_boar_proxy/runtime.py:561",
+    "wild_boar_proxy/runtime.py:5340",
+    "wild_boar_proxy/runtime.py:5649"
+  ]
+}

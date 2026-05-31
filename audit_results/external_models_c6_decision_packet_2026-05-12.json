@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c6_ui_hardening_and_operator_support",
+  "date": "2026-05-12",
+  "branch": "codex/external-agent-lab-isolated",
+  "mode": "implementation",
+  "scope": {
+    "in": [
+      "section-local external-models integration-failure handling",
+      "stale metadata for persisted external-models action results",
+      "support/open-file actions for external-models artifacts",
+      "targeted UI hardening tests",
+      "independent audit and closeout artifacts"
+    ],
+    "out": [
+      "new command surfaces",
+      "runtime or schema changes",
+      "state/log parsing as truth",
+      "installer or packaging work",
+      "design-polish expansion"
+    ]
+  },
+  "guardrails": {
+    "ui_truth_source": "existing_command_packets_only",
+    "status_surface": "synthetic_only",
+    "provider_surface": "route_provider_only",
+    "support_actions_truth_source": false,
+    "no_cached_green_after_failed_refresh": true,
+    "no_new_command_semantics": true
+  },
+  "touched_files": [
+    "wild_boar_proxy/web_ui.py",
+    "wild_boar_proxy/ui_shell.py",
+    "tests/test_web_ui.py",
+    "tests/test_ui_shell.py",
+    "audit_results/external_models_c6_contour_2026-05-12.md",
+    "audit_results/external_models_c6_decision_packet_2026-05-12.json",
+    "audit_results/external_models_c6_independent_audit_2026-05-12.json"
+  ],
+  "verification_plan": {
+    "tests": [
+      "python3 -m unittest -q tests.test_web_ui tests.test_ui_shell tests.test_external_models tests.test_cli_external_models tests.test_external_agent_lab"
+    ],
+    "build": "python3 -m compileall -q wild_boar_proxy tests",
+    "manual": [
+      "launch the local web UI over HTTP",
+      "verify support panel rendering",
+      "verify stale/result markers",
+      "do not execute mutating support-open actions against real files during manual smoke"
+    ]
+  }
+}

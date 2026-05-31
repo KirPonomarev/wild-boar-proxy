@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "not_collected",
+  "reason": "Protected snapshot belongs to live prompt phase and was not collected because owner authorization is absent.",
+  "current_codex_mutation_claimed": false
+}

@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-27T12:27:31.869693Z",
+  "current_bridge_implementation_performed": false,
+  "historical_source_packet_chain": true,
+  "invalid_json_packets": {
+    "isolated_app_e2e": [],
+    "provider_auth": [],
+    "remote_gate": [],
+    "setup_import": []
+  },
+  "loaded_packet_count": 13,
+  "missing_packets": {
+    "isolated_app_e2e": [],
+    "provider_auth": [],
+    "remote_gate": [],
+    "setup_import": []
+  },
+  "packet_kind": "source_app_server_bridge_evidence_inventory",
+  "source_dirs": {
+    "isolated_app_e2e": "/Volumes/Work/wild-boar-proxy/audit_results/isolated_codex_app_e2e_pass_2026-05-23",
+    "provider_auth": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27",
+    "remote_gate": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_remote_control_readiness_gate_classification_r1_2026-05-27",
+    "setup_import": "/Volumes/Work/wild-boar-proxy/audit_results/web_setup_import_surface_admission_foundation_pass_2026-05-25"
+  },
+  "status": "ok"
+}

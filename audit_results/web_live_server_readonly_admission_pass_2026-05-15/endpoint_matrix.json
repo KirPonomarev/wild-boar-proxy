@@ -1,0 +1,62 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/actions",
+      "status": "ok",
+      "source": "ui_action_metadata",
+      "action_phase": "live_readonly",
+      "available_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ],
+      "parked_actions_count": 20
+    },
+    {
+      "method": "GET",
+      "path": "/api/live-readonly",
+      "status": "ok",
+      "source": "live_readonly",
+      "ui_state": "healthy",
+      "primary_truth_ok": true,
+      "warning_codes": [
+        "ROTATION_EVIDENCE_CONTRADICTED"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounts-readonly",
+      "status": "ok",
+      "source": "accounts_readonly",
+      "account_count": 25,
+      "selected_account_id": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/api-connections-readonly",
+      "status": "ok",
+      "source": "api_connections_readonly",
+      "routes_count": 0,
+      "adapter_runtime_available": false,
+      "profile_ready": false,
+      "runtime_claim_blocked": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/action",
+      "case": "parked_action_export_diagnostics",
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_PHASE_PARKED",
+      "changed_files_count": 0
+    },
+    {
+      "method": "POST",
+      "path": "/api/action",
+      "case": "malformed_json_body",
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "changed_files_count": 0
+    }
+  ]
+}

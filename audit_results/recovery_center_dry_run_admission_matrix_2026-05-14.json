@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION",
+  "mode": "admission/spec-only",
+  "date": "2026-05-14",
+  "final_verdict": "RECOVERY_CENTER_DRY_RUN_SUMMARY_ONLY_ADMITTED",
+  "current_repo_facts": [
+    "UI_READINESS_SPEC already lists Stable Repair Dry Run as a non-mutating recovery planning surface",
+    "web design command adapter already allowlists stable_repair_dry_run",
+    "web design live server already exposes stable_repair_plan as recovery_planning with mutates_runtime=false",
+    "stable_repair_apply is blocked from the web design UI action surface",
+    "runtime dry-run packet contains detailed transaction_plan internals including path-shaped auth_ref fields and target authority detail",
+    "browser-facing action result currently remains summary-only because stable repair dry-run does not expose a browser-safe packet.data section"
+  ],
+  "areas": [
+    {
+      "surface": "top_level_dry_run_command_summary",
+      "current_admission": "SUMMARY_ONLY_ADMITTED",
+      "reason": "Existing allowlisted action already exposes bounded non-mutating dry-run command-result summary without browser-side recovery ownership."
+    },
+    {
+      "surface": "detailed_transaction_plan_rendering",
+      "current_admission": "DEFERRED_PENDING_STRICTER_PACKET",
+      "blocking_reasons": [
+        "current transaction_plan includes path-shaped auth_ref details",
+        "current packet includes authority-rich target and reconciliation internals",
+        "rendering this as-is would drift into a browser-owned recovery model"
+      ]
+    },
+    {
+      "surface": "repair_target_strategy_or_policy_selection",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "browser must not choose recovery strategy, recovery target, or repair policy",
+        "no existing bounded selector packet is admitted"
+      ]
+    },
+    {
+      "surface": "stable_repair_apply",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "out of scope for this contour",
+        "apply remains a separate mutating recovery action",
+        "current web design UI explicitly blocks stable_repair_apply"
+      ]
+    },
+    {
+      "surface": "rollback_promise_or_safety_claims",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "dry-run does not prove rollback safety",
+        "dry-run must not imply safe-to-apply or recovered runtime"
+      ]
+    }
+  ],
+  "currently_admitted_fields": [
+    "status",
+    "human_message",
+    "machine_error_code",
+    "next_action",
+    "changed_files",
+    "action_role",
+    "mutates_runtime",
+    "affects_primary_truth",
+    "action_claim_scope"
+  ],
+  "future_packet_requirements_if_detail_is_requested": [
+    "browser-safe bounded detail subsection instead of raw transaction_plan passthrough",
+    "no raw auth_ref paths",
+    "no target inventory path disclosure",
+    "no browser-owned recovery strategy or policy selection",
+    "explicit separation between advisory dry-run detail and apply authority",
+    "stale or historical labeling when not freshly refreshed"
+  ],
+  "browser_payload_rules": {
+    "allowed_now": [
+      "ui_action"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "path",
+      "token",
+      "secret",
+      "arbitrary_flags",
+      "recovery_target",
+      "recovery_strategy",
+      "repair_policy"
+    ]
+  },
+  "implementation_allowed_in_this_contour": false
+}

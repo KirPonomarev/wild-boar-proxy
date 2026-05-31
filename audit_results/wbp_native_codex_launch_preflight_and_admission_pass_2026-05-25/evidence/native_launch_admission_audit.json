@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "audit_id": "INDEPENDENT_AUDIT_WBP_NATIVE_LAUNCH_ADMISSION",
+  "contour_id": "WBP_NATIVE_CODEX_LAUNCH_PREFLIGHT_AND_ADMISSION_PASS_R2",
+  "audit_scope": "admission_only_native_launch_preflight",
+  "live_codex_app_launch_detected": false,
+  "runtime_mutation_detected": false,
+  "ui_mutation_detected": false,
+  "admission_claims_launch": false,
+  "admission_claims_native_window": false,
+  "admission_claims_route_inference": false,
+  "identity_chain_fields_reserved": true,
+  "identity_chain_proven": false,
+  "both_modes_represented": true,
+  "browser_authority_fields_rejected": true,
+  "cleanup_rollback_required": true,
+  "write_surfaces_declared": true,
+  "product_status_upgraded": false,
+  "repo_roadmap_queue_detected": false,
+  "verification_summary": {
+    "native_launch_contract_tests": "passed",
+    "codex_launch_modes_tests": "passed",
+    "py_compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "audit_verdict": "pass_for_admission_only_scope"
+}

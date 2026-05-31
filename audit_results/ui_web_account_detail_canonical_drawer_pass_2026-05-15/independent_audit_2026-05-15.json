@@ -1,0 +1,44 @@
+{
+  "contour": "UI_WEB_ACCOUNT_DETAIL_CANONICAL_DRAWER_PASS",
+  "auditor": "read_only_subagent",
+  "date": "2026-05-15",
+  "verdict": "pass",
+  "failures": [],
+  "findings": [
+    {
+      "item": "scope",
+      "status": "pass",
+      "summary": "Tracked diff stays within web UI and UI tests; no runtime, command adapter, allowlist, or live server files changed."
+    },
+    {
+      "item": "drawer_open",
+      "status": "pass",
+      "summary": "Row click and detail button open the drawer only; no command dispatch is attached to opening details."
+    },
+    {
+      "item": "payload_boundary",
+      "status": "pass",
+      "summary": "Account actions pass only account_id through the bounded UI action payload path."
+    },
+    {
+      "item": "disabled_actions",
+      "status": "pass",
+      "summary": "Disabled account actions render as disabled controls without command listeners."
+    },
+    {
+      "item": "confirmation",
+      "status": "pass",
+      "summary": "Account confirmation preflight renders current account id, pool/lifecycle, requested action, and refresh expectation."
+    },
+    {
+      "item": "redaction",
+      "status": "pass",
+      "summary": "Account last error and timeline fields pass through explicit redaction helpers before rendering."
+    },
+    {
+      "item": "tests",
+      "status": "pass",
+      "summary": "UI tests cover drawer, redaction, confirmation preflight, and button availability behavior."
+    }
+  ]
+}

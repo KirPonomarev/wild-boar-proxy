@@ -1,0 +1,49 @@
+{
+  "status": "ok",
+  "contour": "FULL_SYSTEM_RUNTIME_AND_PROXY_PROOF_PASS",
+  "final_verdict": "passed",
+  "fresh_preflight": {
+    "status_ok": true,
+    "healthcheck_ok": true,
+    "launch_capable_backend_count": 15,
+    "backend_count": 25,
+    "policy_drift_claim_gate_blocked": false,
+    "classification": "runtime_truth_green_with_honest_policy_drift_limits"
+  },
+  "proxy_smoke": {
+    "single_owner_smoke_ok": true,
+    "single_owner_smoke_endpoint": "http://127.0.0.1:8318/v1",
+    "concurrent_owner_probe_classification": "owner_lane_serializes_via_lock",
+    "concurrent_owner_probe_machine_error_codes": [
+      "LOCK_HELD",
+      "OK"
+    ]
+  },
+  "bounded_load": {
+    "runner": "bounded_proxy_responses_parallel",
+    "total_requests": 20,
+    "concurrency": 3,
+    "success_count": 20,
+    "failure_count": 0,
+    "classification": "bounded_proxy_load_green"
+  },
+  "rotation_truth": {
+    "preflight_machine_error_code": "OK",
+    "preflight_final_outcome": "participation_evidence_available",
+    "post_machine_error_code": "OK",
+    "post_final_outcome": "participation_evidence_available"
+  },
+  "post_load_reclear": {
+    "status_ok": true,
+    "healthcheck_ok": true,
+    "rotation_ok": true,
+    "current_proxy_url": "http://127.0.0.1:10808",
+    "endpoint": "http://127.0.0.1:8318/v1"
+  },
+  "current_codex_touch": "none_observed",
+  "claim_boundaries": [
+    "no stable-15-proved claim",
+    "no active-only-traffic claim",
+    "no selected-backend participation beyond bounded snapshot evidence"
+  ]
+}

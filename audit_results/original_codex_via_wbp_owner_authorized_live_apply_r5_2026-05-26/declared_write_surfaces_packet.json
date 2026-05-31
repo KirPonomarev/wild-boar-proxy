@@ -1,0 +1,18 @@
+{
+  "auth_json_mutation_allowed": false,
+  "auth_json_runtime_dependency_allowed": false,
+  "captured_at_utc": "2026-05-26T14:57:06.591392Z",
+  "declared_write_surfaces": [
+    "fresh evidence directory only",
+    "/Users/kirillponomarev/.codex/config.toml"
+  ],
+  "hidden_cleanup_allowed": false,
+  "native_original_launch_allowed": true,
+  "native_original_launch_attempted": false,
+  "original_codex_profile_write_allowed": true,
+  "original_codex_profile_write_performed": false,
+  "owner_authorization_required": true,
+  "owner_authorization_status": "ok",
+  "packet_kind": "declared_write_surfaces",
+  "status": "ok"
+}

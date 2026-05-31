@@ -1,0 +1,27 @@
+{
+  "contour": "WBP_ONE_EXTERNAL_PROVIDER_ROUTE_WORKS_WITH_LIMITS_R2",
+  "pre_fix_failure": {
+    "command": "python3 -m wild_boar_proxy external-models check --json --route wbp-web-primary-openrouter",
+    "observed_status": "error",
+    "machine_error_code": "invalid_upstream_response",
+    "root_cause": "smoke request completion budget was too small for the selected OpenRouter lane",
+    "anchored_provider_fact": {
+      "http_status": 400,
+      "provider_message": "max_output_tokens must be >= 16 when request budget is 8"
+    }
+  },
+  "non_root_causes_ruled_out": {
+    "auth_failed": false,
+    "route_selection_failed": false,
+    "model_visibility_failed": false,
+    "provider_family_switch_required": false
+  },
+  "post_fix_result": {
+    "command": "WBP_EXTERNAL_MODELS_DIR=\"$HOME/.wild-boar-proxy/external-models\" WBP_MANAGED_DIR=\"$HOME/.wild-boar-proxy\" python3 -m wild_boar_proxy external-models check --json --route wbp-web-primary-openrouter",
+    "status": "ok",
+    "machine_error_code": "OK",
+    "route_state": "verified",
+    "request_shape": "openai_chat_messages",
+    "response_shape": "choices_message"
+  }
+}

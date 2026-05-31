@@ -1,0 +1,10 @@
+{
+  "blocked_action": "accounts promote auth --json",
+  "blocked_machine_error_code": "PROMOTION_POLICY_LIMIT_REACHED",
+  "blocked_precondition_status": "active_target_reached",
+  "current_pool_policy": {
+    "active_min": 0,
+    "active_target": 0,
+    "reserve_target": 0
+  }
+}

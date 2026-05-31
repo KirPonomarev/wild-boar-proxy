@@ -1,0 +1,16 @@
+{
+  "captured_from": "audit_results/sandbox_active_lane_external_models_route_add_repair_pass_2026-05-15/decision_packet.json",
+  "route_add_rollback_truth": {
+    "routes_count_after_restore": 0,
+    "models_count_after_restore": 0,
+    "routes_sha_restored": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4",
+    "owner_machine_error_code_after_restore": "ATTESTATION_FAILED",
+    "owner_last_error_after_restore": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+  },
+  "remembered_candidate_route_shape": {
+    "route_id": "wbp-claude-sonnet-4-6-thinking",
+    "upstream_model": "claude-sonnet-4-6-thinking",
+    "auth_type": "none"
+  },
+  "current_truth_statement": "the candidate route is not currently materialized in sandbox routes.json"
+}

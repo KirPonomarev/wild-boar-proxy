@@ -1,0 +1,81 @@
+{
+  "add-deepseek-direct-route": {
+    "human_message": "External-models route added: wbp-deepseek-v3.",
+    "machine_error_code": "OK",
+    "status": "ok"
+  },
+  "check-deepseek-direct-route": {
+    "data": {
+      "effective_model": null,
+      "latency_ms": null,
+      "provider": "deepseek",
+      "response_shape": null,
+      "route_state": "provider_auth_failed",
+      "verification_scope": "route_provider_only"
+    },
+    "human_message": "Provider rejected route credentials.",
+    "machine_error_code": "provider_auth_failed",
+    "status": "error"
+  },
+  "disable-old-route": {
+    "human_message": "External-models route disabled: wbp-deepseek-v3.",
+    "machine_error_code": "OK",
+    "status": "ok"
+  },
+  "external-models-status-after": {
+    "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+    "machine_error_code": "OK",
+    "status": "ok"
+  },
+  "redaction": {
+    "findings": [],
+    "status": "pass"
+  },
+  "remove-old-route": {
+    "human_message": "External-models route removed: wbp-deepseek-v3.",
+    "machine_error_code": "OK",
+    "status": "ok"
+  },
+  "routes-list-after": {
+    "human_message": "External-models routes listed from local registry.",
+    "machine_error_code": "OK",
+    "routes": [
+      {
+        "base_url": "https://api.deepseek.com",
+        "enabled": true,
+        "provider": "deepseek",
+        "route_id": "wbp-deepseek-v3",
+        "upstream_model": "deepseek-chat"
+      }
+    ],
+    "routes_count": 1,
+    "status": "ok"
+  },
+  "validate-deepseek-direct-route": {
+    "data": {
+      "effective_model": null,
+      "latency_ms": null,
+      "provider": "deepseek",
+      "response_shape": null,
+      "route_state": "provider_auth_failed",
+      "verification_scope": "route_provider_only"
+    },
+    "human_message": "Provider rejected route credentials.",
+    "machine_error_code": "provider_auth_failed",
+    "status": "error"
+  },
+  "web": {
+    "routes": [
+      {
+        "provider": "deepseek",
+        "route_id": "wbp-deepseek-v3",
+        "secret_status_label": "available",
+        "upstream_model": "deepseek-chat",
+        "validation_label": "validate failed",
+        "validation_visual_state": "red"
+      }
+    ],
+    "routes_count": 1,
+    "status": "ok"
+  }
+}

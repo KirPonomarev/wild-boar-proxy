@@ -1,0 +1,21 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "Generate an image",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "model": "wbp-fixture-route",
+  "tools": [
+    {
+      "name": "image_generation",
+      "type": "image_generation"
+    }
+  ]
+}

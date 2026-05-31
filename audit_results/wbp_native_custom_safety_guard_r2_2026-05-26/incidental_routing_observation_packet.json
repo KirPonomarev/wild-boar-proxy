@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T18:56:52.003825Z",
+  "incidental_wbp_request_promoted_to_route_proof": false,
+  "model_availability_proven": false,
+  "native_launch_attempted": false,
+  "native_routing_proven": false,
+  "packet_kind": "incidental_routing_observation",
+  "reason_class": "",
+  "response_accepted_by_codex_proven": false,
+  "route_trace_required_for_future_routing_claim": true,
+  "status": "ok",
+  "ux_acceptance_proven": false,
+  "wbp_request_observed": false
+}

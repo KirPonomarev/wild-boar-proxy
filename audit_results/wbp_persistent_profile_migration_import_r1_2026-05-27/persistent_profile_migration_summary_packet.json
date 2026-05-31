@@ -1,0 +1,14 @@
+{
+  "auth_proof_claimed": false,
+  "captured_at_utc": "2026-05-27T11:51:29.462528Z",
+  "final_e2e_claimed": false,
+  "final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_MIGRATION_CLASSIFIED_WITH_LIMITS",
+  "migration_execution_proven": false,
+  "migration_trigger_explicit": true,
+  "packet_kind": "persistent_profile_migration_summary",
+  "persistent_continuity_claimed": false,
+  "restored_state_equivalence_proven": false,
+  "route_proof_claimed": false,
+  "status": "ok",
+  "with_limits_required": true
+}

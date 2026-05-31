@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "date": "2026-05-14",
+  "decisions": [
+    {
+      "area": "css tokens",
+      "status": "applied",
+      "evidence": "overview.css :root includes final color, frame, sidebar, radii, and typography tokens"
+    },
+    {
+      "area": "window geometry",
+      "status": "applied",
+      "evidence": "window width/height now use --window-width 1544px and --window-height 944px"
+    },
+    {
+      "area": "sidebar identity",
+      "status": "applied",
+      "evidence": "sidebar width 304px, padding 66px 24px 28px, logo width 92px"
+    },
+    {
+      "area": "main surface",
+      "status": "applied",
+      "evidence": "main padding 46px 40px 34px"
+    },
+    {
+      "area": "typography",
+      "status": "applied",
+      "evidence": "body 14/20, h1 34/40 700, card title/eyebrow 700, KPI 32/34 700"
+    },
+    {
+      "area": "icon migration",
+      "status": "deferred",
+      "evidence": "no asset migration in this contour; selected icon import belongs to later screen-detail contour"
+    },
+    {
+      "area": "actions and truth surfaces",
+      "status": "unchanged",
+      "evidence": "index.html and overview.js unchanged; data-screen and static data-ui-action invariants match HEAD"
+    },
+    {
+      "area": "1365 viewport proof",
+      "status": "partial",
+      "evidence": "1365x900 crops captured, exact viewport-resize blocked by browser security policy"
+    }
+  ],
+  "changed_files_expected": [
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py"
+  ],
+  "artifacts_expected": [
+    "audit_results/ui_final_design_system_rebase_invariants_2026-05-14.json",
+    "audit_results/ui_final_design_system_rebase_browser_smoke_2026-05-14.json",
+    "audit_results/ui_final_design_system_rebase_matrix_2026-05-14.json",
+    "audit_results/ui_final_design_system_rebase_closeout_2026-05-14.md",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/"
+  ],
+  "acceptance_summary": {
+    "no_new_screen": true,
+    "no_new_static_ui_action": true,
+    "no_forbidden_file_changed": true,
+    "final_tokens_present": true,
+    "private_external_reference_traces_expected_absent": true,
+    "runtime_or_adapter_change_expected_absent": true
+  },
+  "resume_from_here": "Proceed to UI_FINAL_CORE_SCREENS_TRANSFER only after owner reviews screenshots and accepts the base design-system rebase."
+}

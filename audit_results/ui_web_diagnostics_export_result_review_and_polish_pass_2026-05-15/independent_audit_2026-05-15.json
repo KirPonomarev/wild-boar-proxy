@@ -1,0 +1,87 @@
+{
+  "contour_id": "UI_WEB_DIAGNOSTICS_EXPORT_RESULT_REVIEW_AND_POLISH_PASS",
+  "date": "2026-05-15",
+  "auditor": "read_only_subagent",
+  "audit_phase": "initial_surface_audit_and_final_uncommitted_diff_audit",
+  "verdict": "PASS",
+  "summary": "Read-only inspector confirmed the web UI/live server boundary: export_diagnostics is support_artifact, not runtime proof; browser layer used basename metadata and count/marker changed_files; raw argv/logs/raw JSON/full paths did not leak into the browser surface.",
+  "confirmed_facts": [
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "line": 89,
+      "finding": "export_diagnostics is mapped as support_artifact."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "line": 1100,
+      "finding": "diagnostics export payload is sanitized before browser response."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "line": 1599,
+      "finding": "bundle_path rendering uses artifact metadata/basename rather than full path."
+    },
+    {
+      "path": "tests/test_web_design_live_server.py",
+      "line": 1692,
+      "finding": "tests cover safe diagnostics export artifact metadata."
+    },
+    {
+      "path": "tests/test_web_design_ui.py",
+      "line": 714,
+      "finding": "diagnostics screen is asserted as support artifact only."
+    }
+  ],
+  "final_diff_audit": {
+    "verdict": "PASS",
+    "redaction_status_normalized_without_invented_proof": true,
+    "redaction_unreported_not_blue_or_green": true,
+    "redaction_failed_red": true,
+    "export_result_support_artifact_only": true,
+    "runtime_health_green_or_claim_found": false,
+    "bundle_path_basename_reference_only": true,
+    "changed_files_marker_count_only": true,
+    "raw_logs_raw_argv_raw_json_full_paths_in_browser_found": false,
+    "runtime_adapter_allowlist_scope_creep_found": false,
+    "blockers": []
+  },
+  "final_diff_references": [
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "line": 1123,
+      "finding": "redaction_status normalization maps only explicit proof to enabled, failures to failed, and unknown values to unreported."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "line": 1629,
+      "finding": "redaction_unreported maps to amber and support-artifact copy."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "line": 1611,
+      "finding": "redaction_failed maps to red."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "line": 1100,
+      "finding": "bundle_path is reduced to basename and changed_files are converted to diagnostics_bundle markers."
+    },
+    {
+      "path": "tests/test_web_design_ui.py",
+      "line": 2217,
+      "finding": "test rejects runtime-health green for support artifact result."
+    },
+    {
+      "path": "tests/test_web_design_live_server.py",
+      "line": 1751,
+      "finding": "test confirms enabled/failed redaction normalization without full path leak."
+    }
+  ],
+  "adjacent_risks": [
+    {
+      "scope": "desktop_shell",
+      "classification": "out_of_scope",
+      "summary": "Inspector noted desktop shell raw bundle_path/changed_files display as a future parity topic; this contour is web/live-server only."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "artifact_file_count": 10,
+  "secret_pattern_scan_returncode": 1,
+  "secret_pattern_matches_present": false,
+  "secret_pattern_matches": [],
+  "notes": [
+    "auth_ref paths may appear in command packets but no raw key material is allowed",
+    "artifacts intentionally store runtime packet truth, not secret values"
+  ]
+}

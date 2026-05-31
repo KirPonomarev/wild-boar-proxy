@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE_SELECTOR_LOCK_HELD",
+  "basis_head": "fe19560",
+  "basis_branch": "codex/external-agent-lab-isolated",
+  "source_closeout": "audit_results/selector_refresh_owner_path_pass_reentry_2026-05-16/closeout.md",
+  "source_decision_packet": "audit_results/selector_refresh_owner_path_pass_reentry_2026-05-16/decision_packet.json",
+  "selector_refresh_attempt": {
+    "rotation_before_status": "ROTATION_EVIDENCE_STALE",
+    "sync_status": "LOCK_HELD",
+    "sync_human_message": "Mutation lock is held by pid 45666.",
+    "sync_changed_files": [],
+    "rotation_after_status": "ROTATION_EVIDENCE_STALE",
+    "runtime_after_sync": {
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear"
+    }
+  },
+  "post_attempt_observation": {
+    "lock_file_present": false,
+    "pid_45666_present": false
+  },
+  "code_surfaces": {
+    "sync_dispatch": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:78",
+    "runtime_sync": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:6746",
+    "serialized_lock": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:5060",
+    "process_is_alive": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:4992",
+    "runtime_error_json_wrapper": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:421"
+  },
+  "new_guard_tests": [
+    "/Volumes/Work/wild-boar-proxy/tests/test_cli.py:14811",
+    "/Volumes/Work/wild-boar-proxy/tests/test_cli.py:14828"
+  ]
+}

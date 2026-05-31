@@ -1,0 +1,2678 @@
+{
+  "captured_at_utc": "2026-05-23T17:55:49.564211+00:00",
+  "commands": {
+    "accounts_list": {
+      "args": [
+        "<runtime-python>",
+        "-m",
+        "wild_boar_proxy",
+        "accounts",
+        "list",
+        "--json"
+      ],
+      "duration_ms": 88,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout": {
+        "accounts": [
+          {
+            "added_at": "2026-05-03T00:30:00+03:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:14.380747+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 7,
+            "half_open_since": "2026-05-10T19:53:10.563852+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6e6fc7297fca0341ab731f03b1a357d0413c3d101622c224c3107ebf5ed00eff"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-08T15:42:54.460158+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"plus\",\"resets_at\":1778581929,\"eligible_promo\":null,\"resets_in_seconds\":139136}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:14.380747+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-08T20:56:41.885472+00:00",
+            "last_transition_at": "2026-05-10T19:56:09.901300+00:00",
+            "manual_hold": false,
+            "notes": "Current hot path in stable logs.",
+            "pool": "retired",
+            "priority": 10,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T00:30:00+03:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:26.867723+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:17.675329+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:17.675329+00:00",
+            "last_transition_at": "2026-05-10T10:04:30.243738+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 20,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T00:30:00+03:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:19.973215+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:17.812912+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:17.812912+00:00",
+            "last_transition_at": "2026-05-10T10:04:32.997755+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 30,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T00:30:00+03:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:21.790477+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:18.345322+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:18.345322+00:00",
+            "last_transition_at": "2026-05-10T10:04:33.198377+00:00",
+            "manual_hold": false,
+            "notes": "Managed candidate from stable auth pool.",
+            "pool": "active",
+            "priority": 40,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T00:30:00+03:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:23.381852+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:18.438957+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:18.438957+00:00",
+            "last_transition_at": "2026-05-10T10:04:35.351008+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 50,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T09:13:51.167608+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:21.149394+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 17,
+            "half_open_since": "2026-05-10T19:53:17.679280+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c6b864e09d4dc6941a29e543e0bad15671046a8dbd17f5bd5f42de3ccad026ed"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-08T05:23:16.859501+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"team\",\"resets_at\":1778583631,\"eligible_promo\":null,\"resets_in_seconds\":140831}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:21.149394+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-08T10:40:23.898161+00:00",
+            "last_transition_at": "2026-05-10T19:56:27.270054+00:00",
+            "manual_hold": false,
+            "notes": "causes instability",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T09:32:02.780734+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:27.376525+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:18.952356+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:18.952356+00:00",
+            "last_transition_at": "2026-05-10T10:04:39.422289+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T09:55:41.945624+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:28.972628+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:19.039242+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:19.039242+00:00",
+            "last_transition_at": "2026-05-15T22:05:28.972628+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-03T10:09:36.317912+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-15T22:40:20.583930+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 2,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "7b649c67c41027f627c482d87d3f6167ba9f70ffc420052a881bf0fc81697156"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-11T15:20:29.052628+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1779015304,\"eligible_promo\":{\"campaign_id\":\"plus-1-month-free\",\"message\":\"To continue using Codex and get access to GPT-5.3-Codex, start a free trial of Plus today (https://chatgpt.com/explore/plus)\"},\"resets_in_seconds\":130784}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-15T22:35:20.583930+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-11T15:20:29.052628+00:00",
+            "last_transition_at": "2026-05-15T22:35:20.583930+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "degraded",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:16:39.821441+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:30.547027+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:19.555574+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:19.555574+00:00",
+            "last_transition_at": "2026-05-11T15:20:27.710755+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 3,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:22:21.620852+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:31.941352+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 34,
+            "half_open_since": "2026-05-10T19:53:26.665809+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "554042b02c2eda0d2a38d8e831e5d9f613de801c331f52d58e90167d3cedbb50"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-04T20:54:08.785398+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1778498549,\"eligible_promo\":null,\"resets_in_seconds\":55738}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:31.941352+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-04T21:00:55.925126+00:00",
+            "last_transition_at": "2026-05-10T19:55:29.048660+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:33:26.490638+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:32.996268+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 34,
+            "half_open_since": "2026-05-10T19:53:28.877178+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "1f7e1bb2a86a6023a122207b0e946d907d896ed3ec794370302bfa58c9c990c8"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-04T20:38:53.931396+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1778499212,\"eligible_promo\":null,\"resets_in_seconds\":56400}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:32.996268+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-04T21:00:56.209424+00:00",
+            "last_transition_at": "2026-05-10T19:56:45.419547+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:42:48.417571+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:35.252053+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 34,
+            "half_open_since": "2026-05-10T19:53:30.200522+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "b55c2e3d253605afef7647ad806f75293f80e7e1421d08fe86f8fd14e962c2f1"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-04T20:38:55.757947+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1778499777,\"eligible_promo\":null,\"resets_in_seconds\":56963}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:35.252053+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-04T21:00:56.723697+00:00",
+            "last_transition_at": "2026-05-10T19:57:02.151186+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:43:33.049030+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:38.883217+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 34,
+            "half_open_since": "2026-05-10T19:53:32.186458+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "a692ef579b2cf998a5083fd3be68df2ea446433dc543a743c335dc189d75a666"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-04T20:38:58.556730+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1778499826,\"eligible_promo\":null,\"resets_in_seconds\":57008}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:38.883217+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-04T21:00:57.228750+00:00",
+            "last_transition_at": "2026-05-10T19:57:18.446284+00:00",
+            "manual_hold": false,
+            "notes": "degraded-down",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-04T11:44:14.162802+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:39.174236+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 13,
+            "half_open_since": "2026-05-10T19:53:33.405516+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "cf6f6cb1a7b0c715ef18418ad184287bb05b4098d42df9a96080d266ffad3759"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-08T10:40:42.514262+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"team\",\"resets_at\":1778499861,\"eligible_promo\":null,\"resets_in_seconds\":57043}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:39.174236+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-08T16:37:59.989051+00:00",
+            "last_transition_at": "2026-05-10T19:57:40.058081+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-04T11:44:14.049617+00:00",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T13:53:19.235154+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-10T20:23:43.186817+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 17,
+            "half_open_since": "2026-05-10T19:53:35.498541+00:00",
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "87870b3880bdfaef4b3589ab4a889540f02df17a7b222bf922ddf0512d304c3c"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-08T05:23:34.145834+00:00",
+            "last_error": "HTTP 429: {\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"The usage limit has been reached\",\"plan_type\":\"free\",\"resets_at\":1778766805,\"eligible_promo\":null,\"resets_in_seconds\":323983}}",
+            "last_error_class": "quota",
+            "last_probe_at": "2026-05-10T19:53:43.186817+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-08T10:40:40.456896+00:00",
+            "last_transition_at": "2026-05-10T19:58:00.554145+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T13:53:19.126599+00:00",
+            "pool": "retired",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "down",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T14:17:58.111118+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:32.148452+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:20.074165+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:20.074165+00:00",
+            "last_transition_at": "2026-05-10T10:04:55.250356+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T14:17:58.000146+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 31,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T14:39:21.420177+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:32.449778+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:20.671195+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:20.671195+00:00",
+            "last_transition_at": "2026-05-15T22:05:32.449778+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T14:39:21.309989+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T14:51:06.024113+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:33.801655+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:20.970707+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:20.970707+00:00",
+            "last_transition_at": "2026-05-15T22:05:33.801655+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T14:51:05.919056+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T14:55:25.119797+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:33.955246+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:21.055482+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:21.055482+00:00",
+            "last_transition_at": "2026-05-11T15:20:38.527100+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T14:55:25.015647+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 3,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T17:29:54.487464+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:35.619306+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:21.349997+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:21.349997+00:00",
+            "last_transition_at": "2026-05-10T10:17:05.361450+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T17:29:54.356406+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 30,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T17:57:36.476652+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:36.192021+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:21.441503+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:21.441503+00:00",
+            "last_transition_at": "2026-05-15T22:05:36.192021+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T17:57:36.374491+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T17:59:03.592258+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:37.340589+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:21.745463+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:21.745463+00:00",
+            "last_transition_at": "2026-05-15T22:05:37.340589+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T17:59:03.488009+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-07T18:03:13.596246+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": null,
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 0,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-15T22:05:38.305373+00:00",
+            "last_error": "",
+            "last_error_class": "",
+            "last_probe_at": "2026-05-15T22:35:22.745632+00:00",
+            "last_probe_level": "shallow",
+            "last_success": "2026-05-15T22:35:22.745632+00:00",
+            "last_transition_at": "2026-05-15T22:05:38.305373+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-07T18:03:13.464693+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "healthy",
+            "success_count": 2,
+            "type": "cliproxy-auth-file"
+          },
+          {
+            "added_at": "2026-05-11T15:20:05.618303+00:00",
+            "auth_ref": "<redacted>",
+            "cooldown_until": "2026-05-15T22:40:22.665217+00:00",
+            "disabled_reason": "",
+            "drain_until": null,
+            "enabled": true,
+            "fail_count": 2,
+            "half_open_since": null,
+            "id": {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "af4cd349a4c2fcc38128eea1f5777c4a89346cd0c93b2cd4a0accd94220c3db1"
+            },
+            "label": "<label:redacted>",
+            "last_deep_probe_at": "2026-05-11T15:20:53.590041+00:00",
+            "last_error": "HTTP 401: {\"error\":{\"message\":\"Your authentication token has been invalidated. Please try signing in again.\",\"type\":\"authentication_error\",\"code\":\"auth_unavailable\"}}",
+            "last_error_class": "auth",
+            "last_probe_at": "2026-05-15T22:35:22.665217+00:00",
+            "last_probe_level": "deep",
+            "last_success": "2026-05-11T15:20:53.590041+00:00",
+            "last_transition_at": "2026-05-15T22:35:22.665217+00:00",
+            "manual_hold": false,
+            "notes": "Onboarded automatically at 2026-05-11T15:20:05.482408+00:00",
+            "pool": "active",
+            "priority": 100,
+            "proxy_mode": "auto-detect",
+            "status": "degraded",
+            "success_count": 0,
+            "type": "cliproxy-auth-file"
+          }
+        ],
+        "changed_files": [],
+        "exit_code": 0,
+        "human_message": "Account registry snapshot is available.",
+        "liveness": "unknown",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "operator_action": "none",
+        "pool_policy": {
+          "active_min": 20,
+          "active_target": 20,
+          "reserve_target": 0
+        },
+        "registry_identity": {
+          "claim_blockers": [],
+          "duplicate_auth_basenames": [],
+          "duplicate_backend_ids": [],
+          "empty_auth_ref_backends": [],
+          "invalid_auth_basenames": [],
+          "invalid_backend_pools": [],
+          "machine_error_code": "OK",
+          "missing_auth_refs": [],
+          "next_action": "none",
+          "registry_schema_version": 2,
+          "status": "clear",
+          "unsupported_schema_versions": []
+        },
+        "severity": "recoverable",
+        "stable_default_backend_id": "<backend-id:redacted>",
+        "status": "ok"
+      }
+    },
+    "healthcheck": {
+      "args": [
+        "<runtime-python>",
+        "-m",
+        "wild_boar_proxy",
+        "healthcheck",
+        "--json"
+      ],
+      "duration_ms": 1629,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout": {
+        "attestation": {
+          "attestation_source": "healthcheck --json",
+          "base_url_match": true,
+          "configured_model": "gpt-5.5",
+          "configured_proxy_url": "http://127.0.0.1:10808",
+          "current_proxy_url": "http://127.0.0.1:10808",
+          "effective_mode_match": true,
+          "listener_ok": true,
+          "model_match": true,
+          "models_ok": true,
+          "observed_at_utc": "2026-05-23T17:55:54.284812+00:00",
+          "proxy_url_match": true,
+          "requested_model": "gpt-5.5",
+          "responses_ok": true,
+          "runtime_version": "2",
+          "selected_backends_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "auth_pool_hygiene": {
+          "auth_invalid_backend_ids": [
+            "<backend-id:redacted>"
+          ],
+          "blocking_reason": "",
+          "candidate_universe_backend_count": 17,
+          "candidate_universe_backend_ids": [
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>"
+          ],
+          "claim_scope": "bounded_runtime_auth_usability_only",
+          "cooldown_only_backend_ids": [],
+          "launch_capable_backend_count": 15,
+          "launch_capable_backend_ids": [
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+            }
+          ],
+          "machine_error_code": "OK",
+          "quota_exhausted_backend_ids": [
+            "<backend-id:redacted>"
+          ],
+          "ranking_policy": {
+            "fields": [
+              "priority_ascending",
+              "fail_count_ascending",
+              "success_count_descending",
+              "backend_id_ascending"
+            ],
+            "status": "applied"
+          },
+          "selected_backend_ids_observed": [],
+          "selected_launch_capable_backend_count": 0,
+          "selected_launch_capable_backend_ids": [],
+          "selected_unusable_backend_count": 0,
+          "selected_unusable_backend_ids": [],
+          "selection_alignment_status": "aligned",
+          "status": "launch_capable_available",
+          "unknown_unverified_backend_ids": []
+        },
+        "changed_files": [],
+        "configured_model": "gpt-5.5",
+        "configured_proxy_url": "http://127.0.0.1:10808",
+        "current_proxy_adoption_contract": {
+          "absent_default_path_prerequisite_materialization_separate_from_eligibility": true,
+          "activation_surface_kind": "repo_owned_handoff_env_var",
+          "activation_surface_status": "owner_path_private_launcher_activation_available",
+          "activation_value_source_field": "proxy_reprobe.working_candidate",
+          "adoption_from_candidate_liveness_alone_forbidden": true,
+          "adoption_from_last_known_good_alone_forbidden": true,
+          "adoption_from_working_candidate_alone_forbidden": true,
+          "adoption_requires_same_owner_path_live_reproof": true,
+          "ambient_proxy_env_authoritative_forbidden": true,
+          "base_url_proxy_selection_surface_forbidden": true,
+          "candidate_existence_alone_not_ok": true,
+          "candidate_probe_depth": "shallow_socket_listener_only",
+          "candidate_probe_scope": "bounded_local_listener_reachability_only",
+          "changed_files_visibility_required": true,
+          "config_toml_schema_widening_default": false,
+          "control_plane_proxyless": true,
+          "current_proxy_truth_surface": {
+            "field": "current_proxy_url",
+            "meaning": "current_live_outbound_proxy_truth",
+            "persisted_last_known_good_separate": true,
+            "status": "contract_ready",
+            "working_candidate_separate": true
+          },
+          "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
+          "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+          "effectful_runtime_wiring_status": "bounded_private_launcher_lane_available",
+          "engine_local_proxy_routing_allowed": true,
+          "engine_local_proxy_routing_contract": {
+            "allowed": true,
+            "current_engine_consumption_claimed": false,
+            "derived_from_handoff_carrier_only": true,
+            "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+            "derived_proxy_env_keys": [
+              "HTTP_PROXY",
+              "HTTPS_PROXY",
+              "ALL_PROXY",
+              "http_proxy",
+              "https_proxy",
+              "all_proxy"
+            ],
+            "routing_scope": "managed_runtime_child_process_only",
+            "status": "contract_ready"
+          },
+          "engine_local_proxy_routing_scope": "managed_runtime_child_process_only",
+          "external_launcher_path_surface": {
+            "consumer_capability_by_path_presence_forbidden": true,
+            "default_owned_provisioning_target": "<path:redacted>",
+            "env_var": "WBP_LAUNCHER_SCRIPT",
+            "exists": true,
+            "path_kind": "default_owned_provisioning_target",
+            "provisioning_ownership_by_path_presence_forbidden": true,
+            "repo_managed_marker_present": true,
+            "repo_managed_marker_recognized": false,
+            "repo_managed_marker_valid": false,
+            "resolved_path": "<path:redacted>",
+            "role": "launcher_executable_path_surface",
+            "status": "path_present",
+            "truth_surface": false
+          },
+          "external_launcher_readiness_status": "default_path_present_repo_marker_invalid",
+          "handoff_carrier_contract": {
+            "ambient_authoritative_forbidden": true,
+            "current_proxy_truth_surface_field": "current_proxy_url",
+            "env_var": "WBP_CURRENT_PROXY_URL",
+            "persisted_truth_surface_forbidden": true,
+            "status": "contract_ready",
+            "surface_kind": "launcher_scoped_process_local_carrier",
+            "top_level_runtime_truth_by_presence_forbidden": true,
+            "working_candidate_truth_by_presence_forbidden": true
+          },
+          "handoff_env_var": "WBP_CURRENT_PROXY_URL",
+          "launch_smoke_owner_forbidden": true,
+          "launcher_consumer_contract": {
+            "consumer_kind": "bounded_launcher_script",
+            "default_path_non_clobber_required": true,
+            "external_launcher_readiness_status": "default_path_present_repo_marker_invalid",
+            "handoff_carrier_env_var": "WBP_CURRENT_PROXY_URL",
+            "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+            "owner_controlled_activation_only": true,
+            "path_presence_not_capability_proof": true,
+            "repo_managed_marker_present": true,
+            "repo_managed_marker_recognized": false,
+            "repo_managed_marker_required_for_refresh": true,
+            "repo_managed_marker_valid": false,
+            "repo_owned_default_consumer_provisioned": false,
+            "status": "repo_owned_default_consumer_provisioning_available"
+          },
+          "launcher_consumer_status": "repo_owned_default_consumer_provisioning_available",
+          "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "allowed_when_launcher_lane_ineligible": true,
+            "command_surface": "sync --json",
+            "owner_path_private": true,
+            "reproof_required": true,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "status": "available",
+            "writes_managed_config_proxy_url": true
+          },
+          "launcher_protocol_change_outside_repo_owned_handoff_forbidden": true,
+          "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+          "managed_config_schema_widening_default": false,
+          "managed_runtime_subprocess_only": true,
+          "nested_adoption_result_surface": {
+            "command_packet_only_default": true,
+            "field": "proxy_reprobe_adoption_result",
+            "status": "owner_path_emitted"
+          },
+          "new_persisted_adoption_metadata_default": false,
+          "owner_activation_lane": "serialized_healthcheck_owner_path",
+          "owner_command_surface": "healthcheck --json",
+          "post_adoption_runtime_validation_surface": "healthcheck.attestation",
+          "proxy_path_broken_remains_valid_without_live_reproof": true,
+          "proxy_reprobe_failed_remains_valid_without_candidate": true,
+          "repo_owned_default_consumer_provisioned": false,
+          "same_current_reconfirm_not_adoption": true,
+          "separate_control_layer_deep_probe_surface_default": false,
+          "state_file": "<path:redacted>",
+          "status": "contract_ready",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "top_level_ok_requires_live_runtime_reproof": true,
+          "working_candidate_surface": {
+            "current_proxy_truth_by_presence_forbidden": true,
+            "field": "proxy_reprobe.working_candidate",
+            "nested_evidence_only": true,
+            "persisted_history_by_presence_forbidden": true,
+            "status": "contract_ready"
+          },
+          "write_owner": "serialized_healthcheck_owner_path"
+        },
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "desired_mode": "stable",
+        "deterministic_stable_recovery_contract": {
+          "approved_target_recovery_outcome": "separate",
+          "eligible_failure_lanes": [
+            "managed_preflight_failure",
+            "stable_service_disabled",
+            "explicit_stable_recovery_lane"
+          ],
+          "entry_lane_surface": {
+            "allowed_values": [
+              "managed_preflight_failure",
+              "stable_service_disabled",
+              "explicit_stable_recovery_lane",
+              "not_invoked"
+            ],
+            "field": "deterministic_stable_recovery_result.entry_lane",
+            "nested_recovery_surface": true,
+            "status": "owner_path_emitted",
+            "top_level_machine_error_code_separate": true
+          },
+          "entry_owner": "healthcheck_live_attestation_path",
+          "failure_taxonomy_redesign_forbidden": true,
+          "generated_config_derivation_source": "current_baseline_stable_config_plus_current_approved_target_reference",
+          "generated_config_existence_alone_sufficient": false,
+          "generated_config_regeneration_owner_paths": [
+            "healthcheck --json",
+            "launch smoke --json"
+          ],
+          "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+          "generated_config_regeneration_status": "owner_path_emitted",
+          "last_known_good_proxy_persistence_in_scope": false,
+          "live_runtime_observation_required": true,
+          "mode_truth_redefinition_forbidden": true,
+          "new_generic_cli_default": false,
+          "new_persisted_recovery_metadata_required": false,
+          "observed_source_fallback_recovery_outcome": "separate",
+          "owner_command_surface": "healthcheck --json",
+          "re_enable_method_contract": {
+            "generic_service_supervision_forbidden": true,
+            "launchd_integration_forbidden": true,
+            "launcher_protocol_widening_required": false,
+            "os_service_manager_integration_forbidden": true,
+            "owner_command_surface": "healthcheck --json",
+            "owner_path_scope": "bounded_control_layer_recovery_action",
+            "reuse_private_launch_smoke_helper_allowed": true,
+            "status": "owner_path_emitted"
+          },
+          "recovery_failure_outcome": "separate",
+          "shared_activation_mechanics": {
+            "generated_config_file": "<path:redacted>",
+            "handoff_env_var": "WBP_STABLE_CONFIG",
+            "owner_paths": [
+              "healthcheck --json",
+              "launch smoke --json"
+            ],
+            "reuse_existing_launch_smoke_activation_helper": true,
+            "snapshot_topic": "stable_runtime_consumer_snapshot",
+            "status": "owner_path_emitted"
+          },
+          "snapshot_refresh_after_stable_live_outcome": true,
+          "snapshot_refresh_owner_paths": [
+            "healthcheck --json",
+            "launch smoke --json"
+          ],
+          "snapshot_refresh_status": "owner_path_emitted",
+          "snapshot_schema_widening_required": false,
+          "stable_service_disabled_classification": {
+            "bounded_reenable_lane_eligible_required": true,
+            "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+            "control_layer_classification": true,
+            "desired_mode_alone_sufficient": false,
+            "generated_config_existence_alone_sufficient": false,
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "overclassification_forbidden": true,
+            "persisted_engine_state_flag": false,
+            "positive_evidence_required": true,
+            "proxy_path_failure_codes_separate": [
+              "PROXY_PATH_BROKEN",
+              "PROXY_REPROBE_FAILED"
+            ],
+            "snapshot_presence_alone_sufficient": false,
+            "status": "owner_path_emitted"
+          },
+          "stale_generated_config_authoritative": false,
+          "status": "contract_ready",
+          "status_delegates_to_owner": true,
+          "sync_hidden_owner_forbidden": true,
+          "top_level_machine_error_code_rules": {
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "ok_after_successful_reenable": "OK",
+            "proxy_path_codes_remain_separate": true,
+            "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+            "stable_service_disabled_requires_final_unhealthy": true,
+            "status": "owner_path_emitted"
+          },
+          "top_level_truth_boundaries": {
+            "final_live_truth_separate": true,
+            "launch_smoke_owner_lane_fields_forbidden": true,
+            "nested_recovery_surface": "deterministic_stable_recovery_result",
+            "status": "contract_ready",
+            "status_second_owner_forbidden": true,
+            "sync_owner_lane_forbidden": true,
+            "top_level_final_truth_fields": [
+              "status",
+              "machine_error_code",
+              "liveness",
+              "endpoint"
+            ]
+          }
+        },
+        "deterministic_stable_recovery_result": {
+          "attempted": false,
+          "confirmation_basis": "",
+          "delegated_from_status": false,
+          "effectful_claim_allowed": false,
+          "entry_lane": "not_invoked",
+          "fallback_reason": "",
+          "generated_config_regenerated": false,
+          "guardrail_status": "not_invoked",
+          "live_runtime_observation_confirmed": false,
+          "outcome": "not_invoked",
+          "owner_command_surface": "healthcheck --json",
+          "re_enable_method": "",
+          "selected_source_kind": "",
+          "selected_source_path": "",
+          "snapshot_refreshed": false,
+          "status": "not_invoked"
+        },
+        "effective_mode": "stable",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "exit_code": 0,
+        "human_message": "Runtime attestation passed.",
+        "last_error": "",
+        "last_known_good_proxy": {
+          "current_proxy_url_separate": true,
+          "eligible_for_bounded_reprobe": true,
+          "final_live_truth_without_live_checks": false,
+          "matches_current_proxy_url": true,
+          "observed_at_utc": "2026-05-15T22:46:51.193603+00:00",
+          "proxy_url": "http://127.0.0.1:10808",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "state_file": "<path:redacted>",
+          "status": "materialized"
+        },
+        "last_known_good_proxy_contract": {
+          "candidate_input_deduped_after_filter": true,
+          "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            "last_known_good_proxy_url",
+            "current_proxy_url",
+            "legacy.default_local_proxy_candidates",
+            "legacy.dynamic_local_listener_candidates"
+          ],
+          "candidate_inputs_bounded_local_only": true,
+          "changed_files_visibility_required": true,
+          "current_proxy_url_field": "current_proxy_url",
+          "current_proxy_url_reuse_forbidden": true,
+          "failed_reprobe_clears_persisted_value": false,
+          "historical_truth_promotes_live_truth": false,
+          "launch_smoke_owner_forbidden": true,
+          "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "allowed_when_launcher_lane_ineligible": true,
+            "command_surface": "sync --json",
+            "owner_path_private": true,
+            "reproof_required": true,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "status": "available",
+            "writes_managed_config_proxy_url": true
+          },
+          "owner_command_surface": "healthcheck --json",
+          "refresh_from_candidate_liveness_alone_forbidden": true,
+          "refresh_from_current_proxy_url_alone_forbidden": true,
+          "refresh_requires_positive_managed_proxy_proof": true,
+          "separate_metadata_file_default": false,
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "state_file": "<path:redacted>",
+          "status": "contract_ready",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "write_owner": "serialized_healthcheck_owner_path",
+          "write_path_status": "owner_path_emitted"
+        },
+        "launch_readiness": {
+          "auth_pool_hygiene_status": "launch_capable_available",
+          "base_url_match": true,
+          "blocking_reason": "",
+          "delegated_from_status": false,
+          "effective_mode_match": true,
+          "failed_checks": [],
+          "gate_passed": true,
+          "last_error": "",
+          "launch_capable_backend_count": 15,
+          "listener_reachable": true,
+          "machine_error_code": "OK",
+          "model_match": true,
+          "models_surface_reachable": true,
+          "owner_command_surface": "healthcheck --json",
+          "proxy_url_match": true,
+          "real_inference_required": true,
+          "responses_proof_passed": true,
+          "status": "ready",
+          "truth_alignment_passed": true
+        },
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "operator_action": "none",
+        "requested_model": "gpt-5.5",
+        "runtime_guardrails": {
+          "auth_pool_blocking_reason": "",
+          "auth_pool_hygiene_status": "launch_capable_available",
+          "blocking_reason": "",
+          "failed_checks": [],
+          "launch_blocking_reason": "",
+          "launch_readiness_status": "ready",
+          "lock_status": "available",
+          "owner_command_surface": "healthcheck --json",
+          "recovery_confirmation_basis": "",
+          "recovery_effectful_claim_allowed": false,
+          "recovery_guardrail_status": "not_invoked",
+          "status": "clear"
+        },
+        "severity": "recoverable",
+        "status": "ok"
+      }
+    },
+    "rollout_rotation_inspect": {
+      "args": [
+        "<runtime-python>",
+        "-m",
+        "wild_boar_proxy",
+        "rollout",
+        "rotation",
+        "inspect",
+        "--json"
+      ],
+      "duration_ms": 66,
+      "returncode": 1,
+      "stderr_tail": "",
+      "stdout": {
+        "changed_files": [],
+        "delegated_evidence": {
+          "policy_drift_summary": {
+            "allowed_stable_auth_count": 15,
+            "configured_active_count": 17,
+            "machine_error_code": "OK",
+            "stable_auth_inventory_count": 15,
+            "stable_auth_inventory_source": {
+              "exists": true,
+              "path": "<redacted>",
+              "path_resolution": "control_owned_inventory_path",
+              "source": "approved_repair_target"
+            },
+            "status": "clear"
+          },
+          "pool_summary": {
+            "active": 17,
+            "backend_count": 25,
+            "runtime_active_count": 17,
+            "selected_backend_ids": [
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+              },
+              {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+              }
+            ]
+          },
+          "registry_identity_summary": {
+            "machine_error_code": "OK",
+            "status": "clear"
+          }
+        },
+        "exit_code": 1,
+        "human_message": "Rotation participation evidence is stale because the selected backend snapshot is outside the freshness window.",
+        "liveness": "unknown",
+        "machine_error_code": "ROTATION_EVIDENCE_STALE",
+        "next_action": "retry",
+        "operator_action": "retry",
+        "rotation_evidence_result": {
+          "active_pool_count_agreement_status": "matched",
+          "active_pool_count_observed": 17,
+          "active_routing_candidate_ids_observed": [
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>"
+          ],
+          "attempted": true,
+          "blocker_type": "stale_state",
+          "claim_scope": "bounded_local_participation_evidence_only",
+          "evidence_freshness": "stale",
+          "evidence_producer_version": "2",
+          "evidence_reason": "selected_backend_snapshot_stale",
+          "evidence_source": "runtime_state.selected_backend_snapshot",
+          "evidence_source_class": "supervisor_owner_observed",
+          "evidence_source_layer": "supervisor_owner_observed",
+          "evidence_source_name": "sync --json",
+          "evidence_source_run_id": "sync:2026-05-23T02:10:03.811991+00:00",
+          "evidence_sources": [
+            "runtime_state.selected_backend_snapshot",
+            "runtime_state.selected_backend_ids",
+            "runtime_state.active_count",
+            "backend_registry.active_pool",
+            "backend_registry.routing_candidate_backends",
+            "stable_policy_drift",
+            "registry_identity"
+          ],
+          "evidence_status": "participation_evidence_stale",
+          "evidence_strength": "partial",
+          "expected_selected_backends_digest": "3fe6b635a0bf21125f72bfb6203a3ba7bcd5119f8080b6ba482fc489b0210188",
+          "final_outcome": "participation_evidence_stale",
+          "observed_at_utc": "2026-05-23T02:10:03.811991+00:00",
+          "participation_status": "stale",
+          "participation_summary": {
+            "active_pool_count_agreement_status": "matched",
+            "active_routing_candidate_count": 15,
+            "final_outcome": "participation_evidence_stale",
+            "registry_active_pool_count": 17,
+            "runtime_active_pool_count": 17,
+            "selected_backend_count": 15,
+            "status": "stale"
+          },
+          "policy_drift_claim_surface_source": "approved_repair_target",
+          "policy_drift_observed_status": "detected",
+          "policy_drift_status": "clear",
+          "registry_active_pool_count_observed": 17,
+          "registry_identity_status": "clear",
+          "requested_scope": "expanded-active-pool",
+          "runtime_active_pool_count_observed": 17,
+          "schema_version": 1,
+          "selected_backend_ids": [
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+            }
+          ],
+          "selected_backend_ids_observed": [
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+            }
+          ],
+          "selected_backend_snapshot_compatibility": "nested_snapshot",
+          "selected_backend_snapshot_present": true,
+          "selected_backend_snapshot_validation_error": "",
+          "selected_backend_snapshot_validation_status": "valid",
+          "selected_backends_digest": "3fe6b635a0bf21125f72bfb6203a3ba7bcd5119f8080b6ba482fc489b0210188",
+          "stable_inventory_status": "available",
+          "status": "owner_path_emitted"
+        },
+        "severity": "recoverable",
+        "status": "error"
+      }
+    },
+    "status": {
+      "args": [
+        "<runtime-python>",
+        "-m",
+        "wild_boar_proxy",
+        "status",
+        "--json"
+      ],
+      "duration_ms": 3115,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout": {
+        "attestation_summary": {
+          "attestation_source": "healthcheck --json",
+          "machine_error_code": "OK",
+          "observed_at_utc": "2026-05-23T17:55:52.651671+00:00",
+          "status": "ok"
+        },
+        "auth_pool_hygiene": {
+          "auth_invalid_backend_ids": [
+            "<backend-id:redacted>"
+          ],
+          "blocking_reason": "",
+          "candidate_universe_backend_count": 17,
+          "candidate_universe_backend_ids": [
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>",
+            "<backend-id:redacted>"
+          ],
+          "claim_scope": "bounded_runtime_auth_usability_only",
+          "cooldown_only_backend_ids": [],
+          "delegated_from_status": true,
+          "launch_capable_backend_count": 15,
+          "launch_capable_backend_ids": [
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "05bd42a33a468c07eebf0fc33243593460f5c34d49c7283b210618261d2702a0"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "e2af33f088ec4ccc90bbe8b363d51044cc207f51e70e969bad7b112722a0f771"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "d73e9f724d4ccdd1323bdabd5cc4b3e9f368145b8fa3f9ba6a7c4894616fbd6a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "4f654346faaebd792ddb243530b3f2df37867ff3625763f4a455eb6b350ea494"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "db5538d9f09a9f7d403368766bc1aceb91f010c2a47763d529515ce003e1ab54"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "92d5c1082ea2b72a07495c7009bbbbb60853ac5a08eb1af9279ccb183723747e"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "c1c43e18cc88d637f0b0c17a9d275924e37dcf138136159bd8908afb00dcf0da"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "8197cc53d777f075925cc6c1c9b3d98f3beec67bdee53f34754a03f86db55f5c"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "860da61bf19f2807ca1c439e8828f6681e7b18ce9556832551dd3b8416d51e05"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "df56f1a39b3fa5027635eab406ec5260cd7b45c53b268ed55be0e358ae257920"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "f36c7bdffa69fdc81686e25e315ae1127d83567265dd1bf69ff2178533786d7d"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "5b1b0f0e30ced3d6f00e9420e2bfd285360dab733668c8659a28deac122b2a30"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "915e9f0e9bf88731e3632fb0fe8d70361a64148fd11a5f4d0b81fd6cccfa197a"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "fa368f2a2b92f714ed772b9f9e920d2a847fd151e85bb814d3c278d1bb0b4e82"
+            },
+            {
+              "prefix": "<redacted>",
+              "redacted": true,
+              "sha256": "6753c0108ed893b70bef19005bfa04e2a430a9ac6579dd96f7bced7fd409b523"
+            }
+          ],
+          "machine_error_code": "OK",
+          "quota_exhausted_backend_ids": [
+            "<backend-id:redacted>"
+          ],
+          "ranking_policy": {
+            "fields": [
+              "priority_ascending",
+              "fail_count_ascending",
+              "success_count_descending",
+              "backend_id_ascending"
+            ],
+            "status": "applied"
+          },
+          "selected_backend_ids_observed": [],
+          "selected_launch_capable_backend_count": 0,
+          "selected_launch_capable_backend_ids": [],
+          "selected_unusable_backend_count": 0,
+          "selected_unusable_backend_ids": [],
+          "selection_alignment_status": "aligned",
+          "status": "launch_capable_available",
+          "unknown_unverified_backend_ids": []
+        },
+        "changed_files": [],
+        "claim_gate": {
+          "blocked_claims": [
+            "active-only-traffic",
+            "pool-participation-correct",
+            "stable-15-proved"
+          ],
+          "machine_error_code": "CLAIM_GATE_BLOCKED",
+          "next_action": "inspect_claim_gate",
+          "sources": [
+            "policy_drift"
+          ],
+          "status": "blocked"
+        },
+        "configured_model": "gpt-5.5",
+        "configured_proxy_url": "http://127.0.0.1:10808",
+        "current_proxy_adoption_contract": {
+          "absent_default_path_prerequisite_materialization_separate_from_eligibility": true,
+          "activation_surface_kind": "repo_owned_handoff_env_var",
+          "activation_surface_status": "owner_path_private_launcher_activation_available",
+          "activation_value_source_field": "proxy_reprobe.working_candidate",
+          "adoption_from_candidate_liveness_alone_forbidden": true,
+          "adoption_from_last_known_good_alone_forbidden": true,
+          "adoption_from_working_candidate_alone_forbidden": true,
+          "adoption_requires_same_owner_path_live_reproof": true,
+          "ambient_proxy_env_authoritative_forbidden": true,
+          "base_url_proxy_selection_surface_forbidden": true,
+          "candidate_existence_alone_not_ok": true,
+          "candidate_probe_depth": "shallow_socket_listener_only",
+          "candidate_probe_scope": "bounded_local_listener_reachability_only",
+          "changed_files_visibility_required": true,
+          "config_toml_schema_widening_default": false,
+          "control_plane_proxyless": true,
+          "current_proxy_truth_surface": {
+            "field": "current_proxy_url",
+            "meaning": "current_live_outbound_proxy_truth",
+            "persisted_last_known_good_separate": true,
+            "status": "contract_ready",
+            "working_candidate_separate": true
+          },
+          "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
+          "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+          "effectful_runtime_wiring_status": "bounded_private_launcher_lane_available",
+          "engine_local_proxy_routing_allowed": true,
+          "engine_local_proxy_routing_contract": {
+            "allowed": true,
+            "current_engine_consumption_claimed": false,
+            "derived_from_handoff_carrier_only": true,
+            "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+            "derived_proxy_env_keys": [
+              "HTTP_PROXY",
+              "HTTPS_PROXY",
+              "ALL_PROXY",
+              "http_proxy",
+              "https_proxy",
+              "all_proxy"
+            ],
+            "routing_scope": "managed_runtime_child_process_only",
+            "status": "contract_ready"
+          },
+          "engine_local_proxy_routing_scope": "managed_runtime_child_process_only",
+          "external_launcher_path_surface": {
+            "consumer_capability_by_path_presence_forbidden": true,
+            "default_owned_provisioning_target": "<path:redacted>",
+            "env_var": "WBP_LAUNCHER_SCRIPT",
+            "exists": true,
+            "path_kind": "default_owned_provisioning_target",
+            "provisioning_ownership_by_path_presence_forbidden": true,
+            "repo_managed_marker_present": true,
+            "repo_managed_marker_recognized": false,
+            "repo_managed_marker_valid": false,
+            "resolved_path": "<path:redacted>",
+            "role": "launcher_executable_path_surface",
+            "status": "path_present",
+            "truth_surface": false
+          },
+          "external_launcher_readiness_status": "default_path_present_repo_marker_invalid",
+          "handoff_carrier_contract": {
+            "ambient_authoritative_forbidden": true,
+            "current_proxy_truth_surface_field": "current_proxy_url",
+            "env_var": "WBP_CURRENT_PROXY_URL",
+            "persisted_truth_surface_forbidden": true,
+            "status": "contract_ready",
+            "surface_kind": "launcher_scoped_process_local_carrier",
+            "top_level_runtime_truth_by_presence_forbidden": true,
+            "working_candidate_truth_by_presence_forbidden": true
+          },
+          "handoff_env_var": "WBP_CURRENT_PROXY_URL",
+          "launch_smoke_owner_forbidden": true,
+          "launcher_consumer_contract": {
+            "consumer_kind": "bounded_launcher_script",
+            "default_path_non_clobber_required": true,
+            "external_launcher_readiness_status": "default_path_present_repo_marker_invalid",
+            "handoff_carrier_env_var": "WBP_CURRENT_PROXY_URL",
+            "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+            "owner_controlled_activation_only": true,
+            "path_presence_not_capability_proof": true,
+            "repo_managed_marker_present": true,
+            "repo_managed_marker_recognized": false,
+            "repo_managed_marker_required_for_refresh": true,
+            "repo_managed_marker_valid": false,
+            "repo_owned_default_consumer_provisioned": false,
+            "status": "repo_owned_default_consumer_provisioning_available"
+          },
+          "launcher_consumer_status": "repo_owned_default_consumer_provisioning_available",
+          "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "allowed_when_launcher_lane_ineligible": true,
+            "command_surface": "sync --json",
+            "owner_path_private": true,
+            "reproof_required": true,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "status": "available",
+            "writes_managed_config_proxy_url": true
+          },
+          "launcher_protocol_change_outside_repo_owned_handoff_forbidden": true,
+          "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+          "managed_config_schema_widening_default": false,
+          "managed_runtime_subprocess_only": true,
+          "nested_adoption_result_surface": {
+            "command_packet_only_default": true,
+            "field": "proxy_reprobe_adoption_result",
+            "status": "owner_path_emitted"
+          },
+          "new_persisted_adoption_metadata_default": false,
+          "owner_activation_lane": "serialized_healthcheck_owner_path",
+          "owner_command_surface": "healthcheck --json",
+          "post_adoption_runtime_validation_surface": "healthcheck.attestation",
+          "proxy_path_broken_remains_valid_without_live_reproof": true,
+          "proxy_reprobe_failed_remains_valid_without_candidate": true,
+          "repo_owned_default_consumer_provisioned": false,
+          "same_current_reconfirm_not_adoption": true,
+          "separate_control_layer_deep_probe_surface_default": false,
+          "state_file": "<path:redacted>",
+          "status": "contract_ready",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "top_level_ok_requires_live_runtime_reproof": true,
+          "working_candidate_surface": {
+            "current_proxy_truth_by_presence_forbidden": true,
+            "field": "proxy_reprobe.working_candidate",
+            "nested_evidence_only": true,
+            "persisted_history_by_presence_forbidden": true,
+            "status": "contract_ready"
+          },
+          "write_owner": "serialized_healthcheck_owner_path"
+        },
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "desired_mode": "stable",
+        "effective_mode": "stable",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "exit_code": 0,
+        "human_message": "Runtime status summary is available.",
+        "last_error": "",
+        "last_known_good_proxy": {
+          "current_proxy_url_separate": true,
+          "eligible_for_bounded_reprobe": true,
+          "final_live_truth_without_live_checks": false,
+          "matches_current_proxy_url": true,
+          "observed_at_utc": "2026-05-15T22:46:51.193603+00:00",
+          "proxy_url": "http://127.0.0.1:10808",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "state_file": "<path:redacted>",
+          "status": "materialized"
+        },
+        "last_known_good_proxy_contract": {
+          "candidate_input_deduped_after_filter": true,
+          "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            "last_known_good_proxy_url",
+            "current_proxy_url",
+            "legacy.default_local_proxy_candidates",
+            "legacy.dynamic_local_listener_candidates"
+          ],
+          "candidate_inputs_bounded_local_only": true,
+          "changed_files_visibility_required": true,
+          "current_proxy_url_field": "current_proxy_url",
+          "current_proxy_url_reuse_forbidden": true,
+          "failed_reprobe_clears_persisted_value": false,
+          "historical_truth_promotes_live_truth": false,
+          "launch_smoke_owner_forbidden": true,
+          "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "allowed_when_launcher_lane_ineligible": true,
+            "command_surface": "sync --json",
+            "owner_path_private": true,
+            "reproof_required": true,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "status": "available",
+            "writes_managed_config_proxy_url": true
+          },
+          "owner_command_surface": "healthcheck --json",
+          "refresh_from_candidate_liveness_alone_forbidden": true,
+          "refresh_from_current_proxy_url_alone_forbidden": true,
+          "refresh_requires_positive_managed_proxy_proof": true,
+          "separate_metadata_file_default": false,
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "state_file": "<path:redacted>",
+          "status": "contract_ready",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "write_owner": "serialized_healthcheck_owner_path",
+          "write_path_status": "owner_path_emitted"
+        },
+        "launch_readiness": {
+          "auth_pool_hygiene_status": "launch_capable_available",
+          "base_url_match": true,
+          "blocking_reason": "",
+          "delegated_from_status": true,
+          "effective_mode_match": true,
+          "failed_checks": [],
+          "gate_passed": true,
+          "last_error": "",
+          "launch_capable_backend_count": 15,
+          "listener_reachable": true,
+          "machine_error_code": "OK",
+          "model_match": true,
+          "models_surface_reachable": true,
+          "owner_command_surface": "healthcheck --json",
+          "proxy_url_match": true,
+          "real_inference_required": true,
+          "responses_proof_passed": true,
+          "status": "ready",
+          "truth_alignment_passed": true
+        },
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "operator_action": "none",
+        "policy_drift": {
+          "allowed_stable_auth_count": 15,
+          "claim_blockers": [
+            "stable-15-proved",
+            "active-only-traffic",
+            "pool-participation-correct"
+          ],
+          "configured_active_count": 17,
+          "disallowed_configured_auths": [
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "c6b864e09d4dc6941a29e543e0bad15671046a8dbd17f5bd5f42de3ccad026ed"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "cf6f6cb1a7b0c715ef18418ad184287bb05b4098d42df9a96080d266ffad3759"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "af4cd349a4c2fcc38128eea1f5777c4a89346cd0c93b2cd4a0accd94220c3db1"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "active",
+              "reason": "auth_invalid,status_not_allowed",
+              "status": "degraded"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "7b649c67c41027f627c482d87d3f6167ba9f70ffc420052a881bf0fc81697156"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "active",
+              "reason": "quota_exhausted,status_not_allowed",
+              "status": "degraded"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "554042b02c2eda0d2a38d8e831e5d9f613de801c331f52d58e90167d3cedbb50"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "6e6fc7297fca0341ab731f03b1a357d0413c3d101622c224c3107ebf5ed00eff"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "a692ef579b2cf998a5083fd3be68df2ea446433dc543a743c335dc189d75a666"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "1f7e1bb2a86a6023a122207b0e946d907d896ed3ec794370302bfa58c9c990c8"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "87870b3880bdfaef4b3589ab4a889540f02df17a7b222bf922ddf0512d304c3c"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "b55c2e3d253605afef7647ad806f75293f80e7e1421d08fe86f8fd14e962c2f1"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            }
+          ],
+          "machine_error_code": "STABLE_POLICY_DRIFT",
+          "missing_auths": [],
+          "next_action": "inspect_stable_policy_drift",
+          "stable_auth_inventory_count": 25,
+          "stable_auth_inventory_source": {
+            "exists": true,
+            "path": "<redacted>",
+            "path_resolution": "expanduser",
+            "source": "auth-dir"
+          },
+          "status": "detected",
+          "unknown_auths": []
+        },
+        "policy_drift_observed": {
+          "allowed_stable_auth_count": 15,
+          "claim_blockers": [
+            "stable-15-proved",
+            "active-only-traffic",
+            "pool-participation-correct"
+          ],
+          "configured_active_count": 17,
+          "disallowed_configured_auths": [
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "c6b864e09d4dc6941a29e543e0bad15671046a8dbd17f5bd5f42de3ccad026ed"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "cf6f6cb1a7b0c715ef18418ad184287bb05b4098d42df9a96080d266ffad3759"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "af4cd349a4c2fcc38128eea1f5777c4a89346cd0c93b2cd4a0accd94220c3db1"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "active",
+              "reason": "auth_invalid,status_not_allowed",
+              "status": "degraded"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "7b649c67c41027f627c482d87d3f6167ba9f70ffc420052a881bf0fc81697156"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "active",
+              "reason": "quota_exhausted,status_not_allowed",
+              "status": "degraded"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "554042b02c2eda0d2a38d8e831e5d9f613de801c331f52d58e90167d3cedbb50"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "6e6fc7297fca0341ab731f03b1a357d0413c3d101622c224c3107ebf5ed00eff"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "a692ef579b2cf998a5083fd3be68df2ea446433dc543a743c335dc189d75a666"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "1f7e1bb2a86a6023a122207b0e946d907d896ed3ec794370302bfa58c9c990c8"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "87870b3880bdfaef4b3589ab4a889540f02df17a7b222bf922ddf0512d304c3c"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            },
+            {
+              "auth_basename": "<email:redacted>",
+              "backend_id": {
+                "prefix": "<redacted>",
+                "redacted": true,
+                "sha256": "b55c2e3d253605afef7647ad806f75293f80e7e1421d08fe86f8fd14e962c2f1"
+              },
+              "enabled": true,
+              "manual_hold": false,
+              "pool": "retired",
+              "reason": "pool_not_active,status_not_allowed",
+              "status": "down"
+            }
+          ],
+          "machine_error_code": "STABLE_POLICY_DRIFT",
+          "missing_auths": [],
+          "next_action": "inspect_stable_policy_drift",
+          "stable_auth_inventory_count": 25,
+          "stable_auth_inventory_source": {
+            "exists": true,
+            "path": "<redacted>",
+            "path_resolution": "expanduser",
+            "source": "auth-dir"
+          },
+          "status": "detected",
+          "unknown_auths": []
+        },
+        "pool_summary": {
+          "active": 17,
+          "backend_count": 25,
+          "degraded": 0,
+          "down": 1,
+          "healthy": 1,
+          "reserve": 0,
+          "retired": 8,
+          "selected_backend_ids": []
+        },
+        "registry_identity_summary": {
+          "machine_error_code": "OK",
+          "status": "clear"
+        },
+        "requested_model": "gpt-5.5",
+        "runtime_guardrails": {
+          "auth_pool_blocking_reason": "",
+          "auth_pool_hygiene_status": "launch_capable_available",
+          "blocking_reason": "",
+          "delegated_from_status": true,
+          "failed_checks": [],
+          "launch_blocking_reason": "",
+          "launch_readiness_status": "ready",
+          "lock_status": "available",
+          "owner_command_surface": "status --json",
+          "recovery_confirmation_basis": "",
+          "recovery_effectful_claim_allowed": false,
+          "recovery_guardrail_status": "not_invoked",
+          "status": "clear"
+        },
+        "severity": "recoverable",
+        "stable_runtime_consumer": {
+          "activation_evidence_surface": {
+            "classification": "runtime_state_snapshot_evidence",
+            "current_snapshot": {
+              "activation_method": "process_local_env_override",
+              "activation_outcome": "approved_target_activated",
+              "fallback_reason": "",
+              "observed_at_utc": "2026-05-23T14:57:45.523035+00:00",
+              "schema_version": 1,
+              "selected_config_file": "<path:redacted>",
+              "selected_source_kind": "approved_repair_target",
+              "selected_source_path": "<path:redacted>"
+            },
+            "final_truth_without_live_checks": false,
+            "generated_config_file": "<path:redacted>",
+            "live_runtime_observation_required": true,
+            "owner": "serialized_runtime_state_mutation_path",
+            "required_fields": [
+              "schema_version",
+              "activation_method",
+              "selected_config_file",
+              "selected_source_kind",
+              "selected_source_path",
+              "activation_outcome",
+              "fallback_reason",
+              "observed_at_utc"
+            ],
+            "snapshot_alone_sufficient": false,
+            "snapshot_file": "<path:redacted>",
+            "snapshot_freshness": "stale",
+            "snapshot_observed_at_utc": "2026-05-23T14:57:45.523035+00:00",
+            "snapshot_present": true,
+            "snapshot_references_generated_config": true,
+            "snapshot_shape_valid": true,
+            "snapshot_topic": "stable_runtime_consumer_snapshot",
+            "status": "snapshot_stale"
+          },
+          "approved_repair_target_reference": {
+            "inventory_dir": "<path:redacted>",
+            "inventory_dir_exists": true,
+            "location_scope": "companion_managed_data",
+            "ownership": "control_layer",
+            "reference_file": "<path:redacted>",
+            "reference_file_exists": true,
+            "schema_version": 1,
+            "status": "materialized_aligned",
+            "target_identity": "companion_managed_stable_auth_inventory",
+            "target_kind": "control_owned_inventory_path"
+          },
+          "baseline_stable_config_surface": {
+            "config_file": "<path:redacted>",
+            "ownership": "engine_adjacent",
+            "role": "observed_source_discovery_surface"
+          },
+          "consumer_activation_readiness": {
+            "machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+            "next_step": "activation_contour",
+            "reason": "desired_consumer_source_differs_from_effective_observation",
+            "status": "activation_pending"
+          },
+          "derived_stable_runtime_config_surface": {
+            "activation_method": "control_owned_generated_config",
+            "activation_snapshot_alone_sufficient": false,
+            "activation_snapshot_freshness": "stale",
+            "activation_snapshot_observed_at_utc": "2026-05-23T14:57:45.523035+00:00",
+            "activation_snapshot_present": true,
+            "activation_snapshot_references_generated_config": true,
+            "artifact_kind": "generated_runtime_config",
+            "config_file": "<path:redacted>",
+            "exists": true,
+            "location_scope": "companion_managed_data",
+            "ownership": "control_layer",
+            "status": "materialized_with_stale_activation_evidence",
+            "truth_surface": false
+          },
+          "desired_stable_runtime_consumer_source": {
+            "resolved_path": "<path:redacted>",
+            "selection_reason": "approved_target_materialized_and_reconciled",
+            "source_kind": "approved_repair_target",
+            "status": "approved_target_selected"
+          },
+          "deterministic_stable_recovery_contract": {
+            "approved_target_recovery_outcome": "separate",
+            "eligible_failure_lanes": [
+              "managed_preflight_failure",
+              "stable_service_disabled",
+              "explicit_stable_recovery_lane"
+            ],
+            "entry_lane_surface": {
+              "allowed_values": [
+                "managed_preflight_failure",
+                "stable_service_disabled",
+                "explicit_stable_recovery_lane",
+                "not_invoked"
+              ],
+              "field": "deterministic_stable_recovery_result.entry_lane",
+              "nested_recovery_surface": true,
+              "status": "owner_path_emitted",
+              "top_level_machine_error_code_separate": true
+            },
+            "entry_owner": "healthcheck_live_attestation_path",
+            "failure_taxonomy_redesign_forbidden": true,
+            "generated_config_derivation_source": "current_baseline_stable_config_plus_current_approved_target_reference",
+            "generated_config_existence_alone_sufficient": false,
+            "generated_config_regeneration_owner_paths": [
+              "healthcheck --json",
+              "launch smoke --json"
+            ],
+            "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+            "generated_config_regeneration_status": "owner_path_emitted",
+            "last_known_good_proxy_persistence_in_scope": false,
+            "live_runtime_observation_required": true,
+            "mode_truth_redefinition_forbidden": true,
+            "new_generic_cli_default": false,
+            "new_persisted_recovery_metadata_required": false,
+            "observed_source_fallback_recovery_outcome": "separate",
+            "owner_command_surface": "healthcheck --json",
+            "re_enable_method_contract": {
+              "generic_service_supervision_forbidden": true,
+              "launchd_integration_forbidden": true,
+              "launcher_protocol_widening_required": false,
+              "os_service_manager_integration_forbidden": true,
+              "owner_command_surface": "healthcheck --json",
+              "owner_path_scope": "bounded_control_layer_recovery_action",
+              "reuse_private_launch_smoke_helper_allowed": true,
+              "status": "owner_path_emitted"
+            },
+            "recovery_failure_outcome": "separate",
+            "shared_activation_mechanics": {
+              "generated_config_file": "<path:redacted>",
+              "handoff_env_var": "WBP_STABLE_CONFIG",
+              "owner_paths": [
+                "healthcheck --json",
+                "launch smoke --json"
+              ],
+              "reuse_existing_launch_smoke_activation_helper": true,
+              "snapshot_topic": "stable_runtime_consumer_snapshot",
+              "status": "owner_path_emitted"
+            },
+            "snapshot_refresh_after_stable_live_outcome": true,
+            "snapshot_refresh_owner_paths": [
+              "healthcheck --json",
+              "launch smoke --json"
+            ],
+            "snapshot_refresh_status": "owner_path_emitted",
+            "snapshot_schema_widening_required": false,
+            "stable_service_disabled_classification": {
+              "bounded_reenable_lane_eligible_required": true,
+              "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+              "control_layer_classification": true,
+              "desired_mode_alone_sufficient": false,
+              "generated_config_existence_alone_sufficient": false,
+              "generic_listener_down_fallback": "LISTENER_DOWN",
+              "overclassification_forbidden": true,
+              "persisted_engine_state_flag": false,
+              "positive_evidence_required": true,
+              "proxy_path_failure_codes_separate": [
+                "PROXY_PATH_BROKEN",
+                "PROXY_REPROBE_FAILED"
+              ],
+              "snapshot_presence_alone_sufficient": false,
+              "status": "owner_path_emitted"
+            },
+            "stale_generated_config_authoritative": false,
+            "status": "contract_ready",
+            "status_delegates_to_owner": true,
+            "sync_hidden_owner_forbidden": true,
+            "top_level_machine_error_code_rules": {
+              "generic_listener_down_fallback": "LISTENER_DOWN",
+              "ok_after_successful_reenable": "OK",
+              "proxy_path_codes_remain_separate": true,
+              "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+              "stable_service_disabled_requires_final_unhealthy": true,
+              "status": "owner_path_emitted"
+            },
+            "top_level_truth_boundaries": {
+              "final_live_truth_separate": true,
+              "launch_smoke_owner_lane_fields_forbidden": true,
+              "nested_recovery_surface": "deterministic_stable_recovery_result",
+              "status": "contract_ready",
+              "status_second_owner_forbidden": true,
+              "sync_owner_lane_forbidden": true,
+              "top_level_final_truth_fields": [
+                "status",
+                "machine_error_code",
+                "liveness",
+                "endpoint"
+              ]
+            }
+          },
+          "deterministic_stable_recovery_result": {
+            "attempted": false,
+            "confirmation_basis": "",
+            "delegated_from_status": true,
+            "effectful_claim_allowed": false,
+            "entry_lane": "not_invoked",
+            "fallback_reason": "",
+            "generated_config_regenerated": false,
+            "guardrail_status": "not_invoked",
+            "live_runtime_observation_confirmed": false,
+            "outcome": "not_invoked",
+            "owner_command_surface": "healthcheck --json",
+            "re_enable_method": "",
+            "selected_source_kind": "",
+            "selected_source_path": "",
+            "snapshot_refreshed": false,
+            "status": "not_invoked"
+          },
+          "effective_stable_runtime_consumer_source": {
+            "matches_desired": false,
+            "observation_reason": "stable_runtime_observation_still_points_to_observed_source",
+            "resolved_path": "<path:redacted>",
+            "source_kind": "observed_stable_inventory_source",
+            "status": "observed_source_active"
+          },
+          "effective_truth_contract": {
+            "activation_evidence_snapshot_alone_sufficient": false,
+            "baseline_config_is_observation_surface": true,
+            "desired_source_alone_sufficient": false,
+            "generated_config_existence_alone_sufficient": false,
+            "live_runtime_observation_required": true,
+            "status": "contract_ready",
+            "truth_source": "live_runtime_observation_plus_snapshot_evidence"
+          },
+          "fallback_contract": {
+            "desired_source_remains_visible": true,
+            "effective_source_must_report_fallback": true,
+            "fallback_allowed": true,
+            "fallback_source_kind": "observed_stable_inventory_source",
+            "silent_fallback_forbidden": true,
+            "status": "contract_ready"
+          },
+          "launcher_handoff_contract": {
+            "baseline_config_rewrite_forbidden": true,
+            "env_var": "WBP_STABLE_CONFIG",
+            "generated_config_file": "<path:redacted>",
+            "generic_config_routing_forbidden": true,
+            "handoff_method": "process_local_env_override",
+            "recovery_scope": "explicit_stable_runtime_recovery_only",
+            "scope": "launcher_subprocess_only",
+            "status": "contract_ready"
+          },
+          "observed_stable_inventory_source": {
+            "exists": true,
+            "path": "<redacted>",
+            "path_resolution": "expanduser",
+            "source": "auth-dir"
+          },
+          "status": "contract_ready"
+        },
+        "status": "ok"
+      }
+    }
+  },
+  "contour": "GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS",
+  "git": {
+    "branch": "codex/external-agent-lab-isolated",
+    "head": "f584117",
+    "status_sb": "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated\n M tests/test_web_design_live_server.py\n M tests/test_web_design_ui.py\n M wild_boar_proxy/web_design_live_server.py\n M wild_boar_proxy/web_design_ui/index.html\n M wild_boar_proxy/web_design_ui/scripts/overview.js\n?? Security.zip\n?? Security/\n?? audit_results/c02_mini_eval_admission_2026-05-09.json\n?? audit_results/deepseek_direct_provider_route_pass_2026-05-23/evidence/deepseek_key_retry/\n?? audit_results/external_lab_access_smoke_c01_closeout_2026-05-09.md\n?? audit_results/external_lab_access_smoke_c01_packet_2026-05-09.json\n?? audit_results/external_lab_c02_admission_matrix_2026-05-09.json\n?? audit_results/external_lab_c02_closeout_2026-05-09.md\n?? audit_results/external_lab_c02_decision_packet_2026-05-09.json\n?? audit_results/external_lab_c03_admission_matrix_2026-05-09.json\n?? audit_results/external_lab_c03_closeout_2026-05-09.md\n?? audit_results/external_lab_c03_contour_2026-05-09.md\n?? audit_results/external_lab_c03_decision_packet_2026-05-09.json\n?? audit_results/external_lab_c03_independent_audit_2026-05-09.json\n?? audit_results/external_lab_c03_packet_2026-05-09.json\n?? audit_results/external_lab_c04_admission_matrix_2026-05-09.json\n?? audit_results/external_lab_c04_closeout_2026-05-09.md\n?? audit_results/external_lab_c04_contour_2026-05-09.md\n?? audit_results/external_lab_c04_decision_packet_2026-05-09.json\n?? audit_results/external_lab_c04_independent_audit_2026-05-09.json\n?? audit_results/external_lab_c04_packet_2026-05-09.json\n?? audit_results/external_lab_c05_admission_matrix_2026-05-09.json\n?? audit_results/external_lab_c05_closeout_2026-05-09.md\n?? audit_results/external_lab_c05_contour_2026-05-09.md\n?? audit_results/external_lab_c05_decision_packet_2026-05-09.json\n?? audit_results/external_lab_c05_independent_audit_2026-05-09.json\n?? audit_results/external_lab_c05_packet_2026-05-09.json\n?? audit_results/external_lab_c06_admission_matrix_2026-05-10.json\n?? audit_results/external_lab_c06_closeout_2026-05-10.md\n?? audit_results/external_lab_c06_contour_2026-05-10.md\n?? audit_results/external_lab_c06_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c06_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c06_packet_2026-05-10.json\n?? audit_results/external_lab_c07_admission_matrix_2026-05-10.json\n?? audit_results/external_lab_c07_closeout_2026-05-10.md\n?? audit_results/external_lab_c07_contour_2026-05-10.md\n?? audit_results/external_lab_c07_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c07_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c07_packet_2026-05-10.json\n?? audit_results/external_lab_c08_admission_matrix_2026-05-10.json\n?? audit_results/external_lab_c08_closeout_2026-05-10.md\n?? audit_results/external_lab_c08_contour_2026-05-10.md\n?? audit_results/external_lab_c08_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c08_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c08_packet_2026-05-10.json\n?? audit_results/external_lab_c09_closeout_2026-05-10.md\n?? audit_results/external_lab_c09_contour_2026-05-10.md\n?? audit_results/external_lab_c09_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c09_gate_matrix_2026-05-10.json\n?? audit_results/external_lab_c09_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c09_packet_2026-05-10.json\n?? audit_results/external_lab_c10_closeout_2026-05-10.md\n?? audit_results/external_lab_c10_closure_matrix_2026-05-10.json\n?? audit_results/external_lab_c10_contour_2026-05-10.md\n?? audit_results/external_lab_c10_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c10_packet_2026-05-10.json\n?? audit_results/external_lab_c10_pre_audit_2026-05-10.json\n?? audit_results/external_lab_c11_closeout_2026-05-10.md\n?? audit_results/external_lab_c11_contour_2026-05-10.md\n?? audit_results/external_lab_c11_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c11_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c11_progress_matrix_2026-05-10.json\n?? audit_results/external_lab_c13_closeout_2026-05-10.md\n?? audit_results/external_lab_c13_contour_2026-05-10.md\n?? audit_results/external_lab_c13_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c13_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c13_live_execution_packet_2026-05-10.json\n?? audit_results/external_lab_c13_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c13_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c14_closeout_2026-05-10.md\n?? audit_results/external_lab_c14_contour_2026-05-10.md\n?? audit_results/external_lab_c14_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c14_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c14_lifecycle_20_packet_2026-05-10.json\n?? audit_results/external_lab_c14_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c14_live_run_packet_2026-05-10.json\n?? audit_results/external_lab_c14_no_storm_packet_2026-05-10.json\n?? audit_results/external_lab_c14_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c14_stage_rollback_packet_2026-05-10.json\n?? audit_results/external_lab_c15_closeout_2026-05-10.md\n?? audit_results/external_lab_c15_contour_2026-05-10.md\n?? audit_results/external_lab_c15_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c15_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c15_lifecycle_20_packet_2026-05-10.json\n?? audit_results/external_lab_c15_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c15_no_storm_packet_2026-05-10.json\n?? audit_results/external_lab_c15_operator_authorization_packet_2026-05-10.json\n?? audit_results/external_lab_c15_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c15_same_day_live_packet_2026-05-10.json\n?? audit_results/external_lab_c15_stage_rollback_packet_2026-05-10.json\n?? audit_results/external_lab_c16_closeout_2026-05-10.md\n?? audit_results/external_lab_c16_contour_2026-05-10.md\n?? audit_results/external_lab_c16_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c16_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c16_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c16_no_storm_threshold_packet_2026-05-10.json\n?? audit_results/external_lab_c16_operator_authorization_packet_2026-05-10.json\n?? audit_results/external_lab_c16_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c16_stage20_owner_path_packet_2026-05-10.json\n?? audit_results/external_lab_c17_closeout_2026-05-10.md\n?? audit_results/external_lab_c17_contour_2026-05-10.md\n?? audit_results/external_lab_c17_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c17_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c17_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c17_no_storm_threshold_packet_2026-05-10.json\n?? audit_results/external_lab_c17_operator_authorization_packet_2026-05-10.json\n?? audit_results/external_lab_c17_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c17_stage20_owner_path_packet_2026-05-10.json\n?? audit_results/external_lab_c18_closeout_2026-05-10.md\n?? audit_results/external_lab_c18_contour_2026-05-10.md\n?? audit_results/external_lab_c18_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c18_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c18_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c18_no_storm_sentinel_packet_2026-05-10.json\n?? audit_results/external_lab_c18_operator_authorization_packet_2026-05-10.json\n?? audit_results/external_lab_c18_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c18_stage20_owner_path_packet_2026-05-10.json\n?? audit_results/external_lab_c18_stage20_root_cause_packet_2026-05-10.json\n?? audit_results/external_lab_c20_branch_adjudication_packet_2026-05-10.json\n?? audit_results/external_lab_c20_branch_selection_packet_2026-05-10.json\n?? audit_results/external_lab_c20_closeout_2026-05-10.md\n?? audit_results/external_lab_c20_contour_2026-05-10.md\n?? audit_results/external_lab_c20_decision_packet_2026-05-10.json\n?? audit_results/external_lab_c20_independent_audit_2026-05-10.json\n?? audit_results/external_lab_c20_live_matrix_2026-05-10.json\n?? audit_results/external_lab_c20_no_storm_sentinel_packet_2026-05-10.json\n?? audit_results/external_lab_c20_operator_authorization_packet_2026-05-10.json\n?? audit_results/external_lab_c20_precondition_packet_2026-05-10.json\n?? audit_results/external_lab_c20_runtime_execution_packet_2026-05-10.json\n?? audit_results/external_lab_c21_closeout_2026-05-11.md\n?? audit_results/external_lab_c21_contour_2026-05-11.md\n?? audit_results/external_lab_c21_decision_packet_2026-05-11.json\n?? audit_results/external_lab_c21_gate_a_handoff_packet_2026-05-11.json\n?? audit_results/external_lab_c21_independent_audit_2026-05-11.json\n?? audit_results/external_lab_c21_live_matrix_2026-05-11.json\n?? audit_results/external_lab_c21_operator_authorization_packet_2026-05-11.json\n?? audit_results/external_lab_c21_precondition_packet_2026-05-11.json\n?? audit_results/external_lab_c21_sentinel_packet_2026-05-11.json\n?? audit_results/external_lab_c22_closeout_2026-05-11.md\n?? audit_results/external_lab_c22_contour_2026-05-11.md\n?? audit_results/external_lab_c22_decision_packet_2026-05-11.json\n?? audit_results/external_lab_c22_independent_audit_2026-05-11.json\n?? audit_results/external_lab_c22_integration_preflight_packet_2026-05-11.json\n?? audit_results/external_lab_c22_live_matrix_2026-05-11.json\n?? audit_results/external_lab_c22_operator_authorization_packet_2026-05-11.json\n?? audit_results/external_lab_c22_precondition_packet_2026-05-11.json\n?? audit_results/external_lab_c22_sentinel_packet_2026-05-11.json\n?? audit_results/external_lab_c23_closeout_2026-05-11.md\n?? audit_results/external_lab_c23_contour_2026-05-11.md\n?? audit_results/external_lab_c23_decision_packet_2026-05-11.json\n?? audit_results/external_lab_c23_independent_audit_2026-05-11.json\n?? audit_results/external_lab_c23_live_matrix_2026-05-11.json\n?? audit_results/external_lab_c23_operation_declaration_2026-05-11.md\n?? audit_results/external_lab_c23_operator_authorization_packet_2026-05-11.json\n?? audit_results/external_lab_c23_precondition_packet_2026-05-11.json\n?? audit_results/external_lab_c23_runtime_execution_packet_2026-05-11.json\n?? audit_results/external_lab_c23_sentinel_packet_2026-05-11.json\n?? audit_results/external_lab_c25_contour_2026-05-11.md\n?? audit_results/external_lab_c25_operation_declaration_2026-05-11.md\n?? audit_results/external_lab_c25_operator_authorization_packet_2026-05-11.json\n?? audit_results/external_lab_c25_precondition_packet_2026-05-11.json\n?? audit_results/gpt_accounts_pool_truth_and_selection_pass_2026-05-23/\n?? audit_results/legacy_api_routes_and_provider_proof_pass_2026-05-23/evidence/owner_key_resume/\n?? audit_results/legacy_api_routes_and_provider_proof_pass_2026-05-23/evidence/owner_key_resume_real/\n?? audit_results/thread_handoff_snapshot_2026-05-16.json\n?? audit_results/thread_handoff_snapshot_2026-05-16.md\n?? audit_results/ui_web_independent_visual_click_audit_2026-05-15/\n?? external_agent_lab/legacy/eval_results/\n?? tests/test_codex_account_selection.py\n?? wild_boar_proxy/codex_account_selection.py\n"
+  },
+  "web_server": {
+    "purpose": "local live proof only",
+    "url": "http://127.0.0.1:8795"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "contour_id": "KEYCHAIN_PREFLIGHT_QUIET_DIAGNOSTICS_AND_GUARDS_R3_IMPLEMENTATION",
+  "status": "ok",
+  "product_code_changed": false,
+  "changed_test_files": [
+    "tests/test_keychain_preflight.py",
+    "tests/test_native_launch_dispatch.py"
+  ],
+  "new_or_strengthened_guards": [
+    {
+      "file": "tests/test_keychain_preflight.py",
+      "line_start": 61,
+      "line_end": 71,
+      "guard": "relative isolated HOME is blocked before any security command runs",
+      "risk_class": "write-boundary / real-home protection"
+    },
+    {
+      "file": "tests/test_keychain_preflight.py",
+      "line_start": 100,
+      "line_end": 180,
+      "guard": "success path records security subcommands and rejects dangerous unlock/create/delete/item-read commands",
+      "risk_class": "hidden keychain mutation / secret read"
+    },
+    {
+      "file": "tests/test_keychain_preflight.py",
+      "line_start": 239,
+      "line_end": 295,
+      "guard": "isolated search-list verification mismatch stays failed and does not overclaim success",
+      "risk_class": "packet truth mismatch"
+    },
+    {
+      "file": "tests/test_native_launch_dispatch.py",
+      "line_start": 106,
+      "line_end": 126,
+      "guard": "exception path keeps prompt-avoidance claim narrow",
+      "risk_class": "claim widening"
+    },
+    {
+      "file": "tests/test_native_launch_dispatch.py",
+      "line_start": 182,
+      "line_end": 262,
+      "guard": "success path keeps no-mutation / no-read / no-reset flags false and prompt-only scope narrow",
+      "risk_class": "false green / claim broadening"
+    },
+    {
+      "file": "tests/test_native_launch_dispatch.py",
+      "line_start": 264,
+      "line_end": 310,
+      "guard": "blocked preflight path remains prompt-only and launch does not start",
+      "risk_class": "blocked-path leakage"
+    },
+    {
+      "file": "tests/test_native_launch_dispatch.py",
+      "line_start": 312,
+      "line_end": 392,
+      "guard": "failed preflight path does not mutate claim scope or keychain flags",
+      "risk_class": "failed-path false green"
+    },
+    {
+      "file": "tests/test_native_launch_dispatch.py",
+      "line_start": 394,
+      "line_end": 475,
+      "guard": "skipped preflight remains a quiet diagnostic and does not escalate into auth or mutation claims",
+      "risk_class": "skipped-path misclassification"
+    }
+  ],
+  "verification": {
+    "py_compile": {
+      "command": "python3 -m py_compile tests/test_keychain_preflight.py tests/test_native_launch_dispatch.py",
+      "status": "passed"
+    },
+    "unittest": {
+      "command": "python3 -m unittest tests.test_keychain_preflight tests.test_native_launch_dispatch",
+      "status": "passed",
+      "summary": "Ran 42 tests in 0.016s OK"
+    }
+  }
+}

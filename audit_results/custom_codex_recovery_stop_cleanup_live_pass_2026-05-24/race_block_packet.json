@@ -1,0 +1,12 @@
+{
+  "status": "blocked",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_SELECTED_SESSION_CHANGED",
+  "preflight_required": true,
+  "preflight_verified": true,
+  "same_selected_session_ref": false,
+  "session_cancel_performed": false,
+  "cleanup_attempted": false,
+  "owned_cleanup_performed": false,
+  "process_kill_performed": false,
+  "filesystem_write_performed": false
+}

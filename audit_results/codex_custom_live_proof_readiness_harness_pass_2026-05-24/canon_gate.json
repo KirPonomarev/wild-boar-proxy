@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_LIVE_PROOF_READINESS_HARNESS_PASS",
+  "status": "passed",
+  "owner_authorization_phrase_required_for_live": "разрешаю тебе любые законные действия в рамках разработки проекта",
+  "owner_authorization_phrase_present_as_explicit_live_grant": false,
+  "live_commands_allowed": false,
+  "live_runtime_preflight_run": false,
+  "healthcheck_run": false,
+  "accounts_live_check_run": false,
+  "wbp_api_provider_request_run": false,
+  "prompt_executed": false,
+  "token_burn": 0,
+  "canon_evidence": [
+    {
+      "file": "CANON.md",
+      "lines": "45-66",
+      "fact": "Generic start phrases do not authorize live commands unless exact standing approval or a specific owner marker exists."
+    },
+    {
+      "file": "AGENTS.md",
+      "lines": "34-35",
+      "fact": "Live-runtime work is high risk and requires explicit operator authorization."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-29T04:37:24.945974Z",
+  "findings": [
+    {
+      "id": "same_session_dual_lane_callability_is_packet_backed",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "source_provenance_remains_lane_specific",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "concurrent_execution_remains_unproven_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "provider_family_and_other_role_slot_runtime_truth_remain_open",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "independent_audit",
+  "status": "ok"
+}

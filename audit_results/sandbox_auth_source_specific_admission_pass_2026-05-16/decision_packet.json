@@ -1,0 +1,15 @@
+{
+  "contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "decision": "GO_TO_NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "single_exact_source_admitted": false,
+  "allowed_exact_auth_ref_count": 12,
+  "selected_backend_ids_count": 0,
+  "stable_default_backend_id": "gpt2026bis-team",
+  "exact_source_guessing_allowed": false,
+  "materialization_earned_now": false,
+  "next_contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "next_contour_class": "admission",
+  "reason": "the candidate family is localized to exact live-registry auth_ref surfaces, but multiple equally plausible exact candidates remain and current owner evidence does not justify picking one directly"
+}

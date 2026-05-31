@@ -1,0 +1,16 @@
+{
+  "allowed_claims": [
+    "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS only if launch admitted and protected surfaces remain unchanged",
+    "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_HOSTED_EXECUTOR_CONTEXT",
+    "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_NON_QUIESCENT_CURRENT_CODEX",
+    "NATIVE_CUSTOM_SAFETY_BLOCKED_BY_IDLE_PROTECTED_SURFACE_DRIFT"
+  ],
+  "auth_strategy_reproof_allowed": false,
+  "captured_at_utc": "2026-05-26T10:03:32.714707Z",
+  "egress_claim_allowed": false,
+  "model_availability_reproof_allowed": false,
+  "packet_kind": "quiescent_retry_allowed_claims_matrix",
+  "route_claim_allowed": false,
+  "status": "ok",
+  "ux_claim_allowed": false
+}

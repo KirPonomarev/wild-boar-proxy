@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "not_started",
+  "request_observed": false,
+  "response_observed": false,
+  "forwarded_to_wbp": false,
+  "secret_value_recorded": false,
+  "prompt_body_recorded": false,
+  "auth_header_recorded": false,
+  "reason": "Live prompt phase blocked by missing owner authorization phrase."
+}

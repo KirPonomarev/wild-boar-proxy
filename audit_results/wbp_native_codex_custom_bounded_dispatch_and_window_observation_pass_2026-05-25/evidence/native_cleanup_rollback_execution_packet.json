@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_BOUNDED_DISPATCH_AND_WINDOW_OBSERVATION_PASS_R2",
+  "packet_kind": "native_cleanup_rollback_execution",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "cleanup_attempted": false,
+  "rollback_attempted": false,
+  "cleanup_or_rollback_status": "ok_no_process_launched",
+  "cleanup_blocked_reason_class": "owner_authorization_missing_no_live_dispatch"
+}

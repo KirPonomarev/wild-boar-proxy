@@ -1,0 +1,64 @@
+{
+  "contour": "UI_WEB_ACCOUNT_DETAIL_CANONICAL_DRAWER_PASS",
+  "date": "2026-05-14",
+  "viewport": "1600x1000",
+  "source_metrics": "after_metrics.json",
+  "states": [
+    {
+      "id": "active_account_detail",
+      "screenshot": "screenshots/after/active_account_detail.png",
+      "expected": "active account drawer, active pool, available lifecycle, disabled ineligible actions"
+    },
+    {
+      "id": "reserve_account_detail",
+      "screenshot": "screenshots/after/reserve_account_detail.png",
+      "expected": "reserve account drawer, promote eligible, demote disabled"
+    },
+    {
+      "id": "held_account_detail",
+      "screenshot": "screenshots/after/held_account_detail.png",
+      "expected": "held account drawer, release eligible, hold/promote/demote disabled by reason"
+    },
+    {
+      "id": "problem_account_detail",
+      "screenshot": "screenshots/after/problem_account_detail.png",
+      "expected": "problem account drawer, error visible without raw auth data"
+    },
+    {
+      "id": "missing_account",
+      "screenshot": "screenshots/after/missing_account.png",
+      "expected": "missing account after refresh, all account actions disabled"
+    },
+    {
+      "id": "disabled_action_reasons",
+      "screenshot": "screenshots/after/disabled_action_reasons.png",
+      "expected": "disabled actions visibly explain ineligible lifecycle transitions"
+    },
+    {
+      "id": "last_command_success",
+      "screenshot": "screenshots/after/last_command_success.png",
+      "expected": "latest command result visible as command outcome, not account truth"
+    },
+    {
+      "id": "last_command_failed",
+      "screenshot": "screenshots/after/last_command_failed.png",
+      "expected": "failed command result visible with machine code and refresh boundary"
+    },
+    {
+      "id": "retire_confirmation",
+      "screenshot": "screenshots/after/retire_confirmation.png",
+      "expected": "retire account confirmation modal with critical policy and refresh boundary"
+    }
+  ],
+  "metric_acceptance": {
+    "document_scroll_width_lte": 1600,
+    "document_scroll_height_lte": 1000,
+    "drawer_width_lte": 560,
+    "confirmation_width_lte": 640,
+    "target_bottom_lte": 1000,
+    "internal_scroll": false,
+    "visible_svg_icons": 0,
+    "file_inputs": 0,
+    "clipped_elements": 0
+  }
+}

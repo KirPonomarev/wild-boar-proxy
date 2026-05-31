@@ -1,0 +1,17 @@
+{
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS_REENTRY_RECONCILIATION",
+  "status": "pass",
+  "assertions": {
+    "raw_tmp_path_recorded": false,
+    "raw_auth_ref_recorded": false,
+    "raw_token_recorded": false,
+    "raw_secret_recorded": false,
+    "current_codex_path_recorded": false
+  },
+  "reviewed_surfaces": [
+    "live lane packets",
+    "browser projection proof",
+    "independent audit packet",
+    "closeout"
+  ]
+}

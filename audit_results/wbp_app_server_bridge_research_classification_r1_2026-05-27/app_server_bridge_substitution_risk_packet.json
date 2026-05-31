@@ -1,0 +1,13 @@
+{
+  "bridge_equals_final_e2e": false,
+  "bridge_equals_native_app_proof": false,
+  "bridge_equals_provider_compatibility_proof": false,
+  "bridge_equals_remote_control_admission": false,
+  "captured_at_utc": "2026-05-27T12:27:31.870328Z",
+  "historical_app_server_surface_repo_usable_machine_proven": false,
+  "isolated_app_boundary_verdict": "blocked_by_current_codex_protection_boundary",
+  "packet_kind": "app_server_bridge_substitution_risk",
+  "research_equals_architecture_approval": false,
+  "research_equals_implementation_admission": false,
+  "status": "ok"
+}

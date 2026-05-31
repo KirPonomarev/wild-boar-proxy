@@ -1,0 +1,51 @@
+{
+  "captured_at_utc": "2026-05-15T17:23:38.952228Z",
+  "surface_map": [
+    {
+      "problem": "model/provider visibility for current route",
+      "command_surface": "external-models routes validate --json --route wbp-claude-sonnet-4-6-thinking",
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "success_signals": [
+        "validation_kind=provider_route_validate",
+        "route_state=model_visible"
+      ],
+      "failure_signals": [
+        "provider_auth_failed",
+        "provider_network_failed",
+        "model_not_available",
+        "invalid_upstream_response"
+      ]
+    },
+    {
+      "problem": "completion path smoke after model visibility is established or admitted as next step",
+      "command_surface": "external-models check --json --route wbp-claude-sonnet-4-6-thinking",
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "success_signals": [
+        "check_kind=provider_route_smoke",
+        "route_state=verified"
+      ],
+      "failure_signals": [
+        "provider_auth_failed",
+        "provider_network_failed",
+        "invalid_upstream_response"
+      ]
+    },
+    {
+      "problem": "secret-bearing prerequisite",
+      "command_surface": "none under current auth.type=none route shape",
+      "writes": [],
+      "success_signals": [
+        "not_applicable"
+      ],
+      "failure_signals": [
+        "would become relevant only if route auth changes away from none"
+      ]
+    }
+  ]
+}

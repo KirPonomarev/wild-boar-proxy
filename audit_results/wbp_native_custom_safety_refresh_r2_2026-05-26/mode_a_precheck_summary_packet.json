@@ -1,0 +1,37 @@
+{
+  "captured_at_utc": "2026-05-26T11:43:00Z",
+  "packet_kind": "mode_a_precheck_summary",
+  "status": "blocked",
+  "final_status": "NATIVE_CUSTOM_SAFETY_REFRESH_BLOCKED_PROTECTED_CODEX_HOST",
+  "mode_a_completed": true,
+  "mode_b_attempted": false,
+  "native_launch_attempted": false,
+  "prompt_typed": false,
+  "route_claimed": false,
+  "ux_claimed": false,
+  "egress_claimed": false,
+  "auth_strategy_reproved": false,
+  "model_availability_reproved": false,
+  "host_context_status": "blocked",
+  "host_context_reason_class": "PROTECTED_CODEX_HOSTED_EXECUTOR",
+  "quiescent_precondition_status": "blocked",
+  "quiescent_precondition_reason_class": "CURRENT_CODEX_NOT_QUIESCENT",
+  "launch_admission_status": "blocked",
+  "launch_admission_failed_checks": [
+    "host_context_required",
+    "quiescent_current_codex_required",
+    "idle_stability_required"
+  ],
+  "allowed_claim": "Mode A prelaunch safety admission was blocked before native launch",
+  "forbidden_claims": [
+    "native filesystem safety proven",
+    "native launch admission proven",
+    "native routing proven",
+    "native UX proven",
+    "direct egress absence proven",
+    "auth strategy reproven",
+    "model availability reproven",
+    "Original Codex reversibility proven",
+    "final E2E proven"
+  ]
+}

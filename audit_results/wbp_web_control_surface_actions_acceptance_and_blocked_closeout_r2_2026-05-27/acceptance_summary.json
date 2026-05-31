@@ -1,0 +1,28 @@
+{
+  "contour": "WBP_WEB_CONTROL_SURFACE_ACTIONS_ACCEPTANCE_AND_BLOCKED_CLOSEOUT_R2",
+  "captured_on": "2026-05-27",
+  "acceptance_truth": "ok",
+  "final_verdict": "WBP_WEB_CONTROL_SURFACE_ACTIONS_WIRED_AND_GUARDED",
+  "commands": [
+    {
+      "argv": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_control_surface_actions_wired_and_guarded_r2_probe -q",
+      "exit_code": 0,
+      "stdout_summary": "Ran 146 tests in 30.790s; OK"
+    },
+    {
+      "argv": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tools/web_control_surface_actions_wired_and_guarded_r2_probe.py --evidence-dir /tmp/wbp_pass1_acceptance_retry_orchestrator",
+      "exit_code": 0,
+      "stdout_summary": "Fresh-process probe rerun completed successfully."
+    }
+  ],
+  "packet_statuses": {
+    "web_control_surface_matrix_packet.json": "ok",
+    "readonly_live_action_boundary_packet.json": "ok",
+    "auth_authority_boundary_packet.json": "ok",
+    "route_account_mutation_guard_packet.json": "ok",
+    "cost_guard_packet.json": "ok",
+    "disabled_reason_matrix_packet.json": "ok",
+    "action_verification_results_packet.json": "ok",
+    "false_green_audit.json": "ok"
+  }
+}

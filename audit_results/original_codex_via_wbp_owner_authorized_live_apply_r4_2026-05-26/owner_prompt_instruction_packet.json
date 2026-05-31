@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T14:55:34.905436Z",
+  "nonce_prompt": "WBP_ORIGINAL_ROUTE_NONCE_2026_05_26: \u043e\u0442\u0432\u0435\u0442\u044c \u043e\u0434\u043d\u043e\u0439 \u0441\u0442\u0440\u043e\u043a\u043e\u0439 WBP_OK",
+  "owner_action_required": true,
+  "owner_may_type_prompt": true,
+  "owner_must_not_change_config_model_route_or_account": true,
+  "packet_kind": "original_live_owner_prompt_instruction",
+  "status": "ok",
+  "timeout_seconds": 240
+}

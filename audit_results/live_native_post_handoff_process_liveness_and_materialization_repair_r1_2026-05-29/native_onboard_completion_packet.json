@@ -1,0 +1,8 @@
+{
+  "captured_at_utc": "2026-05-29T04:14:58.192145Z",
+  "complete_attempted": true,
+  "complete_exit_code": 1,
+  "complete_machine_error_code": "LOGIN_SESSION_EXPIRED",
+  "login_result": {},
+  "session_id": "codex-a6774fadc45044b989d88b9fda341035"
+}

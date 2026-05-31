@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "passed",
+  "auditor": "Poincare gpt-5.4-mini",
+  "findings": [],
+  "final_verdict": "No blockers found. Trace is server-side, browser cannot control trace/model/backend/path/auth, and observer records hashes/metadata without raw prompt/auth/token."
+}

@@ -1,0 +1,53 @@
+{
+  "captured_at_utc": "2026-05-27T08:51:25.022082Z",
+  "completed_event_observed": true,
+  "completed_event_required": true,
+  "data_parse_errors": [],
+  "data_type_matches_event": true,
+  "data_type_sequence": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "event_count": 9,
+  "expected_events": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "failure_cause": "none",
+  "machine_error_code": "OK",
+  "observed_events": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "packet_kind": "direct_stream_response_shape",
+  "request_attempted": true,
+  "status": "ok",
+  "stream_classification_fields_observed": true,
+  "stream_shape_accepted": true,
+  "stream_sse_envelope_observed": true,
+  "stream_started_counts_as_compatible": false,
+  "stream_success_counts_as_model_availability": false,
+  "terminal_response_status": "completed",
+  "upstream_status_code": 200
+}

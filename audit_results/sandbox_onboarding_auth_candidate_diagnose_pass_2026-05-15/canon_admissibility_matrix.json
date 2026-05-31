@@ -1,0 +1,46 @@
+{
+  "candidate_contours": [
+    {
+      "name": "SANDBOX_ONBOARDING_AUTH_CANDIDATE_ADMISSION_PASS",
+      "class": "admission",
+      "admissible": true,
+      "why": [
+        "the blocker is missing auth material, not discovery logic drift",
+        "secret-bearing material needs explicit scope admission before any write or copy",
+        "the next step must stay inside the onboarding owner lane semantics"
+      ]
+    },
+    {
+      "name": "SANDBOX_ONBOARDING_AUTH_CANDIDATE_MATERIALIZATION_PASS",
+      "class": "mutation",
+      "admissible": false,
+      "why": [
+        "secret-bearing writes are not yet admitted",
+        "the source and destination of auth material are not yet canonically approved"
+      ]
+    },
+    {
+      "name": "SANDBOX_ONBOARDING_DISCOVERY_REPAIR_PASS",
+      "class": "repair",
+      "admissible": false,
+      "why": [
+        "no discovery-path or env-binding bug was observed",
+        "the existing owner-lane behavior is consistent with current sandbox state"
+      ]
+    },
+    {
+      "name": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS_RERUN",
+      "class": "rerun",
+      "admissible": false,
+      "why": [
+        "rerunning onboarding without auth material would repeat the same hard stop",
+        "reserve-first proof cannot begin honestly before auth-candidate scope is admitted"
+      ]
+    }
+  ],
+  "forbidden_even_if_convenient": [
+    "copy live auth directly into the sandbox without an explicit auth admission contour",
+    "use live auth outside accounts onboard --json owner semantics",
+    "treat stderr alone as stronger than the owner packet"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "human_message": "Installer baseline initialization completed.",
+  "machine_error_code": "OK",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/config.toml",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-accounts",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-account-onboard",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-managed-status",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-sync.sh",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/routes.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/state.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/secrets.env",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/evidence"
+  ],
+  "next_action": "none",
+  "liveness": "unknown",
+  "severity": "recoverable",
+  "operator_action": "none",
+  "installer_result": {
+    "status": "owner_path_emitted",
+    "final_outcome": "baseline_initialized",
+    "owner_helper_paths": [
+      "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-accounts",
+      "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-account-onboard",
+      "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-managed-status",
+      "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-sync.sh"
+    ]
+  },
+  "external_models_result": {
+    "status": "owner_path_emitted",
+    "final_outcome": "layout_initialized",
+    "root_dir": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models",
+    "secrets_mode": "0o600"
+  }
+}

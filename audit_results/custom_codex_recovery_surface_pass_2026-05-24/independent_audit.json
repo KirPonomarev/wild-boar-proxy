@@ -1,0 +1,42 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_SURFACE_PASS",
+  "date": "2026-05-24",
+  "auditor": "gpt-5.4-mini independent explorer",
+  "initial_verdict": "BLOCKED",
+  "initial_findings": [
+    {
+      "severity": "blocker",
+      "summary": "Recovery checks could report RECOVERY_READONLY_CHECKS_COMPLETE while accounts-readonly or api-connections-readonly returned integration_failure.",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:1530",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:1563",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:612",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:655"
+      ]
+    }
+  ],
+  "fix": {
+    "summary": "Gate recovery success on originalOk, customOk, accountsOk, and apiOk. Preserve accounts_readonly_ok and api_readonly_ok booleans in the machine packet.",
+    "files": [
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "wild_boar_proxy/web_design_ui/index.html",
+      "tests/test_web_design_ui.py"
+    ],
+    "regression_test": "tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_blocks_when_readonly_probe_fails"
+  },
+  "final_reaudit": {
+    "verdict": "PASS",
+    "summary": "Re-audit confirmed the false-green blocker is fixed. Recovery success now requires originalOk, customOk, accountsOk, and apiOk; accounts/API integration_failure now blocks. No new forbidden browser fields, ~/.codex references, custom recovery backend route, kill, or rollback calls found in touched files.",
+    "verification": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_surface_is_bounded_and_readonly tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_blocks_when_readonly_probe_fails",
+        "result": "passed",
+        "tests": 2
+      },
+      {
+        "command": "git diff --check on touched files",
+        "result": "passed"
+      }
+    ]
+  }
+}

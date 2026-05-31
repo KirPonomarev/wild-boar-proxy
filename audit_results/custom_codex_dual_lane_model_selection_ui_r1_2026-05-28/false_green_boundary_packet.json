@@ -1,0 +1,10 @@
+{
+  "api_route_runtime_claimed_here": false,
+  "browser_authority_widened_here": false,
+  "captured_at_utc": "2026-05-28T11:18:51.088014Z",
+  "packet_kind": "selector_false_green_boundary",
+  "seed_only_promoted_here": false,
+  "session_execution_claimed_here": false,
+  "simultaneous_execution_claimed_here": false,
+  "status": "ok"
+}

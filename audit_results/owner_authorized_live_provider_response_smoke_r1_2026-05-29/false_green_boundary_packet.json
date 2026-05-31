@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-29T12:25:31.483417Z",
+  "fallback_storm_allowed": false,
+  "hidden_model_or_route_substitution_allowed": false,
+  "one_provider_row_treated_as_family_compatibility": false,
+  "packet_kind": "false_green_boundary",
+  "paid_call_without_budget_packet": false,
+  "plain_text_treated_as_streaming_proof": false,
+  "plain_text_treated_as_tools_proof": false,
+  "recording_runner_treated_as_live_upstream": false,
+  "retry_storm_allowed": false,
+  "route_snapshot_treated_as_provider_response": false,
+  "selection_intent_treated_as_execution": false,
+  "status": "ok",
+  "success_treated_as_acceleration_proof": false
+}

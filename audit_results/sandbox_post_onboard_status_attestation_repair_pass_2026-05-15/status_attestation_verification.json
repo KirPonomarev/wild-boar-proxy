@@ -1,0 +1,26 @@
+{
+  "verification_basis": "preserved rerun2 live packets plus current runtime classifier",
+  "status_packet": "/Volumes/Work/wild-boar-proxy/audit_results/account_onboarding_sandbox_reserve_first_pass_rerun2_2026-05-15/post_onboard_status_packet.json",
+  "accounts_packet": "/Volumes/Work/wild-boar-proxy/audit_results/account_onboarding_sandbox_reserve_first_pass_rerun2_2026-05-15/post_onboard_accounts_packet.json",
+  "derived_lifecycle_admission": {
+    "status": "ready",
+    "reason": "reserve_only_launch_gap",
+    "selected_backend_id": "auth",
+    "selected_backend_pool": "reserve",
+    "status_observed_command_status": "error",
+    "status_observed_machine_error_code": "ATTESTATION_FAILED",
+    "status_observed_liveness": "degraded",
+    "launch_blocking_reason": "models_surface_unavailable_or_invalid",
+    "launch_failed_checks": [
+      "models_surface_unavailable_or_invalid"
+    ],
+    "auth_pool_hygiene_status": "launch_capable_empty",
+    "auth_pool_hygiene_blocking_reason": "no_live_capable_active_backends"
+  },
+  "verdict_basis": [
+    "reserve-first onboarding remains proven",
+    "raw launch attestation remains degraded",
+    "degraded launch attestation is now classified as reserve-only launch gap rather than a generic lifecycle blocker",
+    "truth drift and proxy/listener failures remain blocked by the narrowed failed-check gate"
+  ]
+}

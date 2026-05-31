@@ -1,0 +1,29 @@
+{
+  "baseline_owner_truth": {
+    "healthcheck_expected_blocker": "HTTP 401 Invalid API key",
+    "status_expected_machine_error_code": "ATTESTATION_FAILED"
+  },
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "registry_binding": {
+    "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "backend_id": "auth",
+    "manual_hold": false,
+    "pool": "reserve",
+    "status": "unknown"
+  },
+  "schema_version": 1,
+  "source": {
+    "exists": true,
+    "mode_octal": "0o644",
+    "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8",
+    "size": 112
+  },
+  "target": {
+    "exists": true,
+    "mode_octal": "0o600",
+    "path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+    "size": 87
+  }
+}

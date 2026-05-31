@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "WBP_NATIVE_CODEX_TRUTH_CORRECTION_AND_NATIVE_GAP_MATRIX_PASS",
+  "matrix_scope": "owner_meaning_vs_previous_claim_vs_current_evidence",
+  "primary_blocker": "NATIVE_CODEX_APP_INTEGRATED_LAUNCH_NOT_PROVEN",
+  "claims": [
+    {
+      "claim_id": "WEB_WORKBENCH_AND_ROUTE_PROOF",
+      "owner_meaning": "Prior WBP web workbench and route proof remains useful but is not native Codex app proof.",
+      "previous_claim": "CODEX_CUSTOM_WEB_LAUNCH_BLOCK_COMPLETE",
+      "actual_proven_truth": "WBP web UI isolated workbench/session path, GPT-account prompt, external API prompt, transcript/redaction, and bounded cleanup/recovery evidence were proven as scoped web/workbench truth.",
+      "missing_truth": "No missing truth for scoped web/workbench claim; missing only when used as native app proof.",
+      "false_green_risk": "Using this scoped proof as native app integrated launch proof.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/final_e2e_summary.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/independent_audit_report.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/custom_launch_proof.json"
+      ],
+      "negative_substitution_checks": [
+        "workbench_ready_true_is_not_native_app_launch",
+        "wbp_ui_screenshot_is_not_native_codex_window_screenshot"
+      ],
+      "verdict": "pass_scoped_truth_only"
+    },
+    {
+      "claim_id": "CODEX_CUSTOM_NATIVE_APP_LAUNCH",
+      "owner_meaning": "WBP click launches a separate visible native Codex.app window for Codex Custom, with isolated profile and usable app surface.",
+      "previous_claim": "Native-like launch was implied by broad complete wording and desktop launch gap close.",
+      "actual_proven_truth": "A separate launch_client_dispatch lane reports real_codex_app_launched=true and app_process_confirmed, while the Codex Custom launch path itself remains scoped as isolated_session_workbench_launch.",
+      "missing_truth": "No unified proof binds WBP Codex Custom selection to native app window, input-capable UI, usable session, and prompt/route identity.",
+      "false_green_risk": "Counting launch_client_dispatch process observation plus web workbench prompt proof as one native-app user flow.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/desktop_launch_repeatability_summary.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/independent_audit_report.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/custom_launch_proof.json"
+      ],
+      "negative_substitution_checks": [
+        "process_observed_is_not_usable_window",
+        "separate_launch_lane_is_not_integrated_custom_launch",
+        "web_workbench_prompt_is_not_native_window_prompt"
+      ],
+      "verdict": "not_complete"
+    },
+    {
+      "claim_id": "ORIGINAL_CODEX_VIA_WBP",
+      "owner_meaning": "WBP launches ordinary Codex.app through WBP-managed endpoint/ports/proxy and then restores normal original Codex behavior after cleanup/restart.",
+      "previous_claim": "Original protected baseline proof was used as part of broad completion.",
+      "actual_proven_truth": "Original WBP-origin baseline launch is proven, and protected baseline evidence proves no proxy/custom HOME/CODEX_HOME injection and current Codex untouched boundaries.",
+      "missing_truth": "No proof that ordinary Codex.app routes through WBP during WBP mode and then restarts normally without WBP after cleanup.",
+      "false_green_risk": "Counting protected baseline safety as Original via WBP routing.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/original_launch_proof.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/original_launch_proof.json"
+      ],
+      "negative_substitution_checks": [
+        "protected_baseline_is_not_original_via_wbp",
+        "untouched_original_is_not_routed_original"
+      ],
+      "verdict": "baseline_launch_proven_routing_and_reversibility_not_complete"
+    },
+    {
+      "claim_id": "CHATGPT_ACCOUNT_ADD_USABILITY",
+      "owner_meaning": "WBP UI add account flow completes login, account appears, status/probe passes, and the account becomes rotation-eligible or honestly non-usable.",
+      "previous_claim": "accounts_readonly_ok=true contributed to final broad complete.",
+      "actual_proven_truth": "Current final artifacts prove accounts readonly status and visible account inventory.",
+      "missing_truth": "No fresh final proof that this contour added a new ChatGPT account through WBP UI and proved usability/rotation eligibility.",
+      "false_green_risk": "Counting account visible or accounts readonly OK as account add usability.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/accounts_readonly_packet.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/final_e2e_summary.json"
+      ],
+      "negative_substitution_checks": [
+        "account_visible_is_not_account_usable",
+        "accounts_readonly_is_not_account_add_success"
+      ],
+      "verdict": "not_complete"
+    },
+    {
+      "claim_id": "UNIVERSAL_API_ADD_USABILITY",
+      "owner_meaning": "WBP UI supports generic provider-profile API route intake, server-owned secret handling, validation, and live prompt proof without OpenRouter lock-in.",
+      "previous_claim": "api_readonly_ok and external route proof contributed to final broad complete.",
+      "actual_proven_truth": "Current final artifacts prove an API readonly route inventory and external API prompt proof for the scoped route path.",
+      "missing_truth": "No final proof of generic provider-profile intake, universal provider add flow, or non-OpenRouter provider usability.",
+      "false_green_risk": "Counting one credential/route check or one external prompt as universal API add usability.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/api_connections_readonly_packet.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/external_api_prompt_packet.json"
+      ],
+      "negative_substitution_checks": [
+        "api_key_accepted_is_not_route_usable",
+        "route_connected_is_not_universal_api_add_flow",
+        "openrouter_success_is_not_provider_universality"
+      ],
+      "verdict": "not_complete"
+    },
+    {
+      "claim_id": "NATIVE_SESSION_IDENTITY",
+      "owner_meaning": "Every native prompt proof binds WBP action id, native process id, window id/title, profile dir, session id, and WBP trace id.",
+      "previous_claim": "No explicit identity chain was required by old broad complete.",
+      "actual_proven_truth": "Separate artifacts prove pieces: workbench session prompt proof and separate launch_client_dispatch process observation.",
+      "missing_truth": "No single identity chain binds native window to the prompt and route trace.",
+      "false_green_risk": "Combining unrelated process and prompt packets into a single user flow.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/independent_audit_report.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/runs/run_01_launch_client_dispatch.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/runs/run_01_prompt_packet.json"
+      ],
+      "negative_substitution_checks": [
+        "parallel_lanes_are_not_identity_chain",
+        "prompt_trace_without_window_binding_is_not_native_prompt_proof"
+      ],
+      "verdict": "not_complete"
+    },
+    {
+      "claim_id": "PROFILE_ISOLATION_AND_REVERSIBILITY",
+      "owner_meaning": "Custom profile isolation and Original via WBP reversibility prove current/original Codex is not damaged and can run normally after WBP cleanup.",
+      "previous_claim": "current_codex_touched=false and cleanup_ok contributed to final broad complete.",
+      "actual_proven_truth": "Scoped workbench/custom session isolation and cleanup packets prove current Codex untouched for those lanes.",
+      "missing_truth": "No proof that native Original via WBP uses reversible temporary config and original Codex restarts normally without WBP.",
+      "false_green_risk": "Counting workbench cleanup as native app and original config reversibility.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/cleanup_packet.json",
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/isolation_check_packet.json"
+      ],
+      "negative_substitution_checks": [
+        "workbench_cleanup_is_not_native_app_cleanup",
+        "current_codex_untouched_is_not_original_reversibility"
+      ],
+      "verdict": "not_complete"
+    },
+    {
+      "claim_id": "OWNER_MANUAL_VERIFICATION",
+      "owner_meaning": "Final native UX acceptance includes owner-visible manual verification after machine proof.",
+      "previous_claim": "Old final close did not include native owner manual verification.",
+      "actual_proven_truth": "No owner manual verification packet exists for native integrated app launch.",
+      "missing_truth": "Need ready_for_owner_manual_check packet and owner-visible confirmation/waiver for native app UX acceptance.",
+      "false_green_risk": "Treating automated packets alone as owner-accepted native UX.",
+      "evidence_refs": [
+        "/Volumes/Work/wild-boar-proxy/audit_results/browser_proof_recovery_reconciliation_and_final_8b_close_2026-05-25/evidence/final_e2e_summary.json"
+      ],
+      "negative_substitution_checks": [
+        "machine_packet_without_owner_native_check_is_not_owner_ux_acceptance"
+      ],
+      "verdict": "not_complete"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "contour": "external_models_c2_lifecycle_and_mocked_status",
+  "date": "2026-05-12",
+  "auditor": "independent_subagent_read_only",
+  "result": "passed_with_outside_scope_observation",
+  "findings": [
+    {
+      "severity": "medium",
+      "file": "wild_boar_proxy/runtime.py",
+      "summary": "Dirty runtime.py changes exist in working tree but are outside the staged C2 contour.",
+      "in_contour": false
+    }
+  ],
+  "checks": {
+    "synthetic_lifecycle_only": "passed",
+    "no_live_runtime_truth_implied": "passed",
+    "no_runtime_py_staged": "passed",
+    "real_tests_cover_reserved_ports_token_migration": "passed"
+  }
+}

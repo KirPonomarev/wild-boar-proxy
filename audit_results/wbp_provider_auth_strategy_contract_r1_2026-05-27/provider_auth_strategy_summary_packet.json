@@ -1,0 +1,20 @@
+{
+  "account_validation_counts_as_model_availability": false,
+  "ambient_fallback_forbidden_by_default": true,
+  "auth_command_selected": true,
+  "auth_sources_classified": true,
+  "bounded_bearer_selected": false,
+  "captured_at_utc": "2026-05-27T04:34:56.386844Z",
+  "direct_egress_absence_proven": false,
+  "file_auth_selected": false,
+  "final_e2e_proven": false,
+  "final_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "model_availability_proven": false,
+  "native_launch_attempted": false,
+  "packet_kind": "provider_auth_strategy_summary",
+  "selected_auth_claimed_as_live_used_without_trace": false,
+  "selected_auth_runtime_usage_proven": false,
+  "selected_strategy": "auth.command",
+  "silent_fallback_detected": false,
+  "status": "ok"
+}

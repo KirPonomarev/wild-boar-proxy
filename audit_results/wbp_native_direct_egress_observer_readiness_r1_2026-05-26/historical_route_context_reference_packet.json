@@ -1,0 +1,17 @@
+{
+  "api_openai_com_absence_proven": false,
+  "captured_at_utc": "2026-05-26T19:52:02.633304Z",
+  "direct_egress_absence_proven": false,
+  "fresh_route_reproved_in_this_contour": false,
+  "historical_route_context_counted_as_current_egress_proof": false,
+  "packet_kind": "historical_route_context_reference",
+  "reference_only": true,
+  "response_accepted_by_codex_proven": false,
+  "routing_proven": false,
+  "source_packets": [
+    "audit_results/wbp_native_custom_direct_egress_classification_2026-05-26/native_direct_egress_claim_packet.json",
+    "audit_results/native_wbp_route_network_observer_feasibility_2026-05-26/network_observer_feasibility_summary_packet.json",
+    "audit_results/wbp_native_custom_owner_ux_readiness_handoff_r1_2026-05-26/owner_ux_readiness_summary_packet.json"
+  ],
+  "status": "ok"
+}

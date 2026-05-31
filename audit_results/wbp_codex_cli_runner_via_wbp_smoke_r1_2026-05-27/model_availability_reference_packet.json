@@ -1,0 +1,24 @@
+{
+  "auth_strategy_reproved_in_this_contour": false,
+  "claim_level_cannot_exceed_reference": true,
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "created_at_utc": "2026-05-27T09:46:32.186845Z",
+  "model_availability_expansion_claimed": false,
+  "model_availability_reproved_in_this_contour": false,
+  "native_model_availability_claimed": false,
+  "new_model_availability_claims_allowed": false,
+  "packet_kind": "model_availability_reference",
+  "reference_only": true,
+  "referenced_status": "ok",
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_matrix.json",
+  "source_packet_snapshot": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1779873347074918940,
+    "path_label": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_matrix.json",
+    "sha256": "c93c1d0af63d39211882dfd2c0c2d59335633fb663258099275ec1af05cd7d2d",
+    "size": 13799
+  },
+  "status": "passed",
+  "validation_failures": []
+}

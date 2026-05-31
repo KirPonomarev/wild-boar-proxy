@@ -1,0 +1,20 @@
+{
+  "candidate_count": 300,
+  "captured_at_utc": "2026-05-27T04:18:17.632208Z",
+  "direct_egress_absence_claimed": false,
+  "durable_restoration_proven": false,
+  "final_e2e_claimed": false,
+  "final_status": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_RESTORATION_HYPOTHESES_CLASSIFIED_WITH_LIMITS",
+  "live_mutation_attempted": false,
+  "model_availability_claimed": false,
+  "native_launch_attempted": false,
+  "native_ux_acceptance_claimed": false,
+  "owner_action_required": false,
+  "packet_kind": "persistent_storage_r4_summary",
+  "restoration_source_hypothesis_count": 300,
+  "route_proof_claimed": false,
+  "schema_observed_count": 20,
+  "semantic_content_classified": false,
+  "status": "ok",
+  "storage_level_thread_history_proven": false
+}

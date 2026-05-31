@@ -1,0 +1,69 @@
+{
+  "contour_id": "ROLLOUT_SCALE_GATE_ADMISSION",
+  "date": "2026-05-14",
+  "claim_admission_verdict": "BLOCKED",
+  "reason": "Current canon does not permit upgrading observed 16-account evidence, posture readiness, or unit tests into 20-account proof, scale completion, pilot readiness, production readiness, or desktop admission.",
+  "forbidden_claims": [
+    {
+      "claim": "STABLE_20_PROVED",
+      "status": "forbidden",
+      "allowed_only_after": "approved live validation contour with machine-carried evidence, runtime attestation, rotation participation, rollback readiness, and owner acceptance"
+    },
+    {
+      "claim": "SCALE_COMPLETE",
+      "status": "forbidden",
+      "allowed_only_after": "explicit scale-gate closeout with repo-scope machine proof"
+    },
+    {
+      "claim": "PILOT_READY",
+      "status": "forbidden",
+      "allowed_only_after": "separate release/pilot gate with required evidence and owner approval"
+    },
+    {
+      "claim": "production_ready",
+      "status": "forbidden",
+      "allowed_only_after": "out of current experimental scope"
+    },
+    {
+      "claim": "16_account_evidence_proves_20",
+      "status": "forbidden",
+      "allowed_only_after": "never; 16-account evidence is observed-only and cannot be upgraded by wording"
+    },
+    {
+      "claim": "READY_FOR_STAGE_ADVANCE_means_scale_proof",
+      "status": "forbidden",
+      "allowed_only_after": "never; posture compatibility is not proof"
+    },
+    {
+      "claim": "desktop_admission_granted",
+      "status": "forbidden",
+      "allowed_only_after": "explicit owner approval for DESKTOP_RENDERER_ADMISSION"
+    }
+  ],
+  "allowed_narrow_claims": [
+    {
+      "claim": "field_evidence_observed_only",
+      "source": "rollout evidence capture 16 --json",
+      "limits": "not runtime truth, not stable 16, not stable 20, not pilot ready"
+    },
+    {
+      "claim": "bounded_rollout_evidence_warning",
+      "source": "rollout rotation inspect --json",
+      "limits": "metadata/warning only"
+    },
+    {
+      "claim": "posture_compatible_with_later_attempt",
+      "source": "rollout posture inspect <15|20> --json",
+      "limits": "not stage proof, not scale proof, not mutation"
+    }
+  ],
+  "active_blockers_from_history": [
+    "SCALE_GATE_20_NOT_COMPLETED",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "INSUFFICIENT_ELIGIBLE_POOL",
+    "desktop_approval_granted_false"
+  ],
+  "final_state": "STOP_FOR_OWNER_APPROVAL_BEFORE_DESKTOP_RENDERER_ADMISSION"
+}

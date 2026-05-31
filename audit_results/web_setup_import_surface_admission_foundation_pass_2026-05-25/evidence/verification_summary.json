@@ -1,0 +1,44 @@
+{
+  "verdict": "WEB_SETUP_IMPORT_SURFACE_ADMISSION_FOUNDATION_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_commit": "434d96b3e951279466fc7ed51f88e6f53abb3dd2",
+  "changed_files": [
+    "wild_boar_proxy/web_design_live_server.py",
+    "tests/test_web_design_live_server.py"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "name": "tests.test_web_design_live_server",
+        "result": "101 tests OK",
+        "launcher": "inline unittest with ephemeral tkinter stub"
+      },
+      {
+        "name": "tests.test_web_design_ui",
+        "result": "72 tests OK",
+        "launcher": "inline unittest with ephemeral PIL.Image stub backed by PNG parsing"
+      }
+    ],
+    "build": [
+      {
+        "name": "py_compile",
+        "result": "OK"
+      },
+      {
+        "name": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "result": "OK"
+      },
+      {
+        "name": "git diff --check",
+        "result": "OK"
+      }
+    ],
+    "manual": "not run"
+  },
+  "scope": {
+    "ui_changed": false,
+    "command_adapter_changed": false,
+    "runtime_bridge_changed": false,
+    "execution_enabled": false
+  }
+}

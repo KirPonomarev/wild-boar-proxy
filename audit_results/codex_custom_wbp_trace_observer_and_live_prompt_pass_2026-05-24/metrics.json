@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_OBSERVER_AND_LIVE_PROMPT_PASS",
+  "tests": {
+    "node_check_overview_js": "passed",
+    "targeted_unittest_count": 172,
+    "targeted_unittest_status": "passed",
+    "browser_fake_server_proof": "passed"
+  },
+  "live": {
+    "live_wbp_calls": 0,
+    "live_provider_calls": 0,
+    "live_prompt_calls": 0,
+    "token_burn": 0
+  },
+  "guard_counts": {
+    "new_or_updated_authorization_tests": 3,
+    "new_or_updated_trace_tests": 3,
+    "new_or_updated_ui_assertions": 13
+  }
+}

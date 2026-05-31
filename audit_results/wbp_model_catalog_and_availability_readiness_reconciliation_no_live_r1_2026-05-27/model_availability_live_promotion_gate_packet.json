@@ -1,0 +1,20 @@
+{
+  "candidate_count": 4,
+  "captured_at_utc": "2026-05-27T09:06:05.233751Z",
+  "live_execution_allowed_in_this_contour": false,
+  "may_start_future_live_contour": false,
+  "native_launch_allowed": false,
+  "owner_live_authorization_present": false,
+  "packet_kind": "model_availability_live_promotion_gate",
+  "provider_model_requests_allowed": false,
+  "readiness_counts_as_live_pass": false,
+  "required_before_live": [
+    "explicit_operator_live_authorization",
+    "fresh_auth_precondition_packet",
+    "declared_request_surfaces",
+    "secret_scan_clean",
+    "bounded_candidate_matrix",
+    "rollback_or_no_mutation_packet"
+  ],
+  "status": "ok"
+}

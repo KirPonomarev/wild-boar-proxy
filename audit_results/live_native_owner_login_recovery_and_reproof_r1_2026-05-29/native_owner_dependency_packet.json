@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-28T23:16:40.728927Z",
+  "classification": "owner_action_pending",
+  "complete_login_status": "",
+  "complete_machine_error_code": "LOGIN_COMPLETE_NOT_ATTEMPTED",
+  "direct_native_probe_http_status": 503,
+  "owner_action_completed": false,
+  "owner_action_required": true,
+  "start_login_status": "waiting_for_user",
+  "start_machine_error_code": "OK",
+  "status_login_status": "waiting_for_user",
+  "status_machine_error_code": "OK"
+}

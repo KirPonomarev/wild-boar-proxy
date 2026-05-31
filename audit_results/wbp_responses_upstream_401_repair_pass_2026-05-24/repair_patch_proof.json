@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-24T01:25:33.438436Z",
+  "expected_test": "tests.test_operator_surface.OperatorSurfaceTests.test_trace_observer_classifies_upstream_401_without_green_code",
+  "files": [
+    "wild_boar_proxy/operator_surface.py",
+    "tests/test_operator_surface.py"
+  ],
+  "machine_error_code": "OK",
+  "no_live_prompt_rerun": true,
+  "patch_scope": "Trace observer classifies 4xx upstream responses as TRACE_UPSTREAM_HTTP_<status> instead of OK.",
+  "repo_patch_performed": true,
+  "status": "ok"
+}

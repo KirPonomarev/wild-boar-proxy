@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T02:18:43.582104Z",
+  "declared_write_surfaces": [
+    "fresh audit_results evidence directory",
+    "temporary /tmp/wbp-native-egress-* profile if live mode is used"
+  ],
+  "original_codex_bundle_write_allowed": false,
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "declared_write_surfaces",
+  "protected_surfaces_write_allowed": false,
+  "rollback_expectation": "terminate isolated Custom process and remove temp root",
+  "status": "ok"
+}

@@ -1,0 +1,70 @@
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "cli_entrypoints": [
+    {
+      "surface": "python -m wild_boar_proxy",
+      "file": "wild_boar_proxy/__main__.py",
+      "kind": "entrypoint"
+    },
+    {
+      "surface": "wild-boar-proxy command tree",
+      "file": "wild_boar_proxy/cli.py",
+      "kind": "entrypoint"
+    }
+  ],
+  "web_entrypoints": [
+    {
+      "surface": "design live server",
+      "file": "wild_boar_proxy/web_design_live_server.py",
+      "kind": "live_server"
+    },
+    {
+      "surface": "classic web ui server",
+      "file": "wild_boar_proxy/web_ui.py",
+      "kind": "legacy_ui_server"
+    }
+  ],
+  "readonly_get_surfaces": [
+    "/api/live-readonly",
+    "/api/accounts-readonly",
+    "/api/api-connections-readonly",
+    "/api/actions"
+  ],
+  "mutation_gateway_surfaces": [
+    "/api/action"
+  ],
+  "readonly_command_packets": [
+    "status --json",
+    "healthcheck --json",
+    "mode get --json",
+    "accounts list --json",
+    "rollout rotation inspect --json",
+    "external-models status --json",
+    "external-models models --json",
+    "external-models routes list --json"
+  ],
+  "ui_action_gateway_to_command_adapter": {
+    "status": "present",
+    "adapter_allowlist_count": 27,
+    "ui_action_count": 22,
+    "launch_client_command_ui_enabled": false,
+    "launch_client_dispatch_special_case": true
+  },
+  "parked_surface_examples_under_current_master_plan": [
+    "accounts onboarding and lifecycle mutations",
+    "route validation and lifecycle mutations",
+    "runtime sync and mode set mutations",
+    "launch dispatch",
+    "diagnostics export"
+  ],
+  "blockers": [
+    {
+      "id": "master_plan_vs_action_metadata",
+      "summary": "Current /api/actions metadata exposes parked mutation surfaces as available during the active live-readonly wave."
+    },
+    {
+      "id": "readme_vs_action_enablement",
+      "summary": "Current README promises that live read-only mode does not enable action buttons, but code enables most allowlisted actions on live source."
+    }
+  ]
+}

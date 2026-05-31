@@ -1,0 +1,124 @@
+{
+  "cleanup": {
+    "lab_process_after_cleanup": {
+      "cmd": "ps -p 9298 -o pid,ppid,command || true",
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "PID  PPID COMMAND"
+    },
+    "lab_root_removed": true
+  },
+  "created_at": "2026-05-23T14:27:49Z",
+  "current_codex_files_after": {
+    "auth": {
+      "exists": true,
+      "mode": "0o600",
+      "mtime_ns": 1779424645682385204,
+      "path": "/Users/kirillponomarev/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697,
+      "type": "file"
+    },
+    "config": {
+      "exists": true,
+      "mode": "0o600",
+      "mtime_ns": 1779545624067618182,
+      "path": "/Users/kirillponomarev/.codex/config.toml",
+      "sha256": "d470b8daa0b62b526474bfcd6c6aa87b46436a717d113c7ea8a9703eb0ba07a6",
+      "size": 4871,
+      "type": "file"
+    }
+  },
+  "default_desktop_storage_after": {
+    "application_support": {
+      "entry_count": 25,
+      "exists": true,
+      "mode": "0o700",
+      "mtime_ns": 1779546366823151240,
+      "path": "/Users/kirillponomarev/Library/Application Support/Codex",
+      "size": 864,
+      "type": "dir"
+    },
+    "cache": {
+      "entry_count": 5,
+      "exists": true,
+      "mode": "0o755",
+      "mtime_ns": 1777494309271487332,
+      "path": "/Users/kirillponomarev/Library/Caches/com.openai.codex",
+      "size": 224,
+      "type": "dir"
+    },
+    "httpstorages": {
+      "entry_count": 3,
+      "exists": true,
+      "mode": "0o755",
+      "mtime_ns": 1770122166948253653,
+      "path": "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex",
+      "size": 160,
+      "type": "dir"
+    }
+  },
+  "lab_temp_writes": [
+    {
+      "relative_path": "Codex Custom Lab.app",
+      "type": "dir"
+    },
+    {
+      "relative_path": "Codex Custom Lab.app/Contents",
+      "type": "dir"
+    },
+    {
+      "relative_path": "Codex Custom Lab.app/Contents/Info.plist",
+      "sha256": "3683d633b62d8ba8804bfd029dbcb76d084d5b0a6bd0a1d386e26a80f0f7db0a",
+      "size": 948,
+      "type": "file"
+    },
+    {
+      "relative_path": "Codex Custom Lab.app/Contents/MacOS",
+      "type": "dir"
+    },
+    {
+      "relative_path": "Codex Custom Lab.app/Contents/MacOS/CodexCustomLab",
+      "sha256": "3906699fcce10d8d2a4ed57c30bb0e0960cf0d622f40490a891041e9e2928689",
+      "size": 645,
+      "type": "file"
+    },
+    {
+      "relative_path": "Codex Custom Lab.app/Contents/Resources",
+      "type": "dir"
+    },
+    {
+      "relative_path": "cache",
+      "type": "dir"
+    },
+    {
+      "relative_path": "codex-home",
+      "type": "dir"
+    },
+    {
+      "relative_path": "launch.log",
+      "sha256": "61ce8b878fd80178ad9d3aeca13c2cf97e7d23a704c01db5fa9a85d5861f93bc",
+      "size": 138,
+      "type": "file"
+    },
+    {
+      "relative_path": "tmp",
+      "type": "dir"
+    },
+    {
+      "relative_path": "user-data",
+      "type": "dir"
+    }
+  ],
+  "network_verdict": "no lab TCP sockets observed",
+  "status": "passed",
+  "unchanged_checks": {
+    "app_support_dir_mtime_unchanged": true,
+    "cache_dir_mtime_unchanged": true,
+    "codex_auth_mtime_unchanged": true,
+    "codex_auth_sha256_unchanged": true,
+    "codex_config_mtime_unchanged": true,
+    "codex_config_sha256_unchanged": true,
+    "httpstorages_dir_mtime_unchanged": true
+  }
+}

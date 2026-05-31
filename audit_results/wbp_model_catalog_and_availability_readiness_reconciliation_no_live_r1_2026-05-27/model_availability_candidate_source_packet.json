@@ -1,0 +1,107 @@
+{
+  "candidate_selected_counted_as_availability": false,
+  "captured_at_utc": "2026-05-27T09:06:05.232911Z",
+  "catalog_prep_reference": {
+    "catalog_prep_reproved_here": false,
+    "expected_status": "WBP_MODEL_CATALOG_FIDELITY_PREP_CLASSIFIED",
+    "path": "audit_results/wbp_model_catalog_fidelity_prep_r1_2026-05-27",
+    "reference_only": true
+  },
+  "catalog_visible_counted_as_availability": false,
+  "narrative_seed_can_create_candidate": false,
+  "packet_kind": "model_availability_candidate_source",
+  "seed_evaluation": [
+    {
+      "admitted_as_candidate": true,
+      "availability_proven": false,
+      "model_id": "gpt-5.3-codex",
+      "present_in_current_catalog": true,
+      "seed_kind": "current stable default backend model",
+      "skip_reason": ""
+    },
+    {
+      "admitted_as_candidate": false,
+      "availability_proven": false,
+      "model_id": "gpt-5.4-mini",
+      "present_in_current_catalog": false,
+      "seed_kind": "canonical sample",
+      "skip_reason": "not_catalog_visible_or_route_backed_in_current_snapshot"
+    },
+    {
+      "admitted_as_candidate": true,
+      "availability_proven": false,
+      "model_id": "gpt-5.4",
+      "present_in_current_catalog": true,
+      "seed_kind": "canonical sample",
+      "skip_reason": ""
+    },
+    {
+      "admitted_as_candidate": true,
+      "availability_proven": false,
+      "model_id": "gpt-5.5",
+      "present_in_current_catalog": true,
+      "seed_kind": "conditional sample",
+      "skip_reason": ""
+    },
+    {
+      "admitted_as_candidate": true,
+      "availability_proven": false,
+      "model_id": "direct-mistral-devstral-2512",
+      "present_in_current_catalog": true,
+      "seed_kind": "selected WBP/API sample",
+      "skip_reason": ""
+    }
+  ],
+  "source_packet_status": "ok",
+  "source_rows": [
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "codex_native",
+      "model_id": "gpt-5.3-codex",
+      "server_issued": true,
+      "source_class": "current_build_catalog_visible"
+    },
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "codex_native",
+      "model_id": "gpt-5.4",
+      "server_issued": true,
+      "source_class": "current_build_catalog_visible"
+    },
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "codex_native",
+      "model_id": "gpt-5.5",
+      "server_issued": true,
+      "source_class": "current_build_catalog_visible"
+    },
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "wbp_api",
+      "model_id": "direct-mistral-devstral-2512",
+      "server_issued": true,
+      "source_class": "server_registry"
+    },
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "wbp_api",
+      "model_id": "native-looking-external",
+      "server_issued": true,
+      "source_class": "server_registry"
+    },
+    {
+      "availability_proven_by_source": false,
+      "catalog_visible_counted_as_availability": false,
+      "lane": "wbp_api",
+      "model_id": "wbp:deepseek-max",
+      "server_issued": true,
+      "source_class": "server_registry"
+    }
+  ],
+  "status": "ok"
+}

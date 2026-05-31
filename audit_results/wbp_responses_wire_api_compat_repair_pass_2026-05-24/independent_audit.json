@@ -1,0 +1,35 @@
+{
+  "captured_at_utc": "2026-05-24T01:39:00Z",
+  "auditor": {
+    "agent_id": "019e579e-6f55-7910-8095-92fb08f61d6b",
+    "model_class": "5.4-mini",
+    "mode": "read_only_scanner"
+  },
+  "verdict": "pass_with_next_live_rerun_required",
+  "findings": [
+    {
+      "id": "WIRE_PATH_CONFIRMED",
+      "status": "pass",
+      "evidence": "Auditor mapped build_codex_config -> WbpTraceObserver -> OperatorSurfaceSession.run_prompt -> Codex Custom session proof aggregation."
+    },
+    {
+      "id": "HEADER_STRIPPING_PATCH_MATCHES_RISK",
+      "status": "pass",
+      "evidence": "Patch preserves safe compatibility headers and tests forbidden secret-bearing headers are not forwarded."
+    },
+    {
+      "id": "TRACED_401_BUBBLED",
+      "status": "pass",
+      "evidence": "New regression covers traced prompt path with upstream 401 and top-level TRACE_UPSTREAM_HTTP_401."
+    },
+    {
+      "id": "NO_LIVE_PROMPT_RERUN",
+      "status": "pass",
+      "evidence": "No Codex Custom prompt or direct /responses probe was run in this contour."
+    }
+  ],
+  "residual_risk": [
+    "Live Codex Custom success is not proven by this contour.",
+    "If next single live rerun still returns 401, next owner class is GPT account/upstream auth, not this trace header/classification patch."
+  ]
+}

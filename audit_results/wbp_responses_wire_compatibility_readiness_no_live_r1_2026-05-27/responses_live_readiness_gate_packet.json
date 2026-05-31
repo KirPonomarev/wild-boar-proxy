@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T06:58:39.430924Z",
+  "declared_write_surfaces_recorded": true,
+  "live_execution_allowed_by_this_contour": false,
+  "live_execution_attempted": false,
+  "may_start_future_live_contour": false,
+  "native_launch_allowed_by_this_contour": false,
+  "native_launch_attempted": false,
+  "owner_live_reauthorization_present": false,
+  "packet_kind": "responses_live_readiness_gate",
+  "prep_packets_ok": true,
+  "rollback_expectations_required_for_future_live": true,
+  "status": "ok"
+}

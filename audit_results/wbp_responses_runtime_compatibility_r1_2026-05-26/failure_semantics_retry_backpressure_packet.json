@@ -1,0 +1,9 @@
+{
+  "backpressure_behavior_classified": "not_exercised_by_local_harness",
+  "captured_at_utc": "2026-05-26T20:50:43.297630Z",
+  "counts_as_full_robustness_pass": false,
+  "idempotence_assumption": "no automatic retry means adapter does not add idempotence risk",
+  "packet_kind": "failure_semantics_retry_backpressure",
+  "retry_behavior_classified": "adapter_does_not_retry",
+  "status": "ok"
+}

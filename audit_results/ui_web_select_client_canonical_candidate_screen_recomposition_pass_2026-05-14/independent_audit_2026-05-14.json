@@ -1,0 +1,72 @@
+{
+  "contour": "UI_WEB_SELECT_CLIENT_CANONICAL_CANDIDATE_SCREEN_RECOMPOSITION_PASS",
+  "auditor": "read-only subagent",
+  "date": "2026-05-14",
+  "overall": "pass",
+  "scope": {
+    "files": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "tests/test_web_design_ui.py",
+      "audit_results/ui_web_select_client_canonical_candidate_screen_recomposition_pass_2026-05-14/after_metrics.json"
+    ],
+    "mode": "read-only"
+  },
+  "findings": [
+    {
+      "check": "candidate-selection surface",
+      "status": "pass",
+      "evidence": [
+        "selectClientScreen has data-select-client-mode=candidate-preview",
+        "banner says fixture preview, not discovered apps",
+        "candidate list contains rows, inert paths, status chips, and disabled selection buttons"
+      ]
+    },
+    {
+      "check": "no active save or check without proof",
+      "status": "pass",
+      "evidence": [
+        "candidate buttons are disabled",
+        "check button is disabled with missing surface copy",
+        "save button is disabled with requires candidate proof copy",
+        "metrics activeButtons contains only Закрыть"
+      ]
+    },
+    {
+      "check": "no browser path input surface inside selectClientScreen",
+      "status": "pass",
+      "evidence": [
+        "search affordance is a div placeholder, not an input",
+        "manual picker button is disabled",
+        "section-level tests reject input, select, file input, client_path, source_dir, auth_ref, and password tokens"
+      ]
+    },
+    {
+      "check": "no action dispatch inside selectClientScreen",
+      "status": "pass",
+      "evidence": [
+        "section-level tests reject data-ui-action and live-action",
+        "markup uses disabled buttons only"
+      ]
+    },
+    {
+      "check": "icons and layout metrics",
+      "status": "pass",
+      "evidence": [
+        "after metrics report visibleSvgIcons=0",
+        "after metrics report visibleImgIcons=7",
+        "after metrics report mainScrollHeight=942 and mainClientHeight=942",
+        "after metrics report screenBottom=934 and overflows=[]"
+      ]
+    },
+    {
+      "check": "scope boundary",
+      "status": "pass",
+      "evidence": [
+        "tracked diff is limited to web_design_ui index, CSS, JS, and web UI tests",
+        "runtime, command adapter, allowlist, live server, and desktop files are not touched"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "sandbox_after_restore": {
+    "routes.json": {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+      "size_bytes": 598,
+      "sha256": "c9c43694115d349cb4bf690697ebb8e4f952de07916b9a64418bdeac549cb0d1"
+    },
+    "state.json": {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+      "size_bytes": 554,
+      "sha256": "f11ebe5d4aea7a9cd7ff5e54887502bcf3ea1f64f32e832996c79d32c4f84fc5"
+    },
+    "secrets.env": {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "default_path_after_recovery": {
+    "routes.json": {
+      "path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+      "size_bytes": 42,
+      "sha256": "27b0105f1545bd3cbd7891f34e3f532784944d3bf0a23c53b37ff257451afef9"
+    },
+    "state.json": {
+      "path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json",
+      "exists": false
+    },
+    "secrets.env": {
+      "path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/secrets.env",
+      "exists": false
+    }
+  },
+  "drift_verdict": {
+    "sandbox_only_final_mutation": true,
+    "sandbox_non_route_files_unchanged": true,
+    "default_path_recovered_to_empty_registry": true,
+    "validate_not_executed": true,
+    "check_not_executed": true
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "forbidden_roots": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.cli-proxy-api",
+    "/Users/kirillponomarev/.wild-boar-proxy/external-models",
+    "/Users/kirillponomarev/.codex-custom-test"
+  ],
+  "forbidden_live_path_drift": false,
+  "owner_command_changed_files": [],
+  "refresh_changed_files": [],
+  "status_changed_files": [],
+  "notes": "no observed writes escaped the sandbox root; onboarding failure was write-free"
+}

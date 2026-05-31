@@ -1,0 +1,19 @@
+{
+  "allowed_future_owner_actions": [
+    "Cancel",
+    "Allow",
+    "Ignore",
+    "Not Observed"
+  ],
+  "captured_at_utc": "2026-05-27T16:29:09.383198Z",
+  "classification": "reference_only_not_observed_in_this_contour",
+  "contour_final_status": "WBP_CUSTOM_PROFILE_AND_KEYCHAIN_CLASSIFIED_WITH_LIMITS",
+  "imported_truth_only": true,
+  "owner_action_boundary_reference_only": true,
+  "owner_action_performed_in_this_contour": false,
+  "owner_allow_counted_as_auth_success": false,
+  "owner_cancel_counted_as_machine_proof": false,
+  "packet_kind": "keychain_owner_action_boundary",
+  "source_keychain_owner_action_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_keychain_prompt_behavior_import_r1_2026-05-27/keychain_prompt_owner_action_packet.json",
+  "status": "ok"
+}

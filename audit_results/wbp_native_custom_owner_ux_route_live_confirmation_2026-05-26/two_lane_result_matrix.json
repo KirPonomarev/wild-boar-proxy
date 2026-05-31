@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05.029691Z",
+  "direct_egress_claimed": false,
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+  "machine_ui_proof_claimed": false,
+  "owner_ux_confirmed": true,
+  "packet_kind": "two_lane_result_matrix",
+  "route_status": "confirmed",
+  "route_trace_bound": true,
+  "route_trace_confirmed": true,
+  "status": "ok",
+  "ux_status": "confirmed"
+}

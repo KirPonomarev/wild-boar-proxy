@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+  "date": "2026-05-14",
+  "auditor": "independent_scoped_subagent",
+  "checks": [
+    {
+      "check": "expected_files_only",
+      "result": "PASS",
+      "evidence": [
+        "tracked diff is limited to diagnostics UI HTML, diagnostics UI JS, diagnostics CSS, and UI tests",
+        "audit artifacts and screenshots are contour-owned evidence"
+      ]
+    },
+    {
+      "check": "no_server_adapter_runtime_desktop_semantic_change",
+      "result": "PASS",
+      "evidence": [
+        "no tracked diff touches live server, command adapter, runtime, or desktop files",
+        "implementation matrix records runtime_file_changed=false, live_server_semantic_changed=false, command_adapter_semantic_changed=false, desktop_file_changed=false"
+      ]
+    },
+    {
+      "check": "no_new_payload_or_backend_command_surfaces",
+      "result": "PASS",
+      "evidence": [
+        "new JavaScript only toggles diagnostics detail visibility and chip labels by source",
+        "new HTML regions add fixture/demo visualization and deferred copy only",
+        "no new data-ui-action, command_id, raw argv, path, token, or browser payload field was added"
+      ]
+    },
+    {
+      "check": "fixture_and_live_mode_boundary",
+      "result": "PASS",
+      "evidence": [
+        "history chart and latest records include fixture/demo-only markers",
+        "live deferred panels include data-live-state markers",
+        "browser smoke reports fixture chart and records visible only in fixture mode and deferred panels visible only in live mode"
+      ]
+    },
+    {
+      "check": "diagnostics_export_metadata_boundary",
+      "result": "PASS",
+      "evidence": [
+        "diagnostics copy keeps export as support-artifact metadata",
+        "screen states that runtime truth remains separate",
+        "no artifact open, bundle read, log tail read, state read, or config read was introduced"
+      ]
+    },
+    {
+      "check": "tests_and_smoke_relevance",
+      "result": "PASS",
+      "evidence": [
+        "UI tests guard fixture/demo markers, live deferred state, and hidden-state switching",
+        "browser smoke includes fixture and live screenshots at 1600x1000 with no horizontal scroll"
+      ]
+    },
+    {
+      "check": "privacy_trace_scan",
+      "result": "PASS",
+      "evidence": [
+        "no forbidden external reference service traces were found in the scoped implementation diff and artifacts"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Any future live diagnostics history needs a separate bounded redacted JSON command surface.",
+    "Any future non-live source value is currently treated as fixture/demo and should be audited if new sources are added."
+  ],
+  "verdict": "PASS",
+  "blocks_commit": false,
+  "resume_from_here": "Create closeout, run final scans, commit, and push."
+}

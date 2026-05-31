@@ -1,0 +1,22 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "rollback_comparison": {
+    "sandbox_owned_auth_material": {
+      "root_local": true,
+      "rollback_unit": "delete auth.json or remove the full sandbox root tree",
+      "status": "not currently available as a source"
+    },
+    "adjacent_non_live_local_auth_material": {
+      "root_local": "unknown",
+      "rollback_unit": "not yet nameable",
+      "status": "not evidenced"
+    },
+    "forbidden_live_root_auth_material": {
+      "root_local": false,
+      "rollback_unit": "cannot stay root-local without an extra source-specific admission contour",
+      "status": "observed but not directly admissible"
+    }
+  },
+  "current_narrowest_honest_next_step": "source_specific_admission_before_materialization"
+}

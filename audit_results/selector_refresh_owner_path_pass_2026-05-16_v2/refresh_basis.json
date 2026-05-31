@@ -1,0 +1,18 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "v2",
+  "pre_state": {
+    "head": "79f353f",
+    "runtime_effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "runtime_effective_source_status": "approved_target_active_by_activation_evidence",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "rotation_selected_backend_count": 15
+  },
+  "owner_refresh_surface": {
+    "command_surface": "python3 -m wild_boar_proxy sync --json",
+    "canon_basis": "runtime_state.selected_backend_snapshot may be materialized only by the serialized runtime-state owner path in sync --json"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "bounded_manifest_status": "ok",
+  "captured_at_utc": "2026-05-27T03:40:14.364323Z",
+  "execution_mode": "admission",
+  "native_launch_attempted": false,
+  "original_codex_write_performed_by_contour": false,
+  "original_drift_blocks_filesystem_pass_claim": true,
+  "original_drift_classified": true,
+  "original_drift_status": "blocked",
+  "owner_action_required": false,
+  "packet_kind": "r2b_admission",
+  "protected_filesystem_pass_claimed": false,
+  "reason_class": "",
+  "rollback_reference_status": "ok",
+  "route_egress_model_claimed": false,
+  "status": "ok",
+  "thread_history_claimed": false
+}

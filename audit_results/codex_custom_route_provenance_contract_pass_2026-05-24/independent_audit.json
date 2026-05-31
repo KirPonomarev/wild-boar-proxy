@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_ROUTE_PROVENANCE_CONTRACT_PASS",
+  "status": "passed",
+  "auditor": {
+    "agent_id": "019e56cd-00fe-7b82-86d5-86b478b40b30",
+    "nickname": "Hilbert",
+    "model_class": "gpt-5.4-mini",
+    "mode": "read_only",
+    "live_commands_run": false
+  },
+  "findings": [
+    "route_provenance was not first-class before this contour.",
+    "Best insertion point is build_account_selection_packet because it already owns server-side selection truth.",
+    "build_account_smoke_dry_run_packet should mirror provenance metadata without changing model or backend choice.",
+    "CodexCustomSessionManager.create_packet should persist provenance fields into session shape.",
+    "prompt_packet is the right place to expose route-backed proof state and block full success when required proof is missing.",
+    "Avoid scope creep into routing behavior, browser-selected backend, ranking inputs, UI, or model registry ownership."
+  ],
+  "orchestrator_resolution": [
+    "Added explicit GPT-account route_provenance_required=false fields.",
+    "Added route-backed fixture tests for missing and proven route provenance.",
+    "Did not change real routing behavior.",
+    "Did not touch model registry."
+  ],
+  "verdict": "route provenance contract hardening is scoped correctly and evidence-backed."
+}

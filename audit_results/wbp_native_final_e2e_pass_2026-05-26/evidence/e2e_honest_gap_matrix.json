@@ -1,0 +1,13 @@
+{
+  "matrix": [
+    {"layer": "provider contract", "status": "PROVEN"},
+    {"layer": "CLI runner", "status": "PROVEN", "direct_non_wbp_egress_absent": true, "current_codex_untouched": true},
+    {"layer": "native strategy", "status": "PROVEN", "selected": "repo_canonical_custom_proxy_auth_isolated_home"},
+    {"layer": "filesystem safety", "status": "PROVEN", "all_protected_surfaces_unchanged": true},
+    {"layer": "window process identity", "status": "PROVEN", "window_bound_to_custom_launch": true, "window_distinguishable": true},
+    {"layer": "window input-capable UI", "status": "NOT_PROVEN", "blocked_by": "AX/CG host limitation: isolated-home Codex process does not expose accessible AX windows; Quartz installed but reports no windows for pid; System Events reports window_count=0; AXTextField/AXTextArea not found in UI hierarchy"},
+    {"layer": "native routing to WBP", "status": "PROVEN", "request_reached_wbp": true, "direct_egress_absent": true},
+    {"layer": "Original Codex via WBP reversible", "status": "PROVEN", "config_restored_sha256_match": true, "restart_witness_ok": true},
+    {"layer": "final E2E", "status": "EXECUTED_WITH_HONEST_GAPS"}
+  ]
+}

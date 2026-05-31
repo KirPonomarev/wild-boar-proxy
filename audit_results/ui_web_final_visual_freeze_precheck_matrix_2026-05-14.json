@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_FINAL_VISUAL_FREEZE_PRECHECK",
+  "date": "2026-05-14",
+  "mode": "verification / audit / tightly bounded minimal repair",
+  "final_state": "UI_WEB_FINAL_VISUAL_FREEZE_PRECHECK_PASS_WITH_OWNER_REVIEW_NOTES",
+  "head_at_precheck_start": "f3e5f0b",
+  "screens_checked": [
+    "overview",
+    "accounts",
+    "api-connections",
+    "diagnostics",
+    "settings",
+    "setup",
+    "select-client",
+    "import-existing"
+  ],
+  "modal_surfaces_checked": [
+    "confirmation-modal",
+    "onboard-modal"
+  ],
+  "browser_smoke": {
+    "artifact": "audit_results/ui_web_final_visual_freeze_precheck_browser_smoke_2026-05-14.json",
+    "viewport": {
+      "width": 1600,
+      "height": 1000
+    },
+    "source": "fixture/demo only",
+    "result": "PASS",
+    "screenshots_captured": 10,
+    "final_confirm_clicked": false,
+    "command_request_executed": false,
+    "runtime_mutation_attempted": false,
+    "blocker_candidates": []
+  },
+  "tiny_repairs_applied": [
+    {
+      "classification": "freeze-blocking visual",
+      "files": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "summary": "Renamed one compact overview action label to operator copy, tightened secondary action spacing, and reduced API table minimum width by 8px.",
+      "layer_check": "CSS/HTML-only; no dispatch, payload, metadata, availability, refresh, or truth handling change."
+    }
+  ],
+  "blocker_classification": {
+    "freeze_blocking_visual": [],
+    "freeze_blocking_truth_copy": [],
+    "post_owner_review_design_preference": [
+      {
+        "surface": "all",
+        "note": "Owner may still request typography, spacing, icon, density, or exact identity tuning during owner design review."
+      }
+    ],
+    "deferred_desktop_only": [
+      {
+        "surface": "all",
+        "note": "Native window behavior, desktop bridge affordances, and desktop packaging remain deferred until explicit owner approval."
+      }
+    ]
+  },
+  "action_surface_audit": {
+    "mode": "read-only verification",
+    "new_action_surface_added": false,
+    "backend_files_changed": false,
+    "live_server_changed": false,
+    "command_adapter_changed": false,
+    "runtime_changed": false,
+    "desktop_changed": false,
+    "setup_like_screens_inert": true,
+    "stable_repair_apply_exposed": false,
+    "final_confirm_executed_in_smoke": false
+  },
+  "identity_check": {
+    "source_baseline_preserved": true,
+    "wild_boar_identity_preserved": true,
+    "external_reference_trace_absent": true,
+    "notes": [
+      "Mono-first typography and warm technical palette preserved.",
+      "Left sidebar hierarchy preserved.",
+      "Compact operational density preserved."
+    ]
+  },
+  "verification": {
+    "node_check": "PASS",
+    "targeted_unittest_suite": "PASS: 82 tests",
+    "json_validation": "PASS",
+    "closeout_resilience": "PASS",
+    "leak_scan": "PASS",
+    "diff_check": "PASS",
+    "independent_audit": "PASS"
+  },
+  "resume_from_here": "Run final verification, independent audit, closeout, commit, and push."
+}

@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-29T05:46:02.539491Z",
+  "classification": "inspection_only_untouched_with_unknown_drift_blocker",
+  "current_contour_non_mutation_observed": true,
+  "full_runtime_integrity_proven": false,
+  "original_codex_untouched_within_admitted_scope": true,
+  "packet_kind": "original_codex_isolation_reproof",
+  "protected_surface_recheck_classification": "blocked_unknown_attribution_with_limits",
+  "status": "ok",
+  "unknown_attribution_cannot_upgrade_integrity": true
+}

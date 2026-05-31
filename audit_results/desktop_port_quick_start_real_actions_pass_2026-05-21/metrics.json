@@ -1,0 +1,40 @@
+{
+  "contour": "DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS",
+  "status": "closed_success",
+  "desktop_surface": "admitted_tk_shell",
+  "baseline_kind": "desktop_continuity_parity",
+  "touched_files": [
+    "wild_boar_proxy/ui_shell.py",
+    "tests/test_ui_shell.py",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/spec.md",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/metrics.json",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/closeout.md",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/independent_audit.json",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json"
+  ],
+  "verification": {
+    "ui_shell_tests": "passed",
+    "full_regression_suite": "passed",
+    "node_check": "passed",
+    "git_diff_check": "passed",
+    "closeout_resilience_staged": "pending_final_stage"
+  },
+  "smoke_summary": {
+    "source": "live_sandbox",
+    "account_status": "ok",
+    "api_status": "enabled",
+    "route_validation": "ok",
+    "runtime_liveness": "healthy",
+    "bundle_status": "ok",
+    "bundle_verdict": "ready",
+    "ledger_actions": [
+      "quick_start_check_all",
+      "api_route_check"
+    ]
+  },
+  "scope": {
+    "forbidden_inputs_widened": false,
+    "new_truth_source_introduced": false,
+    "desktop_only_command_surface_added": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T06:49:37.469988Z",
+  "env_auth_overrides_route_policy": false,
+  "env_auth_proves_provider_reachability": false,
+  "env_auth_used": false,
+  "env_source_declared": false,
+  "env_var_presence_proves_safe_runtime_auth": false,
+  "failed_checks": [],
+  "packet_kind": "provider_auth_env_authority_limit",
+  "raw_env_value_recorded": false,
+  "server_side_only": true,
+  "silent_env_fallback_allowed": false,
+  "status": "ok"
+}

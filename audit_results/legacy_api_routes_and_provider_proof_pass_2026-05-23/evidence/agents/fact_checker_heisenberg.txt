@@ -1,0 +1,17 @@
+Agent: Heisenberg
+Model: gpt-5.4-mini
+Role: independent read-only fact checker
+
+Findings:
+- Branch: codex/external-agent-lab-isolated
+- HEAD: 2384af97c1d1d329cc86bb4559279f3d9874eabb
+- Canonical external-models surfaces are documented in COMMAND_API.md and covered by tests around credentials status/admit, routes add/validate, and external-models check/read paths.
+- Live web server on 127.0.0.1:8788 is running in sandbox_actions mode and uses copied runtime dirs:
+  - profile: /private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile
+  - managed: /private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed
+- Safe baseline commands: status --json, healthcheck --json, accounts list --json, external-models status/routes list/credentials status --json.
+- Network proof commands such as external-models routes validate/check may write evidence and should only run after route/credential proof.
+- Highest leakage risk is managed/external-models/secrets.env and any evidence/browser packet that accidentally captures secret values.
+- secrets.env content was not read.
+
+Verdict: canonical surfaces and live target are identified; proceed only with redacted evidence and no browser/chat secret intake.

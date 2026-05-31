@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_TABLE_SCREENS_REPAIR",
+  "date": "2026-05-14",
+  "auditor": "independent_scoped_subagent",
+  "scope": {
+    "tracked_code_files": [
+      "tests/test_web_design_ui.py",
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "wild_boar_proxy/web_design_ui/styles/overview.css"
+    ],
+    "ignored_out_of_scope": [
+      "unrelated untracked external lab tail"
+    ]
+  },
+  "checks": {
+    "scope_limited_to_ui_table_repair": {
+      "result": "PASS",
+      "evidence": "Tracked code diff is limited to web design UI static files and one UI layout guard test."
+    },
+    "runtime_and_server_layers_untouched": {
+      "result": "PASS",
+      "evidence": "No runtime, live server, command adapter, desktop, or config surfaces are modified in the tracked diff."
+    },
+    "ui_action_semantics_preserved": {
+      "result": "PASS",
+      "evidence": "Route action buttons retain existing ui_action names, route_id dispatch payload, and route enabled/state requirement data attributes."
+    },
+    "table_visual_repair": {
+      "result": "PASS",
+      "evidence": "Accounts and API Connections table cards use bounded internal scroll, readable column widths, compact wrapped action groups, and no vertical header text in browser smoke."
+    },
+    "browser_smoke_artifact": {
+      "result": "PASS",
+      "evidence": "Browser smoke JSON records result PASS with repo-relative screenshots for Accounts live/fixture and API Connections live/fixture at 1600x1000."
+    },
+    "privacy_and_reference_trace_scan": {
+      "result": "PASS",
+      "evidence": "Scoped new artifacts contain no external reference service traces, install prompts, private notes, secret material, or absolute private paths."
+    },
+    "overclaim_scan": {
+      "result": "PASS",
+      "evidence": "Production UI copy avoids forbidden route control and readiness overclaim wording."
+    }
+  },
+  "commands_observed": [
+    {
+      "command": "python3 -m json.tool audit_results/ui_web_table_screens_repair_matrix_2026-05-14.json",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m json.tool audit_results/ui_web_table_screens_repair_browser_smoke_2026-05-14.json",
+      "result": "PASS"
+    },
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "PASS",
+      "summary": "Ran 80 tests; OK"
+    }
+  ],
+  "residual_risks": [
+    "Browser smoke directly exercised the locked 1600x1000 transfer viewport; narrower responsive viewports remain for the later visual stabilization contour.",
+    "This contour repairs table presentation only and does not implement the future diagnostics detail screen."
+  ],
+  "verdict": "PASS",
+  "blocks_commit": false,
+  "resume_from_here": "Create closeout, run final scoped scans, commit, and push."
+}

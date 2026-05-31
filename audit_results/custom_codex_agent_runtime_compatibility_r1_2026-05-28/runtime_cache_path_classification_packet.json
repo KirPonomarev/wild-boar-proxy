@@ -1,0 +1,45 @@
+{
+  "cache_path_classified": true,
+  "cache_paths": {
+    "marketplace_tmp_root": {
+      "content_recorded": false,
+      "exists": true,
+      "kind": "dir",
+      "mtime_ns": 1779944793973487271,
+      "overlaps_original_codex": false,
+      "path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.tmp",
+      "size": 192,
+      "under_custom_profile": true
+    },
+    "plugin_cache_root": {
+      "content_recorded": false,
+      "exists": true,
+      "kind": "dir",
+      "mtime_ns": 1779851215036789585,
+      "overlaps_original_codex": false,
+      "path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/plugins/cache",
+      "size": 128,
+      "under_custom_profile": true
+    },
+    "runtime_cache_root": {
+      "content_recorded": false,
+      "exists": true,
+      "kind": "dir",
+      "mtime_ns": 1779851214543528221,
+      "overlaps_original_codex": false,
+      "path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/home/.cache/codex-runtimes",
+      "size": 96,
+      "under_custom_profile": true
+    }
+  },
+  "cache_persistence_proven": false,
+  "captured_at_utc": "2026-05-28T08:40:00.046182Z",
+  "latency_claimed": false,
+  "packet_kind": "runtime_cache_path_classification",
+  "parity_claimed": false,
+  "performance_claimed": false,
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_id": "wbp-custom-main",
+  "reason_class": "",
+  "status": "ok"
+}

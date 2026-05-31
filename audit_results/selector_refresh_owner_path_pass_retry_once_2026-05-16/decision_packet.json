@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS_RETRY_ONCE",
+  "status": "stopped",
+  "fresh_selector_truth_earned": false,
+  "machine_reason": "REPEATED_LOCK_HELD_WITH_RUNTIME_REGRESSION",
+  "rotation_before_status": "ROTATION_EVIDENCE_STALE",
+  "sync_status": "LOCK_HELD",
+  "rotation_after_status": "LOCK_HELD",
+  "sync_changed_files": [],
+  "runtime_truth_after_sync": {
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected"
+  },
+  "provisional_next_contour": "STOP_AND_DIAGNOSE",
+  "provisional_next_action": "localize repeated selector lock contention together with post-retry runtime regression before any further live selector or runtime retry"
+}

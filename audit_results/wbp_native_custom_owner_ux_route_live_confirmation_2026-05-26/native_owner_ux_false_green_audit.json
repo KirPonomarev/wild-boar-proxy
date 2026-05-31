@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05.029701Z",
+  "checks": [
+    {
+      "name": "manual_ui_waiver_does_not_replace_route_trace",
+      "passed": true
+    },
+    {
+      "name": "route_trace_does_not_replace_owner_ux",
+      "passed": true
+    },
+    {
+      "name": "two_lane_matrix_present",
+      "passed": true
+    },
+    {
+      "name": "no_raw_prompt_or_auth",
+      "passed": true
+    },
+    {
+      "name": "no_filesystem_or_egress_or_final_claim",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "native_owner_ux_false_green_audit",
+  "status": "ok"
+}

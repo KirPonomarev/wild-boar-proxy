@@ -1,0 +1,23 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "status": "completed",
+  "runtime_reproof_succeeded": true,
+  "healthcheck_machine_error_code": "OK",
+  "launch_smoke_machine_error_code": "OK",
+  "launch_smoke_launcher_exit_code": 0,
+  "approved_target_effective_runtime_status": "approved_target_active_by_activation_evidence",
+  "activation_snapshot_outcome": "approved_target_activated",
+  "claim_gate_status_after_reproof": "clear",
+  "policy_drift_status_after_reproof": "clear",
+  "rotation_machine_error_code_after_reproof": "ROTATION_EVIDENCE_STALE",
+  "rotation_selected_backend_count": 9,
+  "rotation_selector_fresh": false,
+  "exact_source_admission_earned_now": false,
+  "selector_refresh_earned_now": true,
+  "sandbox_materialization_earned_now": false,
+  "decision": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "next_contour_class": "owner_path_refresh",
+  "reason": "runtime reproof successfully promoted the approved repair target to effective runtime truth and cleared claim-gate and policy-drift blockers; the remaining localized blocker is stale selected-backend participation evidence, so the next narrow contour is owner-path selector refresh rather than exact-source admission"
+}

@@ -1,0 +1,28 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_PASS",
+  "auditor": "Boole",
+  "model_class": "5.4-mini",
+  "initial_findings": [
+    {
+      "severity": "high",
+      "finding": "Verifier accepted source_admission_sha256 as presence-only provenance and did not compare file digest against an expected value outside the artifact.",
+      "resolution": "Added server-side manifest and verify-side manifest comparison for artifact_sha256, artifact_payload_sha256, source_admission_sha256, created_at_utc, kind, and write surface."
+    },
+    {
+      "severity": "medium",
+      "finding": "Verifier accepted artifacts with missing created_at_utc.",
+      "resolution": "Added parseable timestamp validation before candidate admission."
+    }
+  ],
+  "reaudit": {
+    "verdict": "pass",
+    "findings": [],
+    "evidence": [
+      "Verify requires _rollback_point_manifest.json and validates manifest_payload_sha256.",
+      "Verify compares the selected artifact against manifest entry fields.",
+      "Tampered source_admission_sha256 with recomputed artifact_payload_sha256 returns ROLLBACK_POINT_VERIFY_PROVENANCE_MISMATCH.",
+      "Missing manifest returns ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING.",
+      "Missing or invalid created_at_utc returns ROLLBACK_POINT_VERIFY_TIMESTAMP_INVALID."
+    ]
+  }
+}

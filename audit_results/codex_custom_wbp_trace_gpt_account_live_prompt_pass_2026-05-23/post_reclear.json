@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "not_run",
+  "reason": "live runtime commands are held behind owner authorization gate",
+  "runtime_truth_claimed": false
+}

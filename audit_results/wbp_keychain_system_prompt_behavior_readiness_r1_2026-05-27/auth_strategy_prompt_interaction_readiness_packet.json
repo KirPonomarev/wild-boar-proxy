@@ -1,0 +1,19 @@
+{
+  "auth_invoked_in_this_contour": false,
+  "auth_strategy_reference": {
+    "expected_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+    "path": "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
+    "reference_only": true,
+    "sha256": "0d2ab97373d241cec4773a6ac9d0d995d93db60d737b5890d616f849f0dd737a"
+  },
+  "auth_strategy_reproved_in_this_contour": false,
+  "auth_success_claimed": false,
+  "auth_success_requires_future_live_trace": true,
+  "captured_at_utc": "2026-05-27T05:32:12.361490Z",
+  "current_codex_auth_json_used": false,
+  "keychain_prompt_behavior_classified": false,
+  "original_codex_auth_keychain_dependency": false,
+  "packet_kind": "auth_strategy_prompt_interaction_readiness",
+  "selected_strategy": "auth.command",
+  "status": "ok"
+}

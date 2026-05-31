@@ -1,0 +1,22 @@
+{
+  "authoritative_next_step_surface": {
+    "surface": "status --json",
+    "reason": "blocked claim_gate and effective runtime source outrank fresh selector evidence for deciding whether auth-chain work is admissible"
+  },
+  "supporting_surfaces": [
+    {
+      "surface": "rollout rotation inspect --json",
+      "role": "proves selector freshness and approved-target claim-surface clarity"
+    },
+    {
+      "surface": "sync --json",
+      "role": "proves the refresh surface and visible writes, but not stable recovery ownership"
+    }
+  ],
+  "final_verdict": "GO_TO_MANAGED_SYNC_MODE_DRIFT_DIAGNOSE_PASS",
+  "why": [
+    "the contradiction is lane-specific rather than selector-specific",
+    "stable/runtime-wide reconciliation was already done once and the current regression is introduced specifically by sync-managed lane behavior",
+    "auth-source work remains blocked"
+  ]
+}

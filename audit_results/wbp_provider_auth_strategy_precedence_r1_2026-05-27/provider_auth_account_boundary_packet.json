@@ -1,0 +1,13 @@
+{
+  "account_session_auth_equals_provider_adapter_auth": false,
+  "account_session_auth_selected": false,
+  "account_validation_counts_as_model_availability": false,
+  "account_validation_counts_as_provider_compatibility": false,
+  "account_validation_observed": false,
+  "captured_at_utc": "2026-05-27T06:49:37.469694Z",
+  "packet_kind": "provider_auth_account_boundary",
+  "provider_adapter_auth_selected": false,
+  "reserve_account_promoted": false,
+  "runtime_route_claimed": false,
+  "status": "ok"
+}

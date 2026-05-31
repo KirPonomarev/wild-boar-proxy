@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "packet_kind": "owner_assisted_retry_guard_crash",
+  "script_exit_code": 1,
+  "crash_class": "protected_surface_scan_race",
+  "exception_type": "FileNotFoundError",
+  "exception_path": "/Users/kirillponomarev/.codex/tmp/arg0/codex-arg0a34XGZ",
+  "meaning": "The owner-assisted retry produced route trace packets before the guard scan crashed, but final protected-surface after/diff packets for that retry are incomplete.",
+  "full_safety_pass_allowed": false,
+  "route_trace_packet_still_available": true,
+  "cleanup_followup_packet": "owner_assisted_retry_residual_cleanup_packet.json",
+  "secret_value_recorded": false
+}

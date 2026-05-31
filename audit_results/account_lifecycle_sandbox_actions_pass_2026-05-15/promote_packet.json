@@ -1,0 +1,66 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "accounts",
+    "promote",
+    "auth",
+    "--json"
+  ],
+  "returncode": 1,
+  "stdout": "{\"status\": \"error\", \"exit_code\": 1, \"human_message\": \"Promotion blocked because the staged active-pool target is already reached.\", \"machine_error_code\": \"PROMOTION_POLICY_LIMIT_REACHED\", \"changed_files\": [], \"next_action\": \"user_action\", \"liveness\": \"unknown\", \"severity\": \"recoverable\", \"operator_action\": \"user_action\", \"command\": [\"promote\", \"auth\"], \"promotion_result\": {\"status\": \"owner_path_emitted\", \"attempted\": true, \"backend_id\": \"auth\", \"precondition_status\": \"active_target_reached\", \"previous_pool\": \"reserve\", \"requested_pool\": \"active\", \"pool_policy_status\": \"ok\", \"pool_policy_observed\": {\"status\": \"ok\", \"machine_error_code\": \"OK\", \"reason\": \"pool_policy_valid\", \"active_min\": 0, \"active_target\": 0, \"reserve_target\": 0}, \"active_pool_count_before\": 0, \"active_target_observed\": 0, \"reserve_count_before\": 1, \"reserve_target_observed\": 0, \"active_pool_count_after\": null, \"reserve_count_after\": null, \"policy_verification_status\": \"not_verified\", \"rollback_point_captured\": false, \"routing_change_attempted\": false, \"routing_change_observed\": false, \"validate_attempted\": false, \"validate_outcome\": \"not_attempted\", \"sync_attempted\": false, \"sync_outcome\": \"not_attempted\", \"status_observed\": null, \"rollback_attempted\": false, \"rollback_outcome\": \"not_attempted\", \"external_command_exit_code\": null, \"external_command_status\": \"not_invoked\", \"final_outcome\": \"precondition_failed\"}}\n",
+  "stderr": "",
+  "json": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Promotion blocked because the staged active-pool target is already reached.",
+    "machine_error_code": "PROMOTION_POLICY_LIMIT_REACHED",
+    "changed_files": [],
+    "next_action": "user_action",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "user_action",
+    "command": [
+      "promote",
+      "auth"
+    ],
+    "promotion_result": {
+      "status": "owner_path_emitted",
+      "attempted": true,
+      "backend_id": "auth",
+      "precondition_status": "active_target_reached",
+      "previous_pool": "reserve",
+      "requested_pool": "active",
+      "pool_policy_status": "ok",
+      "pool_policy_observed": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "reason": "pool_policy_valid",
+        "active_min": 0,
+        "active_target": 0,
+        "reserve_target": 0
+      },
+      "active_pool_count_before": 0,
+      "active_target_observed": 0,
+      "reserve_count_before": 1,
+      "reserve_target_observed": 0,
+      "active_pool_count_after": null,
+      "reserve_count_after": null,
+      "policy_verification_status": "not_verified",
+      "rollback_point_captured": false,
+      "routing_change_attempted": false,
+      "routing_change_observed": false,
+      "validate_attempted": false,
+      "validate_outcome": "not_attempted",
+      "sync_attempted": false,
+      "sync_outcome": "not_attempted",
+      "status_observed": null,
+      "rollback_attempted": false,
+      "rollback_outcome": "not_attempted",
+      "external_command_exit_code": null,
+      "external_command_status": "not_invoked",
+      "final_outcome": "precondition_failed"
+    }
+  }
+}

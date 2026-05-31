@@ -1,0 +1,34 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "post_refresh_rotation_inspect": {
+    "exit_code": 1,
+    "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "evidence_status": "participation_evidence_contradicted",
+    "evidence_reason": "policy_drift_detected",
+    "evidence_freshness": "fresh",
+    "policy_drift_status": "detected",
+    "final_outcome": "participation_evidence_contradicted",
+    "selected_backend_count": 15,
+    "active_routing_candidate_count": 15
+  },
+  "post_refresh_status": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "effective_source_status": "observed_source_active",
+    "effective_source_kind": "observed_stable_inventory_source"
+  },
+  "evaluation": {
+    "selector_snapshot_fresh": true,
+    "selector_truth_singleton": false,
+    "exact_source_admission_earned_now": false,
+    "new_contradiction_localized": true
+  }
+}

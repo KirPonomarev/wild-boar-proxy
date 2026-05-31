@@ -1,0 +1,36 @@
+{
+  "syntax": {
+    "python_py_compile": "passed",
+    "node_check_overview_js": "passed"
+  },
+  "tests": [
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_codex_recovery_contract tests.test_web_design_live_server.WebDesignCodexCustomSessionEndpointTests.test_codex_custom_recovery_rollback_point_create_admission_endpoint_allows_bounded_create tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_surface_is_bounded_and_readonly -q",
+      "result": "passed",
+      "count": 43
+    },
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_codex_recovery_contract tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "result": "passed",
+      "count": 219
+    },
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_operator_surface tests.test_web_design_command_adapter -q",
+      "result": "passed",
+      "count": 33
+    }
+  ],
+  "machine_proof": {
+    "success_status": "ok",
+    "success_machine_error_code": "ROLLBACK_APPLY_BOUNDED_LIVE_PERFORMED",
+    "rollback_apply_completed_scope": "bounded_apply_receipt_only",
+    "receipt_manifest_exists": false,
+    "browser_forbidden_fields_count": 17,
+    "browser_reject_without_read_or_write": true
+  },
+  "independent_audit": {
+    "first_verdict": "fail",
+    "first_finding_fixed": "removed hidden receipt manifest write",
+    "second_verdict": "pass"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "rollback_required": false,
+  "reason": "promotion precondition failed before validate, sync, or routing mutation",
+  "rollback_point_captured": false,
+  "routing_change_attempted": false,
+  "changed_files": []
+}

@@ -1,0 +1,14 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "surface": "accounts onboard --json --auth-ref",
+  "authoritative_for": [
+    "reserve-first onboarding",
+    "new unique backend identity selection by exact auth_ref match"
+  ],
+  "not_authoritative_for": [
+    "admitting one already-existing active auth_ref from the current approved-target family",
+    "overriding stale runtime or selector readiness prerequisites"
+  ],
+  "current_runnable_state": false,
+  "current_non_runnable_reason": "current family is already populated in active/selected surfaces and the explicit-auth owner path proves success from newly added backends only"
+}

@@ -1,0 +1,14 @@
+{
+  "branch_clean": false,
+  "captured_at_utc": "2026-05-25T14:25:02.942386Z",
+  "git_head": "90c87bcca1258c527cd79c4ee5eb5b067b1c0daa",
+  "git_status_short_branch": [
+    "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated",
+    " M tests/test_native_filesystem_probe.py",
+    " M wild_boar_proxy/native_filesystem_probe.py",
+    "?? audit_results/wbp_codex_native_filesystem_baseline_stability_gate_pass_2026-05-25/",
+    "?? tools/native_baseline_stability_probe.py"
+  ],
+  "reason_class": "WORKTREE_DIRTY",
+  "status": "blocked"
+}

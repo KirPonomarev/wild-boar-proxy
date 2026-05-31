@@ -1,0 +1,15 @@
+{
+  "contour": "external_lab_c24",
+  "date": "2026-05-11",
+  "stage": "operator_authorization",
+  "authorization_source": "thread_user_instruction",
+  "authorization_scope": "pre_integration_runtime_remediation_with_independent_audit",
+  "explicit_constraints": {
+    "max_parallel_agents": 2,
+    "independent_audit_required": true,
+    "factual_machine_readable_reports_required": true,
+    "canon_precedence_enforced": true,
+    "token_economy_required": true
+  },
+  "status": "authorized"
+}

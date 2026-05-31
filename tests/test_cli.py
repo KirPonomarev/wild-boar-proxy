@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -28,6 +29,7 @@ class ProbeHandler(BaseHTTPRequestHandler):
     response_text = "OK"
     response_status = 200
     response_payload: object | None = None
+    last_request_headers: dict[str, str] | None = None
     dynamic_state_file: str | None = None
     dynamic_launcher_path: str | None = None
     dynamic_managed_config_path: str | None = None
@@ -48,6 +50,7 @@ class ProbeHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/responses":
             length = int(self.headers.get("Content-Length", "0"))
             _ = self.rfile.read(length)
+            self.__class__.last_request_headers = dict(self.headers.items())
             if (
                 self.dynamic_state_file is not None
                 and self.dynamic_success_proxy_url is not None
@@ -125,6 +128,7 @@ class CliTests(unittest.TestCase):
         ProbeHandler.response_text = "OK"
         ProbeHandler.response_status = 200
         ProbeHandler.response_payload = None
+        ProbeHandler.last_request_headers = None
         ProbeHandler.dynamic_state_file = None
         ProbeHandler.dynamic_launcher_path = None
         ProbeHandler.dynamic_managed_config_path = None
@@ -134,10 +138,12 @@ class CliTests(unittest.TestCase):
         self.profile_dir = root / "profile"
         self.managed_dir = self.profile_dir / "managed"
         self.stable_dir = root / "stable"
+        self.external_models_dir = root / "external-models"
         self.bin_dir = self.managed_dir / "bin"
         self.profile_dir.mkdir(parents=True)
         self.managed_dir.mkdir(parents=True)
         self.stable_dir.mkdir(parents=True)
+        self.external_models_dir.mkdir(parents=True)
         self.bin_dir.mkdir(parents=True)
         (self.profile_dir / "auth.json").write_text(
             json.dumps({"OPENAI_API_KEY": "test-key"}) + "\n", encoding="utf-8"
@@ -253,6 +259,7 @@ class CliTests(unittest.TestCase):
         env["WBP_MANAGED_CONFIG_FILE"] = str(self.managed_dir / "managed-config.yaml")
         env["WBP_REGISTRY_FILE"] = str(self.managed_dir / "backend-registry.json")
         env["WBP_STATE_FILE"] = str(self.managed_dir / "supervisor-state.json")
+        env["WBP_EXTERNAL_MODELS_DIR"] = str(self.external_models_dir)
         env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(
             self.profile_dir / "runtime-effective-mode.txt"
         )
@@ -313,6 +320,244 @@ class CliTests(unittest.TestCase):
     def test_status_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection("status", command_path="status")
 
+    def test_invariant_check_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "invariant-check", command_path="invariant-check"
+        )
+
+    def test_invariant_check_json_healthy_passes(self) -> None:
+        port = free_port()
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            (self.managed_dir / "managed-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {port}\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("invariant-check", "--json")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["invariant_result"]["status"], "passed")
+        self.assertEqual(payload["invariant_result"]["failed"], 0)
+        self.assertEqual(payload["recovery_hints"], [])
+
+    def test_invariant_check_reports_listener_down(self) -> None:
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_INVARIANT_FAILED")
+        self.assertEqual(payload["invariant_result"]["status"], "failed")
+        listener_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "listener_truth"
+        )
+        self.assertEqual(listener_check["status"], "fail")
+        self.assertEqual(listener_check["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["recovery_hints"][0]["machine_error_code"], "LISTENER_DOWN")
+
+    def test_invariant_check_reports_mode_mismatch(self) -> None:
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        mode_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "mode_truth"
+        )
+        self.assertEqual(mode_check["status"], "fail")
+        self.assertEqual(mode_check["machine_error_code"], "MODE_MISMATCH")
+
+    def test_invariant_check_reports_bad_pool(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["pool"] = "hold"
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        pool_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "accounts_pool_integrity"
+        )
+        self.assertEqual(pool_check["status"], "fail")
+        self.assertEqual(pool_check["machine_error_code"], "ACCOUNTS_POOL_INVALID")
+
+    def test_invariant_check_reports_managed_path_unbound(self) -> None:
+        (self.profile_dir / "config.toml").unlink()
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        path_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "managed_paths_bound"
+        )
+        self.assertEqual(path_check["status"], "fail")
+        self.assertEqual(path_check["machine_error_code"], "MANAGED_PATH_UNBOUND")
+
+    def test_invariant_check_reports_onboarding_not_reserve_first(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                onboarding_evidence={
+                    "status": "ok",
+                    "final_outcome": "explicit_auth_imported_to_reserve",
+                    "selected_backend_id": "backend-b",
+                    "pool_after_onboarding": "active",
+                    "active_routing_changed": False,
+                },
+            )
+
+        reserve_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "reserve_first_policy"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(reserve_check["status"], "fail")
+        self.assertEqual(
+            reserve_check["machine_error_code"], "ONBOARDING_NOT_RESERVE_FIRST"
+        )
+
+    def test_invariant_check_reports_ambiguous_active_routing(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                onboarding_evidence={
+                    "status": "ok",
+                    "final_outcome": "explicit_auth_imported_to_reserve",
+                    "selected_backend_id": "backend-b",
+                    "pool_after_onboarding": "reserve",
+                },
+            )
+
+        routing_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "active_routing_explicit"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(routing_check["status"], "fail")
+        self.assertEqual(routing_check["machine_error_code"], "ACTIVE_ROUTING_AMBIGUOUS")
+
+    def test_invariant_check_requires_command_packet_shape(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                status_evidence={"status": "ok"},
+            )
+
+        shape_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "command_packet_shape"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(shape_check["status"], "fail")
+        self.assertEqual(shape_check["machine_error_code"], "COMMAND_PACKET_MALFORMED")
+
+    def test_invariant_check_rejects_false_green(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                status_evidence={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "incorrect green",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                },
+            )
+
+        false_green_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "no_false_green"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_INVARIANT_FAILED")
+        self.assertEqual(false_green_check["status"], "fail")
+        self.assertEqual(false_green_check["machine_error_code"], "LISTENER_DOWN")
+
+    def test_recovery_hints_are_sorted_by_priority(self) -> None:
+        unused_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unused_stable_port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        payload = json.loads(result.stdout)
+        scores = [hint["priority_score"] for hint in payload["recovery_hints"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertIn(
+            "LISTENER_DOWN",
+            [hint["machine_error_code"] for hint in payload["recovery_hints"]],
+        )
+        self.assertIn(
+            "MODE_MISMATCH",
+            [hint["machine_error_code"] for hint in payload["recovery_hints"]],
+        )
+
+    def test_invariant_check_unknown_error_gets_fallback_hint(self) -> None:
+        hint = runtime_mod.build_recovery_hint("FUTURE_RUNTIME_FAILURE")
+
+        self.assertEqual(hint["machine_error_code"], "FUTURE_RUNTIME_FAILURE")
+        self.assertEqual(hint["risk"], "medium")
+        self.assertIn("status --json", hint["allowed_next_commands"])
+
+    def test_invariant_check_does_not_write_runtime_state(self) -> None:
+        watched_paths = [
+            self.managed_dir / "backend-registry.json",
+            self.managed_dir / "supervisor-state.json",
+            self.managed_dir / "managed-config.yaml",
+            self.profile_dir / "runtime-mode.txt",
+            self.profile_dir / "runtime-effective-mode.txt",
+            self.profile_dir / "config.toml",
+        ]
+        before = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in watched_paths
+        }
+
+        result = self.run_cli("invariant-check", "--json")
+
+        after = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in watched_paths
+        }
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["changed_files"], [])
+
     def test_policy_stage_set_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection(
             "policy",
@@ -345,6 +590,473 @@ class CliTests(unittest.TestCase):
             "init",
             command_path="installer init",
         )
+
+    def test_accounts_login_start_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "sandbox",
+            command_path="accounts login start",
+        )
+
+    def test_accounts_login_complete_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "sandbox-session",
+            "--state",
+            "sandbox-state",
+            "--proof",
+            "sandbox-ok",
+            command_path="accounts login complete",
+        )
+
+    def test_accounts_login_status_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "status",
+            "--session",
+            "codex-session",
+            command_path="accounts login status",
+        )
+
+    def test_accounts_login_cancel_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "cancel",
+            "--session",
+            "codex-session",
+            command_path="accounts login cancel",
+        )
+
+    def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+
+        result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        installer_result = payload["installer_result"]
+        self.assertEqual(installer_result["final_outcome"], "baseline_initialized")
+        self.assertCountEqual(
+            installer_result["owner_helper_paths"],
+            [
+                str(self.accounts_bin),
+                str(self.onboard_bin),
+                str(status_bin),
+                str(self.sync_script),
+            ],
+        )
+        for path in (self.accounts_bin, self.onboard_bin, self.sync_script, status_bin):
+            self.assertTrue(path.exists(), str(path))
+            self.assertTrue(os.access(path, os.X_OK), str(path))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, text)
+            self.assertNotIn("~/.codex-custom-cli", text)
+            self.assertNotIn("~/.cli-proxy-api", text)
+
+    def test_installer_init_materializes_retired_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        add_account_wrapper.unlink(missing_ok=True)
+        team_login_wrapper.unlink(missing_ok=True)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        installer_result = payload["installer_result"]
+        self.assertCountEqual(
+            installer_result["operator_wrapper_paths"],
+            [str(add_account_wrapper), str(team_login_wrapper)],
+        )
+        add_account_text = add_account_wrapper.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, add_account_text)
+        self.assertIn("Add Account.command is retired.", add_account_text)
+        self.assertIn("accounts login start --provider codex --mode device --json", add_account_text)
+        self.assertNotIn("codex-account-onboard", add_account_text)
+        self.assertTrue(os.access(add_account_wrapper, os.X_OK))
+        team_login_text = team_login_wrapper.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, team_login_text)
+        self.assertIn("team-codex-login.command is retired.", team_login_text)
+        self.assertIn("accounts login start --provider codex --mode device --json", team_login_text)
+        self.assertNotIn("sandbox_owner_helpers login --no-browser", team_login_text)
+        self.assertTrue(os.access(team_login_wrapper, os.X_OK))
+        self.assertIn(str(add_account_wrapper), payload["changed_files"])
+        self.assertIn(str(team_login_wrapper), payload["changed_files"])
+
+    def test_installer_init_does_not_overwrite_unmarked_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        add_account_original = "#!/bin/sh\nexit 9\n"
+        team_login_original = "#!/bin/sh\nexit 8\n"
+        add_account_wrapper.write_text(add_account_original, encoding="utf-8")
+        add_account_wrapper.chmod(0o755)
+        team_login_wrapper.write_text(team_login_original, encoding="utf-8")
+        team_login_wrapper.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            add_account_wrapper.read_text(encoding="utf-8"),
+            add_account_original,
+        )
+        self.assertEqual(
+            team_login_wrapper.read_text(encoding="utf-8"),
+            team_login_original,
+        )
+        self.assertNotIn(str(add_account_wrapper), payload["changed_files"])
+        self.assertNotIn(str(team_login_wrapper), payload["changed_files"])
+
+    def test_repo_managed_operator_wrappers_are_retired_stubs(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        fake_cli_proxy = self.profile_dir / "fake-cli-proxy.sh"
+        fake_cli_proxy_args = self.profile_dir / "fake-cli-proxy-args.txt"
+        fake_cli_proxy.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$@\" > {shlex.quote(str(fake_cli_proxy_args))}\n",
+            encoding="utf-8",
+        )
+        fake_cli_proxy.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        add_env = self.env()
+        add_env.pop("WBP_LAUNCHER_SCRIPT", None)
+        add_run = subprocess.run(
+            [str(add_account_wrapper), "--note", "example"],
+            cwd=ROOT,
+            env=add_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(add_run.returncode, 64)
+        self.assertIn("Add Account.command is retired.", add_run.stderr)
+        self.assertIn("accounts login start --provider codex --mode device --json", add_run.stderr)
+
+        login_env = self.env()
+        login_env.pop("WBP_LAUNCHER_SCRIPT", None)
+        login_env["WBP_CLIPROXY_BIN"] = str(fake_cli_proxy)
+        login_env["WBP_PYTHON_BIN"] = sys.executable
+        login_env["WBP_REPO_ROOT"] = str(ROOT)
+        login_run = subprocess.run(
+            [str(team_login_wrapper)],
+            cwd=ROOT,
+            env=login_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(login_run.returncode, 64)
+        self.assertIn("team-codex-login.command is retired.", login_run.stderr)
+        self.assertIn(
+            "accounts login start --provider codex --mode device --json",
+            login_run.stderr,
+        )
+        self.assertFalse(fake_cli_proxy_args.exists())
+
+    def test_installer_init_upgrades_old_repo_managed_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        old_payload = "\n".join(
+            [
+                "set -eu",
+                'PROFILE_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"',
+                'exec "$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"',
+            ]
+        )
+        old_text = "\n".join(
+            [
+                "#!/bin/sh",
+                runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER,
+                f"{runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}add-account",
+                (
+                    f"{runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX}"
+                    f"{runtime_mod.compute_repo_managed_operator_wrapper_digest(old_payload)}"
+                ),
+                old_payload,
+            ]
+        )
+        add_account_wrapper.write_text(old_text, encoding="utf-8")
+        add_account_wrapper.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        upgraded_text = add_account_wrapper.read_text(encoding="utf-8")
+        self.assertIn("Add Account.command is retired.", upgraded_text)
+        self.assertNotIn("codex-account-onboard", upgraded_text)
+        self.assertIn(str(add_account_wrapper), payload["changed_files"])
+
+    def test_installer_materialized_owner_helpers_support_explicit_auth_onboarding_lane(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "codex-sandbox-owner.json"
+        auth_ref.write_text(
+            json.dumps(
+                {
+                    "type": "codex",
+                    "email": "sandbox@example.com",
+                    "access_token": "token-sandbox",
+                    "account_id": "acct-sandbox",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        backends = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_ref)
+        ]
+        self.assertEqual(len(backends), 1)
+        self.assertEqual(backends[0]["pool"], "reserve")
+
+        validate_result = subprocess.run(
+            [str(self.accounts_bin), "validate", backends[0]["id"]],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
+        self.assertIn("OK", validate_result.stdout)
+
+    def test_installer_materialized_owner_helper_runs_sandbox_scoped_codex_login(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_dir = self.managed_dir / "auth-source"
+        (self.profile_dir / "auth.json").unlink(missing_ok=True)
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-cli-proxy-api"
+        fake_cli.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, re, sys\n"
+            "from pathlib import Path\n"
+            "config = sys.argv[sys.argv.index('-config') + 1]\n"
+            "text = Path(config).read_text(encoding='utf-8')\n"
+            "match = re.search(r'^auth-dir:\\s*[\"\\']?(.*?)[\"\\']?\\s*$', text, re.M)\n"
+            "auth_dir = Path(match.group(1))\n"
+            "auth_dir.mkdir(parents=True, exist_ok=True)\n"
+            "payload = {\n"
+            "    'type': 'codex',\n"
+            "    'email': 'web-login@example.com',\n"
+            "    'access_token': 'token-web-login',\n"
+            "    'account_id': 'acct-web-login',\n"
+            "}\n"
+            "(auth_dir / 'codex-web-login.json').write_text(json.dumps(payload) + '\\n', encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        fake_cli.chmod(0o755)
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        env = self.env()
+        env["WBP_CLIPROXY_BIN"] = str(fake_cli)
+        env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        imported = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_dir / "codex-web-login.json")
+        ]
+        self.assertEqual(len(imported), 1)
+        self.assertEqual(imported[0]["pool"], "reserve")
+        materialized_auth = json.loads((self.profile_dir / "auth.json").read_text())
+        self.assertEqual(materialized_auth["account_id"], "acct-web-login")
+        self.assertEqual(
+            stat.S_IMODE((self.profile_dir / "auth.json").stat().st_mode),
+            0o600,
+        )
+
+    def test_installer_materialized_owner_helper_rejects_non_sandbox_auth_dir(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        outside_auth_dir = Path(self.temp_dir.name) / "outside-auth"
+        (self.profile_dir / "auth.json").unlink(missing_ok=True)
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{outside_auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-cli-proxy-api"
+        fake_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_cli.chmod(0o755)
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        env = self.env()
+        env["WBP_CLIPROXY_BIN"] = str(fake_cli)
+        env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(onboard_result.returncode, 0)
+        self.assertIn("outside sandbox", onboard_result.stderr + onboard_result.stdout)
+
+    def test_installer_materialized_owner_helpers_support_auth_mode_apikey_payload(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "legacy-auth-mode-apikey.json"
+        auth_ref.write_text(
+            json.dumps(
+                {
+                    "auth_mode": "apikey",
+                    "OPENAI_API_KEY": "token-legacy-apikey",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        backends = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_ref)
+        ]
+        self.assertEqual(len(backends), 1)
+        self.assertEqual(backends[0]["pool"], "reserve")
+
+        validate_result = subprocess.run(
+            [str(self.accounts_bin), "validate", backends[0]["id"]],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
+        self.assertIn("OK", validate_result.stdout)
+
+    def test_installer_materialized_owner_helpers_reject_invalid_legacy_apikey_payload(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "legacy-auth-mode-invalid.json"
+        auth_ref.write_text(
+            json.dumps({"auth_mode": "apikey"}) + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        before_registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        after_registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        self.assertEqual(onboard_result.returncode, 1)
+        self.assertIn("missing auth field: OPENAI_API_KEY", onboard_result.stderr)
+        self.assertEqual(before_registry, after_registry)
 
     def test_legacy_import_requires_json_flag(self) -> None:
         result = self.run_cli("legacy", "import", "--source-dir", "/tmp/example")
@@ -392,6 +1104,28 @@ class CliTests(unittest.TestCase):
             command_path="package experimental verify",
         )
 
+    def test_package_launchable_build_requires_json_flag(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-output-missing-json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            command_path="package launchable build",
+        )
+
+    def test_package_launchable_verify_requires_json_flag(self) -> None:
+        manifest_path = Path(self.temp_dir.name) / "missing-launchable.manifest.json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            command_path="package launchable verify",
+        )
+
     def test_package_experimental_build_success_reports_changed_files(self) -> None:
         output_dir = Path(self.temp_dir.name) / "package-build-output"
         result = self.run_cli(
@@ -424,6 +1158,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(artifact_path.is_file())
         self.assertTrue(manifest_path.is_file())
         self.assertTrue(metadata_path.is_file())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        self.assertEqual(metadata["repo_plan_files_allowed"], "false")
+        self.assertNotIn("plan_version", metadata)
+        self.assertNotIn("plan_date", metadata)
         self.assertCountEqual(
             payload["changed_files"],
             [str(artifact_path), str(manifest_path), str(metadata_path)],
@@ -469,6 +1207,26 @@ class CliTests(unittest.TestCase):
         (package_root / "wild_boar_proxy" / "api_token.txt").write_text(
             "token\n", encoding="utf-8"
         )
+        (package_root / "wild_boar_proxy" / "external_models").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "external_models" / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "state.json").write_text(
+            json.dumps({"schema_version": 2, "routes": {}}) + "\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=x\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "evidence").mkdir(
+            parents=True, exist_ok=True
+        )
+        (
+            package_root
+            / "wild_boar_proxy"
+            / "external_models"
+            / "evidence"
+            / "capture.json"
+        ).write_text("{}\n", encoding="utf-8")
         (package_root / "docs" / "private-key.md").write_text(
             "# private\n", encoding="utf-8"
         )
@@ -503,6 +1261,12 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("wild_boar_proxy/session.dump", archive_entries)
         self.assertNotIn("wild_boar_proxy/session.tmp", archive_entries)
         self.assertNotIn("wild_boar_proxy/api_token.txt", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/routes.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/state.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/secrets.env", archive_entries)
+        self.assertNotIn(
+            "wild_boar_proxy/external_models/evidence/capture.json", archive_entries
+        )
         self.assertNotIn("docs/private-key.md", archive_entries)
         self.assertNotIn("docs/.hidden-notes.md", archive_entries)
 
@@ -564,6 +1328,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(verify_payload["machine_error_code"], "OK")
         self.assertEqual(verify_payload["severity"], "recoverable")
         self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["status"], "passed"
+        )
         self.assertEqual(verify_payload["changed_files"], [])
 
     def test_package_experimental_verify_checksum_mismatch_failure(self) -> None:
@@ -594,6 +1361,709 @@ class CliTests(unittest.TestCase):
         self.assertEqual(verify_payload["status"], "error")
         self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
         self.assertFalse(verify_payload["package_result"]["checksum_match"])
+
+    def test_package_experimental_verify_rejects_boundary_violation(self) -> None:
+        package_root = Path(self.temp_dir.name) / "package-verify-boundary-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        module_path = package_root / "wild_boar_proxy" / "module.py"
+        module_path.write_text("value = 1\n", encoding="utf-8")
+        secret_path = package_root / "wild_boar_proxy" / "external_models" / "secrets.env"
+        secret_path.parent.mkdir(parents=True, exist_ok=True)
+        secret_path.write_text("OPENROUTER_API_KEY=x\n", encoding="utf-8")
+        output_dir = Path(self.temp_dir.name) / "package-verify-boundary-output"
+        artifact_path = output_dir / "experimental-package.tar.gz"
+        manifest_path = output_dir / "experimental-package.manifest.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            archive.add(module_path, arcname="wild_boar_proxy/module.py")
+            archive.add(
+                secret_path,
+                arcname="wild_boar_proxy/external_models/secrets.env",
+            )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-12T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_sha256": runtime_mod.hash_file(artifact_path),
+                    "artifact_format": "tar.gz",
+                    "metadata_path": "experimental-package.metadata.json",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID")
+        self.assertEqual(
+            verify_payload["package_result"]["status"], "boundary_invalid"
+        )
+        self.assertIn(
+            "wild_boar_proxy/external_models/secrets.env",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_experimental_verify_rejects_symlink_boundary_bypass(self) -> None:
+        package_root = Path(self.temp_dir.name) / "package-verify-symlink-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        module_path = package_root / "wild_boar_proxy" / "module.py"
+        module_path.write_text("value = 1\n", encoding="utf-8")
+        guide_path = package_root / "docs" / "guide.md"
+        guide_path.write_text("# Guide\n", encoding="utf-8")
+        output_dir = Path(self.temp_dir.name) / "package-verify-symlink-output"
+        artifact_path = output_dir / "experimental-package.tar.gz"
+        manifest_path = output_dir / "experimental-package.manifest.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            archive.add(module_path, arcname="wild_boar_proxy/module.py")
+            link_info = tarfile.TarInfo("wild_boar_proxy/link")
+            link_info.type = tarfile.SYMTYPE
+            link_info.linkname = "../docs"
+            archive.addfile(link_info)
+            archive.add(guide_path, arcname="wild_boar_proxy/link/guide.md")
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-12T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_sha256": runtime_mod.hash_file(artifact_path),
+                    "artifact_format": "tar.gz",
+                    "metadata_path": "experimental-package.metadata.json",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID")
+        self.assertIn(
+            "wild_boar_proxy/link",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_launchable_build_success_reports_changed_files(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-build-output"
+        result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        package_result = payload["package_result"]
+        artifact_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+        manifest_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_MANIFEST_NAME
+        metadata_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME
+        self.assertEqual(package_result["status"], "built")
+        self.assertEqual(package_result["artifact_kind"], "macos_app_bundle")
+        self.assertEqual(package_result["runtime_executable"], sys.executable)
+        self.assertTrue(artifact_path.is_dir())
+        self.assertTrue(manifest_path.is_file())
+        self.assertTrue(metadata_path.is_file())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        self.assertEqual(metadata["repo_plan_files_allowed"], "false")
+        self.assertNotIn("plan_version", metadata)
+        self.assertNotIn("plan_date", metadata)
+        self.assertCountEqual(
+            payload["changed_files"],
+            [str(artifact_path), str(manifest_path), str(metadata_path)],
+        )
+
+    def test_package_launchable_build_embeds_allowlisted_files_and_runtime_probe(self) -> None:
+        package_root = Path(self.temp_dir.name) / "launchable-package-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "module.py").write_text(
+            "value = 1\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        outside_secret = Path(self.temp_dir.name) / "outside-secret.md"
+        outside_secret.write_text("# external secret\n", encoding="utf-8")
+        (package_root / "LEAK.md").symlink_to(outside_secret)
+        (package_root / "auth.json").write_text(
+            '{"OPENAI_API_KEY":"x"}\n', encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.dump").write_text(
+            "runtime dump\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "external_models" / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=x\n", encoding="utf-8"
+        )
+        output_dir = Path(self.temp_dir.name) / "launchable-package-allowlist-output"
+        result = self.run_cli_with_env(
+            {"WBP_PACKAGE_SOURCE_ROOT": str(package_root)},
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        artifact_path = Path(payload["package_result"]["artifact_path"])
+        entries = sorted(
+            str(path.relative_to(artifact_path))
+            for path in artifact_path.rglob("*")
+            if path.is_file()
+        )
+        self.assertIn("Contents/Info.plist", entries)
+        self.assertIn("Contents/MacOS/WildBoarProxy", entries)
+        self.assertIn("Contents/Resources/app/wild_boar_proxy/module.py", entries)
+        self.assertIn("Contents/Resources/app/docs/guide.md", entries)
+        self.assertNotIn("Contents/Resources/app/LEAK.md", entries)
+        self.assertNotIn("Contents/Resources/app/auth.json", entries)
+        self.assertNotIn("Contents/Resources/app/wild_boar_proxy/session.dump", entries)
+        self.assertNotIn(
+            "Contents/Resources/app/wild_boar_proxy/external_models/secrets.env",
+            entries,
+        )
+        metadata = json.loads(
+            (output_dir / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME).read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(metadata["runtime_executable"], sys.executable)
+        self.assertIn("runtime_probe", metadata)
+        self.assertIn("tkinter_available", metadata["runtime_probe"])
+
+    def test_package_launchable_verify_success(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-success"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "ok")
+        self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertTrue(verify_payload["package_result"]["metadata_checksum_match"])
+        self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["status"], "passed"
+        )
+        self.assertEqual(
+            verify_payload["package_result"]["runtime_executable"], sys.executable
+        )
+
+    def test_package_launchable_verify_rejects_boundary_violation(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-boundary"
+        artifact_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+        executable_path = (
+            artifact_path / "Contents" / "MacOS" / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+        plist_path = artifact_path / "Contents" / "Info.plist"
+        violating_path = (
+            artifact_path
+            / "Contents"
+            / "Resources"
+            / "app"
+            / "wild_boar_proxy"
+            / "external_models"
+            / "secrets.env"
+        )
+        violating_path.parent.mkdir(parents=True, exist_ok=True)
+        plist_path.parent.mkdir(parents=True, exist_ok=True)
+        executable_path.parent.mkdir(parents=True, exist_ok=True)
+        plist_path.write_text(
+            runtime_mod.render_launchable_package_info_plist() + "\n",
+            encoding="utf-8",
+        )
+        executable_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable_path.chmod(0o755)
+        violating_path.write_text("OPENROUTER_API_KEY=x\n", encoding="utf-8")
+        manifest_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_MANIFEST_NAME
+        metadata_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME
+        output_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "runtime_executable": sys.executable,
+                    "runtime_probe": {"tkinter_available": False},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-21T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_kind": "macos_app_bundle",
+                    "artifact_sha256": runtime_mod.hash_directory_files(artifact_path),
+                    "metadata_path": metadata_path.name,
+                    "metadata_sha256": runtime_mod.hash_file(metadata_path),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/external_models/secrets.env",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_launchable_verify_rejects_symlink_boundary_bypass(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-symlink"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        artifact_path = Path(build_payload["package_result"]["artifact_path"])
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        symlink_path = (
+            artifact_path / "Contents" / "Resources" / "app" / "wild_boar_proxy" / "symlink"
+        )
+        symlink_path.parent.mkdir(parents=True, exist_ok=True)
+        symlink_path.symlink_to("../docs")
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        manifest["artifact_sha256"] = runtime_mod.hash_directory_files(artifact_path)
+        Path(manifest_path).write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/symlink",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_launchable_verify_rejects_metadata_checksum_mismatch(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-metadata"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        metadata_path = Path(build_payload["package_result"]["metadata_path"])
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["runtime_executable"] = "/tmp/evil-python"
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_METADATA_INVALID"
+        )
+        self.assertFalse(verify_payload["package_result"]["metadata_checksum_match"])
+
+    def test_package_launchable_launcher_smoke_installer_init_json_works(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-smoke"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        launcher_path = (
+            Path(build_payload["package_result"]["artifact_path"])
+            / "Contents"
+            / "MacOS"
+            / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+        result = subprocess.run(
+            [str(launcher_path), "--smoke-installer-init-json"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+
+    def test_package_launchable_launcher_smoke_packaged_continuity_json_works(self) -> None:
+        def find_tk_runtime() -> str | None:
+            candidates = [
+                Path(sys.executable),
+                Path.home()
+                / ".cache"
+                / "codex-runtimes"
+                / "codex-primary-runtime"
+                / "dependencies"
+                / "python"
+                / "bin"
+                / "python3",
+            ]
+            seen: set[str] = set()
+            for candidate in candidates:
+                resolved = candidate.expanduser().resolve()
+                key = str(resolved)
+                if key in seen or not resolved.exists():
+                    continue
+                seen.add(key)
+                probe = subprocess.run(
+                    [key, "-c", "import tkinter"],
+                    cwd=ROOT,
+                    env=self.env(),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                if probe.returncode == 0:
+                    return key
+            return None
+
+        runtime_executable = find_tk_runtime()
+        if runtime_executable is None:
+            self.skipTest("no tkinter-capable runtime is available for packaged continuity smoke")
+
+        class PackagedHandler(BaseHTTPRequestHandler):
+            request_paths: list[str] = []
+
+            def do_GET(self) -> None:  # noqa: N802
+                PackagedHandler.request_paths.append(self.path)
+                if self.path == "/v1/models":
+                    body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_error(404)
+
+            def do_POST(self) -> None:  # noqa: N802
+                PackagedHandler.request_paths.append(self.path)
+                length = int(self.headers.get("Content-Length", "0"))
+                _ = self.rfile.read(length)
+                if self.path == "/v1/responses":
+                    body = json.dumps({"output_text": "OK"}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if self.path == "/v1/chat/completions":
+                    body = json.dumps(
+                        {
+                            "choices": [
+                                {"message": {"role": "assistant", "content": "pong"}}
+                            ]
+                        }
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_error(404)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        port = free_port()
+        server = ThreadingHTTPServer(("127.0.0.1", port), PackagedHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            registry = {
+                "schema_version": 2,
+                "version": 2,
+                "updated_at": "2026-05-21T00:00:00+00:00",
+                "stable_default_backend_id": "auth",
+                "pool_policy": {
+                    "active_min": 0,
+                    "active_target": 0,
+                    "reserve_target": 1,
+                },
+                "backends": [
+                    {
+                        "id": "auth",
+                        "label": "Sandbox Auth",
+                        "pool": "reserve",
+                        "status": "healthy",
+                        "manual_hold": False,
+                        "auth_ref": str(self.profile_dir / "auth.json"),
+                        "fail_count": 0,
+                        "success_count": 1,
+                        "last_success": "2026-05-21T00:00:00+00:00",
+                        "last_error": "",
+                        "cooldown_until": None,
+                        "notes": "",
+                    }
+                ],
+            }
+            (self.managed_dir / "backend-registry.json").write_text(
+                json.dumps(registry) + "\n",
+                encoding="utf-8",
+            )
+            state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+            state.update(
+                {
+                    "status": "healthy",
+                    "effective_mode": "managed",
+                    "last_error": "",
+                    "selected_backend_ids": [],
+                    "managed_port": port,
+                    "current_proxy_url": "",
+                    "stable_default_backend_id": "auth",
+                    "active_count": 0,
+                    "reserve_count": 1,
+                    "retired_count": 0,
+                    "healthy_count": 1,
+                    "degraded_count": 0,
+                    "down_count": 0,
+                }
+            )
+            (self.managed_dir / "supervisor-state.json").write_text(
+                json.dumps(state) + "\n",
+                encoding="utf-8",
+            )
+            (self.managed_dir / "managed-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {port}\n",
+                encoding="utf-8",
+            )
+            (self.profile_dir / "config.toml").write_text(
+                f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+                encoding="utf-8",
+            )
+            (self.profile_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+            (self.profile_dir / "runtime-effective-mode.txt").write_text(
+                "managed\n",
+                encoding="utf-8",
+            )
+
+            route_payload = {
+                "schema_version": 1,
+                "route_id": "wbp-openrouter-primary",
+                "display_name": "Local Mock Route",
+                "provider": "openrouter",
+                "base_url": f"http://127.0.0.1:{port}/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek/deepseek-chat",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+            }
+            self.external_models_dir.mkdir(parents=True, exist_ok=True)
+            (self.external_models_dir / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "policy": {
+                            "paid_routes_enabled": False,
+                            "paid_route_allowlist": [],
+                            "paid_route_default": "blocked",
+                        },
+                        "adapter": {
+                            "lifecycle_mode": "synthetic",
+                            "state": "stopped",
+                            "host": "127.0.0.1",
+                            "port": None,
+                            "base_url": None,
+                            "listener_proven": False,
+                            "runtime_claim_blocked": True,
+                            "started_at_utc": None,
+                            "last_transition": "init",
+                        },
+                        "local_auth": {
+                            "token_ref": "managed_local_token",
+                            "token_present": True,
+                            "token_created_at_utc": "2026-05-21T00:00:00Z",
+                        },
+                        "routes": {},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            route_file = Path(self.temp_dir.name) / "packaged-route.json"
+            route_file.write_text(json.dumps(route_payload) + "\n", encoding="utf-8")
+            add_result = self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--file",
+                str(route_file),
+                "--json",
+            )
+            self.assertEqual(add_result.returncode, 0, add_result.stderr)
+            (self.external_models_dir / "secrets.env").write_text(
+                "OPENROUTER_API_KEY=test-key\n",
+                encoding="utf-8",
+            )
+            os.chmod(self.external_models_dir / "secrets.env", 0o600)
+            check_result = self.run_cli(
+                "external-models",
+                "check",
+                "--route",
+                "wbp-openrouter-primary",
+                "--json",
+            )
+            self.assertEqual(check_result.returncode, 0, check_result.stderr)
+            chat_requests_before_packaged = PackagedHandler.request_paths.count(
+                "/v1/chat/completions"
+            )
+
+            output_dir = Path(self.temp_dir.name) / "launchable-package-continuity"
+            build_result = self.run_cli(
+                "package",
+                "launchable",
+                "build",
+                "--output-dir",
+                str(output_dir),
+                "--runtime-executable",
+                runtime_executable,
+                "--json",
+            )
+            self.assertEqual(build_result.returncode, 0, build_result.stderr)
+            build_payload = json.loads(build_result.stdout)
+            launcher_path = (
+                Path(build_payload["package_result"]["artifact_path"])
+                / "Contents"
+                / "MacOS"
+                / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+            )
+            result = subprocess.run(
+                [str(launcher_path), "--smoke-packaged-continuity-json"],
+                cwd=ROOT,
+                env=self.env(include_launcher_override=False),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["quick_start_summary"]["source"], "live_sandbox")
+        self.assertEqual(payload["quick_start_summary"]["account_status"], "ok")
+        self.assertEqual(payload["quick_start_summary"]["api_status"], "enabled")
+        self.assertEqual(payload["quick_start_summary"]["bundle_verdict"], "ready")
+        self.assertEqual(payload["quick_start_summary"]["route_label"], "Local Mock Route")
+        self.assertEqual(payload["quick_start_summary"]["route_secret_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(payload["direct_packets"]["accounts"]["account_count"], 1)
+        self.assertEqual(payload["direct_packets"]["api"]["route_id"], "wbp-openrouter-primary")
+        self.assertEqual(payload["ledger"][0]["action_id"], "quick_start_check_all")
+        self.assertEqual(
+            PackagedHandler.request_paths.count("/v1/chat/completions"),
+            chat_requests_before_packaged,
+        )
+        self.assertIn("/v1/models", PackagedHandler.request_paths)
+        self.assertIn("/v1/responses", PackagedHandler.request_paths)
+        self.assertIn("/v1/chat/completions", PackagedHandler.request_paths)
 
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
@@ -870,6 +2340,52 @@ class CliTests(unittest.TestCase):
             "    print(stderr_text, file=sys.stderr)\n"
             "raise SystemExit(int(os.environ.get('WBP_TEST_ONBOARD_EXIT_CODE', '0')))\n"
             "PY\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+
+    def write_test_device_login_cli_proxy(
+        self,
+        path: Path,
+        *,
+        argv_capture_path: Path,
+        ready_file: Path,
+        auth_filename: str = "codex-device-login.json",
+    ) -> None:
+        path.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, re, sys, time\n"
+            "from pathlib import Path\n"
+            f"argv_capture = Path({str(argv_capture_path)!r})\n"
+            f"ready_file = Path({str(ready_file)!r})\n"
+            "argv_capture.write_text(json.dumps(sys.argv[1:]) + '\\n', encoding='utf-8')\n"
+            "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
+            "text = config.read_text(encoding='utf-8')\n"
+            "match = re.search(r'^auth-dir:\\s*[\"\\']?(.*?)[\"\\']?\\s*$', text, re.M)\n"
+            "if not match:\n"
+            "    raise SystemExit('missing auth-dir')\n"
+            "auth_dir = Path(match.group(1)).expanduser()\n"
+            "if not auth_dir.is_absolute():\n"
+            "    auth_dir = config.parent / auth_dir\n"
+            "auth_dir.mkdir(parents=True, exist_ok=True)\n"
+            "print('Codex device URL: https://auth.openai.com/codex/device', flush=True)\n"
+            "print('Codex device code: WBP-1234', flush=True)\n"
+            "mode = os.environ.get('WBP_TEST_DEVICE_LOGIN_MODE', 'wait')\n"
+            "if mode == 'exit-no-auth':\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_DEVICE_LOGIN_EXIT_CODE', '0')))\n"
+            "deadline = time.time() + float(os.environ.get('WBP_TEST_DEVICE_LOGIN_WAIT_SECONDS', '10'))\n"
+            "while time.time() < deadline:\n"
+            "    if ready_file.exists():\n"
+            "        payload = {\n"
+            "            'type': 'codex',\n"
+            "            'email': 'device-login@example.com',\n"
+            "            'access_token': 'token-device-login',\n"
+            "            'account_id': 'acct-device-login',\n"
+            "        }\n"
+            f"        (auth_dir / {str(auth_filename)!r}).write_text(json.dumps(payload) + '\\n', encoding='utf-8')\n"
+            "        raise SystemExit(0)\n"
+            "    time.sleep(0.05)\n"
+            "raise SystemExit(int(os.environ.get('WBP_TEST_DEVICE_LOGIN_TIMEOUT_EXIT_CODE', '0')))\n",
             encoding="utf-8",
         )
         path.chmod(0o755)
@@ -1213,6 +2729,8 @@ class CliTests(unittest.TestCase):
             "    'HTTPS_PROXY_present': 'HTTPS_PROXY' in os.environ,\n"
             "    'ALL_PROXY_present': 'ALL_PROXY' in os.environ,\n"
             "    'WBP_CURRENT_PROXY_URL_present': 'WBP_CURRENT_PROXY_URL' in os.environ,\n"
+            "    'CODEX_HOME_present': 'CODEX_HOME' in os.environ,\n"
+            "    'OPENAI_API_KEY_present': 'OPENAI_API_KEY' in os.environ,\n"
             "    'NO_PROXY': os.environ.get('NO_PROXY', ''),\n"
             "    'PATH': os.environ.get('PATH', ''),\n"
             "}\n"
@@ -1364,7 +2882,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1570,7 +3092,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1615,7 +3141,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1717,7 +3247,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1767,7 +3301,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1804,7 +3342,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1841,7 +3383,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1949,7 +3495,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -1972,6 +3522,8 @@ class CliTests(unittest.TestCase):
                 "env.WBP_PROXY_REPROBE_CANDIDATES",
                 "runtime_state.last_known_good_proxy_url",
                 "runtime_state.current_proxy_url",
+                "legacy.default_local_proxy_candidates",
+                "legacy.dynamic_local_listener_candidates",
             ],
         )
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
@@ -2019,7 +3571,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2075,6 +3631,13 @@ class CliTests(unittest.TestCase):
             thread.start()
             server_thread_started = True
             env = self.env()
+            custom_sync_script = self.profile_dir / "reprobe-greenwash-sync.sh"
+            custom_sync_script.write_text(
+                self.sync_script.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            custom_sync_script.chmod(0o755)
+            env["WBP_SYNC_SCRIPT"] = str(custom_sync_script)
             env["WBP_PROXY_REPROBE_CANDIDATES"] = (
                 f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
             )
@@ -2234,7 +3797,8 @@ class CliTests(unittest.TestCase):
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
-        self.sync_script.write_text(
+        custom_sync_script = self.profile_dir / "healthcheck-candidate-sync.sh"
+        custom_sync_script.write_text(
             "#!/bin/sh\n"
             "python3 - \"$WBP_STATE_FILE\" \"$WBP_MANAGED_CONFIG_FILE\" "
             "\"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\" \"$WBP_CONFIG_TOML\" <<'PY'\n"
@@ -2272,7 +3836,7 @@ class CliTests(unittest.TestCase):
             "PY\n",
             encoding="utf-8",
         )
-        self.sync_script.chmod(0o755)
+        custom_sync_script.chmod(0o755)
         server, thread = self.start_probe_server(port)
         candidate_socket = socket.socket()
         candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -2281,6 +3845,7 @@ class CliTests(unittest.TestCase):
         try:
             result = self.run_cli_with_env(
                 {
+                    "WBP_SYNC_SCRIPT": str(custom_sync_script),
                     "WBP_PROXY_REPROBE_CANDIDATES": (
                         f"{expected_proxy_url},http://127.0.0.1:10808"
                     ),
@@ -3391,7 +4956,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(
-            payload["proxy_reprobe"]["candidates"],
+            payload["proxy_reprobe"]["candidates"][:3],
             [
                 f"http://127.0.0.1:{env_candidate_port}",
                 f"http://127.0.0.1:{lkg_candidate_port}",
@@ -3467,6 +5032,81 @@ class CliTests(unittest.TestCase):
             reprobe["candidates"],
             [f"http://127.0.0.1:{18000 + index}" for index in range(8)],
         )
+
+    def test_parse_dynamic_local_listener_candidates_filters_service_ports_and_dedupes(
+        self,
+    ) -> None:
+        parsed = runtime_mod.parse_dynamic_local_listener_candidates(
+            "\n".join(
+                [
+                    "cliproxy 1 user 10u IPv4 0t0 TCP 127.0.0.1:8318 (LISTEN)",
+                    "vpn 2 user 11u IPv4 0t0 TCP localhost:10808 (LISTEN)",
+                    "random 3 user 12u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
+                    "random 4 user 13u IPv4 0t0 TCP localhost:18081 (LISTEN)",
+                    "random 5 user 14u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
+                ]
+            )
+        )
+        self.assertEqual(
+            parsed,
+            [
+                "http://127.0.0.1:10808",
+                "http://127.0.0.1:18080",
+                "http://127.0.0.1:18081",
+                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:18080",
+                "socks5h://127.0.0.1:18081",
+            ],
+        )
+
+    def test_get_proxy_reprobe_candidates_appends_legacy_defaults_and_dynamic_candidates(
+        self,
+    ) -> None:
+        state = {
+            "current_proxy_url": "http://127.0.0.1:19000",
+            "last_known_good_proxy_url": "http://127.0.0.1:19001",
+        }
+        with mock.patch.object(
+            runtime_mod,
+            "discover_dynamic_local_proxy_candidates",
+            return_value=[
+                "http://127.0.0.1:19002",
+                "socks5h://127.0.0.1:19002",
+            ],
+        ):
+            candidates = runtime_mod.get_proxy_reprobe_candidates(state)
+        self.assertEqual(
+            candidates,
+            [
+                "http://127.0.0.1:19001",
+                "http://127.0.0.1:19000",
+                "http://127.0.0.1:10808",
+                "http://127.0.0.1:10809",
+                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:10809",
+                "http://127.0.0.1:19002",
+                "socks5h://127.0.0.1:19002",
+            ],
+        )
+
+    def test_healthcheck_responses_probe_emits_x_session_id(self) -> None:
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNotNone(ProbeHandler.last_request_headers)
+        session_id = ""
+        for key, value in ProbeHandler.last_request_headers.items():
+            if key.lower() == "x-session-id":
+                session_id = value
+                break
+        self.assertTrue(session_id.startswith("wbp-runtime-"))
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -5007,6 +6647,8 @@ class CliTests(unittest.TestCase):
                 "WBP_PROXY_REPROBE_CANDIDATES",
                 "last_known_good_proxy_url",
                 "current_proxy_url",
+                "legacy.default_local_proxy_candidates",
+                "legacy.dynamic_local_listener_candidates",
             ],
         )
         self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
@@ -6648,6 +8290,716 @@ class CliTests(unittest.TestCase):
         self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
         self.assertEqual(identity["invalid_backend_pools"], ["backend-a:hold"])
 
+    def test_accounts_login_start_sandbox_strict_json_and_session_persisted(self) -> None:
+        result = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertTrue(result.stdout.strip().startswith("{"))
+        self.assertTrue(result.stdout.strip().endswith("}"))
+        payload = json.loads(result.stdout)
+        for field in runtime_mod.COMMAND_PAYLOAD_REQUIRED_FIELDS:
+            self.assertIn(field, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "login_complete")
+        self.assertEqual(payload["provider"], "sandbox")
+        login_session_id = payload["login_session_id"]
+        self.assertTrue(login_session_id.startswith("sandbox-"))
+        self.assertTrue(str(payload["state"]).startswith("sandbox-state-"))
+        self.assertTrue(str(payload["nonce"]).startswith("sandbox-nonce-"))
+        self.assertIn("/owner-login/sandbox?", str(payload["login_url"]))
+        login_result = payload["login_result"]
+        self.assertEqual(login_result["status"], "started")
+        self.assertEqual(login_result["provider"], "sandbox")
+        self.assertEqual(login_result["login_session_id"], login_session_id)
+        self.assertEqual(login_result["state"], payload["state"])
+        self.assertEqual(login_result["nonce"], payload["nonce"])
+        self.assertEqual(login_result["login_url"], payload["login_url"])
+        self.assertEqual(login_result["expires_at"], payload["expires_at"])
+        self.assertFalse(login_result["auth_materialized"])
+        self.assertFalse(login_result["used"])
+        self.assertIn(str(self.managed_dir / "login-sessions"), payload["changed_files"])
+        session_path = self.managed_dir / "login-sessions" / f"{login_session_id}.json"
+        self.assertIn(str(session_path), payload["changed_files"])
+        self.assertTrue(session_path.is_file())
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            sorted(session.keys()),
+            sorted(
+                [
+                    "login_session_id",
+                    "provider",
+                    "state",
+                    "nonce",
+                    "created_at",
+                    "expires_at",
+                    "used",
+                ]
+            ),
+        )
+        self.assertEqual(session["login_session_id"], login_session_id)
+        self.assertEqual(session["provider"], "sandbox")
+        self.assertEqual(session["state"], payload["state"])
+        self.assertFalse(session["used"])
+        self.assertTrue(str(session["nonce"]).startswith("sandbox-nonce-"))
+        self.assertTrue(all(path.startswith(str(self.managed_dir)) for path in payload["changed_files"]))
+        self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+
+    def test_accounts_login_start_codex_requires_device_mode(self) -> None:
+        result = self.run_cli(
+            "accounts", "login", "start", "--provider", "codex", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_MODE_UNSUPPORTED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["mode"], "")
+        self.assertEqual(payload["supported_modes"], ["device"])
+
+    def test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay(self) -> None:
+        missing = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "sandbox-missing-session",
+            "--state",
+            "sandbox-state-missing",
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(missing.returncode, 1, missing.stderr)
+        missing_payload = json.loads(missing.stdout)
+        self.assertEqual(missing_payload["machine_error_code"], "LOGIN_SESSION_NOT_FOUND")
+        self.assertEqual(missing_payload["changed_files"], [])
+
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+
+        wrong_state = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            "sandbox-state-wrong",
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(wrong_state.returncode, 1, wrong_state.stderr)
+        wrong_state_payload = json.loads(wrong_state.stdout)
+        self.assertEqual(wrong_state_payload["machine_error_code"], "LOGIN_STATE_MISMATCH")
+        self.assertEqual(wrong_state_payload["changed_files"], [])
+
+        wrong_proof = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "not-ok",
+            "--json",
+        )
+        self.assertEqual(wrong_proof.returncode, 1, wrong_proof.stderr)
+        wrong_proof_payload = json.loads(wrong_proof.stdout)
+        self.assertEqual(wrong_proof_payload["machine_error_code"], "LOGIN_PROOF_INVALID")
+        self.assertEqual(wrong_proof_payload["changed_files"], [])
+
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        session_payload = json.loads(session_path.read_text(encoding="utf-8"))
+        session_payload["expires_at"] = "2000-01-01T00:00:00+00:00"
+        session_path.write_text(json.dumps(session_payload) + "\n", encoding="utf-8")
+        expired = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(expired.returncode, 1, expired.stderr)
+        expired_payload = json.loads(expired.stdout)
+        self.assertEqual(expired_payload["machine_error_code"], "LOGIN_SESSION_EXPIRED")
+        self.assertEqual(expired_payload["changed_files"], [])
+
+        started_replay = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_replay_payload = json.loads(started_replay.stdout)
+        replay_session = started_replay_payload["login_session_id"]
+        replay_state = started_replay_payload["state"]
+        first_complete = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            replay_session,
+            "--state",
+            replay_state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(first_complete.returncode, 0, first_complete.stderr)
+        replay = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            replay_session,
+            "--state",
+            replay_state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(replay.returncode, 1, replay.stderr)
+        replay_payload = json.loads(replay.stdout)
+        self.assertEqual(replay_payload["machine_error_code"], "LOGIN_SESSION_REPLAY_BLOCKED")
+        self.assertEqual(replay_payload["changed_files"], [])
+
+    def test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets(
+        self,
+    ) -> None:
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+
+        completed = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "accounts_onboard")
+        self.assertEqual(payload["provider"], "sandbox")
+        self.assertEqual(payload["login_session_id"], session_id)
+        self.assertEqual(payload["auth_ref_scope"], "sandbox")
+        login_result = payload["login_result"]
+        self.assertEqual(login_result["status"], "completed")
+        self.assertEqual(login_result["provider"], "sandbox")
+        self.assertEqual(login_result["login_session_id"], session_id)
+        self.assertTrue(login_result["auth_materialized"])
+        self.assertEqual(login_result["auth_ref_scope"], "sandbox")
+        self.assertTrue(login_result["used"])
+        auth_ref = Path(payload["auth_ref"])
+        self.assertTrue(auth_ref.is_file())
+        self.assertTrue(str(auth_ref).startswith(str(self.managed_dir / "sandbox-auth")))
+        self.assertIn(str(auth_ref), payload["changed_files"])
+        self.assertIn(
+            str(self.managed_dir / "login-sessions" / f"{session_id}.json"),
+            payload["changed_files"],
+        )
+        auth_payload = json.loads(auth_ref.read_text(encoding="utf-8"))
+        sandbox_auth_payload = json.loads(
+            (self.profile_dir / "auth.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(sandbox_auth_payload, auth_payload)
+        self.assertEqual(auth_payload["provider"], "sandbox")
+        self.assertTrue(auth_payload["synthetic"])
+        self.assertEqual(auth_payload["synthetic_source"], "sandbox-login")
+        self.assertEqual(auth_payload["sandbox_login_session_id"], session_id)
+        self.assertTrue(str(auth_payload["OPENAI_API_KEY"]).startswith("sandbox-synthetic-"))
+        self.assertIn(str(self.profile_dir / "auth.json"), payload["changed_files"])
+        self.assertTrue(
+            all(
+                path.startswith(str(self.managed_dir)) or path.startswith(str(self.profile_dir))
+                for path in payload["changed_files"]
+            )
+        )
+        self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+        payload_text = json.dumps(payload, ensure_ascii=True)
+        self.assertNotIn("sandbox-ok", payload_text)
+        self.assertNotIn(str(auth_payload["OPENAI_API_KEY"]), payload_text)
+        self.assertNotIn("proof", payload_text)
+
+    def test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change(
+        self,
+    ) -> None:
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+        completed = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        complete_payload = json.loads(completed.stdout)
+        auth_ref = complete_payload["auth_ref"]
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-from-sandbox-login",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--skip-login",
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-from-sandbox-login")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        added = [
+            item for item in registry["backends"] if item["id"] == "backend-from-sandbox-login"
+        ]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["pool"], "reserve")
+
+    def test_accounts_login_start_codex_device_returns_session_url_and_code(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-api"
+        argv_capture = self.managed_dir / "device-login-argv.json"
+        ready_file = self.managed_dir / "device-login.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["mode"], "device")
+        self.assertEqual(payload["next_action"], "wait_for_login")
+        self.assertEqual(payload["device_url"], "https://auth.openai.com/codex/device")
+        self.assertEqual(payload["device_code"], "WBP-1234")
+        self.assertTrue(payload["device_code_present"])
+        session_id = payload["session_id"]
+        self.assertTrue(session_id.startswith("codex-"))
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        self.assertTrue(session_path.is_file())
+        session_payload = json.loads(session_path.read_text(encoding="utf-8"))
+        self.assertEqual(session_payload["provider"], "codex")
+        self.assertEqual(session_payload["state"], "waiting_for_user")
+        self.assertIn(str(session_path), payload["changed_files"])
+        self.assertEqual(
+            json.loads(argv_capture.read_text(encoding="utf-8")),
+            [
+                "-config",
+                str(self.stable_dir / "config.yaml"),
+                "-codex-device-login",
+                "-no-browser",
+            ],
+        )
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+        cancelled_payload = json.loads(cancelled.stdout)
+        self.assertEqual(cancelled_payload["login_result"]["status"], "cancelled")
+
+    def test_accounts_login_start_codex_device_allows_stable_config_parent_inventory(self) -> None:
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{self.stable_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-stable-parent"
+        argv_capture = self.managed_dir / "device-login-stable-parent-argv.json"
+        ready_file = self.managed_dir / "device-login-stable-parent.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["device_code"], "WBP-1234")
+        self.assertEqual(payload["login_result"]["scope"], "admitted_owner_login")
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", payload["session_id"], "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_start_codex_device_blocks_auth_dir_outside_admitted_roots(self) -> None:
+        auth_dir = Path(self.temp_dir.name) / "external-device-login-auth"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+
+        started = self.run_cli(
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertNotEqual(started.returncode, 0)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOGIN_SANDBOX_SCOPE_UNPROVEN")
+        self.assertEqual(payload["auth_inventory_dir"], str(auth_dir))
+        self.assertIn(
+            str(self.stable_dir.resolve(strict=False)),
+            payload["admitted_owner_login_inventory_roots"],
+        )
+        self.assertEqual(
+            payload["stable_auth_inventory_source"]["path_resolution"],
+            "absolute",
+        )
+
+    def test_accounts_login_status_codex_detects_materialized_auth(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-status"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-status"
+        argv_capture = self.managed_dir / "device-login-status-argv.json"
+        ready_file = self.managed_dir / "device-login-status.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+            auth_filename="codex-device-status.json",
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        ready_file.write_text("ready\n", encoding="utf-8")
+        deadline = time.time() + 5
+        payload = {}
+        while time.time() < deadline:
+            status = self.run_cli(
+                "accounts", "login", "status", "--session", session_id, "--json"
+            )
+            payload = json.loads(status.stdout)
+            if payload["login_result"]["status"] == "auth_materialized":
+                break
+            time.sleep(0.05)
+        self.assertEqual(payload["status"], "ok", payload)
+        self.assertEqual(payload["next_action"], "accounts_onboard")
+        self.assertEqual(payload["login_result"]["status"], "auth_materialized")
+        self.assertTrue(payload["login_result"]["auth_materialized"])
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_status_codex_fails_after_device_handoff_process_exit(
+        self,
+    ) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-exit-after-handoff"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-exit-after-handoff"
+        argv_capture = self.managed_dir / "device-login-exit-after-handoff-argv.json"
+        ready_file = self.managed_dir / "device-login-exit-after-handoff.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_TEST_DEVICE_LOGIN_MODE": "exit-no-auth",
+            },
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        session_id = json.loads(started.stdout)["session_id"]
+
+        status = self.run_cli(
+            "accounts", "login", "status", "--session", session_id, "--json"
+        )
+        self.assertNotEqual(status.returncode, 0, status.stderr)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_HANDOFF_PROCESS_EXITED")
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["login_result"]["status"], "failed")
+        self.assertFalse(payload["login_result"]["auth_materialized"])
+        self.assertFalse(payload["login_result"]["session_process_alive"])
+        self.assertTrue(payload["login_result"]["handoff_observed"])
+        self.assertEqual(
+            payload["login_result"]["failure_reason"],
+            "device_handoff_process_exited_before_auth_materialized",
+        )
+
+        completed = self.run_cli(
+            "accounts", "login", "complete", "--session", session_id, "--json"
+        )
+        self.assertNotEqual(completed.returncode, 0, completed.stderr)
+        completed_payload = json.loads(completed.stdout)
+        self.assertEqual(
+            completed_payload["machine_error_code"], "LOGIN_HANDOFF_PROCESS_EXITED"
+        )
+        self.assertEqual(completed_payload["login_result"]["status"], "failed")
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_complete_codex_requires_materialized_auth(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-incomplete"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-incomplete"
+        argv_capture = self.managed_dir / "device-login-incomplete-argv.json"
+        ready_file = self.managed_dir / "device-login-incomplete.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        completed = self.run_cli(
+            "accounts", "login", "complete", "--session", session_id, "--json"
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOGIN_AUTH_NOT_MATERIALIZED")
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_complete_codex_onboards_explicit_auth_to_reserve(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-complete"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-complete"
+        argv_capture = self.managed_dir / "device-login-complete-argv.json"
+        ready_file = self.managed_dir / "device-login-complete.ready"
+        auth_ref = auth_dir / "codex-device-complete.json"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+            auth_filename=auth_ref.name,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        ready_file.write_text("ready\n", encoding="utf-8")
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            status = self.run_cli(
+                "accounts", "login", "status", "--session", session_id, "--json"
+            )
+            status_payload = json.loads(status.stdout)
+            if status_payload["login_result"]["status"] == "auth_materialized":
+                break
+            time.sleep(0.05)
+        completed = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-from-codex-device-login",
+                            auth_ref=str(auth_ref),
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "accounts_refresh")
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["login_result"]["status"], "completed")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-from-codex-device-login")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+
+    def test_accounts_login_cancel_codex_only_kills_session_owned_pid(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-cancel"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-cancel"
+        argv_capture = self.managed_dir / "device-login-cancel-argv.json"
+        ready_file = self.managed_dir / "device-login-cancel.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+        payload = json.loads(cancelled.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["login_result"]["used"] is False)
+        self.assertEqual(payload["login_result"]["status"], "cancelled")
+        session_payload = json.loads(
+            (self.managed_dir / "login-sessions" / f"{session_id}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertTrue(session_payload["cancelled_process_owned_by_session"])
+
     def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
         self,
     ) -> None:
@@ -6698,15 +9050,134 @@ class CliTests(unittest.TestCase):
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
         )
         self.assertIsNotNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "blocked")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "status_proof_failed"
+        )
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
         added = [item for item in registry["backends"] if item["id"] == "backend-new"]
         self.assertEqual(len(added), 1)
         self.assertEqual(added[0]["pool"], "reserve")
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
 
+    def test_accounts_onboard_explicit_auth_adopts_existing_matching_backend_without_new_backend(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-existing-auth.json"
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["backends"] = [
+            self.build_backend(
+                backend_id="backend-existing",
+                auth_ref=auth_ref,
+            )
+        ]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-existing",
+                            "label": "existing-auth-refresh-observed",
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-existing")
+        self.assertEqual(onboarding["selection_status"], "selected_existing_backend")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_existing_auth_adopted_to_reserve"
+        )
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
+
+    def test_accounts_onboard_passes_derived_runtime_paths_to_owner_helpers(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-derived-env.json"
+        env = os.environ.copy()
+        env.update(
+            {
+                "PYTHONPATH": str(ROOT),
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_MANAGED_DIR": str(self.managed_dir),
+                "WBP_STABLE_CONFIG": str(self.stable_dir / "config.yaml"),
+                "WBP_ACCOUNTS_BIN": str(self.accounts_bin),
+                "WBP_ONBOARD_BIN": str(self.onboard_bin),
+                "WBP_SYNC_SCRIPT": str(self.sync_script),
+                "WBP_LAUNCHER_SCRIPT": str(self.launcher_script),
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-derived-env",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                ),
+            }
+        )
+        for key in (
+            "WBP_AUTH_FILE",
+            "WBP_CONFIG_TOML",
+            "WBP_REGISTRY_FILE",
+            "WBP_STATE_FILE",
+            "WBP_MANAGED_CONFIG_FILE",
+            "WBP_RUNTIME_MODE_FILE",
+            "WBP_RUNTIME_EFFECTIVE_MODE_FILE",
+            "WBP_LOCK_FILE",
+            "WBP_LAUNCHER_LOCK_FILE",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "wild_boar_proxy",
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--no-sync",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "backend-derived-env")
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        self.assertTrue(
+            any(item.get("id") == "backend-derived-env" for item in registry["backends"])
+        )
+
     def test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof(
         self,
     ) -> None:
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(
@@ -6742,6 +9213,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
         self.assertIsNotNone(onboarding["status_observed"])
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "ready")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "post_onboard_status_ok"
+        )
         self.assertFalse(onboarding["active_routing_changed"])
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
@@ -6749,6 +9224,7 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof(
         self,
     ) -> None:
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(
@@ -6832,27 +9308,91 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
         self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
 
+    def test_accounts_onboard_ignores_selected_backend_state_drift_for_reserve_first_gate(
+        self,
+    ) -> None:
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-state-drift",
+                                auth_ref="/tmp/codex-detected-state-drift.json",
+                            )
+                        ]
+                    ),
+                    "WBP_TEST_ONBOARD_STATE_PATCH_JSON": json.dumps(
+                        {"selected_backend_ids": []}
+                    ),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+                "--no-sync",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected-state-drift")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
+
     def test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success(
         self,
     ) -> None:
-        (self.profile_dir / "auth.json").write_text("{}\n", encoding="utf-8")
-        result = self.run_cli_with_env(
-            {
-                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
-                    [
-                        self.build_backend(
-                            backend_id="backend-detected-status-fail",
-                            auth_ref="/tmp/codex-detected-status-fail.json",
-                        )
-                    ]
-                )
-            },
-            "accounts",
-            "onboard",
-            "--json",
-            "--non-interactive",
-            "--no-sync",
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
         )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "auth.json").write_text("{}\n", encoding="utf-8")
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-status-fail",
+                                auth_ref="/tmp/codex-detected-status-fail.json",
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+                "--no-sync",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
@@ -6875,6 +9415,7 @@ class CliTests(unittest.TestCase):
     ) -> None:
         auth_ref = "/tmp/codex-skip-login.json"
         argv_file = self.managed_dir / "onboard-argv.json"
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(
@@ -6925,6 +9466,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["sync_outcome"], "ok")
         self.assertIsNotNone(onboarding["status_observed"])
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "ready")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "post_onboard_status_ok"
+        )
         self.assertEqual(
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
         )
@@ -6934,6 +9479,136 @@ class CliTests(unittest.TestCase):
         self.assertEqual(added[0]["pool"], "reserve")
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_onboarding_lifecycle_admission_marks_reserve_only_launch_gap_ready(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "models_surface_unavailable_or_invalid",
+                "failed_checks": ["models_surface_unavailable_or_invalid"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_empty",
+                "blocking_reason": "no_live_capable_active_backends",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "ready")
+        self.assertEqual(admission["reason"], "reserve_only_launch_gap")
+        self.assertEqual(admission["selected_backend_pool"], "reserve")
+        self.assertEqual(
+            admission["auth_pool_hygiene_blocking_reason"],
+            "no_live_capable_active_backends",
+        )
+        self.assertEqual(
+            admission["launch_failed_checks"],
+            ["models_surface_unavailable_or_invalid"],
+        )
+
+    def test_onboarding_lifecycle_admission_blocks_non_reserve_attestation_failure(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "responses_probe_failed",
+                "failed_checks": ["responses_probe_failed"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_available",
+                "blocking_reason": "",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["reason"], "status_proof_failed")
+        self.assertEqual(
+            admission["status_observed_machine_error_code"], "ATTESTATION_FAILED"
+        )
+
+    def test_onboarding_lifecycle_admission_blocks_truth_drift_even_when_pool_empty(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "proxy_truth_drift",
+                "failed_checks": ["proxy_truth_drift"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_empty",
+                "blocking_reason": "no_live_capable_active_backends",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["reason"], "status_proof_failed")
+        self.assertEqual(admission["launch_failed_checks"], ["proxy_truth_drift"])
 
     def test_accounts_onboard_loop_mode_forwards_flag_and_keeps_reserve_first_proof(
         self,
@@ -7264,6 +9939,11 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success(
         self,
     ) -> None:
+        unavailable_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unavailable_stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli_with_env(
             {
                 "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
@@ -7765,6 +10445,82 @@ class CliTests(unittest.TestCase):
         self.assertFalse(promotion["validate_attempted"])
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 
+    def test_accounts_promote_accepts_single_promotion_when_reserve_stays_above_floor(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 1,
+            "active_target": 2,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-target",
+                auth_ref="/tmp/codex-reserve-target.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-extra",
+                auth_ref="/tmp/codex-reserve-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-reserve-floor-ok.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-reserve-target"],
+                "active_count": 2,
+                "reserve_count": 1,
+                "retired_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-reserve-floor-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "promote",
+                "backend-reserve-target",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["policy_verification_status"], "passed")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_pool_count_after"], 2)
+        self.assertEqual(promotion["reserve_count_before"], 2)
+        self.assertEqual(promotion["reserve_count_after"], 1)
+        self.assertTrue(promotion["routing_change_observed"])
+        self.assertEqual(promotion["final_outcome"], "promoted_to_active")
+
     def test_accounts_promote_rejects_invalid_pool_policy(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -8179,7 +10935,7 @@ class CliTests(unittest.TestCase):
             selected_backend_ids=["backend-a", "backend-b"]
         )
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             sync_result = self.run_cli("sync", "--json")
@@ -13522,6 +16278,41 @@ class CliTests(unittest.TestCase):
         )
         self.assertNotIn(str(generated_config_path), payload["changed_files"])
 
+    def test_accounts_retire_held_reserve_backend_clears_hold_and_confirms_terminal_state(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-held-reserve-retire",
+                auth_ref="/tmp/codex-held-reserve-retire.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "accounts", "retire", "backend-held-reserve-retire", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(
+            retire["precondition_status"], "eligible_reserve_backend_for_retire"
+        )
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "backend_retired")
+        registry = json.loads(registry_path.read_text())
+        retired = [
+            item
+            for item in registry["backends"]
+            if item["id"] == "backend-held-reserve-retire"
+        ][0]
+        self.assertEqual(retired["pool"], "retired")
+        self.assertFalse(retired["manual_hold"])
+
     def test_accounts_retire_reserve_backend_keeps_status_lifecycle_counts_consistent(
         self,
     ) -> None:
@@ -13904,6 +16695,7 @@ class CliTests(unittest.TestCase):
         fresh_profile = Path(self.temp_dir.name) / "fresh-profile"
         fresh_managed = fresh_profile / "managed"
         fresh_stable = Path(self.temp_dir.name) / "fresh-stable"
+        fresh_external = Path(self.temp_dir.name) / "fresh-external-models"
         fresh_stable.mkdir(parents=True, exist_ok=True)
         (fresh_stable / "config.yaml").write_text(
             "host: 127.0.0.1\nport: 8318\n",
@@ -13918,6 +16710,7 @@ class CliTests(unittest.TestCase):
                 "WBP_REGISTRY_FILE": str(fresh_managed / "backend-registry.json"),
                 "WBP_STATE_FILE": str(fresh_managed / "supervisor-state.json"),
                 "WBP_MANAGED_CONFIG_FILE": str(fresh_managed / "managed-config.yaml"),
+                "WBP_EXTERNAL_MODELS_DIR": str(fresh_external),
                 "WBP_RUNTIME_EFFECTIVE_MODE_FILE": str(
                     fresh_profile / "runtime-effective-mode.txt"
                 ),
@@ -13943,6 +16736,14 @@ class CliTests(unittest.TestCase):
         state = json.loads((fresh_managed / "supervisor-state.json").read_text())
         self.assertEqual(state["schema_version"], 2)
         self.assertEqual(state["effective_mode"], "stable")
+        self.assertTrue((fresh_external / "routes.json").is_file())
+        self.assertTrue((fresh_external / "state.json").is_file())
+        self.assertTrue((fresh_external / "evidence").is_dir())
+        self.assertTrue((fresh_external / "secrets.env").is_file())
+        self.assertEqual((fresh_external / "secrets.env").stat().st_mode & 0o777, 0o600)
+        external_state = json.loads((fresh_external / "state.json").read_text())
+        self.assertEqual(external_state["adapter"]["state"], "stopped")
+        self.assertFalse(external_state["local_auth"]["token_present"])
 
     def test_legacy_import_updates_registry_and_state(self) -> None:
         source_dir = Path(self.temp_dir.name) / "legacy-source"
@@ -14016,6 +16817,138 @@ class CliTests(unittest.TestCase):
             "managed",
         )
 
+    def test_legacy_import_optionally_imports_external_models_layout(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-external-source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+        legacy_external = source_dir / "external-models"
+        legacy_external.mkdir(parents=True, exist_ok=True)
+        (legacy_external / "routes.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "routes": [
+                        {
+                            "schema_version": 1,
+                            "route_id": "wbp-imported",
+                            "display_name": "Imported",
+                            "provider": "openrouter",
+                            "base_url": "https://openrouter.ai/api/v1",
+                            "endpoint_path": "/chat/completions",
+                            "upstream_model": "deepseek/deepseek-chat",
+                            "compatibility": "openai_chat_completions",
+                            "auth": {
+                                "type": "bearer",
+                                "secret_ref": "OPENROUTER_API_KEY",
+                            },
+                            "cost_class": "paid_or_free_limited",
+                            "lane_role": "candidate",
+                            "fallback_eligible": False,
+                            "enabled": True,
+                        }
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (legacy_external / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {"wbp-imported": {"availability_state": "unverified"}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (legacy_external / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=imported-key\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("legacy", "import", "--source-dir", str(source_dir), "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["external_models_result"]["final_outcome"],
+            "external_models_import_completed",
+        )
+        imported_routes = json.loads((self.external_models_dir / "routes.json").read_text())
+        self.assertEqual(imported_routes["routes"][0]["route_id"], "wbp-imported")
+        imported_state = json.loads((self.external_models_dir / "state.json").read_text())
+        self.assertIn("wbp-imported", imported_state["routes"])
+        self.assertEqual(
+            (self.external_models_dir / "secrets.env").read_text(encoding="utf-8"),
+            "OPENROUTER_API_KEY=imported-key\n",
+        )
+        self.assertEqual((self.external_models_dir / "secrets.env").stat().st_mode & 0o777, 0o600)
+
+    def test_legacy_import_marks_external_models_not_applicable_when_missing(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-no-external-models"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("legacy", "import", "--source-dir", str(source_dir), "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["external_models_result"]["final_outcome"],
+            "external_models_source_missing",
+        )
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+
     def test_legacy_import_rolls_back_on_invalid_source_state(self) -> None:
         before_registry = (self.managed_dir / "backend-registry.json").read_text(
             encoding="utf-8"
@@ -14080,23 +17013,172 @@ class CliTests(unittest.TestCase):
         self.assertTrue((self.profile_dir / "auth.json").exists())
         self.assertTrue(payload["reset_result"]["auth_file_preserved"])
 
+    def test_companion_reset_clears_external_models_state_and_preserves_secrets(self) -> None:
+        (self.external_models_dir / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (self.external_models_dir / "routes.lock").write_text("lock\n", encoding="utf-8")
+        (self.external_models_dir / "state.lock").write_text("lock\n", encoding="utf-8")
+        (self.external_models_dir / "evidence").mkdir(parents=True, exist_ok=True)
+        (self.external_models_dir / "evidence" / "sample.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "secrets.env").write_text(
+            "KEY=value\n", encoding="utf-8"
+        )
+        os.chmod(self.external_models_dir / "secrets.env", 0o600)
+
+        result = self.run_cli("companion", "reset", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+        self.assertFalse((self.external_models_dir / "state.json").exists())
+        self.assertFalse((self.external_models_dir / "routes.lock").exists())
+        self.assertFalse((self.external_models_dir / "state.lock").exists())
+        self.assertFalse((self.external_models_dir / "evidence").exists())
+        self.assertTrue((self.external_models_dir / "secrets.env").exists())
+        self.assertTrue(payload["external_models_result"]["secrets_preserved"])
+
+    def test_companion_uninstall_clears_external_models_state_and_preserves_secrets(self) -> None:
+        (self.external_models_dir / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (self.external_models_dir / "evidence").mkdir(parents=True, exist_ok=True)
+        (self.external_models_dir / "evidence" / "sample.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "secrets.env").write_text(
+            "KEY=value\n", encoding="utf-8"
+        )
+        os.chmod(self.external_models_dir / "secrets.env", 0o600)
+
+        result = self.run_cli("companion", "uninstall", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+        self.assertFalse((self.external_models_dir / "state.json").exists())
+        self.assertFalse((self.external_models_dir / "evidence").exists())
+        self.assertTrue((self.external_models_dir / "secrets.env").exists())
+        self.assertTrue(payload["external_models_result"]["secrets_preserved"])
+
     def test_sync_returns_single_json_object(self) -> None:
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, "managed listener should remain absent")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
-        self.assertEqual(result.stderr.strip(), "sync-ran")
+        self.assertEqual(result.stderr.strip(), f"sync-stable:{port}")
+        helper_text = self.sync_script.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
+        self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
+
+    def test_sync_blocks_held_lock_without_mutation(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("sync", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["operator_action"], "retry")
+        self.assertEqual(before, after)
+
+    def test_sync_clears_stale_lock_and_proceeds_past_lock_gate(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text("999999\n", encoding="utf-8")
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+
+        result = self.run_cli("sync", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr.strip(), f"sync-stable:{port}")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertNotEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertFalse(lock_file.exists())
 
     def test_sync_materializes_selected_backend_snapshot_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]
         )
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             result = self.run_cli("sync", "--json")
@@ -14133,6 +17215,71 @@ class CliTests(unittest.TestCase):
             state.get("selected_backend_ids_observed_at"),
         )
 
+    def test_sync_repopulates_selected_backend_ids_from_live_capable_registry(self) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = []
+        state.pop("selected_backend_ids_observed_at", None)
+        state.pop("selected_backend_snapshot", None)
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        state_after = json.loads(state_path.read_text())
+        self.assertEqual(state_after.get("selected_backend_ids"), ["backend-a"])
+        snapshot = state_after.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertEqual(snapshot.get("selected_backend_ids"), ["backend-a"])
+        self.assertEqual(
+            snapshot.get("selected_backends_digest"),
+            runtime_mod.get_selected_backend_ids_digest(["backend-a"]),
+        )
+
+    def test_launch_capable_backend_ids_apply_runtime_ranking_policy(self) -> None:
+        registry = {"backends": []}
+        for backend_id, priority, fail_count, success_count in (
+            ("backend-d", 20, 0, 99),
+            ("backend-b", 10, 1, 99),
+            ("backend-c", 10, 0, 1),
+            ("backend-a", 10, 0, 3),
+            ("backend-reserve", 1, 0, 100),
+        ):
+            backend = self.build_backend(
+                backend_id=backend_id,
+                auth_ref=f"/tmp/{backend_id}.json",
+                pool="active" if backend_id != "backend-reserve" else "reserve",
+                status="healthy",
+            )
+            backend["priority"] = priority
+            backend["fail_count"] = fail_count
+            backend["success_count"] = success_count
+            registry["backends"].append(backend)
+
+        ranked_ids = runtime_mod.get_launch_capable_backend_ids(registry)
+
+        self.assertEqual(ranked_ids, ["backend-a", "backend-c", "backend-b", "backend-d"])
+
+        hygiene = runtime_mod.summarize_auth_pool_hygiene(
+            registry, {"selected_backend_ids": []}
+        )
+        self.assertEqual(
+            hygiene["launch_capable_backend_ids"],
+            ["backend-a", "backend-c", "backend-b", "backend-d"],
+        )
+        self.assertEqual(hygiene["ranking_policy"]["status"], "applied")
+
     def test_sync_refreshes_selected_backend_snapshot_observed_at_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]
@@ -14152,7 +17299,7 @@ class CliTests(unittest.TestCase):
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             result = self.run_cli("sync", "--json")
@@ -14187,6 +17334,7 @@ class CliTests(unittest.TestCase):
         )
         state["selected_backend_snapshot"] = expected_snapshot
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        self.configure_stable_runtime_probe(free_port())
 
         result = self.run_cli("sync", "--json")
 
@@ -14195,6 +17343,128 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         after = json.loads(state_path.read_text())
         self.assertEqual(after.get("selected_backend_snapshot"), expected_snapshot)
+
+    def test_stable_runtime_launcher_attempt_does_not_hold_shared_sync_lock(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        launcher_started = threading.Event()
+        release_launcher = threading.Event()
+        sync_subprocess_called = threading.Event()
+        attempt_result: dict[str, object] = {}
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def subprocess_side_effect(
+                command: list[str],
+                *,
+                capture_output: bool,
+                text: bool,
+                env: dict[str, str],
+                check: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                executable = str(command[0])
+                if executable == str(paths.launcher_script):
+                    launcher_started.set()
+                    self.assertEqual(
+                        env[runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV],
+                        str(paths.stable_runtime_generated_config_file),
+                    )
+                    release_launcher.wait(timeout=5)
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                if executable == str(paths.sync_script):
+                    sync_subprocess_called.set()
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                raise AssertionError(f"unexpected subprocess command: {command!r}")
+
+            def run_attempt() -> None:
+                attempt_result["attempt"] = runtime_mod.run_stable_runtime_launcher_attempt(
+                    paths, selection
+                )
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.subprocess.run",
+                side_effect=subprocess_side_effect,
+            ), mock.patch(
+                "wild_boar_proxy.runtime.socket_is_listening", return_value=False
+            ):
+                launcher_thread = threading.Thread(target=run_attempt, daemon=True)
+                launcher_thread.start()
+                self.assertTrue(launcher_started.wait(timeout=2))
+                self.assertTrue(paths.launcher_lock_file.exists())
+                self.assertFalse(paths.lock_file.exists())
+                payload = runtime_mod.run_sync(paths)
+                release_launcher.set()
+                launcher_thread.join(timeout=5)
+
+        self.assertFalse(launcher_thread.is_alive())
+        self.assertTrue(sync_subprocess_called.is_set())
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertNotEqual(payload["machine_error_code"], "LOCK_HELD")
+        attempt = attempt_result["attempt"]
+        self.assertIsInstance(attempt, runtime_mod.StableRuntimeLaunchAttempt)
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(
+            attempt.selected_config_file,
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+
+    def test_stable_runtime_launcher_attempt_serializes_concurrent_launcher_runs(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        launcher_started = threading.Event()
+        release_launcher = threading.Event()
+        concurrent_result: dict[str, object] = {}
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def subprocess_side_effect(
+                command: list[str],
+                *,
+                capture_output: bool,
+                text: bool,
+                env: dict[str, str],
+                check: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                executable = str(command[0])
+                if executable != str(paths.launcher_script):
+                    raise AssertionError(f"unexpected subprocess command: {command!r}")
+                launcher_started.set()
+                release_launcher.wait(timeout=5)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            def run_first_attempt() -> None:
+                runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.subprocess.run",
+                side_effect=subprocess_side_effect,
+            ):
+                launcher_thread = threading.Thread(target=run_first_attempt, daemon=True)
+                launcher_thread.start()
+                self.assertTrue(launcher_started.wait(timeout=2))
+                try:
+                    runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+                except runtime_mod.RuntimeErrorInfo as exc:
+                    concurrent_result["machine_error_code"] = exc.machine_error_code
+                    concurrent_result["message"] = exc.message
+                else:
+                    concurrent_result["status"] = "unexpected_success"
+                release_launcher.set()
+                launcher_thread.join(timeout=5)
+
+        self.assertFalse(launcher_thread.is_alive())
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertIn("Launcher procedure lock", str(concurrent_result["message"]))
 
     def test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces(
         self,
@@ -14263,6 +17533,11 @@ class CliTests(unittest.TestCase):
         )
 
     def test_sync_does_not_expose_deterministic_stable_recovery_result(self) -> None:
+        unavailable_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unavailable_stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
@@ -14352,6 +17627,125 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-promoted")
+
+    def test_sync_preserves_stable_runtime_truth_when_activation_evidence_exists(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        stable_port = free_port()
+        managed_port = free_port()
+        repair_target_dir = self.managed_dir / "stable-repair-target"
+        repair_target_dir.mkdir(parents=True, exist_ok=True)
+        generated_config = self.managed_dir / "stable-runtime-config.generated.yaml"
+        generated_config.write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n"
+            f'auth-dir: "{repair_target_dir}"\n',
+            encoding="utf-8",
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n",
+            encoding="utf-8",
+        )
+        runtime_effective_mode = self.profile_dir / "runtime-effective-mode.txt"
+        runtime_effective_mode.write_text("stable\n", encoding="utf-8")
+        config_toml_path = self.profile_dir / "config.toml"
+        runtime_mod.write_toml_string_atomic(
+            config_toml_path, "base_url", f"http://127.0.0.1:{stable_port}/v1"
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["effective_mode"] = "stable"
+        state["status"] = "unknown"
+        state["last_error"] = ""
+        state["stable_runtime_consumer_snapshot"] = {
+            "schema_version": 1,
+            "activation_method": "process_local_env_override",
+            "selected_config_file": str(generated_config),
+            "selected_source_kind": "approved_repair_target",
+            "selected_source_path": str(repair_target_dir),
+            "activation_outcome": "approved_target_activated",
+            "fallback_reason": "",
+            "observed_at_utc": runtime_mod.now_iso(),
+        }
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        sync_script = self.profile_dir / "sync-promotes-managed-truth.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "port = os.environ['WBP_TEST_MANAGED_PORT']\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state['effective_mode'] = 'managed'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state['managed_port'] = int(port)\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "Path(os.environ['WBP_RUNTIME_EFFECTIVE_MODE_FILE']).write_text('managed\\n')\n"
+            "Path(os.environ['WBP_MANAGED_CONFIG_FILE']).write_text(f'host: 127.0.0.1\\nport: {port}\\n')\n"
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+            "lines = config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('base_url = '):\n"
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "PY\n"
+            "echo sync-promoted-managed >&2\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        env = self.env()
+        env["WBP_SYNC_SCRIPT"] = str(sync_script)
+        env["WBP_TEST_MANAGED_PORT"] = str(managed_port)
+        stable_server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
+        managed_server = ThreadingHTTPServer(("127.0.0.1", managed_port), ProbeHandler)
+        managed_thread = threading.Thread(target=managed_server.serve_forever, daemon=True)
+        stable_thread.start()
+        managed_thread.start()
+        try:
+            result = subprocess.run(
+                ["python3", "-m", "wild_boar_proxy", "sync", "--json"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            stable_server.shutdown()
+            stable_thread.join()
+            stable_server.server_close()
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(encoding="utf-8").strip(),
+            "stable",
+        )
+        state_after = json.loads(state_path.read_text())
+        self.assertEqual(state_after.get("effective_mode"), "stable")
+        self.assertEqual(
+            runtime_mod.read_toml_string(self.profile_dir / "config.toml", "base_url"),
+            f"http://127.0.0.1:{stable_port}/v1",
+        )
+        snapshot = state_after.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertEqual(result.stderr.strip(), "sync-promoted-managed")
 
     def test_mode_get_reports_stable_when_managed_listener_is_absent(self) -> None:
         (self.profile_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")
@@ -14599,8 +17993,106 @@ class CliTests(unittest.TestCase):
                 "repo_managed_marker_recognized"
             ]
         )
+        launcher_text = self.default_launcher_script.read_text(encoding="utf-8")
+        self.assertIn('if [ "$mode" = "desktop" ]; then', launcher_text)
+        self.assertIn('export CODEX_HOME="$PROFILE_DIR"', launcher_text)
+        self.assertIn('export HOME="$APP_HOME"', launcher_text)
+        self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', launcher_text)
+        self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', launcher_text)
+        self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', launcher_text)
+        self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', launcher_text)
+        self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', launcher_text)
+        self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', launcher_text)
+        self.assertIn('WORKSPACE_PATH="${1:-}"', launcher_text)
+        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', launcher_text)
+        self.assertIn(
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            launcher_text,
+        )
+        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', launcher_text)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', launcher_text)
+        self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', launcher_text)
+        self.assertIn('cd "$CODEX_APP_RESOURCES"', launcher_text)
+        self.assertIn("primary_bin_hash=", launcher_text)
+        self.assertIn("preferred_asar_hash=", launcher_text)
+        self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', launcher_text)
+        self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', launcher_text)
+        self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', launcher_text)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", launcher_text)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", launcher_text)
+        self.assertIn('"$CODEX_APP_BIN"', launcher_text)
+        self.assertNotIn('proxy_env "$CODEX_APP_BIN"', launcher_text)
+        self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', launcher_text)
+        self.assertIn(
+            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
+            launcher_text,
+        )
+        self.assertIn(
+            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            launcher_text,
+        )
+        self.assertIn(
+            'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            launcher_text,
+        )
         self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertEqual(status_payload["changed_files"], [])
+
+    def test_repo_owned_default_launcher_payload_includes_isolated_desktop_lane(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        self.assertIn('PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"', payload)
+        self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
+        self.assertIn('APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"', payload)
+        self.assertIn('APP_HOME="$PROFILE_DIR/home"', payload)
+        self.assertIn('APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"', payload)
+        self.assertIn('APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"', payload)
+        self.assertIn('APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"', payload)
+        self.assertIn('APP_TMP_DIR="$PROFILE_DIR/tmp"', payload)
+        self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', payload)
+        self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', payload)
+        self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', payload)
+        self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', payload)
+        self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', payload)
+        self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
+        self.assertIn('export CODEX_HOME="$PROFILE_DIR"', payload)
+        self.assertIn('export HOME="$APP_HOME"', payload)
+        self.assertIn('export XDG_CONFIG_HOME="$APP_HOME/.config"', payload)
+        self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', payload)
+        self.assertIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
+        self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
+        self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', payload)
+        self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('WORKSPACE_PATH="${1:-}"', payload)
+        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', payload)
+        self.assertIn(
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            payload,
+        )
+        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', payload)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', payload)
+        self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', payload)
+        self.assertIn('cd "$CODEX_APP_RESOURCES"', payload)
+        self.assertIn("primary_bin_hash=", payload)
+        self.assertIn("preferred_asar_hash=", payload)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", payload)
+        self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", payload)
+        self.assertIn('"$CODEX_APP_BIN"', payload)
+        self.assertNotIn('proxy_env "$CODEX_APP_BIN"', payload)
+        self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', payload)
+        self.assertIn(
+            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
+            payload,
+        )
+        self.assertIn(
+            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            payload,
+        )
+        self.assertIn(
+            'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            payload,
+        )
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
@@ -14696,6 +18188,49 @@ class CliTests(unittest.TestCase):
         self.assertFalse(contract["repo_owned_default_consumer_provisioned"])
         self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertNotIn(str(self.default_launcher_script), status_payload["changed_files"])
+
+    def test_launch_smoke_repairs_signed_legacy_repo_owned_default_launcher_file(
+        self,
+    ) -> None:
+        legacy_payload = (
+            "set -eu\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n"
+        )
+        legacy_text = runtime_mod.render_repo_owned_default_launcher_script_text(
+            legacy_payload
+        )
+        legacy_digest = runtime_mod.compute_repo_managed_default_launcher_digest(
+            legacy_payload
+        )
+        self.default_launcher_script.write_text(legacy_text + "\n", encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+
+        paths = runtime_mod.RuntimePaths.from_env()
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_LAUNCHER_SCRIPT": str(self.default_launcher_script),
+            },
+        ), mock.patch.object(
+            runtime_mod,
+            "LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS",
+            {legacy_digest},
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            runtime_mod.ensure_repo_owned_default_launcher_consumer(paths)
+
+        self.assertTrue(
+            runtime_mod.repo_managed_default_launcher_recognized(
+                self.default_launcher_script
+            )
+        )
+        self.assertIn(
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            self.default_launcher_script.read_text(encoding="utf-8"),
+        )
 
     def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(
         self,
@@ -14984,6 +18519,8 @@ class CliTests(unittest.TestCase):
                     "HTTPS_PROXY": "http://example.invalid:2",
                     "ALL_PROXY": "http://example.invalid:3",
                     "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                    "CODEX_HOME": str(self.profile_dir / "ambient-codex-home"),
+                    "OPENAI_API_KEY": "ambient-secret",
                     "PATH": "/definitely/missing",
                 },
                 "launch",
@@ -15010,7 +18547,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(launch_result["runtime_precondition_status"], "ready")
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
-        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertIsInstance(launch_result["process_observed_running"], bool)
+        self.assertEqual(
+            launch_result["real_codex_app_launched"],
+            launch_result["process_observed_running"],
+        )
+        if launch_result["process_observed_running"]:
+            self.assertEqual(
+                launch_result["launch_claim_scope"],
+                "bounded_executable_launch_with_process_observation",
+            )
+            self.assertEqual(launch_result["final_outcome"], "app_process_observed")
+        else:
+            self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+            self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
         self.assertEqual(payload["status_observed"]["exit_code"], 0)
         for _ in range(50):
             if trace_file.exists():
@@ -15022,6 +18572,8 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_payload["HTTPS_PROXY_present"])
         self.assertFalse(trace_payload["ALL_PROXY_present"])
         self.assertFalse(trace_payload["WBP_CURRENT_PROXY_URL_present"])
+        self.assertFalse(trace_payload["CODEX_HOME_present"])
+        self.assertFalse(trace_payload["OPENAI_API_KEY_present"])
         self.assertEqual(trace_payload["NO_PROXY"], "127.0.0.1,localhost,::1")
         self.assertEqual(trace_payload["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
 
@@ -15088,7 +18640,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_file.exists())
         self.assertEqual(before, self.state_snapshot())
 
-    def test_launch_client_treats_detached_executable_as_bounded_dispatch_only(
+    def test_launch_client_marks_real_app_launch_when_process_stays_alive(
         self,
     ) -> None:
         port = free_port()
@@ -15146,8 +18698,11 @@ class CliTests(unittest.TestCase):
         launch_result = payload["client_launch_result"]
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
+        self.assertTrue(launch_result["process_observed_running"])
+        self.assertTrue(launch_result["real_codex_app_launched"])
         self.assertIsNone(launch_result["dispatch_exit_code"])
-        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
+        self.assertEqual(launch_result["launch_claim_scope"], "bounded_executable_launch_with_process_observation")
+        self.assertEqual(launch_result["final_outcome"], "app_process_observed")
 
     def test_launch_client_reports_exec_format_failure_as_json_packet(self) -> None:
         port = free_port()

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "auditor": "Euclid",
+  "status": "ok",
+  "verdict": "mismatches_found",
+  "mismatches": [
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/closeout.md",
+      "line": 19,
+      "issue": "Stale HEAD hash.",
+      "expected": "HEAD on `codex/external-agent-lab-isolated` is `c9da772cd01cca65103aa51bd69233399f0fe4ea`."
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/closeout.md",
+      "line": 48,
+      "issue": "Commit-state claim is stale relative to the branch tip that now contains the contour.",
+      "expected": "Record the current HEAD commit (`c9da772cd01cca65103aa51bd69233399f0fe4ea`) as the contour commit state."
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/closeout.md",
+      "line": 49,
+      "issue": "Push-state claim is stale.",
+      "expected": "`codex/external-agent-lab-isolated` is already on `origin/codex/external-agent-lab-isolated` at the same HEAD commit, so this should be pushed: yes."
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/independent_audit_report.json",
+      "line": 5,
+      "issue": "Changed-files accounting is incomplete versus the actual HEAD commit diff.",
+      "expected": "List all changed paths or explicitly label the array as a partial summary."
+    }
+  ],
+  "correction_scope_applied": [
+    "stale blocked-pass closeout git/accounting truth"
+  ],
+  "product_files_should_change": false,
+  "contradictions": []
+}

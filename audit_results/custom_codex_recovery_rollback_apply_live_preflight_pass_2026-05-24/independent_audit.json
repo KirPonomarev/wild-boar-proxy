@@ -1,0 +1,14 @@
+{
+  "agent": "Fermat",
+  "model": "gpt-5.4-mini",
+  "verdict": "pass",
+  "findings": [],
+  "checked_invariants": [
+    "live-preflight is exposed only as GET and adds no mutation path",
+    "success packet reports server-owned read evidence while keeping apply, write, kill, and operator-ready false",
+    "browser-forbidden query payloads are rejected without filesystem read or write",
+    "packet keeps browser_payload_allowed false and dangerous_actions_disabled true",
+    "UI renders the new packet fields without raw mutation fetch",
+    "tests cover success, blocked, and browser rejection cases"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "admitted_live_bounded_actions": [
+    "session_cancel",
+    "owned_session_cleanup",
+    "stop_cleanup_live"
+  ],
+  "captured_at_utc": "2026-05-27T12:18:29.358084Z",
+  "command_surface_exists_equals_safe_remote_admission": false,
+  "dangerous_visible_disabled_actions": [
+    "process_kill_live",
+    "account_mutation",
+    "route_remove",
+    "global_reset_uninstall",
+    "touch_original_codex"
+  ],
+  "operator_harness_post_paths": [],
+  "packet_kind": "remote_control_command_surface",
+  "preflight_or_dry_run_only_actions": [
+    "stop_cleanup_preflight",
+    "rollback_process_owner_contract",
+    "rollback_point_dry_run",
+    "rollback_apply_admission",
+    "rollback_apply_live_preflight"
+  ],
+  "sandbox_phase_runtime_mutations_parked": true,
+  "status": "ok",
+  "web_live_server_post_paths": [
+    "/api/action",
+    "/api/codex/app-copy/launch",
+    "/api/codex/app-copy/launch-dry-run",
+    "/api/codex/app-copy/live-admission",
+    "/api/codex/custom/account-smoke-dry-run",
+    "/api/codex/custom/launch",
+    "/api/codex/custom/launch-dry-run",
+    "/api/codex/custom/model-dry-run",
+    "/api/codex/custom/recovery/rollback-apply",
+    "/api/codex/custom/recovery/rollback-point",
+    "/api/codex/custom/recovery/stop-cleanup",
+    "/api/codex/custom/sessions",
+    "/api/codex/original/launch",
+    "/api/codex/original/launch-dry-run",
+    "/api/operator/run",
+    "/api/review-command"
+  ]
+}

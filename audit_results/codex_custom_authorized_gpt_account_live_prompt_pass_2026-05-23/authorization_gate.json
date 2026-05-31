@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "blocked_by_operator_authorization",
+  "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+  "canonical_source": "CANON.md owner authorization rule",
+  "required_phrase": "разрешаю тебе любые законные действия в рамках разработки проекта",
+  "observed_owner_message": "начинай работу по данному контуру",
+  "generic_start_authorizes_live_commands": false,
+  "live_prompt_executed": false,
+  "live_runtime_commands_executed": false,
+  "account_api_requests_executed": false,
+  "token_burn": 0,
+  "next_exact_action": "Owner must send the exact required phrase in this thread before the live prompt phase can run."
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_REMOVE_ACTION_GATE",
+  "date": "2026-05-13",
+  "final_state": "API_ROUTE_REMOVE_ACTION_GATE_CLOSED",
+  "implemented_action": "api_route_remove",
+  "admission_basis": "ROUTE_CONFIG_UI_REMOVE_ONLY_ADMITTED",
+  "browser_payload": {
+    "allowed": [
+      "ui_action",
+      "route_id"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "file_path",
+      "raw_route_json",
+      "provider_config",
+      "base_url",
+      "endpoint_path",
+      "token",
+      "secret_ref",
+      "secret_value"
+    ]
+  },
+  "adapter": {
+    "command_id": "external_models_routes_remove",
+    "argv_template": [
+      "external-models",
+      "routes",
+      "remove",
+      "--route",
+      "{route_id}",
+      "--json"
+    ],
+    "required_args": [
+      "route_id"
+    ],
+    "allowed_args": [
+      "route_id"
+    ],
+    "category": "external_models_registry_cleanup"
+  },
+  "server_preflight": {
+    "command": [
+      "external-models",
+      "routes",
+      "list",
+      "--json"
+    ],
+    "requires": [
+      "safe route_id",
+      "route exists",
+      "route enabled value is exactly false"
+    ],
+    "blocks": [
+      "missing route_id",
+      "unsafe route_id",
+      "unknown route_id",
+      "enabled route",
+      "unproven enabled state",
+      "malformed route list packet",
+      "route list command failure",
+      "extra browser payload fields"
+    ]
+  },
+  "ui": {
+    "confirmation_required": true,
+    "severity": "critical",
+    "post_action_refresh_required": true,
+    "visual_separation": "api-route-destructive-action",
+    "copy_scope": "disabled registry entry cleanup only"
+  },
+  "tests": [
+    "python3 -m unittest tests.test_web_design_command_adapter",
+    "python3 -m unittest tests.test_web_design_live_server",
+    "python3 -m unittest tests.test_web_design_ui",
+    "python3 -m unittest tests.test_cli_external_models"
+  ],
+  "forbidden_scope": [
+    "route_create",
+    "route_update",
+    "route_editor",
+    "credential_entry",
+    "secret_file_write",
+    "direct_file_truth",
+    "runtime_py_change"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "packet_kind": "protected_surface_no_launch_control",
+  "captured_at_utc": "2026-05-25T10:46:16.702935Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_CONFIG_DRIFT_ROOT_CAUSE_PASS_R2",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "control_duration_seconds": 20,
+  "live_launch_attempted": false,
+  "before_sha256": "edae70b25342f10ef841cf43abd8b464f90c3cf7e3a210867f1e46b050250262",
+  "after_sha256": "edae70b25342f10ef841cf43abd8b464f90c3cf7e3a210867f1e46b050250262",
+  "before_mtime_ns": 1779705351401656564,
+  "after_mtime_ns": 1779705351401656564
+}

@@ -1,0 +1,14 @@
+{
+  "cache_excluded": true,
+  "captured_at_utc": "2026-05-27T03:19:35.800109Z",
+  "existing_incomplete_backup_counted": false,
+  "native_relaunch_proven": false,
+  "original_codex_drift_classified": true,
+  "original_codex_write_performed_by_contour": false,
+  "packet_kind": "rollback_readiness",
+  "rollback_ready": true,
+  "state_backup": true,
+  "status": "ok",
+  "thread_history_proven": false,
+  "timestamped_backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup.20260527T031925Z"
+}

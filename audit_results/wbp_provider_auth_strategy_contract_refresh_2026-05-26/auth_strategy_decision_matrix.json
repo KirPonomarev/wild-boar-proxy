@@ -1,0 +1,31 @@
+{
+  "auth_command_available": true,
+  "auth_command_output_format": "plain_token_stdout",
+  "auth_command_secret_redacted": true,
+  "auth_command_selected": true,
+  "auth_command_supported": true,
+  "auth_command_token_scope": "owner_local_listener",
+  "bounded_bearer_available": true,
+  "bounded_bearer_locality": "local_wbp_listener_only",
+  "bounded_bearer_redaction": true,
+  "bounded_bearer_rejection_reason": "not_selected_preferred_auth_command_available",
+  "bounded_bearer_scope": "owner_local_listener",
+  "bounded_bearer_selected": false,
+  "browser_authority_used": false,
+  "captured_at_utc": "2026-05-26T12:44:31.779012Z",
+  "current_codex_auth_json_used": false,
+  "failed_checks": [],
+  "file_auth_available": false,
+  "file_auth_deferred_to_separate_contour": true,
+  "file_auth_rejection_reason": "deferred_to_separate_contour",
+  "file_auth_selected": false,
+  "packet_kind": "auth_strategy_decision_matrix",
+  "rejection_reason_per_unselected_strategy": {
+    "bounded_local_bearer": "fallback_only_requires_explicit_contract_not_selected",
+    "file_auth_separate_contour": "separate_fallback_contour_required"
+  },
+  "selected_strategy": "auth.command",
+  "selection_reason": "server_owned_local_token_command",
+  "silent_fallback_detected": false,
+  "status": "ok"
+}

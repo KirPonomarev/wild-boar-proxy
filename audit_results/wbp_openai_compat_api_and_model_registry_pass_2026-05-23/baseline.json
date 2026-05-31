@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "contour": "WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS",
+  "captured_date": "2026-05-23",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_changes": "f83ec34",
+  "existing_surfaces": {
+    "model_registry_module": "wild_boar_proxy/codex_model_registry.py",
+    "models_endpoint": "/api/codex/custom/models",
+    "api_compat_endpoint": "/api/codex/custom/api-compat",
+    "model_dry_run_endpoint": "/api/codex/custom/model-dry-run",
+    "ui_panel": "wild_boar_proxy/web_design_ui/index.html#codexCustomModelsPanel"
+  },
+  "baseline_issue_found": "old contract language treated model visibility as models endpoint called",
+  "live_runtime_commands_run": false,
+  "live_api_commands_run": false,
+  "live_prompt_run": false
+}

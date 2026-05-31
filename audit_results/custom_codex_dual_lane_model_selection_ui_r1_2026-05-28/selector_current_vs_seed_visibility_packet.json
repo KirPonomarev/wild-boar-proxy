@@ -1,0 +1,10 @@
+{
+  "api_visible_count": 2,
+  "captured_at_utc": "2026-05-28T11:18:51.087997Z",
+  "chatgpt_visible_count": 2,
+  "packet_kind": "selector_current_vs_seed_visibility",
+  "seed_only_default_choice": false,
+  "seed_only_selectable": false,
+  "seed_visible_count": 12,
+  "status": "ok"
+}

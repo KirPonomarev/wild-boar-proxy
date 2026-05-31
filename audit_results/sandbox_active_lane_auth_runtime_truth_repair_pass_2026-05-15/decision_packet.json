@@ -1,0 +1,6 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_RUNTIME_TRUTH_REPAIR_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "rationale": "fresh sandbox owner packets reconfirm raw ATTESTATION_FAILED / HTTP 401 while sync keeps stable and no canon-supported in-scope repair path is available",
+  "next_contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS"
+}

@@ -1,0 +1,17 @@
+{
+  "browser_client_path_authority": false,
+  "captured_at_utc": "2026-05-29T05:44:58.156990Z",
+  "cleanup_deletes_persistent_profile_by_default": false,
+  "codex_home": "/Volumes/Work/wild-boar-proxy/audit_results/persistent_profile_and_thread_history_strong_reproof_r2_2026-05-29/r1_probe/probe_profile_base/wbp-custom-main",
+  "history_persistence_expected": true,
+  "original_codex_profile_runtime_dependency": false,
+  "packet_kind": "persistent_custom_profile_contract",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Volumes/Work/wild-boar-proxy/audit_results/persistent_profile_and_thread_history_strong_reproof_r2_2026-05-29/r1_probe/probe_profile_base/wbp-custom-main",
+  "profile_mode": "persistent_custom",
+  "protected_surface_overlap": false,
+  "reason_class": "",
+  "remote_client_path_authority": false,
+  "status": "ok",
+  "user_data_dir": "/Volumes/Work/wild-boar-proxy/audit_results/persistent_profile_and_thread_history_strong_reproof_r2_2026-05-29/r1_probe/probe_profile_base/wbp-custom-main/electron-user-data"
+}

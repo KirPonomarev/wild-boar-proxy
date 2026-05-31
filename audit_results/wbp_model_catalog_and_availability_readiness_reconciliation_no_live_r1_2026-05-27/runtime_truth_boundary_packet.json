@@ -1,0 +1,14 @@
+{
+  "candidate_matrix_runtime_rows": 4,
+  "captured_at_utc": "2026-05-27T09:06:05.233670Z",
+  "catalog_metadata_becomes_runtime_truth": false,
+  "codex_consumer_accepted_response_proven": false,
+  "direct_wbp_response_accepted_proven": false,
+  "packet_alias_of": "runtime_binding_boundary_packet.json",
+  "packet_kind": "runtime_truth_boundary",
+  "provider_selected_proven": false,
+  "route_selected_proven": false,
+  "source_packet_kind": "runtime_binding_truth",
+  "status": "ok",
+  "upstream_accepts_proven": false
+}

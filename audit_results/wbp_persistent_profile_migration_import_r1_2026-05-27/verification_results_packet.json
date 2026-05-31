@@ -1,0 +1,24 @@
+{
+  "blocked_packet_count": 0,
+  "captured_at_utc": "2026-05-27T11:51:29.462518Z",
+  "ok_packet_count": 15,
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "top_level_packet_statuses": {
+    "historical_dirt_quarantine_packet.json": "ok",
+    "independent_persistent_profile_migration_audit.json": "ok",
+    "persistent_profile_migration_classification_packet.json": "ok",
+    "persistent_profile_migration_false_green_audit.json": "ok",
+    "persistent_profile_migration_recovery_policy_packet.json": "ok",
+    "persistent_profile_migration_scope_packet.json": "ok",
+    "persistent_profile_migration_trigger_packet.json": "ok",
+    "persistent_profile_migration_verification_packet.json": "ok",
+    "persistent_profile_source_target_packet.json": "ok",
+    "persistent_profile_state_copy_matrix.json": "ok",
+    "scanner_agent_fact_report_packet.json": "ok",
+    "source_persistent_migration_evidence_inventory_packet.json": "ok",
+    "source_persistent_migration_validation_packet.json": "ok",
+    "sync_gate_packet.json": "ok",
+    "version_pinning_packet.json": "ok"
+  }
+}

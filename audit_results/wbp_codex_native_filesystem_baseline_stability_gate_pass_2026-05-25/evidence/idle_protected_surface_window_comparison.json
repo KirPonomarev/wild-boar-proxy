@@ -1,0 +1,43 @@
+{
+  "captured_at_utc": "2026-05-25T14:24:00.103985Z",
+  "drift_repeatability": "repeated",
+  "no_custom_native_launch_occurred": true,
+  "repeated_path_drift": true,
+  "repeated_surface_drift": true,
+  "window_1_changed_surfaces": {
+    "codex_dir": [
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "sessions/2026/05/24/rollout-2026-05-24T20-20-04-019e5b00-42d8-73b0-8966-3caad69ef9a0.jsonl"
+    ],
+    "default_app_support_codex": [
+      "Cache/Cache_Data",
+      "Cache/Cache_Data/3df811c9a5a0cd3a_0",
+      "sentry/scope_v3.json"
+    ]
+  },
+  "window_1_root_pid_preserved": true,
+  "window_2_changed_surfaces": {
+    "codex_dir": [
+      ".",
+      ".codex-global-state.json",
+      ".codex-global-state.json.bak",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "models_cache.json",
+      "sessions/2026/05/24/rollout-2026-05-24T20-20-04-019e5b00-42d8-73b0-8966-3caad69ef9a0.jsonl",
+      "sessions/2026/05/25/rollout-2026-05-25T17-21-31-019e5f83-27ec-7093-bd1e-edf192e68eb5.jsonl",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal"
+    ],
+    "default_app_support_codex": [
+      "Cache/Cache_Data",
+      "Cache/Cache_Data/a4fa5adc9a48da0c_0",
+      "sentry/scope_v3.json"
+    ]
+  },
+  "window_2_root_pid_preserved": true,
+  "window_count": 2
+}

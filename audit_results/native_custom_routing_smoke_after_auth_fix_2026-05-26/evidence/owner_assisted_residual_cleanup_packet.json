@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T05:52:31Z",
+  "cleanup_error": "",
+  "custom_owned_residual_cleanup": true,
+  "secret_value_recorded": false,
+  "sigkill_pids": [
+    85489
+  ],
+  "target_pids": [
+    85022,
+    85489
+  ],
+  "target_tmp_root": "/tmp/wbp-owner-assisted-native-routing-slgm6j6y",
+  "tmp_root_removed_after_residual_cleanup": true
+}

@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T04:42:14.359848Z",
+  "codex_native_acceptance_proven": false,
+  "fixture_truth_not_live_truth": true,
+  "http_status": 200,
+  "object": "response",
+  "output_text_present": true,
+  "packet_kind": "responses_non_stream_fixture",
+  "response_status": "completed",
+  "source_packet": "responses_non_stream_regression_packet.json",
+  "status": "ok"
+}

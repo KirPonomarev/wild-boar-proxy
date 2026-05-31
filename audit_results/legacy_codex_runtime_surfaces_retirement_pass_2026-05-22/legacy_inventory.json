@@ -1,0 +1,95 @@
+{
+  "contour": "LEGACY_CODEX_RUNTIME_SURFACES_RETIREMENT_PASS",
+  "date": "2026-05-22",
+  "items": [
+    {
+      "id": "add_account_command_wrapper",
+      "surface": "Add Account.command",
+      "repo_owner": "wild_boar_proxy/runtime.py",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:add_account_wrapper_path",
+        "wild_boar_proxy/runtime.py:build_repo_owned_operator_wrapper_script_payload",
+        "tests/test_cli.py:test_installer_init_materializes_retired_operator_wrappers"
+      ],
+      "previous_behavior": "generated wrapper ran managed/bin/codex-account-onboard --loop",
+      "replacement": "web Connect account -> accounts login start/status/complete --provider codex --mode device --json",
+      "verdict": "superseded",
+      "action": "retired_stub"
+    },
+    {
+      "id": "team_codex_login_command_wrapper",
+      "surface": "team-codex-login.command",
+      "repo_owner": "wild_boar_proxy/runtime.py",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:team_codex_login_wrapper_path",
+        "wild_boar_proxy/runtime.py:build_repo_owned_operator_wrapper_script_payload",
+        "tests/test_cli.py:test_repo_managed_operator_wrappers_are_retired_stubs"
+      ],
+      "previous_behavior": "generated wrapper ran sandbox_owner_helpers login --no-browser",
+      "replacement": "accounts login start/status/complete --provider codex --mode device --json",
+      "verdict": "superseded",
+      "action": "retired_stub"
+    },
+    {
+      "id": "codex_account_onboard_helper",
+      "surface": "managed/bin/codex-account-onboard",
+      "repo_owner": "wild_boar_proxy/runtime.py",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:installer_owner_helper_paths",
+        "wild_boar_proxy/runtime.py:run_onboard",
+        "wild_boar_proxy/web_design_live_server.py:WBP_ONBOARD_BIN"
+      ],
+      "replacement": "none; internal owner helper remains part of accounts onboard --json implementation",
+      "verdict": "still_needed",
+      "action": "kept"
+    },
+    {
+      "id": "cli_proxy_api_engine",
+      "surface": "cli-proxy-api",
+      "repo_owner": "external engine",
+      "evidence": [
+        "CANON.md: CLIProxyAPI is the engine",
+        "README.md: CLIProxyAPI stays the engine",
+        "wild_boar_proxy/runtime.py:resolve_cli_proxy_bin",
+        "wild_boar_proxy/runtime.py:accounts login start uses -codex-device-login"
+      ],
+      "replacement": "none; required engine dependency",
+      "verdict": "still_needed",
+      "action": "kept"
+    },
+    {
+      "id": "sandbox_owner_helpers_login",
+      "surface": "python -m wild_boar_proxy.sandbox_owner_helpers login",
+      "repo_owner": "wild_boar_proxy/sandbox_owner_helpers.py",
+      "evidence": [
+        "wild_boar_proxy/sandbox_owner_helpers.py:run_login_flow"
+      ],
+      "replacement": "accounts login start/status/complete --provider codex --mode device --json for primary operator flow",
+      "verdict": "hold",
+      "action": "not_retired_in_this_contour"
+    },
+    {
+      "id": "supervisor_healthcheck_legacy_script",
+      "surface": "supervisor-healthcheck.sh",
+      "repo_owner": "external or historical audit only",
+      "evidence": [
+        "subagent runtime-support audit found no repo-owned script file",
+        "repo runtime owns healthcheck/stale pid/recovery behavior"
+      ],
+      "replacement": "run_healthcheck and related runtime recovery helpers",
+      "verdict": "adopted",
+      "action": "no_repo_file_to_retire"
+    },
+    {
+      "id": "vpn_sync_legacy_script",
+      "surface": "vpn-sync.sh",
+      "repo_owner": "external operator asset if present",
+      "evidence": [
+        "subagent runtime-support audit found no repo-owned script file"
+      ],
+      "replacement": "none proven in this contour",
+      "verdict": "external_operator_asset",
+      "action": "not_touched"
+    }
+  ]
+}

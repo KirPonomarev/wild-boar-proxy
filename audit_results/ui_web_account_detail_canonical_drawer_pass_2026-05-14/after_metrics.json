@@ -1,0 +1,820 @@
+{
+  "generated_at": "2026-05-14T20:14:37.867Z",
+  "metrics": [
+    {
+      "scenario": "active_account_detail",
+      "account_id": "acct-active-01",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Работает",
+      "lifecycle": "available",
+      "pool": "Активные",
+      "lastError": "—",
+      "checks24h": "17",
+      "timelineRows": 3,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "demote_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныеаккаунт уже активен",
+          "title": "аккаунт уже активен",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/active_account_detail.png"
+    },
+    {
+      "scenario": "reserve_account_detail",
+      "account_id": "acct-reserve-04",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Готов",
+      "lifecycle": "available",
+      "pool": "Резерв",
+      "lastError": "—",
+      "checks24h": "8",
+      "timelineRows": 2,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-reserve-04",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-reserve-04",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "promote_account",
+          "account_id": "acct-reserve-04",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-reserve-04",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в резерваккаунт уже в резерве",
+          "title": "аккаунт уже в резерве",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-reserve-04",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/reserve_account_detail.png"
+    },
+    {
+      "scenario": "held_account_detail",
+      "account_id": "acct-held-11",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Удержан",
+      "lifecycle": "held",
+      "pool": "Резерв",
+      "lastError": "manual hold",
+      "checks24h": "4",
+      "timelineRows": 2,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-held-11",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "release_account",
+          "account_id": "acct-held-11",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-held-11",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Удержатьаккаунт уже удержан",
+          "title": "аккаунт уже удержан",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныесначала снимите удержание",
+          "title": "сначала снимите удержание",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в резерваккаунт уже в резерве",
+          "title": "аккаунт уже в резерве",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-held-11",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/held_account_detail.png"
+    },
+    {
+      "scenario": "problem_account_detail",
+      "account_id": "acct-problem-21",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Недоступен",
+      "lifecycle": "disabled",
+      "pool": "Резерв",
+      "lastError": "auth unavailable",
+      "checks24h": "9",
+      "timelineRows": 2,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-problem-21",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-problem-21",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "promote_account",
+          "account_id": "acct-problem-21",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-problem-21",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в резерваккаунт уже в резерве",
+          "title": "аккаунт уже в резерве",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-problem-21",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/problem_account_detail.png"
+    },
+    {
+      "scenario": "missing_account",
+      "account_id": "acct-missing-99",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": false,
+      "statusChip": "не подтверждено",
+      "lifecycle": "account_missing_after_refresh",
+      "pool": "нет данных",
+      "lastError": "Действия отключены до выбора существующего аккаунта.",
+      "checks24h": "нет данных",
+      "timelineRows": 0,
+      "activeButtons": [],
+      "disabledButtons": [
+        {
+          "label": "Действия отключеныaccount_missing_after_refresh",
+          "title": "account_missing_after_refresh",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Вывести из пулаaccount_missing_after_refresh",
+          "title": "account_missing_after_refresh",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "",
+          "account_id": "",
+          "disabled": true,
+          "classes": "button small account-detail-disabled-action",
+          "title": "account_missing_after_refresh"
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 3,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/missing_account.png"
+    },
+    {
+      "scenario": "disabled_action_reasons",
+      "account_id": "acct-active-01",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Работает",
+      "lifecycle": "available",
+      "pool": "Активные",
+      "lastError": "—",
+      "checks24h": "17",
+      "timelineRows": 3,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "demote_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныеаккаунт уже активен",
+          "title": "аккаунт уже активен",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/disabled_action_reasons.png"
+    },
+    {
+      "scenario": "last_command_success",
+      "account_id": "acct-active-01",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Работает",
+      "lifecycle": "available",
+      "pool": "Активные",
+      "lastError": "—",
+      "checks24h": "17",
+      "timelineRows": 3,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "demote_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныеаккаунт уже активен",
+          "title": "аккаунт уже активен",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "ok",
+      "lastCommandAction": "validate_account",
+      "lastCommandCode": "OK",
+      "lastCommandRefresh": "canonical refresh required",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 7,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/last_command_success.png"
+    },
+    {
+      "scenario": "last_command_failed",
+      "account_id": "acct-active-01",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 1040,
+        "right": 1600,
+        "top": 0,
+        "bottom": 913,
+        "width": 560,
+        "height": 913,
+        "scrollHeight": 913,
+        "clientHeight": 913
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Работает",
+      "lifecycle": "available",
+      "pool": "Активные",
+      "lastError": "—",
+      "checks24h": "17",
+      "timelineRows": 3,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "demote_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныеаккаунт уже активен",
+          "title": "аккаунт уже активен",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "command_error",
+      "lastCommandAction": "validate_account",
+      "lastCommandCode": "VALIDATION_FAILED",
+      "lastCommandRefresh": "canonical refresh failed",
+      "confirmHidden": true,
+      "confirmUiAction": "-",
+      "confirmAccountId": "-",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 7,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/last_command_failed.png"
+    },
+    {
+      "scenario": "retire_confirmation",
+      "account_id": "acct-active-01",
+      "viewport": {
+        "width": 1600,
+        "height": 913
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 913
+      },
+      "targetRect": {
+        "left": 480,
+        "right": 1120,
+        "top": 144,
+        "bottom": 769,
+        "width": 640,
+        "height": 625,
+        "scrollHeight": 623,
+        "clientHeight": 623
+      },
+      "overlayHidden": false,
+      "missingHidden": true,
+      "statusChip": "Работает",
+      "lifecycle": "available",
+      "pool": "Активные",
+      "lastError": "—",
+      "checks24h": "17",
+      "timelineRows": 3,
+      "activeButtons": [
+        {
+          "ui_action": "validate_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "hold_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "demote_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action account-detail-action"
+        },
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "title": "",
+          "classes": "button small account-action danger account-detail-action"
+        }
+      ],
+      "disabledButtons": [
+        {
+          "label": "Снять удержаниеаккаунт не на удержании",
+          "title": "аккаунт не на удержании",
+          "classes": "button small account-detail-disabled-action"
+        },
+        {
+          "label": "Перевести в активныеаккаунт уже активен",
+          "title": "аккаунт уже активен",
+          "classes": "button small account-detail-disabled-action"
+        }
+      ],
+      "dangerButtons": [
+        {
+          "ui_action": "retire_account",
+          "account_id": "acct-active-01",
+          "disabled": false,
+          "classes": "button small account-action danger account-detail-action",
+          "title": ""
+        }
+      ],
+      "lastCommandChip": "нет",
+      "lastCommandAction": "нет",
+      "lastCommandCode": "-",
+      "lastCommandRefresh": "нет данных",
+      "confirmHidden": false,
+      "confirmUiAction": "retire_account",
+      "confirmAccountId": "acct-active-01",
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 10,
+      "fileInputs": 0,
+      "editablePathInputs": 0,
+      "clipped": [],
+      "screenshot": "screenshots/after/retire_confirmation.png"
+    }
+  ]
+}

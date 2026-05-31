@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "schema_id": "WBP_NATIVE_LAUNCH_PACKET_SCHEMA",
+  "scope": "native_launch_claim_packet_contract",
+  "allowed_launch_modes": [
+    "CODEX_CUSTOM_NATIVE_APP",
+    "ORIGINAL_CODEX_VIA_WBP"
+  ],
+  "common_required_fields": [
+    "schema_version",
+    "claim_id",
+    "launch_mode",
+    "wbp_action_id",
+    "process_id",
+    "process_lineage",
+    "window_id_or_title",
+    "profile_dir",
+    "codex_home",
+    "route_endpoint",
+    "trace_id",
+    "cleanup_command",
+    "current_codex_touched",
+    "process_started",
+    "window_observed",
+    "native_window_usable",
+    "prompt_surface_observed",
+    "route_trace_bound",
+    "workbench_ready",
+    "protected_baseline_only"
+  ],
+  "mode_required_fields": {
+    "CODEX_CUSTOM_NATIVE_APP": [
+      "isolated_home",
+      "isolated_codex_home",
+      "isolated_profile_dir",
+      "isolated_app_support_dir",
+      "isolated_cache_dir",
+      "isolated_runtime_dir",
+      "keychain_reset_prompt_observed",
+      "server_owned_route_configuration"
+    ],
+    "ORIGINAL_CODEX_VIA_WBP": [
+      "ordinary_codex_app_identity",
+      "temporary_wbp_route_config",
+      "permanent_user_config_mutated",
+      "custom_home_present",
+      "custom_codex_home_present",
+      "before_profile_hash",
+      "during_wbp_route_config",
+      "after_cleanup_profile_hash",
+      "restart_without_wbp_status"
+    ]
+  },
+  "completion_forbidden_when": [
+    "process_started_without_window_observed",
+    "window_observed_without_native_window_usable",
+    "window_observed_without_route_trace_bound",
+    "workbench_ready_true",
+    "current_codex_touched_true",
+    "protected_baseline_only_true_for_original_via_wbp"
+  ]
+}

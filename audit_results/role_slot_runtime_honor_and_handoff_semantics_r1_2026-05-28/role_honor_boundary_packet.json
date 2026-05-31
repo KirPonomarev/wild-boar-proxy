@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-28T13:37:16.764423Z",
+  "cheap_scanner_honored": false,
+  "coding_agent_honored": true,
+  "deep_reasoning_honored": false,
+  "implicit_primary_default_observed": true,
+  "only_primary_and_coding_directly_observed": true,
+  "operator_mediated_not_autonomous": true,
+  "packet_kind": "role_honor_boundary",
+  "primary_honored": true,
+  "reviewer_honored": false,
+  "same_model_multi_role_disambiguation_proven": false,
+  "session_id": "ccs-cc3f9b8d698a4874bb63",
+  "status": "ok"
+}

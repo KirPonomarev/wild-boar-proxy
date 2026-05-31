@@ -1,0 +1,23 @@
+{
+  "all_protected_surfaces_unchanged_in_current_recheck": false,
+  "attribution_class": "ambient_external",
+  "captured_at_utc": "2026-05-28T15:02:21.843262Z",
+  "classification": "attribution_localized_with_limits",
+  "current_before_after_drift_status": "blocked",
+  "current_contour_caused_protected_drift": false,
+  "current_contour_native_launch_attempted": false,
+  "current_contour_original_codex_write_performed": false,
+  "current_contour_temp_surface_action_performed": false,
+  "idle_baseline_drift_repeatability": "repeated",
+  "idle_baseline_final_verdict": "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE",
+  "idle_baseline_status": "ok",
+  "idle_windows_with_any_drift": 3,
+  "packet_kind": "protected_surface_recheck",
+  "protected_surface_read_status": "ok",
+  "repo_dirty_counts_as_protected_codex_drift": false,
+  "repo_dirty_entry_count": 37,
+  "repo_dirty_under_protected_surface": false,
+  "status": "ok",
+  "stronger_clean_recheck_observed": false,
+  "unknown_attribution_cannot_upgrade_integrity": false
+}

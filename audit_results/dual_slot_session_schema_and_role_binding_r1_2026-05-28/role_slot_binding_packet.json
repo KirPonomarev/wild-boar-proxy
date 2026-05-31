@@ -1,0 +1,12 @@
+{
+  "binding_source": "browser_payload_server_validated",
+  "captured_at_utc": "2026-05-28T11:59:27.498015Z",
+  "coding_agent_slot_bound": true,
+  "packet_kind": "role_slot_binding",
+  "primary_slot_bound": true,
+  "role_slot_binding_count": 2,
+  "role_slot_binding_present": true,
+  "runtime_execution_truth_closed_here": false,
+  "slot_catalog_revalidated": true,
+  "status": "ok"
+}

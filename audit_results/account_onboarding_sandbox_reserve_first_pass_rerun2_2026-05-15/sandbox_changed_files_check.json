@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-05-15T15:29:50.383662+00:00",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt"
+  ],
+  "outside_sandbox_scope": [],
+  "within_sandbox_scope_only": true
+}

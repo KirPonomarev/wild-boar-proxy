@@ -11,12 +11,11 @@ The full workflow canon lives in [WORKFLOW_OS_V1_2.md](WORKFLOW_OS_V1_2.md).
 When documents conflict, follow this order:
 
 1. `CANON.md`
-2. `MASTER_PLAN.md`
-3. `RUNTIME_CONTRACT.md`
-4. `STATE_SCHEMA.md`
-5. `COMMAND_API.md`
-6. `DELIVERY_RULES.md`
-7. `README.md`
+2. `RUNTIME_CONTRACT.md`
+3. `STATE_SCHEMA.md`
+4. `COMMAND_API.md`
+5. `DELIVERY_RULES.md`
+6. `README.md`
 
 `WORKFLOW_OS_V1_2.md` governs how work is executed.
 It does not override the product/runtime canon above.
@@ -36,6 +35,12 @@ It does not override the product/runtime canon above.
 - Follow strict JSON command surfaces as the primary truth source.
 - Do not infer success from cached state, logs, narrative memory, or exit code
   alone when command packets exist.
+- Do not create or rely on repo-resident master plans, roadmaps, next-contour
+  queues, or repair plans. Active planning belongs outside the repo; this repo
+  keeps canon, contracts, implementation, tests, and completed evidence.
+- Treat `audit_results/` as historical evidence only. It is not an active
+  navigation source for "what is next"; use the current task thread and the
+  current contour's completed closeout only.
 
 ## Current Repo Boundaries
 
@@ -67,6 +72,8 @@ Until that token is truthfully earned:
   for expensive-to-reverse decisions.
 - Use the closeout template at [templates/CLOSEOUT_TEMPLATE.md](templates/CLOSEOUT_TEMPLATE.md)
   for completed contours.
+- Contour/spec/closeout artifacts may document admitted scope and completed
+  evidence. They must not become a forward roadmap or master plan.
 
 ## Stop Token
 
@@ -90,9 +97,26 @@ Work is not closed by local intuition alone.
 For any completed contour, require:
 
 - verification
+- `python3 tools/check_closeout_resilience.py` for any new or changed
+  `audit_results/*closeout*.md`
 - scope check
 - atomic commit or logically complete commit set
 - push
 - final closeout note
 
 Local-only truth is not a closed contour.
+
+## Forget-Proof Enforcement
+
+Closeout resilience is enforced both by policy and by git hooks.
+
+- One-time setup per clone/session:
+  `bash tools/install_git_hooks.sh`
+- Commit-time gate:
+  `.githooks/pre-commit` runs
+  `python3 tools/check_closeout_resilience.py --staged-only`
+- Any commit with a changed `audit_results/*closeout*.md` and missing/placeholder
+  `Contour Capsule` or `resume from here` fields must fail.
+- Any new or changed closeout that stores next-contour pointers, master-plan
+  routes, or future execution queues must fail. Completed evidence closes a
+  contour; it must not seed the next one.

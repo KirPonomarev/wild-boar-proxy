@@ -1,0 +1,22 @@
+{
+  "pre_state": {
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_claim_surface_source": "auth-dir"
+  },
+  "post_state": {
+    "claim_gate_status": "clear",
+    "claim_gate_sources": [],
+    "policy_drift_status": "clear",
+    "policy_drift_claim_surface_source": "approved_repair_target",
+    "policy_drift_observed_status": "detected"
+  },
+  "interpretation": {
+    "claim_gate_cleared": true,
+    "stable_claim_surface_cleared": true,
+    "observed_source_drift_remains_observation_only": true
+  }
+}

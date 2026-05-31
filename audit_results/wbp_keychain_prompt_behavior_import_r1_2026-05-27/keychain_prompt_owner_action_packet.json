@@ -1,0 +1,16 @@
+{
+  "allowed_future_owner_actions": [
+    "Cancel",
+    "Allow",
+    "Ignore",
+    "Not Observed"
+  ],
+  "captured_at_utc": "2026-05-27T11:36:20.561782Z",
+  "historical_destructive_dialog_interacted_with": false,
+  "owner_action_boundary_reference_only": true,
+  "owner_action_performed_in_this_contour": false,
+  "owner_allow_counted_as_auth_success": false,
+  "owner_cancel_counted_as_machine_proof": false,
+  "packet_kind": "keychain_prompt_owner_action_boundary_import",
+  "status": "ok"
+}

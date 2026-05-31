@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T12:03:37.735725Z",
+  "nonce": "WBP_OWNER_UX_ROUTE_R1_2026_05_26",
+  "nonce_recorded": true,
+  "packet_kind": "owner_nonce_prompt",
+  "prompt_hash_recorded": true,
+  "prompt_sha256": "aa7461e8294c23117d79438f15639bf48a3726fec61787bacc520c04d6f86eda",
+  "prompt_template_shape": "WBP owner UX route check <nonce>. Reply with OK and the nonce only.",
+  "raw_prompt_recorded": false,
+  "status": "ok"
+}

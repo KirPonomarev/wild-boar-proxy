@@ -1,0 +1,28 @@
+{
+  "allowed_claims": [
+    "external evidence imported",
+    "external evidence validated",
+    "native filesystem safety classified",
+    "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORTED_PASS_WITH_LIMITS",
+    "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED"
+  ],
+  "auth_strategy_reproof_allowed": false,
+  "captured_at_utc": "2026-05-26T10:36:25.705446Z",
+  "egress_claim_allowed": false,
+  "forbidden_claims": [
+    "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+    "CODEX_CUSTOM_NATIVE_APP_USABLE",
+    "NATIVE_ROUTING_PROVEN",
+    "OWNER_UX_PROVEN",
+    "DIRECT_EGRESS_ABSENT",
+    "ORIGINAL_CODEX_VIA_WBP_PROVEN",
+    "MODEL_AVAILABILITY_PROVEN",
+    "AUTH_STRATEGY_PROVEN",
+    "FINAL_E2E_COMPLETE"
+  ],
+  "model_availability_reproof_allowed": false,
+  "packet_kind": "external_result_import_allowed_claims_matrix",
+  "route_claim_allowed": false,
+  "status": "ok",
+  "ux_claim_allowed": false
+}

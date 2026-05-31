@@ -1,0 +1,44 @@
+{
+  "contour": "WBP_ONE_EXTERNAL_PROVIDER_ROUTE_WORKS_WITH_LIMITS_R2",
+  "command": "WBP_EXTERNAL_MODELS_DIR=\"$HOME/.wild-boar-proxy/external-models\" WBP_MANAGED_DIR=\"$HOME/.wild-boar-proxy\" python3 -m wild_boar_proxy external-models check --json --route wbp-web-primary-openrouter",
+  "packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models route smoke check captured provider evidence without claiming runtime readiness.",
+    "machine_error_code": "OK",
+    "changed_files": [
+      "/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json",
+      "/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence/wbp-web-primary-openrouter-external-models_check-20260527T153608Z.json"
+    ],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "check_kind": "provider_route_smoke",
+      "network_dependent": true,
+      "listener_proven": false,
+      "runtime_claim_blocked": true,
+      "profile_ready": false,
+      "verification_scope": "route_provider_only",
+      "route_state": "verified",
+      "requested_model": "wbp-web-primary-openrouter",
+      "effective_model": "openai/gpt-5",
+      "provider": "openrouter",
+      "fallback_used": false,
+      "fallback_chain": [
+        "wbp-web-primary-openrouter"
+      ],
+      "evidence_path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence/wbp-web-primary-openrouter-external-models_check-20260527T153608Z.json",
+      "latency_ms": 3875,
+      "request_count": 1,
+      "transform_profile": "openai_chat_passthrough",
+      "response_profile": "openai_chat_choices_message",
+      "transform_declared": false,
+      "response_profile_declared": false,
+      "request_shape": "openai_chat_messages",
+      "response_shape": "choices_message"
+    },
+    "timestamp_utc": "2026-05-27T15:36:08Z"
+  }
+}

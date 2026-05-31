@@ -1,0 +1,89 @@
+{
+  "captured_at_utc": "2026-05-27T16:02:26.133659Z",
+  "codex_native_live_current_model_ids": [
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5"
+  ],
+  "packet_kind": "lane_truth_mapping",
+  "rows": [
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "availability_evidence_scope": "current_operator_catalog_only",
+      "current_stability_proven": false,
+      "lane": "wbp_api",
+      "live_availability_proven": false,
+      "model_id": "codex-auto-review",
+      "provider_class": "external_alias"
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "availability_evidence_scope": "current_operator_catalog_only",
+      "current_stability_proven": false,
+      "lane": "codex_native",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.2",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "direct_wbp_non_stream_response_accepted",
+      "availability_evidence_scope": "current_thread_direct_wbp_non_stream",
+      "current_stability_proven": true,
+      "lane": "codex_native",
+      "live_availability_proven": true,
+      "model_id": "gpt-5.3-codex",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "direct_wbp_non_stream_response_accepted",
+      "availability_evidence_scope": "current_thread_direct_wbp_non_stream",
+      "current_stability_proven": true,
+      "lane": "codex_native",
+      "live_availability_proven": true,
+      "model_id": "gpt-5.4",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "direct_wbp_non_stream_response_accepted",
+      "availability_evidence_scope": "current_thread_direct_wbp_non_stream",
+      "current_stability_proven": true,
+      "lane": "codex_native",
+      "live_availability_proven": true,
+      "model_id": "gpt-5.4-mini",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "direct_wbp_non_stream_response_accepted",
+      "availability_evidence_scope": "current_thread_direct_wbp_non_stream",
+      "current_stability_proven": true,
+      "lane": "codex_native",
+      "live_availability_proven": true,
+      "model_id": "gpt-5.5",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "availability_evidence_scope": "current_operator_catalog_only",
+      "current_stability_proven": false,
+      "lane": "codex_native",
+      "live_availability_proven": false,
+      "model_id": "gpt-image-2",
+      "provider_class": "gpt_account_or_alias"
+    },
+    {
+      "availability_claim_level": "historically_direct_wbp_non_stream_response_accepted",
+      "availability_evidence_scope": "pass2_selected_external_route_closed_truth",
+      "current_stability_proven": false,
+      "lane": "wbp_api",
+      "live_availability_proven": false,
+      "model_id": "wbp-web-primary-openrouter",
+      "provider_class": "external_alias"
+    }
+  ],
+  "status": "ok",
+  "target_status": "WBP_MODEL_CATALOG_FIDELITY_AND_AVAILABILITY_ALIGNED_R2",
+  "wbp_api_historically_bounded_model_ids": [
+    "wbp-web-primary-openrouter"
+  ]
+}

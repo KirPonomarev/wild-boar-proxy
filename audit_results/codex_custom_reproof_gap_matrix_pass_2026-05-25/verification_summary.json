@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_PLAN_REPROOF_AND_GAP_MATRIX_PASS",
+  "captured_at_utc": "2026-05-25T00:00:00Z",
+  "mode": "read_only_audit",
+  "runtime_mutation_performed": false,
+  "checks": [
+    {
+      "name": "current_code_evidence_collection",
+      "status": "ok",
+      "details": "Current code, tests, and historical artifacts were inspected to classify contours 1..8."
+    },
+    {
+      "name": "one_matrix_only",
+      "status": "ok",
+      "details": "Exactly one canonical matrix and one short summary were produced."
+    },
+    {
+      "name": "closeout_resilience",
+      "status": "ok",
+      "details": "`python3 tools/check_closeout_resilience.py audit_results/codex_custom_reproof_gap_matrix_pass_2026-05-25/closeout.md` passed."
+    },
+    {
+      "name": "independent_read_only_audit",
+      "status": "ok",
+      "details": "Independent read-only audit returned PASS with no obvious overclaim on launch, external API live prompt, or recovery execution completeness."
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "sync_selected_backend_snapshot_surface": {
+    "writer": "materialize_selected_backend_snapshot_for_sync",
+    "writer_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "writer_lines": "1314-1339",
+    "writes": [
+      "supervisor-state.selected_backend_ids_observed_at",
+      "supervisor-state.selected_backend_snapshot"
+    ],
+    "surface_role": "authoritative owner-path materialization for bounded participation evidence only",
+    "current_effect": "fresh multi-backend selector evidence"
+  },
+  "sync_script_state_write_surface": {
+    "writer": "write_state",
+    "writer_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-sync.sh",
+    "writer_lines": "271-335",
+    "invocation_lines": "1069-1070",
+    "writes": [
+      "supervisor-state.status",
+      "supervisor-state.last_error",
+      "supervisor-state.current_proxy_url",
+      "supervisor-state.selected_backend_ids",
+      "supervisor-state.effective_mode"
+    ],
+    "invoked_effective_mode": "managed",
+    "surface_role": "sync-owned managed runtime state write surface"
+  },
+  "sync_healthcheck_write_surface": {
+    "writer": "write_state_and_effective_mode",
+    "writer_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-healthcheck.sh",
+    "writer_lines": "50-144",
+    "invocation_lines": "350 and 356",
+    "writes": [
+      "supervisor-state.status",
+      "supervisor-state.last_error",
+      "supervisor-state.effective_mode",
+      "runtime-effective-mode.txt",
+      "config.toml.base_url"
+    ],
+    "invoked_effective_mode_success": "managed",
+    "surface_role": "managed health attestation write surface consumed by status healthcheck truth"
+  },
+  "status_effective_mode_reader": {
+    "reader": "get_effective_mode",
+    "reader_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "reader_lines": "1247-1254",
+    "precedence_order": [
+      "runtime-effective-mode.txt",
+      "supervisor-state.effective_mode",
+      "stable default"
+    ],
+    "surface_role": "authoritative runtime effective-mode read path for health/status"
+  },
+  "status_policy_drift_gate": {
+    "reader": "should_use_approved_target_policy_drift",
+    "reader_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "reader_lines": "1974-2009",
+    "requires": [
+      "approved target ready",
+      "stable runtime consumer snapshot confirms approved target activation",
+      "health payload status ok",
+      "health payload effective_mode stable",
+      "effective stable runtime consumer source approved_target_active_by_activation_evidence"
+    ],
+    "surface_role": "gates whether status may clear policy drift from approved target instead of observed auth-dir"
+  },
+  "stable_runtime_consumer_effective_source_surface": {
+    "builder": "build_stable_runtime_consumer_contract",
+    "builder_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "builder_lines": "3119-3235",
+    "live_stable_runtime_requirement_lines": "3147-3174",
+    "surface_role": "observational effective-source classifier, upgraded only when live stable runtime and fresh activation evidence agree"
+  }
+}

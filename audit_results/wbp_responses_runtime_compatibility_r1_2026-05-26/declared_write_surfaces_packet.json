@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-26T20:50:43.297478Z",
+  "native_profile_write_surface": false,
+  "original_codex_write_surface": false,
+  "packet_kind": "declared_write_surfaces",
+  "status": "ok",
+  "write_surfaces": [
+    "wild_boar_proxy/operator_surface.py",
+    "tests/test_wbp_responses_fixture_compatibility.py",
+    "tools/responses_runtime_compatibility_probe.py",
+    "audit_results/wbp_responses_runtime_compatibility_r1_2026-05-26"
+  ]
+}

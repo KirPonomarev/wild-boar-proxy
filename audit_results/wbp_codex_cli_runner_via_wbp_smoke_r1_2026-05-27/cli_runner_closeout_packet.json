@@ -1,0 +1,16 @@
+{
+  "completed_at_utc": "2026-05-27T09:46:49.144683Z",
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "direct_egress_absence_claimed": false,
+  "evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27",
+  "final_e2e_claimed": false,
+  "machine_error_code": "OK",
+  "native_app_claimed": false,
+  "original_codex_lane_claimed": false,
+  "pass_status": "CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP",
+  "raw_prompt_recorded": false,
+  "raw_token_recorded": false,
+  "status": "passed",
+  "streaming_claimed": false,
+  "tool_loop_claimed": false
+}

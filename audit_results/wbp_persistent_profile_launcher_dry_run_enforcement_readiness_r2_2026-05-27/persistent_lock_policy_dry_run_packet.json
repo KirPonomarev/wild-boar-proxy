@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.082041Z",
+  "concurrent_real_launch_tested": false,
+  "invalid_policy_rejected": true,
+  "lock_acquired": false,
+  "lock_enforcement_claimed": false,
+  "lock_execution_proven": false,
+  "lock_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/.wbp-profile.lock",
+  "lock_policy_rendered": true,
+  "lock_policy_rendered_counts_as_lock_acquired": false,
+  "packet_kind": "persistent_lock_policy_dry_run",
+  "policy": "single_writer_only",
+  "status": "ok"
+}

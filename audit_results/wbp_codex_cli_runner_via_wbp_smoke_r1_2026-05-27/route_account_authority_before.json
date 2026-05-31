@@ -1,0 +1,28 @@
+{
+  "custom_profile_config": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1779780793661815536,
+    "path_label": "~/.codex-custom-cli/config.toml",
+    "sha256": "eb046f33cdc76f4c97b69920193125822ae9b564a117d5f0268df149ac43bd82",
+    "size": 2442
+  },
+  "dynamic_registry_counters_used_as_truth": false,
+  "registry_file_classification": "dynamic_runtime_state_not_used_as_pass_fail",
+  "stable_config": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1778332551870097299,
+    "path_label": "~/.cli-proxy-api/config.yaml",
+    "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2",
+    "size": 577
+  },
+  "stable_runtime_generated_config": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1779548257686331264,
+    "path_label": "~/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+    "sha256": "5fa1f1d585a3dbf8aa196f398b276b1759c26638644a338cfe54375ee5d7dd31",
+    "size": 630
+  }
+}

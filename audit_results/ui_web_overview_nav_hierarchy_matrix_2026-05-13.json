@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_NAV_PRODUCT_HIERARCHY_REALIGNMENT",
+  "created_at": "2026-05-13",
+  "goal": "Realign the web UI overview and persistent navigation toward a product/operator dashboard while preserving command and runtime guardrails.",
+  "scope": [
+    "overview product copy",
+    "overview action hierarchy",
+    "compact secondary action evidence panel",
+    "persistent sidebar navigation cleanup",
+    "route preservation for deferred setup/select/import screens",
+    "static tests for hierarchy and guardrails"
+  ],
+  "out_of_scope_confirmed": [
+    "no account table action redesign",
+    "no diagnostics workspace redesign",
+    "no settings form redesign",
+    "no runtime.py changes",
+    "no command adapter changes",
+    "no server allowlist behavior changes",
+    "no new command surfaces",
+    "no setup/import implementation"
+  ],
+  "changes": [
+    {
+      "area": "persistent_navigation",
+      "result": "sidebar now exposes only overview, accounts, diagnostics and settings",
+      "deferred_routes": [
+        "setup",
+        "select-client",
+        "import-existing"
+      ]
+    },
+    {
+      "area": "overview_hierarchy",
+      "result": "system state, mode, KPI row and events now precede the last-action evidence panel"
+    },
+    {
+      "area": "overview_actions",
+      "result": "launch client remains the only primary overview CTA; other overview header actions are ghost buttons and mode-card actions are secondary tiles"
+    },
+    {
+      "area": "copy",
+      "result": "dominant overview copy now uses operator-facing language while compact guardrail copy remains available"
+    },
+    {
+      "area": "tests",
+      "result": "added static assertions for nav membership, one primary overview CTA, secondary action treatment, action panel order and deferred route inertness"
+    }
+  ],
+  "canon_alignment": [
+    {
+      "rule": "UI is not runtime truth",
+      "status": "preserved",
+      "evidence": "overview boundary copy says factual state is confirmed by command responses; action evidence remains secondary"
+    },
+    {
+      "rule": "browser sends ui_action plus structured payload only",
+      "status": "preserved",
+      "evidence": "no payload or command id changes; tests still assert no command_id/raw argv pattern"
+    },
+    {
+      "rule": "deferred setup/import cannot accept browser paths",
+      "status": "preserved",
+      "evidence": "setup/select/import remain inert sections with no data-ui-action, live-action, file inputs or path payload controls"
+    },
+    {
+      "rule": "no runtime or adapter work in UI hierarchy contour",
+      "status": "preserved",
+      "evidence": "changed files are limited to web UI HTML/CSS/JS, tests and contour artifacts"
+    }
+  ],
+  "verification_completed": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui -q",
+      "status": "passed",
+      "tests": 21
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "status": "passed",
+      "tests": 71
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "residual_risks": [
+    "Accounts, Diagnostics and Settings still need their own follow-up hierarchy realignment contours.",
+    "Some technical tokens remain in secondary evidence and deferred screens to preserve exact safety meaning.",
+    "Browser smoke checks DOM order and key hierarchy, not pixel parity."
+  ]
+}

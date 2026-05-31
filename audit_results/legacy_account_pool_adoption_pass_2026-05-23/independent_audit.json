@@ -1,0 +1,54 @@
+{
+  "status": "clean_with_documented_runtime_blocker",
+  "checks": [
+    {
+      "id": "legacy_source_untouched",
+      "status": "pass",
+      "evidence": "no writes executed against /Users/kirillponomarev/.codex-custom-cli or /Users/kirillponomarev/.cli-proxy-api"
+    },
+    {
+      "id": "operator_exclusion",
+      "status": "pass",
+      "evidence": "exact ponomarevkirill89@gmail.com candidate exists only in removed-auth and absent from active registry"
+    },
+    {
+      "id": "canonical_import",
+      "status": "pass",
+      "evidence": "legacy import packet machine_error_code=OK"
+    },
+    {
+      "id": "external_models_not_imported",
+      "status": "pass",
+      "evidence": "external_models_result.final_outcome=external_models_source_missing"
+    },
+    {
+      "id": "ranking_policy",
+      "status": "pass",
+      "evidence": "expected launch capable ids match observed auth_pool_hygiene.launch_capable_backend_ids"
+    },
+    {
+      "id": "runtime_truth",
+      "status": "blocked",
+      "evidence": "healthcheck/status ATTESTATION_FAILED due HTTP 401 Invalid API key"
+    },
+    {
+      "id": "web_split_brain_fix",
+      "status": "pass",
+      "evidence": "sandbox live-readonly now reports integration_failure for target instead of default healthy"
+    },
+    {
+      "id": "loopback_provider_validation",
+      "status": "pass",
+      "evidence": "external-models loopback route checks bypass system proxy and reach local /v1/chat/completions mock"
+    },
+    {
+      "id": "full_test_gate",
+      "status": "pass",
+      "evidence": "node --check overview passed; unittest gate ran 568 tests OK"
+    }
+  ],
+  "residual_risks": [
+    "duplicate account_id groups remain imported as backend entries, not independent identities",
+    "runtime live attestation needs separate API/auth blocker contour"
+  ]
+}

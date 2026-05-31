@@ -1,0 +1,19 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_PASS",
+  "endpoint": "/api/codex/app-copy/launch",
+  "packet_summary": {
+    "status": "blocked",
+    "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+    "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+    "live_launch_admitted": true,
+    "launch_performed": false,
+    "launch_ready_claimed": false,
+    "bounded_live_launch_execution_ready": false,
+    "cleanup_or_stop_instruction": "no_process_launched",
+    "current_codex_touched": false,
+    "current_codex_home_touched": false,
+    "raw_path_exposed": false,
+    "raw_pid_exposed": false,
+    "raw_env_exposed": false
+  }
+}

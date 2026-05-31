@@ -1,0 +1,30 @@
+{
+  "api_lane_median_packet_latency_ms": 46.5,
+  "api_lane_median_wall_clock_ms": 47.5,
+  "api_lane_packet_latency_ms": [
+    33,
+    60
+  ],
+  "api_lane_wall_clock_ms": [
+    34,
+    61
+  ],
+  "captured_at_utc": "2026-05-28T13:19:22.302415Z",
+  "chatgpt_lane_median_packet_latency_ms": 37.5,
+  "chatgpt_lane_median_wall_clock_ms": 38.5,
+  "chatgpt_lane_packet_latency_ms": [
+    25,
+    50
+  ],
+  "chatgpt_lane_wall_clock_ms": [
+    26,
+    51
+  ],
+  "live_stack_acceleration_proven": false,
+  "measurement_source_classification": "bounded_contour_local_runner_harness_only",
+  "packet_kind": "latency_classification",
+  "packet_latency_surface_present": true,
+  "status": "ok",
+  "user_visible_productivity_gain_proven": false,
+  "wall_clock_surface_present": true
+}

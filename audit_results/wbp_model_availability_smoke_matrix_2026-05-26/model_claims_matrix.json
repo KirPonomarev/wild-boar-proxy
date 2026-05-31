@@ -1,0 +1,24 @@
+{
+  "allowed_claims": [
+    "MODEL_gpt-5.5_DIRECT_WBP_NON_STREAM_PROVEN",
+    "MODEL_gpt-5.4-mini_DIRECT_WBP_NON_STREAM_PROVEN",
+    "MODEL_gpt-5.4_DIRECT_WBP_NON_STREAM_PROVEN",
+    "MODEL_wbp-web-primary-openrouter_BLOCKED_OR_UNKNOWN"
+  ],
+  "captured_at_utc": "2026-05-26T09:37:48.266290Z",
+  "forbidden_claims": [
+    "all_models_work",
+    "GPT-5.5_works_without_own_packet",
+    "native_Custom_works",
+    "Codex.app_accepted_model",
+    "Codex_CLI_accepted_model",
+    "direct_egress_absent",
+    "account_pool_valid",
+    "streaming_compatible",
+    "tool_loop_compatible",
+    "model_catalog_proves_model_access"
+  ],
+  "packet_kind": "model_claims_matrix",
+  "status": "ok",
+  "validation_failures": []
+}

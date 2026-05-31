@@ -1,0 +1,27 @@
+{
+  "packet_status": "ok",
+  "bundle_verdict": "ready",
+  "bundle": {
+    "accounts": {
+      "human_message": "Account registry snapshot is available.",
+      "machine_error_code": "OK",
+      "source": "accounts_readonly",
+      "status": "ok"
+    },
+    "api": {
+      "human_message": "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth.",
+      "machine_error_code": "OK",
+      "refresh_status": "complete",
+      "route_id": "wbp-openrouter-primary",
+      "source": "api_connections_readonly",
+      "status": "ok"
+    },
+    "runtime": {
+      "human_message": "Runtime status summary is available.",
+      "machine_error_code": "OK",
+      "source": "live_readonly",
+      "status": "ok",
+      "visual_state": "healthy"
+    }
+  }
+}

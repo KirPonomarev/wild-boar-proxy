@@ -1,0 +1,22 @@
+{
+  "chip": "dry-run safe / gate blocked",
+  "claim_gate": "blocked",
+  "contour": "WEB_CODEX_LAUNCH_MODE_SPLIT_AND_DRY_RUN_GUARD_PASS",
+  "custom_role": "proxy_enabled_workbench",
+  "custom_session": "session_manager_next_contour",
+  "custom_status": "degraded · readonly_readiness_only",
+  "dry_run_response": "{\n  \"status\": \"ok\",\n  \"machine_error_code\": \"OK\",\n  \"dry_run\": true,\n  \"dispatch_plan_safe\": true,\n  \"proxy_env_injected\": false,\n  \"custom_home_injected\": false,\n  \"model_override_injected\": false,\n  \"route_or_backend_injected\": false,\n  \"launch_claim_scope\": \"dry_run_guard_only\",\n  \"next_action\": \"manual_live_dispatch_contour_if_needed\"\n}",
+  "forbidden_dom_findings": [],
+  "notes": [
+    "Browser proof verifies UI split and Original dry-run packet only.",
+    "It does not launch Original Codex or Custom Codex."
+  ],
+  "original_claim": "dry_run_guard_only",
+  "original_proxy": "forbidden",
+  "original_role": "protected_baseline",
+  "original_status": "ok · dry_run_guard_only",
+  "proof_type": "browser_ui_dry_run_guard_proof",
+  "screenshot": "evidence/browser_launch_modes_overview.png",
+  "summary": "Original protected_baseline · Custom proxy_enabled_workbench",
+  "url": "http://127.0.0.1:8793/?source=live&screen=overview"
+}

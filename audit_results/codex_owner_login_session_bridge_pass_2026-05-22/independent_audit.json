@@ -1,0 +1,98 @@
+{
+  "contour": "CODEX_OWNER_LOGIN_SESSION_BRIDGE_PASS",
+  "date": "2026-05-22",
+  "audit_mode": "independent_fact_check_from_saved_packets_and_browser_evidence",
+  "verdict": "closed_success",
+  "checks": [
+    {
+      "id": "login_start_packet",
+      "status": "pass",
+      "evidence": "evidence/login-start-packet.json",
+      "facts": [
+        "status=ok",
+        "provider=codex",
+        "mode=device",
+        "device_url_present=true",
+        "device_code_present=true",
+        "browser_secret_intake=false"
+      ]
+    },
+    {
+      "id": "login_status_packet",
+      "status": "pass",
+      "evidence": "evidence/login-status-waiting.json",
+      "facts": [
+        "status=ok",
+        "login_bridge.status=auth_materialized",
+        "auth_ref_present=true"
+      ]
+    },
+    {
+      "id": "login_complete_packet",
+      "status": "pass",
+      "evidence": "evidence/login-complete-packet.json",
+      "facts": [
+        "status=ok",
+        "machine_error_code=OK",
+        "final_outcome=explicit_auth_imported_to_reserve",
+        "selected_backend_id=device-login",
+        "reserve_first_proven=true",
+        "active_routing_changed=false",
+        "sync_outcome=ok",
+        "validate_outcome=ok"
+      ]
+    },
+    {
+      "id": "accounts_refresh_proof",
+      "status": "pass",
+      "evidence": "evidence/accounts-readonly-after.json",
+      "facts": [
+        "accounts_after_count=1",
+        "accounts_after_pool=reserve"
+      ]
+    },
+    {
+      "id": "browser_proof",
+      "status": "pass",
+      "evidence": [
+        "evidence/browser-ui-success.png",
+        "evidence/browser-ui-complete.json",
+        "evidence/browser-run-summary.json",
+        "evidence/browser-ledger.json"
+      ],
+      "facts": [
+        "quick-start UI shows one connected reserve account after completion",
+        "owner overlay reached completed state",
+        "ledger captured onboard_account and account_login_complete actions"
+      ]
+    },
+    {
+      "id": "sandbox_isolation",
+      "status": "pass",
+      "evidence": "evidence/sandbox-isolation-proof.json",
+      "facts": [
+        "sandbox_preflight.current_session_untouched=true",
+        "sandbox_preflight.separate_profile=true",
+        "sandbox_preflight.separate_data_dir=true",
+        "sandbox_preflight.separate_port=true",
+        "installer baseline writes stayed inside the sandbox proof root"
+      ]
+    },
+    {
+      "id": "full_composite_gate",
+      "status": "pass",
+      "evidence": "evidence/composite-gate-result.txt",
+      "facts": [
+        "553 tests completed successfully",
+        "duration_seconds=194.179",
+        "the earlier 90-second wrapper was shorter than the real suite duration",
+        "no login-bridge deadlock remained after aligning the stale test expectation"
+      ]
+    }
+  ],
+  "overall_assessment": {
+    "implementation_truth": "pass",
+    "browser_truth": "pass",
+    "formal_closeout_truth": "pass"
+  }
+}

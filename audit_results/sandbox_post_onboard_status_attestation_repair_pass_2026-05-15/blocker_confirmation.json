@@ -1,0 +1,18 @@
+{
+  "source_contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS rerun2",
+  "source_closeout": "/Volumes/Work/wild-boar-proxy/audit_results/account_onboarding_sandbox_reserve_first_pass_rerun2_2026-05-15/closeout.md",
+  "onboarding_packet_status": "ok",
+  "onboarding_machine_error_code": "OK",
+  "selected_backend_id": "auth",
+  "reserve_first_enforced": true,
+  "post_refresh_selected_backend_pool": "reserve",
+  "status_observed_command_status": "error",
+  "status_observed_machine_error_code": "ATTESTATION_FAILED",
+  "status_observed_liveness": "degraded",
+  "post_onboard_status_machine_error_code": "ATTESTATION_FAILED",
+  "post_onboard_status_liveness": "degraded",
+  "post_onboard_launch_blocking_reason": "models_surface_unavailable_or_invalid",
+  "post_onboard_auth_pool_hygiene_status": "launch_capable_empty",
+  "post_onboard_auth_pool_blocking_reason": "no_live_capable_active_backends",
+  "forbidden_live_path_drift_observed": false
+}

@@ -1,0 +1,14 @@
+{
+  "adapter_normalized_success_equals_upstream_native_compatibility": false,
+  "captured_at_utc": "2026-05-29T04:43:04.124742Z",
+  "concurrent_multi_agent_semantics_proven": false,
+  "failure_coverage_exhaustive": false,
+  "model_driven_function_tool_protocol_proven": false,
+  "packet_kind": "protocol_non_claims",
+  "provider_family_tools_compatibility_proven": false,
+  "status": "ok",
+  "streaming_production_ready": false,
+  "text_success_implies_structured_compatibility": false,
+  "tool_support_complete": false,
+  "wire_level_streaming_implies_user_visible_streaming": false
+}

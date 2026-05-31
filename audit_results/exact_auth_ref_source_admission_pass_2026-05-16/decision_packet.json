@@ -1,0 +1,17 @@
+{
+  "contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "runtime_truth_aligned": true,
+  "selector_truth_fresh": true,
+  "claim_gate_clear": true,
+  "policy_drift_clear": true,
+  "single_exact_source_admitted": false,
+  "allowed_exact_auth_ref_count": 15,
+  "exact_source_guessing_allowed": false,
+  "canonical_exact_admission_surface": "accounts onboard --json --auth-ref",
+  "canonical_exact_admission_surface_runnable_now": false,
+  "next_contour": "",
+  "next_contour_class": "stop",
+  "relevant_test_failure": "tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+  "reason": "the current approved-target family is machine-readable but still multi-auth-ref, the explicit-auth owner surface is an onboarding/import path that cannot truthfully admit one already-existing active auth_ref without new unique import evidence, and a relevant explicit-auth full-proof test currently fails"
+}

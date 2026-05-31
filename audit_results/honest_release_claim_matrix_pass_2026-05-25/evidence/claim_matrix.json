@@ -1,0 +1,128 @@
+{
+  "contour": "CONTOUR_07: HONEST_RELEASE_CLAIM_MATRIX",
+  "status": "completed_pending_commit",
+  "user_facing_surfaces": [
+    "README.md",
+    "wild_boar_proxy/web_design_ui/index.html"
+  ],
+  "claim_rows": [
+    {
+      "row": "REVIEW_PACKET_PREVIEW",
+      "wording": "supported; local JSON review packet only",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": [
+        "tests/test_review_bridge_command_bus.py:98",
+        "tests/test_web_design_ui.py:2346"
+      ]
+    },
+    {
+      "row": "EXACT_TEXT_SAFE_APPLY",
+      "wording": "supported; one exact text change only, with receipt and recovery",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": [
+        "tests/test_review_bridge_command_bus.py:233",
+        "tests/test_review_bridge_command_bus.py:276",
+        "tests/test_web_design_ui.py:2346"
+      ]
+    },
+    {
+      "row": "IMPORT_EXISTING_LANE",
+      "wording": "supported; explicit confirm required, narrow lane only",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": [
+        "tests/test_web_design_live_server.py:1294",
+        "tests/test_web_design_live_server.py:1381",
+        "tests/test_web_design_ui.py:2346"
+      ]
+    },
+    {
+      "row": "DOCX_EXPORT_BASELINE",
+      "wording": "not claimed in this first useful release",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "MARKDOWN_EXPORT",
+      "wording": "not claimed in this first useful release",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "TEXT_EXPORT",
+      "wording": "not claimed in this first useful release",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "DOCX_REVIEW_IMPORT",
+      "wording": "not supported yet",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "WORD_GOOGLE_ROUNDTRIP",
+      "wording": "not claimed",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "STRUCTURAL_AUTO_APPLY",
+      "wording": "not claimed",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "MASS_APPLY",
+      "wording": "not claimed",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    },
+    {
+      "row": "FULL_SYNC",
+      "wording": "not claimed",
+      "surfaces": [
+        "README.md",
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "proof_refs": []
+    }
+  ],
+  "overclaim_absence_checks": [
+    "DOCX review import supported",
+    "Word / Google Docs roundtrip supported",
+    "structural auto-apply supported",
+    "mass apply supported",
+    "full sync supported",
+    "import-existing lane supported without explicit confirm"
+  ]
+}

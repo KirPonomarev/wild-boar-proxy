@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-27T11:36:20.561768Z",
+  "checks": [
+    {
+      "name": "readiness_chain_ok",
+      "passed": true
+    },
+    {
+      "name": "historical_prompt_observation_ok",
+      "passed": true
+    },
+    {
+      "name": "repaired_lane_nonreproduction_ok",
+      "passed": true
+    },
+    {
+      "name": "auth_reference_ok",
+      "passed": true
+    }
+  ],
+  "current_live_prompt_behavior_proven": false,
+  "historical_signal_import_only": true,
+  "packet_kind": "source_keychain_prompt_validation",
+  "status": "ok"
+}

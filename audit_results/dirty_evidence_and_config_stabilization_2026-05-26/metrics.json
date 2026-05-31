@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "contour": "DIRTY_EVIDENCE_AND_CONFIG_STABILIZATION_CONTOUR_R2",
+  "final_status": "STABILIZATION_CLOSED_WITH_CLAIMS_CLASSIFIED",
+  "tracked_dirty_evidence_files_classified": 11,
+  "untracked_retry_dirs_classified": 2,
+  "source_code_files_changed": 0,
+  "live_codex_launch_count": 0,
+  "provider_repair_attempt_count": 0,
+  "oauth_attempt_count": 0,
+  "raw_secret_findings_in_new_evidence": 0,
+  "independent_audit_status": "pass_after_remediation",
+  "closeout_state": "CLOSED",
+  "audit_remediation_recorded_at_utc": "2026-05-26T05:31:37Z",
+  "closure_recorded_at_utc": "2026-05-26T05:34:27Z"
+}

@@ -1,0 +1,73 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.073144Z",
+  "invalid_cases": [
+    {
+      "backup_export_execution_allowed": false,
+      "browser_client_path_authority": false,
+      "cleanup_execution_allowed": false,
+      "client_model_provider_authority": false,
+      "codex_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+      "config_validation_is_live_runtime_enforcement": false,
+      "dry_run_rejection_is_live_rejection_proof": false,
+      "failed_checks": [
+        "persistent_profile_id_invalid"
+      ],
+      "home_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/home",
+      "launcher_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/codex-custom-launch.sh",
+      "live_execution_allowed": false,
+      "lock_policy": "single_writer_only",
+      "lock_policy_rendered_counts_as_lock_acquired": false,
+      "original_codex_profile_dependency": false,
+      "original_codex_profile_mutation_allowed": false,
+      "persistent_profile_id": "",
+      "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+      "persistent_profile_state_write_allowed": false,
+      "profile_mode": "persistent_custom",
+      "profile_path_existence_checked": false,
+      "profile_path_existence_counts_as_storage_proof": false,
+      "protected_surface_overlap": [],
+      "remote_client_path_authority": false,
+      "silent_fallback_to_ephemeral_allowed": false,
+      "status": "blocked",
+      "tmp_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/tmp",
+      "user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+    },
+    {
+      "backup_export_execution_allowed": false,
+      "browser_client_path_authority": false,
+      "cleanup_execution_allowed": false,
+      "client_model_provider_authority": false,
+      "codex_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+      "config_validation_is_live_runtime_enforcement": false,
+      "dry_run_rejection_is_live_rejection_proof": false,
+      "failed_checks": [
+        "persistent_profile_id_invalid"
+      ],
+      "home_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/home",
+      "launcher_path": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/codex-custom-launch.sh",
+      "live_execution_allowed": false,
+      "lock_policy": "single_writer_only",
+      "lock_policy_rendered_counts_as_lock_acquired": false,
+      "original_codex_profile_dependency": false,
+      "original_codex_profile_mutation_allowed": false,
+      "persistent_profile_id": "../original",
+      "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+      "persistent_profile_state_write_allowed": false,
+      "profile_mode": "persistent_custom",
+      "profile_path_existence_checked": false,
+      "profile_path_existence_counts_as_storage_proof": false,
+      "protected_surface_overlap": [],
+      "remote_client_path_authority": false,
+      "silent_fallback_to_ephemeral_allowed": false,
+      "status": "blocked",
+      "tmp_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/tmp",
+      "user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+    }
+  ],
+  "missing_id_rejected": true,
+  "packet_kind": "persistent_profile_id_validation",
+  "profile_id_validation_counts_as_history_proof": false,
+  "status": "ok",
+  "traversal_id_rejected": true,
+  "valid_profile_id": "wbp-custom-main"
+}

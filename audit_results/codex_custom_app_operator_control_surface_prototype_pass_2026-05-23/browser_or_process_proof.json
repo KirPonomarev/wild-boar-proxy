@@ -1,0 +1,121 @@
+{
+  "url": "http://127.0.0.1:62446/",
+  "initialStatus": "status=ok health=ok claim_gate=blocked",
+  "responseOne": {
+    "exact_match": true,
+    "exit_code": 0,
+    "expected_exact": "UI_ONE",
+    "final_message": "UI_ONE",
+    "machine_error_code": "OK",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "responseTwo": {
+    "exact_match": true,
+    "exit_code": 0,
+    "expected_exact": "UI_TWO",
+    "final_message": "UI_TWO",
+    "machine_error_code": "OK",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "transcript": {
+    "captured_at_utc": "2026-05-23T15:48:36.765014Z",
+    "entries": [
+      {
+        "exact_match": true,
+        "exit_code": 0,
+        "expected_exact": "UI_ONE",
+        "final_message": "UI_ONE",
+        "prompt_id": "prompt_1",
+        "prompt_sha256": "017585e367cc971e23a4d88cf916485efb648c9b84bd4141db4a6986219d1bbc",
+        "warning_classes": []
+      },
+      {
+        "exact_match": true,
+        "exit_code": 0,
+        "expected_exact": "UI_TWO",
+        "final_message": "UI_TWO",
+        "prompt_id": "prompt_2",
+        "prompt_sha256": "f971e5faf9888758dcfb2eca0c26a9ea26458219f130b44e0afc0f9495b0fb76",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "runtime": {
+    "captured_at_utc": "2026-05-23T15:48:26.722003Z",
+    "claim_gate": {
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "next_action": "inspect_claim_gate",
+      "sources": [
+        "policy_drift"
+      ],
+      "status": "blocked"
+    },
+    "control_surface": {
+      "browser_secret_fields": false,
+      "localhost_only": true,
+      "raw_path_fields": false
+    },
+    "health": {
+      "claim_gate": {
+        "status": "not_reported"
+      },
+      "configured_model": "gpt-5.5",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "launch_readiness": "ready",
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    },
+    "models": {
+      "chosen_model_visible": true,
+      "error": "",
+      "model_ids": [
+        "gpt-5.2",
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.5",
+        "codex-auto-review",
+        "gpt-image-2",
+        "gpt-5.3-codex-spark"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "status": {
+      "claim_gate": {
+        "blocked_claims": [
+          "active-only-traffic",
+          "pool-participation-correct",
+          "stable-15-proved"
+        ],
+        "machine_error_code": "CLAIM_GATE_BLOCKED",
+        "next_action": "inspect_claim_gate",
+        "sources": [
+          "policy_drift"
+        ],
+        "status": "blocked"
+      },
+      "configured_model": "gpt-5.5",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "launch_readiness": "ready",
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    }
+  },
+  "domSecretFindings": [],
+  "screenshotPath": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_prototype_pass_2026-05-23/evidence/operator_surface_browser.png",
+  "capturedAtUtc": "2026-05-23T15:48:37.212Z",
+  "browserSession": "Operator surface proof"
+}

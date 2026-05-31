@@ -1,0 +1,305 @@
+[
+  {
+    "name": "fixture_healthy",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 929,
+    "leftPanelBottom": 929,
+    "rightDetailBottom": 929,
+    "telemetryScaleWidth": 712,
+    "telemetryTickCount": 48,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 12,
+    "routeClientWidth": 289,
+    "routeScrollWidth": 289,
+    "buttons": [
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "records": [
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      }
+    ]
+  },
+  {
+    "name": "fixture_degraded",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 929,
+    "leftPanelBottom": 929,
+    "rightDetailBottom": 929,
+    "telemetryScaleWidth": 712,
+    "telemetryTickCount": 48,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 12,
+    "routeClientWidth": 289,
+    "routeScrollWidth": 289,
+    "buttons": [
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "records": [
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      }
+    ]
+  },
+  {
+    "name": "fixture_down",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 929,
+    "leftPanelBottom": 929,
+    "rightDetailBottom": 929,
+    "telemetryScaleWidth": 712,
+    "telemetryTickCount": 48,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 12,
+    "routeClientWidth": 289,
+    "routeScrollWidth": 289,
+    "buttons": [
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "records": [
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      }
+    ]
+  },
+  {
+    "name": "fixture_stale",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 929,
+    "leftPanelBottom": 929,
+    "rightDetailBottom": 929,
+    "telemetryScaleWidth": 712,
+    "telemetryTickCount": 48,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 12,
+    "routeClientWidth": 289,
+    "routeScrollWidth": 289,
+    "buttons": [
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "records": [
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      },
+      {
+        "clientWidth": 742,
+        "scrollWidth": 742
+      }
+    ]
+  },
+  {
+    "name": "live_integration_failure",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 929,
+    "leftPanelBottom": 929,
+    "rightDetailBottom": 929,
+    "telemetryScaleWidth": 716,
+    "telemetryTickCount": 48,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 12,
+    "routeClientWidth": 289,
+    "routeScrollWidth": 289,
+    "buttons": [
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 178,
+        "scrollWidth": 178,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "records": []
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "captured_at_utc": "2026-05-23T17:55:54.476530+00:00",
+  "claims": [
+    {
+      "claim": "25 managed accounts visible",
+      "evidence": "accounts_truth_packet.json",
+      "status": true
+    },
+    {
+      "claim": "launch-capable count is server-derived",
+      "evidence": "accounts_truth_packet.json",
+      "status": true
+    },
+    {
+      "claim": "selection is server-side, not browser-selected",
+      "evidence": "selection_packet.json",
+      "status": true
+    },
+    {
+      "claim": "dry-run does not perform inference",
+      "evidence": "smoke_dry_run_packet.json",
+      "status": true
+    },
+    {
+      "claim": "account/backend/route ids rejected from browser dry-run payload",
+      "evidence": "smoke_dry_run_packet.json",
+      "status": true
+    },
+    {
+      "claim": "account pool not mutated by dry-run",
+      "evidence": "mutation_diff.json",
+      "status": true
+    },
+    {
+      "claim": "inference/GPT request is not claimed in this contour",
+      "evidence": "selection_packet.json + smoke_dry_run_packet.json",
+      "status": true
+    }
+  ],
+  "negative_claim_boundaries": [
+    "No Codex Custom session manager claim.",
+    "No GPT inference claim.",
+    "No rotation/load claim.",
+    "No account lifecycle mutation claim."
+  ]
+}

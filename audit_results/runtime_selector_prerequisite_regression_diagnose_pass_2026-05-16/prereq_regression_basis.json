@@ -1,0 +1,39 @@
+{
+  "contour": "RUNTIME_SELECTOR_PREREQUISITE_REGRESSION_DIAGNOSE_PASS",
+  "timestamp_utc": "2026-05-16T00:00:00Z",
+  "status_packet": {
+    "machine_error_code": "OK",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "effective_stable_runtime_consumer_source": {
+      "status": "observed_source_active",
+      "source_kind": "observed_stable_inventory_source",
+      "matches_desired": false
+    },
+    "consumer_activation_readiness": "activation_pending",
+    "effective_mode": "stable"
+  },
+  "rotation_packet": {
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_status": "participation_evidence_stale",
+    "evidence_freshness": "stale",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "selected_backend_count": 15,
+    "policy_drift_status": "clear"
+  },
+  "stable_repair_dry_run_packet": {
+    "machine_error_code": "LOCK_HELD",
+    "lock_holder_pid": "96494",
+    "would_change": false,
+    "eligible_registry_auth_ref_count": 15,
+    "source_copy_missing_auth_refs": [],
+    "source_copy_basename_collisions": []
+  },
+  "state_snapshot_timestamps": {
+    "selected_backend_snapshot_observed_at_utc": "2026-05-15T23:13:26.050963+00:00",
+    "stable_runtime_consumer_snapshot_observed_at_utc": "2026-05-15T23:19:25.347606+00:00"
+  }
+}

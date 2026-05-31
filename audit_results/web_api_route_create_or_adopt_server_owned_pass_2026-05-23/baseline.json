@@ -1,0 +1,36 @@
+{
+  "contour": "WEB_API_ROUTE_CREATE_OR_ADOPT_SERVER_OWNED_PASS",
+  "date": "2026-05-23",
+  "status": "reentry_baseline_complete",
+  "classification": "materially_implemented_and_pushed",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_changes": "c00d604",
+  "implementation_commit": "607ceb10bd31264e06557bdcfb0b870fb6d0b2a2",
+  "repo_truth_source": [
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/closeout.md",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_safe_account_connect_live_pass_reopen_2026-05-21/closeout.md"
+  ],
+  "lane_aliases": [
+    "WEB_API_ROUTE_CONNECT_SERVER_OWNED_PASS"
+  ],
+  "existing_lane": {
+    "ui_action": "api_route_connect",
+    "bounded_browser_payload": true,
+    "generic_route_builder_admitted": false,
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "create_branch_present": true,
+    "adopt_branch_present": true
+  },
+  "identified_gap": {
+    "type": "coverage_and_fresh_closeout",
+    "repo_owned": true,
+    "details": [
+      "direct focused test for adopted_existing_route branch was not obvious in current suite",
+      "current contour name differs from the earlier implemented contour alias"
+    ]
+  }
+}

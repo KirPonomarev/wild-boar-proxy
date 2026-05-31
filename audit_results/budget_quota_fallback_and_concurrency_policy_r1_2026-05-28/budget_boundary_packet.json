@@ -1,0 +1,18 @@
+{
+  "budget_packet_presence_implies_hard_enforcement": false,
+  "captured_at_utc": "2026-05-28T13:11:24.792581Z",
+  "custom_session_budget_packet_present": false,
+  "external_paid_route_allowlist_count": 0,
+  "external_paid_route_default": "blocked",
+  "external_paid_route_policy_present": true,
+  "external_paid_routes_enabled_default": false,
+  "hard_overspend_prevention_proven": false,
+  "packet_kind": "budget_boundary",
+  "per_session_budget_packet_present": false,
+  "per_slot_budget_packet_present": false,
+  "policy_enforcement_state": "declared_or_partial_only",
+  "pre_execution_spend_gate_proven": false,
+  "runtime_meter_attached": false,
+  "silent_paid_parallel_fanout_observed": false,
+  "status": "ok"
+}

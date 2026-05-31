@@ -1,0 +1,41 @@
+{
+  "captured_at_utc": "2026-05-26T21:35:00Z",
+  "commands": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/native_filesystem_probe.py tools/native_custom_safety_admission_refresh_r1_probe.py tests/test_native_filesystem_probe.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_native_filesystem_probe",
+      "result": "passed",
+      "test_count": 187
+    },
+    {
+      "command": "python3 tools/native_custom_safety_admission_refresh_r1_probe.py",
+      "result": "passed",
+      "allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_native_filesystem_probe tests.test_native_launch_contract tests.test_native_launch_dispatch tests.test_model_availability tests.test_cli_runner tests.test_repo_hygiene tests.test_closeout_resilience",
+      "result": "passed",
+      "test_count": 304
+    },
+    {
+      "command": "python3 JSON parse check for audit_results/wbp_native_custom_safety_admission_refresh_r1_2026-05-27/*.json",
+      "json_files": 26,
+      "result": "passed"
+    },
+    {
+      "command": "rg secret scan over audit_results/wbp_native_custom_safety_admission_refresh_r1_2026-05-27",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "native_launch_attempted": false,
+  "packet_kind": "verification_results",
+  "route_ux_egress_claims_made": false,
+  "status": "ok"
+}

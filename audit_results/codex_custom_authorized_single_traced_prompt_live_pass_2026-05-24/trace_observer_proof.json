@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "status": "not_run",
+  "reason": "live_prompt_not_authorized",
+  "independent_wbp_trace_observed": false,
+  "wbp_path_observed": false,
+  "wbp_path_proven": false,
+  "cli_proxy_api_path_observed": false,
+  "cli_proxy_api_path_proven": false,
+  "selected_backend_proven_server_side": false,
+  "trace_success_claim": "not_claimed"
+}

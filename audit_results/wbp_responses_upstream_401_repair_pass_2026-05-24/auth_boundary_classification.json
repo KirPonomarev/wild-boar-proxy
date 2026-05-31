@@ -1,0 +1,45 @@
+{
+  "captured_at_utc": "2026-05-24T01:25:33.438228Z",
+  "confidence": "medium",
+  "evidence_fields": {
+    "invalid_token_status": {
+      "body_class": "auth",
+      "body_len": 27,
+      "body_sha256_prefix8": "1a47b153",
+      "ok": false,
+      "status_code": 401
+    },
+    "models_operator_token_status": {
+      "data_count": 8,
+      "json_shape": [
+        "data",
+        "object"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "models_runtime_token_status": {
+      "data_count": 8,
+      "json_shape": [
+        "data",
+        "object"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "previous_responses_upstream_status": 401,
+    "selected_source_class": "gpt_account",
+    "source_provenance_proven": true,
+    "trace_forwarded_to_wbp": true
+  },
+  "external_or_operator_owned": true,
+  "local_wbp_auth_token_invalid": false,
+  "machine_error_code": "WBP_RESPONSES_UPSTREAM_401_CLASSIFIED_WIRE_API_OR_ACCOUNT_AUTH",
+  "narrow_repo_repair_performed": "trace observer 401 classification guard only",
+  "next_exact_action": "Open WBP_RESPONSES_WIRE_API_COMPAT_REPAIR_PASS or GPT_ACCOUNT_AUTH_REPAIR_OR_OPERATOR_REAUTH_PASS depending on whether the next owner wants wire payload inspection or account reauth first.",
+  "not_repaired_here": "No account reauth, no broad auth pool repair, no second prompt, no responses live probe.",
+  "primary_owner_class": "WIRE_API_RESPONSES_COMPAT_MISMATCH_OR_GPT_ACCOUNT_AUTH_INVALID_OR_STALE",
+  "repo_owned": false,
+  "runtime_owned": false,
+  "status": "blocked"
+}

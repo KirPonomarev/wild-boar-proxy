@@ -1,0 +1,21 @@
+{
+  "data": {
+    "routes": [
+      {
+        "auth": {
+          "secret_ref": "present_redacted"
+        },
+        "enabled": true,
+        "provider": {
+          "id": "external_route_from_previous_matrix"
+        },
+        "route_id": "wbp-web-primary-openrouter",
+        "upstream_model": ""
+      }
+    ]
+  },
+  "packet_kind": "route_snapshot_stub",
+  "raw_secret_recorded": false,
+  "source": "previous_model_availability_candidate_list",
+  "status": "ok"
+}

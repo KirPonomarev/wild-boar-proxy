@@ -1,0 +1,22 @@
+{
+  "contour": "WEB_SAFE_COMMANDS_EXPANSION_PASS",
+  "date": "2026-05-22",
+  "verdict": "clean",
+  "scope_integrity": "pass",
+  "false_green_risk": "pass",
+  "findings": [],
+  "observations": [
+    {
+      "kind": "browser_proof",
+      "summary": "Account promote and retire surfaced machine-readable non-green results rather than false-green UI."
+    },
+    {
+      "kind": "browser_proof",
+      "summary": "API remove on enabled route was rejected machine-readably until the route became disabled."
+    },
+    {
+      "kind": "privacy",
+      "summary": "Audit evidence redaction check found no secret literals in stored browser summary JSON."
+    }
+  ]
+}

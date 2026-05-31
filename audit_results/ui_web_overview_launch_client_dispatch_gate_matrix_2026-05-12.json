@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_LAUNCH_CLIENT_DISPATCH_GATE",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "scope": {
+    "web_only": true,
+    "desktop_transfer": false,
+    "installer_work": false,
+    "runtime_core_changes": false,
+    "file_picker": false,
+    "auto_discovery": false
+  },
+  "launch_action": {
+    "ui_action": "launch_client_dispatch",
+    "adapter_command": "launch client --client-path <server-owned bounded path> --json",
+    "browser_sends_client_path": false,
+    "browser_sends_command_id": false,
+    "confirmation_required": true,
+    "mutates_runtime": false,
+    "post_action_refresh_required": true,
+    "claim_scope": "bounded OS dispatch request only; not host-client session success"
+  },
+  "availability": {
+    "without_bounded_path": "disabled/unavailable",
+    "with_server_owned_bounded_path": "available",
+    "metadata_exposes_path": false,
+    "metadata_exposes_adapter_command_id": false
+  },
+  "verification": {
+    "unit_contract_tests": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter",
+    "legacy_shell_web_tests": "python3 -m unittest -q tests.test_ui_shell tests.test_web_ui",
+    "combined_regression": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui",
+    "whitespace": "git diff --check",
+    "browser_smoke": "fake runner on 127.0.0.1:8788"
+  },
+  "browser_smoke_observations": [
+    "without launch_client_path, launch button is disabled and data-available=false",
+    "without launch_client_path, launch button title explains bounded path is unavailable",
+    "with server-owned bounded launch_client_path, launch button is enabled and data-available=true",
+    "launch click opens confirmation for launch_client_dispatch",
+    "confirmed launch returns host_client_dispatch OK",
+    "confirmed launch performs live refresh OK"
+  ],
+  "forbidden": [
+    "browser client_path",
+    "browser command_id",
+    "file picker",
+    "auto-discovery",
+    "config mutation",
+    "runtime health claim from dispatch",
+    "host-client session success claim",
+    "desktop transfer"
+  ]
+}

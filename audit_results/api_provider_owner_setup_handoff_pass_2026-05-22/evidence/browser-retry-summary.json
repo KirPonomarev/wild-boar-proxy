@@ -1,0 +1,15 @@
+{
+  "url": "http://127.0.0.1:8788/?screen=quick-start&source=live",
+  "action_status": "ok",
+  "action_machine_error_code": "OK",
+  "credential_phase": "credential_admitted",
+  "credential_admitted": true,
+  "api_route_connect_phase": "created_and_validated",
+  "validate_status": "ok",
+  "route_id": "wbp-web-primary-openrouter",
+  "route_visible_after_refresh": true,
+  "api_key_input_count": 0,
+  "ledger_contains_credential_admitted": true,
+  "secret_value_exposed": false,
+  "screenshot": "audit_results/api_provider_owner_setup_handoff_pass_2026-05-22/evidence/browser-retry-state.png"
+}

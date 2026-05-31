@@ -7,12 +7,18 @@ import http.client
 import socket
 import threading
 import unittest
+from pathlib import Path
 
 from wild_boar_proxy.ui_shell import (
     AccountPoolSnapshot,
     AccountRecord,
     CommandResult,
+    ExternalActionResult,
+    ExternalModelRecord,
+    ExternalModelsSnapshot,
+    ExternalRouteRecord,
     RuntimeSnapshot,
+    UiShellError,
 )
 from wild_boar_proxy.web_ui import (
     DashboardState,
@@ -20,6 +26,7 @@ from wild_boar_proxy.web_ui import (
     WildBoarWebUi,
     apply_action,
     build_handler,
+    load_dashboard_state,
     render_dashboard,
 )
 from http.server import ThreadingHTTPServer
@@ -89,6 +96,93 @@ def account_snapshot() -> AccountPoolSnapshot:
             ),
         ),
         integration_error="",
+    )
+
+
+def external_snapshot() -> ExternalModelsSnapshot:
+    return ExternalModelsSnapshot(
+        foundation_phase="C3",
+        adapter_runtime_available=False,
+        lifecycle_mode="synthetic",
+        adapter_state="stopped",
+        listener_proven=False,
+        runtime_claim_blocked=True,
+        profile_ready=False,
+        routes_count=1,
+        observed_routes_count=0,
+        observed_routes={},
+        local_token_present=False,
+        available_secret_refs=None,
+        models_source="local_routes_registry",
+        models=(
+            ExternalModelRecord(
+                route_id="wbp-deepseek-v3",
+                display_name="DeepSeek V3",
+                provider="openrouter",
+                base_url="http://127.0.0.1:54321/v1",
+                endpoint_path="/chat/completions",
+                upstream_model="deepseek/deepseek-chat",
+                compatibility="openai_chat_completions",
+                cost_class="paid_or_free_limited",
+                enabled=True,
+                lane_role="candidate",
+                fallback_eligible=False,
+                synthetic_adapter_state="stopped",
+                profile_ready=False,
+            ),
+        ),
+        routes=(
+            ExternalRouteRecord(
+                route_id="wbp-deepseek-v3",
+                display_name="DeepSeek V3",
+                provider="openrouter",
+                base_url="http://127.0.0.1:54321/v1",
+                endpoint_path="/chat/completions",
+                upstream_model="deepseek/deepseek-chat",
+                compatibility="openai_chat_completions",
+                cost_class="paid_or_free_limited",
+                enabled=True,
+                lane_role="candidate",
+                fallback_eligible=False,
+                auth_type="bearer",
+                secret_ref="OPENROUTER_API_KEY",
+            ),
+        ),
+        integration_error="",
+    )
+
+
+def external_action() -> ExternalActionResult:
+    return ExternalActionResult(
+        action="external_validate",
+        status="ok",
+        human_message="Provider-route validation only.",
+        machine_error_code="OK",
+        next_action="none",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        route_id="wbp-deepseek-v3",
+        verification_scope="route_provider_only",
+        route_state="model_visible",
+        listener_proven=False,
+        runtime_claim_blocked=True,
+        profile_ready=False,
+        network_dependent=True,
+        evidence_path="/tmp/evidence.json",
+        effective_model="deepseek/deepseek-chat",
+        provider="openrouter",
+        fallback_used="false",
+        fallback_chain="[\"wbp-deepseek-v3\"]",
+        latency_ms="5",
+        request_count="1",
+        writes_external_config="false",
+        prerequisite="live_listener_contour_required",
+        base_url="",
+        changed_files=("/tmp/state.json",),
+        observed_at_utc="2026-05-12T00:00:00+00:00",
+        is_stale=False,
+        stale_reason="",
     )
 
 
@@ -163,6 +257,272 @@ class FakeRunner:
                 },
                 stderr="",
             )
+        if args == ("external-models", "status", "--json"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "foundation_phase": "C3",
+                        "adapter_runtime_available": False,
+                        "lifecycle_mode": "synthetic",
+                        "adapter_state": "stopped",
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "profile_ready": False,
+                        "routes_count": 1,
+                        "observed_routes_count": 0,
+                        "adapter": {
+                            "state": "stopped",
+                            "lifecycle_mode": "synthetic",
+                            "listener_proven": False,
+                            "runtime_claim_blocked": True,
+                            "base_url": None,
+                            "host": "127.0.0.1",
+                            "port": None,
+                            "started_at_utc": None,
+                            "last_transition": "init",
+                        },
+                        "local_auth": {
+                            "token_ref": "managed_local_token",
+                            "token_present": False,
+                            "token_created_at_utc": None,
+                        },
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "models", "--json"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models route models listed from local registry.",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "count": 1,
+                        "source": "local_routes_registry",
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "models": [
+                            {
+                                "route_id": "wbp-deepseek-v3",
+                                "display_name": "DeepSeek V3",
+                                "provider": "openrouter",
+                                "base_url": "http://127.0.0.1:54321/v1",
+                                "endpoint_path": "/chat/completions",
+                                "upstream_model": "deepseek/deepseek-chat",
+                                "compatibility": "openai_chat_completions",
+                                "cost_class": "paid_or_free_limited",
+                                "enabled": True,
+                                "lane_role": "candidate",
+                                "fallback_eligible": False,
+                                "synthetic_adapter_state": "stopped",
+                                "profile_ready": False,
+                            }
+                        ],
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "routes", "list", "--json"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models routes listed from local registry.",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "count": 1,
+                        "routes": [
+                            {
+                                "schema_version": 1,
+                                "route_id": "wbp-deepseek-v3",
+                                "display_name": "DeepSeek V3",
+                                "provider": "openrouter",
+                                "base_url": "http://127.0.0.1:54321/v1",
+                                "endpoint_path": "/chat/completions",
+                                "upstream_model": "deepseek/deepseek-chat",
+                                "compatibility": "openai_chat_completions",
+                                "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                                "cost_class": "paid_or_free_limited",
+                                "lane_role": "candidate",
+                                "fallback_eligible": False,
+                                "enabled": True,
+                            }
+                        ],
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "routes", "validate", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models route validation captured provider evidence without claiming runtime readiness.",
+                    "machine_error_code": "OK",
+                    "changed_files": ["/tmp/state.json", "/tmp/evidence-validate.json"],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "validation_kind": "provider_route_validate",
+                        "network_dependent": True,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "profile_ready": False,
+                        "verification_scope": "route_provider_only",
+                        "route_state": "model_visible",
+                        "requested_model": "wbp-deepseek-v3",
+                        "effective_model": "deepseek/deepseek-chat",
+                        "provider": "openrouter",
+                        "evidence_path": "/tmp/evidence-validate.json",
+                        "available_models_count": 1,
+                        "latency_ms": 6,
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "check", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models route smoke check captured provider evidence without claiming runtime readiness.",
+                    "machine_error_code": "OK",
+                    "changed_files": ["/tmp/state.json", "/tmp/evidence-check.json"],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "check_kind": "provider_route_smoke",
+                        "network_dependent": True,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "profile_ready": False,
+                        "verification_scope": "route_provider_only",
+                        "route_state": "verified",
+                        "requested_model": "wbp-deepseek-v3",
+                        "effective_model": "deepseek/deepseek-chat",
+                        "provider": "openrouter",
+                        "fallback_used": False,
+                        "fallback_chain": ["wbp-deepseek-v3"],
+                        "evidence_path": "/tmp/evidence-check.json",
+                        "latency_ms": 5,
+                        "request_count": 1,
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "profile", "codex-desktop", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "Codex Desktop profile contract generated without mutating config.",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "profile_kind": "codex_desktop_openai_compatible",
+                        "route_id": "wbp-deepseek-v3",
+                        "base_url": None,
+                        "model": "wbp-deepseek-v3",
+                        "api_key_source": "managed_local_token",
+                        "writes_external_config": False,
+                        "profile_ready": False,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "synthetic_endpoint_contract": True,
+                        "prerequisite": "live_listener_contour_required",
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "evidence", "capture", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "Local external-models evidence captured from foundation contract.",
+                    "machine_error_code": "OK",
+                    "changed_files": ["/tmp/evidence-local.json"],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {
+                        "route_id": "wbp-deepseek-v3",
+                        "network_dependent_evidence": False,
+                        "evidence_path": "/tmp/evidence-local.json",
+                    },
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "routes", "disable", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models route disabled: wbp-deepseek-v3.",
+                    "machine_error_code": "OK",
+                    "changed_files": ["/tmp/routes.json"],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {"route_id": "wbp-deepseek-v3", "enabled": False},
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
+        if args == ("external-models", "routes", "enable", "--json", "--route", "wbp-deepseek-v3"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "External-models route enabled: wbp-deepseek-v3.",
+                    "machine_error_code": "OK",
+                    "changed_files": ["/tmp/routes.json"],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "data": {"route_id": "wbp-deepseek-v3", "enabled": True},
+                    "timestamp_utc": "2026-05-12T00:00:00Z",
+                },
+                stderr="",
+            )
         raise AssertionError(f"unexpected command: {args}")
 
 
@@ -185,7 +545,9 @@ class WebUiTests(unittest.TestCase):
             DashboardState(
                 runtime=runtime_snapshot(),
                 accounts=account_snapshot(),
+                external_models=external_snapshot(),
                 flash="Ready.",
+                external_action=external_action(),
                 events=(UiEvent(observed_at="12:00:00", request="GET /", outcome="ok"),),
             )
         )
@@ -194,17 +556,125 @@ class WebUiTests(unittest.TestCase):
         self.assertIn("Состояние runtime", html)
         self.assertIn("Операторские действия", html)
         self.assertIn("Пул аккаунтов", html)
+        self.assertIn("External Models Overview", html)
+        self.assertIn("External Models Routes", html)
+        self.assertIn("External Models Action Result", html)
         self.assertIn("Последние действия", html)
         self.assertIn("Добавить explicit auth", html)
+        self.assertIn("provider-route evidence only", html)
         self.assertIn("method=\"post\" action=\"/action\"", html)
+        self.assertIn("external_validate", html)
+        self.assertIn("external_check", html)
+        self.assertIn("external_profile", html)
+        self.assertIn("external_evidence", html)
+        self.assertIn("Disable route wbp-deepseek-v3?", html)
+        self.assertIn("External Models Support", html)
+        self.assertIn("Open data dir", html)
 
     def test_apply_action_requires_explicit_auth_ref(self) -> None:
         state = apply_action(FakeRunner(), {"action": "onboard", "auth_ref": "   "})
 
         self.assertEqual(state.flash, "Нужен явный путь к auth-файлу.")
 
+    def test_apply_action_external_validate_uses_existing_command_surface(self) -> None:
+        state = apply_action(
+            FakeRunner(),
+            {"action": "external_validate", "route_id": "wbp-deepseek-v3"},
+        )
+
+        self.assertEqual(state.flash, "External-models route validation captured provider evidence without claiming runtime readiness.")
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertEqual(state.external_action.verification_scope, "route_provider_only")
+        self.assertEqual(state.external_action.route_state, "model_visible")
+        self.assertFalse(state.external_action.listener_proven)
+        self.assertTrue(state.external_action.runtime_claim_blocked)
+        self.assertFalse(state.external_action.profile_ready)
+
+    def test_apply_action_external_route_toggle_requires_route_id(self) -> None:
+        state = apply_action(FakeRunner(), {"action": "external_route_disable", "route_id": "   "})
+
+        self.assertEqual(state.flash, "Нужен route_id для external-models.")
+
+    def test_apply_action_external_profile_stays_non_ready(self) -> None:
+        state = apply_action(
+            FakeRunner(),
+            {"action": "external_profile", "route_id": "wbp-deepseek-v3"},
+        )
+
+        self.assertEqual(state.flash, "Codex Desktop profile contract generated without mutating config.")
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertFalse(state.external_action.profile_ready)
+        self.assertEqual(state.external_action.writes_external_config, "false")
+        self.assertEqual(
+            state.external_action.prerequisite,
+            "live_listener_contour_required",
+        )
+        self.assertFalse(state.external_action.is_stale)
+
+    def test_apply_action_support_open_keeps_result_support_only_and_stale(self) -> None:
+        opened: list[Path] = []
+
+        state = apply_action(
+            FakeRunner(),
+            {"action": "external_open_root_dir"},
+            current_external_action=external_action(),
+            support_opener=opened.append,
+        )
+
+        self.assertEqual(len(opened), 1)
+        self.assertIn("Opened support target:", state.flash)
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "support_action")
+
+    def test_load_dashboard_state_preserves_stale_external_action_on_integration_failure(self) -> None:
+        class BrokenRunner(FakeRunner):
+            def run(self, *args: str) -> CommandResult:
+                if args == ("external-models", "status", "--json"):
+                    raise UiShellError("boom")
+                return super().run(*args)
+
+        stale_action = external_action()
+        stale_action = ExternalActionResult(
+            **{**stale_action.__dict__, "is_stale": True, "stale_reason": "cached_history"}
+        )
+
+        state = load_dashboard_state(
+            BrokenRunner(),
+            flash="refresh failed",
+            external_action=stale_action,
+        )
+
+        self.assertEqual(state.runtime.overall_state, "ok")
+        self.assertEqual(state.external_models.integration_error, "boom")
+        self.assertEqual(state.flash, "refresh failed")
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "refresh_failed")
+
+    def test_get_dashboard_marks_previous_external_action_stale(self) -> None:
+        app = WildBoarWebUi(runner=FakeRunner())
+        app._external_action = external_action()  # noqa: SLF001 - targeted state test
+
+        state = app.get_dashboard()
+
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "cached_history")
+
     def test_http_handler_serves_dashboard_and_posts_actions(self) -> None:
-        state = DashboardState(runtime=runtime_snapshot(), accounts=account_snapshot(), flash="Ready.")
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
         app = FakeApp(state)
         server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -259,7 +729,13 @@ class WebUiTests(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_http_handler_recovers_unknown_get_route(self) -> None:
-        state = DashboardState(runtime=runtime_snapshot(), accounts=account_snapshot(), flash="Ready.")
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
         app = FakeApp(state)
         server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
         thread = threading.Thread(target=server.serve_forever, daemon=True)

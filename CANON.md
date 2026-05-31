@@ -6,12 +6,11 @@
 ## Source of truth order
 
 1. `CANON.md`
-2. `MASTER_PLAN.md`
-3. `RUNTIME_CONTRACT.md`
-4. `STATE_SCHEMA.md`
-5. `COMMAND_API.md`
-6. `DELIVERY_RULES.md`
-7. `README.md`
+2. `RUNTIME_CONTRACT.md`
+3. `STATE_SCHEMA.md`
+4. `COMMAND_API.md`
+5. `DELIVERY_RULES.md`
+6. `README.md`
 
 ## Product definition
 
@@ -41,6 +40,33 @@ low-level routing.
 - each closed write contour must reach GitHub, not just a local commit
 - architecture is designed for 20 accounts from day one
 - scaling proof is staged: 10, then 15, then 20
+- plans, roadmaps, next-contour queues, and master plans are never repository
+  truth and must not be stored in the repo
+- future intent belongs in the active task thread, external handoff, or issue
+  tracker; the repository stores canon, contracts, implementation, tests, and
+  completed evidence only
+
+## Repository planning prohibition
+
+Do not add or keep repo-resident planning documents.
+
+Forbidden repository artifacts include:
+
+- `MASTER_PLAN.md`
+- `NEXT_CONTOUR_CANON_PLAN.md`
+- roadmap files
+- next-step queues
+- contour plan files
+- repair plan files
+- master-plan reconciliation artifacts
+
+Completed contour evidence is allowed only when it records what was already
+done and verified. It must not become a forward plan or a source of product
+truth.
+
+Historical evidence is not route guidance. Agents must not derive the active
+next contour from `audit_results/`, historical closeouts, old spec files, or
+plan-like text preserved in completed artifacts.
 
 ## Owner authorization rule
 

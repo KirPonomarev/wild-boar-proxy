@@ -1,0 +1,15 @@
+{
+  "contour": "API_CONNECTIONS_WEB_SCREEN_READONLY",
+  "date": "2026-05-13",
+  "preview_url": "http://127.0.0.1:8788/?source=live&screen=api-connections",
+  "api_endpoint": "/api/api-connections-readonly",
+  "screenshot_path": "/tmp/wbp-api-connections-readonly-2026-05-13.png",
+  "checks": {
+    "sidebar_item_visible": true,
+    "readonly_screen_rendered": true,
+    "route_actions_present": false,
+    "forbidden_active_copy_present": false,
+    "new_truth_surface_introduced": false,
+    "secret_ref_exposed": false
+  }
+}

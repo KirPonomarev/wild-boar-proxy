@@ -1,0 +1,11 @@
+{
+  "create_status": "ok",
+  "current_execution_slot_id": "primary_model_slot",
+  "detail_status": "ok",
+  "packet_kind": "manual_http_smoke",
+  "role_slot_binding_count": 1,
+  "scope": "primary_slot_only",
+  "session_schema_version": 2,
+  "slot_catalog_revalidated": true,
+  "status": "ok"
+}

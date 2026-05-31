@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_LIVE_OVERVIEW_COMPLETION",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "primary_truth": ["status", "mode_get", "accounts_list"],
+  "runtime_detail_evidence": ["healthcheck"],
+  "rollout_evidence": ["rollout_rotation_inspect"],
+  "failure_policy": {
+    "status": "integration_failure",
+    "mode_get": "integration_failure_on_command_error_or_status_mismatch",
+    "accounts_list": "integration_failure_on_command_error_or_invalid_packet",
+    "healthcheck": "degraded_warning",
+    "rollout_rotation_inspect": "warning_event"
+  },
+  "real_smoke_observation": {
+    "local_url": "http://127.0.0.1:8788/?source=live",
+    "endpoint_status": "ok",
+    "ui_state": "healthy",
+    "primary_truth_ok": true,
+    "has_warnings": true,
+    "warning_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "interpretation": "primary overview truth rendered while rollout contradiction stayed visible as warning"
+  },
+  "guardrails": {
+    "browser_command_id_submission": "not_supported",
+    "action_buttons": "disabled",
+    "direct_state_file_truth": "not_introduced",
+    "stale_green_after_primary_failure": "blocked",
+    "desktop_transfer": "forbidden_without_operator_approval"
+  }
+}

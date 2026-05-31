@@ -1,0 +1,13 @@
+{
+  "consumer_kind": "codex_cli_runner",
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "created_at_utc": "2026-05-27T09:46:49.144129Z",
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "native_app_claimed": false,
+  "packet_kind": "cli_runner_summary",
+  "pass_status": "CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP",
+  "runner_lane_proven": true,
+  "selected_model_id": "gpt-5.5",
+  "status": "passed"
+}

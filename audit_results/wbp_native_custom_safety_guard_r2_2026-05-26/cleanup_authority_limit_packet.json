@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T18:56:52.003813Z",
+  "cleanup_executed": false,
+  "cleanup_may_delete_only_declared_custom_owned_surfaces": true,
+  "cleanup_removes_only_custom_owned_surfaces": true,
+  "declared_write_surfaces_status": "ok",
+  "extra_paths_deleted": false,
+  "extra_paths_detected": false,
+  "hidden_cleanup_performed": false,
+  "original_codex_reversibility_claimed": false,
+  "packet_kind": "cleanup_authority_limit",
+  "reason_class": "",
+  "status": "ok",
+  "stop_and_diagnose_required_for_extra_paths": true
+}

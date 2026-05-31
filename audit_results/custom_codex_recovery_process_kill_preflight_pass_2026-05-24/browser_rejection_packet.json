@@ -1,0 +1,16 @@
+{
+  "status": "blocked",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_BROWSER_FIELD_REJECTED",
+  "forbidden_fields": [
+    "CODEX_HOME",
+    "HOME",
+    "auth",
+    "path",
+    "pid",
+    "process_id",
+    "session_id",
+    "token"
+  ],
+  "filesystem_read_performed": false,
+  "process_kill_performed": false
+}

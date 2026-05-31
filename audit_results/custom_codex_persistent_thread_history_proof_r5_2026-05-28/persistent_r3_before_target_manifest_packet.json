@@ -1,0 +1,43 @@
+{
+  "baseline_inferred_from_cutoff": true,
+  "captured_at_utc": "2026-05-28T08:05:08.714635Z",
+  "content_hash_recorded": false,
+  "metadata_only": true,
+  "packet_kind": "persistent_restore_r5_target_manifest",
+  "phase": "r3_before",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "status": "ok",
+  "target_count": 2,
+  "targets": [
+    {
+      "baseline_inferred_from_cutoff": true,
+      "content_hash_recorded": false,
+      "cutoff_ns": 1779953824651186995,
+      "durable_restoration_proven": false,
+      "exists": false,
+      "kind": "file",
+      "mtime_ns": 0,
+      "raw_content_recorded": false,
+      "relative_path": "session_index.jsonl",
+      "selected_mtime_ns": 1779955499768598872,
+      "selected_path_changed_after_cutoff": true,
+      "size": 0
+    },
+    {
+      "baseline_inferred_from_cutoff": true,
+      "content_hash_recorded": false,
+      "cutoff_ns": 1779953824651186995,
+      "durable_restoration_proven": false,
+      "exists": false,
+      "kind": "file",
+      "mtime_ns": 0,
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/28/rollout-2026-05-28T11-04-47-019e6d9d-5430-7fd1-aeeb-33d95682f388.jsonl",
+      "selected_mtime_ns": 1779955495975062880,
+      "selected_path_changed_after_cutoff": true,
+      "size": 0
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T13:40:33.757744Z",
+  "max_narrative_screenshots": 3,
+  "packet_kind": "screenshot_limit",
+  "reason_class": "",
+  "screenshot_claims_packet_truth": false,
+  "screenshot_count": 2,
+  "screenshot_counts_as_filesystem_proof": false,
+  "screenshot_counts_as_machine_ui_proof": false,
+  "screenshot_counts_as_packet_truth": false,
+  "screenshot_counts_as_route_proof": false,
+  "screenshots_used_as_narrative_support": true,
+  "status": "ok"
+}

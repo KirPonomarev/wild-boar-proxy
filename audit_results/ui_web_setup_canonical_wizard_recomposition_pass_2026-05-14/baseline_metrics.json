@@ -1,0 +1,1730 @@
+{
+  "fixture_healthy": {
+    "url": "http://127.0.0.1:8788/?state=healthy&source=fixture&screen=setup",
+    "mainTitle": "Настройка",
+    "subtitle": "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет.",
+    "setupBanner": "\n            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.\n          ",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 1190,
+    "mainClientHeight": 942,
+    "setupBottom": 1187,
+    "setupHeight": 999,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [],
+    "disabledButtons": [
+      "Проверка готовности отложена",
+      "Отложено",
+      "Запрещено",
+      "Нет команды",
+      "Назад",
+      "Отмена",
+      "Продолжить после packet truth"
+    ],
+    "stepCount": 4,
+    "overflows": [
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "preview-controls",
+        "text": "Источник\n                \n                  демо\n                  live только ч",
+        "rect": {
+          "x": 53,
+          "y": 952,
+          "width": 255,
+          "height": 70,
+          "top": 952,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "LABEL",
+        "id": "",
+        "cls": "input state-picker preview-state-picker",
+        "text": "Состояние\n                \n                  здорово\n                  деградаци",
+        "rect": {
+          "x": 53,
+          "y": 991,
+          "width": 255,
+          "height": 31,
+          "top": 991,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Состояние",
+        "rect": {
+          "x": 64,
+          "y": 999,
+          "width": 59.421875,
+          "height": 15,
+          "top": 999,
+          "right": 123.421875,
+          "bottom": 1014,
+          "left": 64
+        }
+      },
+      {
+        "tag": "SELECT",
+        "id": "statePicker",
+        "cls": "",
+        "text": "здорово\n                  деградация\n                  недоступно\n              ",
+        "rect": {
+          "x": 185,
+          "y": 998,
+          "width": 112,
+          "height": 17,
+          "top": 998,
+          "right": 297,
+          "bottom": 1015,
+          "left": 185
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "setupScreen",
+        "cls": "screen setup-screen setup-final-screen",
+        "text": "Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы",
+        "rect": {
+          "x": 373,
+          "y": 188,
+          "width": 1158,
+          "height": 999,
+          "top": 188,
+          "right": 1531,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-flow-layout",
+        "text": "Setup Wizard\n              1Готовностьтолько каркас\n              2Компонентыбез",
+        "rect": {
+          "x": 373,
+          "y": 240,
+          "width": 1120,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-workbench",
+        "text": "Первичная настройка\n                \n                  \n                    Подг",
+        "rect": {
+          "x": 645,
+          "y": 240,
+          "width": 848,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "",
+        "cls": "card form-section setup-boundary-card",
+        "text": "Граница безопасной настройки\n                    Этот экран не является настройщ",
+        "rect": {
+          "x": 645,
+          "y": 939,
+          "width": 848,
+          "height": 174,
+          "top": 939,
+          "right": 1493,
+          "bottom": 1113,
+          "left": 645
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-boundary-grid",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов\n                  Truth s",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 806,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 928,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Browser payload",
+        "rect": {
+          "x": 679,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 915,
+          "bottom": 1041,
+          "left": 679
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "нет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 679,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 915,
+          "bottom": 1079,
+          "left": 679
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Truth sourceтолько будущий JSON packet",
+        "rect": {
+          "x": 938,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1200,
+          "bottom": 1092,
+          "left": 938
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Truth source",
+        "rect": {
+          "x": 951,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1187,
+          "bottom": 1041,
+          "left": 951
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "только будущий JSON packet",
+        "rect": {
+          "x": 951,
+          "y": 1045,
+          "width": 236,
+          "height": 17,
+          "top": 1045,
+          "right": 1187,
+          "bottom": 1062,
+          "left": 951
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Next actionописать command surface перед implementation",
+        "rect": {
+          "x": 1210,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 1210
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Next action",
+        "rect": {
+          "x": 1223,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1459,
+          "bottom": 1041,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "описать command surface перед implementation",
+        "rect": {
+          "x": 1223,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 1459,
+          "bottom": 1079,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-bottom-bar",
+        "text": "Назад\n                Отмена\n                Продолжить после packet truth",
+        "rect": {
+          "x": 645,
+          "y": 1129,
+          "width": 848,
+          "height": 58,
+          "top": 1129,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Назад",
+        "rect": {
+          "x": 1083.921875,
+          "y": 1140,
+          "width": 62.015625,
+          "height": 36,
+          "top": 1140,
+          "right": 1145.9375,
+          "bottom": 1176,
+          "left": 1083.921875
+        }
+      }
+    ]
+  },
+  "fixture_degraded": {
+    "url": "http://127.0.0.1:8788/?state=degraded&source=fixture&screen=setup",
+    "mainTitle": "Настройка",
+    "subtitle": "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет.",
+    "setupBanner": "\n            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.\n          ",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 1190,
+    "mainClientHeight": 942,
+    "setupBottom": 1187,
+    "setupHeight": 999,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [],
+    "disabledButtons": [
+      "Проверка готовности отложена",
+      "Отложено",
+      "Запрещено",
+      "Нет команды",
+      "Назад",
+      "Отмена",
+      "Продолжить после packet truth"
+    ],
+    "stepCount": 4,
+    "overflows": [
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "preview-controls",
+        "text": "Источник\n                \n                  демо\n                  live только ч",
+        "rect": {
+          "x": 53,
+          "y": 952,
+          "width": 255,
+          "height": 70,
+          "top": 952,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "LABEL",
+        "id": "",
+        "cls": "input state-picker preview-state-picker",
+        "text": "Состояние\n                \n                  здорово\n                  деградаци",
+        "rect": {
+          "x": 53,
+          "y": 991,
+          "width": 255,
+          "height": 31,
+          "top": 991,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Состояние",
+        "rect": {
+          "x": 64,
+          "y": 999,
+          "width": 59.421875,
+          "height": 15,
+          "top": 999,
+          "right": 123.421875,
+          "bottom": 1014,
+          "left": 64
+        }
+      },
+      {
+        "tag": "SELECT",
+        "id": "statePicker",
+        "cls": "",
+        "text": "здорово\n                  деградация\n                  недоступно\n              ",
+        "rect": {
+          "x": 185,
+          "y": 998,
+          "width": 112,
+          "height": 17,
+          "top": 998,
+          "right": 297,
+          "bottom": 1015,
+          "left": 185
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "setupScreen",
+        "cls": "screen setup-screen setup-final-screen",
+        "text": "Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы",
+        "rect": {
+          "x": 373,
+          "y": 188,
+          "width": 1158,
+          "height": 999,
+          "top": 188,
+          "right": 1531,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-flow-layout",
+        "text": "Setup Wizard\n              1Готовностьтолько каркас\n              2Компонентыбез",
+        "rect": {
+          "x": 373,
+          "y": 240,
+          "width": 1120,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-workbench",
+        "text": "Первичная настройка\n                \n                  \n                    Подг",
+        "rect": {
+          "x": 645,
+          "y": 240,
+          "width": 848,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "",
+        "cls": "card form-section setup-boundary-card",
+        "text": "Граница безопасной настройки\n                    Этот экран не является настройщ",
+        "rect": {
+          "x": 645,
+          "y": 939,
+          "width": 848,
+          "height": 174,
+          "top": 939,
+          "right": 1493,
+          "bottom": 1113,
+          "left": 645
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-boundary-grid",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов\n                  Truth s",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 806,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 928,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Browser payload",
+        "rect": {
+          "x": 679,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 915,
+          "bottom": 1041,
+          "left": 679
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "нет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 679,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 915,
+          "bottom": 1079,
+          "left": 679
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Truth sourceтолько будущий JSON packet",
+        "rect": {
+          "x": 938,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1200,
+          "bottom": 1092,
+          "left": 938
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Truth source",
+        "rect": {
+          "x": 951,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1187,
+          "bottom": 1041,
+          "left": 951
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "только будущий JSON packet",
+        "rect": {
+          "x": 951,
+          "y": 1045,
+          "width": 236,
+          "height": 17,
+          "top": 1045,
+          "right": 1187,
+          "bottom": 1062,
+          "left": 951
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Next actionописать command surface перед implementation",
+        "rect": {
+          "x": 1210,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 1210
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Next action",
+        "rect": {
+          "x": 1223,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1459,
+          "bottom": 1041,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "описать command surface перед implementation",
+        "rect": {
+          "x": 1223,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 1459,
+          "bottom": 1079,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-bottom-bar",
+        "text": "Назад\n                Отмена\n                Продолжить после packet truth",
+        "rect": {
+          "x": 645,
+          "y": 1129,
+          "width": 848,
+          "height": 58,
+          "top": 1129,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Назад",
+        "rect": {
+          "x": 1083.921875,
+          "y": 1140,
+          "width": 62.015625,
+          "height": 36,
+          "top": 1140,
+          "right": 1145.9375,
+          "bottom": 1176,
+          "left": 1083.921875
+        }
+      }
+    ]
+  },
+  "fixture_down": {
+    "url": "http://127.0.0.1:8788/?state=down&source=fixture&screen=setup",
+    "mainTitle": "Настройка",
+    "subtitle": "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет.",
+    "setupBanner": "\n            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.\n          ",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 1190,
+    "mainClientHeight": 942,
+    "setupBottom": 1187,
+    "setupHeight": 999,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [],
+    "disabledButtons": [
+      "Проверка готовности отложена",
+      "Отложено",
+      "Запрещено",
+      "Нет команды",
+      "Назад",
+      "Отмена",
+      "Продолжить после packet truth"
+    ],
+    "stepCount": 4,
+    "overflows": [
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "preview-controls",
+        "text": "Источник\n                \n                  демо\n                  live только ч",
+        "rect": {
+          "x": 53,
+          "y": 952,
+          "width": 255,
+          "height": 70,
+          "top": 952,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "LABEL",
+        "id": "",
+        "cls": "input state-picker preview-state-picker",
+        "text": "Состояние\n                \n                  здорово\n                  деградаци",
+        "rect": {
+          "x": 53,
+          "y": 991,
+          "width": 255,
+          "height": 31,
+          "top": 991,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Состояние",
+        "rect": {
+          "x": 64,
+          "y": 999,
+          "width": 59.421875,
+          "height": 15,
+          "top": 999,
+          "right": 123.421875,
+          "bottom": 1014,
+          "left": 64
+        }
+      },
+      {
+        "tag": "SELECT",
+        "id": "statePicker",
+        "cls": "",
+        "text": "здорово\n                  деградация\n                  недоступно\n              ",
+        "rect": {
+          "x": 185,
+          "y": 998,
+          "width": 112,
+          "height": 17,
+          "top": 998,
+          "right": 297,
+          "bottom": 1015,
+          "left": 185
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "setupScreen",
+        "cls": "screen setup-screen setup-final-screen",
+        "text": "Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы",
+        "rect": {
+          "x": 373,
+          "y": 188,
+          "width": 1158,
+          "height": 999,
+          "top": 188,
+          "right": 1531,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-flow-layout",
+        "text": "Setup Wizard\n              1Готовностьтолько каркас\n              2Компонентыбез",
+        "rect": {
+          "x": 373,
+          "y": 240,
+          "width": 1120,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-workbench",
+        "text": "Первичная настройка\n                \n                  \n                    Подг",
+        "rect": {
+          "x": 645,
+          "y": 240,
+          "width": 848,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "",
+        "cls": "card form-section setup-boundary-card",
+        "text": "Граница безопасной настройки\n                    Этот экран не является настройщ",
+        "rect": {
+          "x": 645,
+          "y": 939,
+          "width": 848,
+          "height": 174,
+          "top": 939,
+          "right": 1493,
+          "bottom": 1113,
+          "left": 645
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-boundary-grid",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов\n                  Truth s",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 806,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 928,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Browser payload",
+        "rect": {
+          "x": 679,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 915,
+          "bottom": 1041,
+          "left": 679
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "нет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 679,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 915,
+          "bottom": 1079,
+          "left": 679
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Truth sourceтолько будущий JSON packet",
+        "rect": {
+          "x": 938,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1200,
+          "bottom": 1092,
+          "left": 938
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Truth source",
+        "rect": {
+          "x": 951,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1187,
+          "bottom": 1041,
+          "left": 951
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "только будущий JSON packet",
+        "rect": {
+          "x": 951,
+          "y": 1045,
+          "width": 236,
+          "height": 17,
+          "top": 1045,
+          "right": 1187,
+          "bottom": 1062,
+          "left": 951
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Next actionописать command surface перед implementation",
+        "rect": {
+          "x": 1210,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 1210
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Next action",
+        "rect": {
+          "x": 1223,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1459,
+          "bottom": 1041,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "описать command surface перед implementation",
+        "rect": {
+          "x": 1223,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 1459,
+          "bottom": 1079,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-bottom-bar",
+        "text": "Назад\n                Отмена\n                Продолжить после packet truth",
+        "rect": {
+          "x": 645,
+          "y": 1129,
+          "width": 848,
+          "height": 58,
+          "top": 1129,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Назад",
+        "rect": {
+          "x": 1083.921875,
+          "y": 1140,
+          "width": 62.015625,
+          "height": 36,
+          "top": 1140,
+          "right": 1145.9375,
+          "bottom": 1176,
+          "left": 1083.921875
+        }
+      }
+    ]
+  },
+  "fixture_stale": {
+    "url": "http://127.0.0.1:8788/?state=stale&source=fixture&screen=setup",
+    "mainTitle": "Настройка",
+    "subtitle": "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет.",
+    "setupBanner": "\n            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.\n          ",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 1190,
+    "mainClientHeight": 942,
+    "setupBottom": 1187,
+    "setupHeight": 999,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [],
+    "disabledButtons": [
+      "Проверка готовности отложена",
+      "Отложено",
+      "Запрещено",
+      "Нет команды",
+      "Назад",
+      "Отмена",
+      "Продолжить после packet truth"
+    ],
+    "stepCount": 4,
+    "overflows": [
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "preview-controls",
+        "text": "Источник\n                \n                  демо\n                  live только ч",
+        "rect": {
+          "x": 53,
+          "y": 952,
+          "width": 255,
+          "height": 70,
+          "top": 952,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "LABEL",
+        "id": "",
+        "cls": "input state-picker preview-state-picker",
+        "text": "Состояние\n                \n                  здорово\n                  деградаци",
+        "rect": {
+          "x": 53,
+          "y": 991,
+          "width": 255,
+          "height": 31,
+          "top": 991,
+          "right": 308,
+          "bottom": 1022,
+          "left": 53
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Состояние",
+        "rect": {
+          "x": 64,
+          "y": 999,
+          "width": 59.421875,
+          "height": 15,
+          "top": 999,
+          "right": 123.421875,
+          "bottom": 1014,
+          "left": 64
+        }
+      },
+      {
+        "tag": "SELECT",
+        "id": "statePicker",
+        "cls": "",
+        "text": "здорово\n                  деградация\n                  недоступно\n              ",
+        "rect": {
+          "x": 185,
+          "y": 998,
+          "width": 112,
+          "height": 17,
+          "top": 998,
+          "right": 297,
+          "bottom": 1015,
+          "left": 185
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "setupScreen",
+        "cls": "screen setup-screen setup-final-screen",
+        "text": "Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы",
+        "rect": {
+          "x": 373,
+          "y": 188,
+          "width": 1158,
+          "height": 999,
+          "top": 188,
+          "right": 1531,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-flow-layout",
+        "text": "Setup Wizard\n              1Готовностьтолько каркас\n              2Компонентыбез",
+        "rect": {
+          "x": 373,
+          "y": 240,
+          "width": 1120,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-workbench",
+        "text": "Первичная настройка\n                \n                  \n                    Подг",
+        "rect": {
+          "x": 645,
+          "y": 240,
+          "width": 848,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "",
+        "cls": "card form-section setup-boundary-card",
+        "text": "Граница безопасной настройки\n                    Этот экран не является настройщ",
+        "rect": {
+          "x": 645,
+          "y": 939,
+          "width": 848,
+          "height": 174,
+          "top": 939,
+          "right": 1493,
+          "bottom": 1113,
+          "left": 645
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-boundary-grid",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов\n                  Truth s",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 806,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 928,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Browser payload",
+        "rect": {
+          "x": 679,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 915,
+          "bottom": 1041,
+          "left": 679
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "нет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 679,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 915,
+          "bottom": 1079,
+          "left": 679
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Truth sourceтолько будущий JSON packet",
+        "rect": {
+          "x": 938,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1200,
+          "bottom": 1092,
+          "left": 938
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Truth source",
+        "rect": {
+          "x": 951,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1187,
+          "bottom": 1041,
+          "left": 951
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "только будущий JSON packet",
+        "rect": {
+          "x": 951,
+          "y": 1045,
+          "width": 236,
+          "height": 17,
+          "top": 1045,
+          "right": 1187,
+          "bottom": 1062,
+          "left": 951
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Next actionописать command surface перед implementation",
+        "rect": {
+          "x": 1210,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 1210
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Next action",
+        "rect": {
+          "x": 1223,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1459,
+          "bottom": 1041,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "описать command surface перед implementation",
+        "rect": {
+          "x": 1223,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 1459,
+          "bottom": 1079,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-bottom-bar",
+        "text": "Назад\n                Отмена\n                Продолжить после packet truth",
+        "rect": {
+          "x": 645,
+          "y": 1129,
+          "width": 848,
+          "height": 58,
+          "top": 1129,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Назад",
+        "rect": {
+          "x": 1083.921875,
+          "y": 1140,
+          "width": 62.015625,
+          "height": 36,
+          "top": 1140,
+          "right": 1145.9375,
+          "bottom": 1176,
+          "left": 1083.921875
+        }
+      }
+    ]
+  },
+  "live_integration_failure": {
+    "url": "http://127.0.0.1:8788/?source=live&screen=setup",
+    "mainTitle": "Настройка",
+    "subtitle": "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта.",
+    "setupBanner": "\n            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.\n          ",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 1190,
+    "mainClientHeight": 942,
+    "setupBottom": 1187,
+    "setupHeight": 999,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [],
+    "disabledButtons": [
+      "Проверка готовности отложена",
+      "Отложено",
+      "Запрещено",
+      "Нет команды",
+      "Назад",
+      "Отмена",
+      "Продолжить после packet truth"
+    ],
+    "stepCount": 4,
+    "overflows": [
+      {
+        "tag": "SECTION",
+        "id": "setupScreen",
+        "cls": "screen setup-screen setup-final-screen",
+        "text": "Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы",
+        "rect": {
+          "x": 373,
+          "y": 188,
+          "width": 1158,
+          "height": 999,
+          "top": 188,
+          "right": 1531,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-flow-layout",
+        "text": "Setup Wizard\n              1Готовностьтолько каркас\n              2Компонентыбез",
+        "rect": {
+          "x": 373,
+          "y": 240,
+          "width": 1120,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 373
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-workbench",
+        "text": "Первичная настройка\n                \n                  \n                    Подг",
+        "rect": {
+          "x": 645,
+          "y": 240,
+          "width": 848,
+          "height": 947,
+          "top": 240,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "SECTION",
+        "id": "",
+        "cls": "card form-section setup-boundary-card",
+        "text": "Граница безопасной настройки\n                    Этот экран не является настройщ",
+        "rect": {
+          "x": 645,
+          "y": 939,
+          "width": 848,
+          "height": 174,
+          "top": 939,
+          "right": 1493,
+          "bottom": 1113,
+          "left": 645
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-boundary-grid",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов\n                  Truth s",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 806,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Browser payloadнет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 666,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 928,
+          "bottom": 1092,
+          "left": 666
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Browser payload",
+        "rect": {
+          "x": 679,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 915,
+          "bottom": 1041,
+          "left": 679
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "нет путей, нет raw config, нет секретов",
+        "rect": {
+          "x": 679,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 915,
+          "bottom": 1079,
+          "left": 679
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Truth sourceтолько будущий JSON packet",
+        "rect": {
+          "x": 938,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1200,
+          "bottom": 1092,
+          "left": 938
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Truth source",
+        "rect": {
+          "x": 951,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1187,
+          "bottom": 1041,
+          "left": 951
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "только будущий JSON packet",
+        "rect": {
+          "x": 951,
+          "y": 1045,
+          "width": 236,
+          "height": 17,
+          "top": 1045,
+          "right": 1187,
+          "bottom": 1062,
+          "left": 951
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "",
+        "text": "Next actionописать command surface перед implementation",
+        "rect": {
+          "x": 1210,
+          "y": 1013,
+          "width": 262,
+          "height": 79,
+          "top": 1013,
+          "right": 1472,
+          "bottom": 1092,
+          "left": 1210
+        }
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "cls": "",
+        "text": "Next action",
+        "rect": {
+          "x": 1223,
+          "y": 1026,
+          "width": 236,
+          "height": 15,
+          "top": 1026,
+          "right": 1459,
+          "bottom": 1041,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "STRONG",
+        "id": "",
+        "cls": "",
+        "text": "описать command surface перед implementation",
+        "rect": {
+          "x": 1223,
+          "y": 1045,
+          "width": 236,
+          "height": 34,
+          "top": 1045,
+          "right": 1459,
+          "bottom": 1079,
+          "left": 1223
+        }
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "cls": "setup-bottom-bar",
+        "text": "Назад\n                Отмена\n                Продолжить после packet truth",
+        "rect": {
+          "x": 645,
+          "y": 1129,
+          "width": 848,
+          "height": 58,
+          "top": 1129,
+          "right": 1493,
+          "bottom": 1187,
+          "left": 645
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Назад",
+        "rect": {
+          "x": 1083.921875,
+          "y": 1140,
+          "width": 62.015625,
+          "height": 36,
+          "top": 1140,
+          "right": 1145.9375,
+          "bottom": 1176,
+          "left": 1083.921875
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button small disabled",
+        "text": "Отмена",
+        "rect": {
+          "x": 1157.9375,
+          "y": 1140,
+          "width": 69.21875,
+          "height": 36,
+          "top": 1140,
+          "right": 1227.15625,
+          "bottom": 1176,
+          "left": 1157.9375
+        }
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "button primary small disabled",
+        "text": "Продолжить после packet truth",
+        "rect": {
+          "x": 1239.15625,
+          "y": 1140,
+          "width": 234.84375,
+          "height": 36,
+          "top": 1140,
+          "right": 1474,
+          "bottom": 1176,
+          "left": 1239.15625
+        }
+      }
+    ]
+  }
+}

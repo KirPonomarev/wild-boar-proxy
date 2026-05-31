@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-24T01:12:12.012265Z",
+  "latency_ms": 8130,
+  "load_claim_proven": false,
+  "machine_error_code": "OK",
+  "operator_prompt_counter": 1,
+  "prompt_count": 1,
+  "rotation_claim_proven": false,
+  "runner_called_once": true,
+  "status": "ok",
+  "token_burn": null,
+  "token_usage_present": false
+}

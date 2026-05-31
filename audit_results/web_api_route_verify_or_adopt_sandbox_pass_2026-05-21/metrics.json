@@ -1,0 +1,33 @@
+{
+  "contour": "WEB_API_ROUTE_VERIFY_OR_ADOPT_SANDBOX_PASS",
+  "status": "ok",
+  "verdict": "closed_verify_only",
+  "verify_first_only": true,
+  "adopt_existing_surface_present": false,
+  "sandbox_phase": "sandbox_actions",
+  "quick_start_api_action": "api_route_check",
+  "main_route_id": "wbp-openrouter-primary",
+  "provider": "openrouter",
+  "secret_ref_visible": true,
+  "secret_value_visible": false,
+  "post_action_refresh_source": "api_connections_readonly",
+  "post_action_refresh_sandbox_owned": true,
+  "observed_route_projection": {
+    "validation_label": "ok",
+    "validation_visual_state": "green",
+    "last_checked": "2026-05-20T23:06:43Z",
+    "observed_routes_count": 1
+  },
+  "packet_summary": {
+    "machine_error_code": "OK",
+    "action_role": "api_route_smoke_check",
+    "route_state": "verified",
+    "verification_scope": "route_provider_only"
+  },
+  "artifacts": {
+    "packet": "audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/evidence/api-route-check-packet.json",
+    "refresh": "audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/evidence/api-connections-readonly-after.json",
+    "ui_summary": "audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/evidence/ui-run-summary.json",
+    "independent_audit": "audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/independent_audit.json"
+  }
+}

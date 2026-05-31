@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "claims": [
+    {
+      "claim": "dirty evidence classified",
+      "allowed": true,
+      "basis": "dirty_evidence_classification_packet.json"
+    },
+    {
+      "claim": "secret-bearing config path classified",
+      "allowed": true,
+      "basis": "secret_config_path_audit_packet.json and experimental_bearer_token_canon_verdict.json"
+    },
+    {
+      "claim": "new stabilization evidence redacted",
+      "allowed": true,
+      "basis": "redaction_scan_packet.json"
+    },
+    {
+      "claim": "provider availability proven",
+      "allowed": false,
+      "basis": "provider_readiness_boundary_packet.json"
+    },
+    {
+      "claim": "native launch proven",
+      "allowed": false,
+      "basis": "no live native launch in this contour"
+    },
+    {
+      "claim": "native routing prompt-response proven",
+      "allowed": false,
+      "basis": "no prompt-response proof in this contour"
+    },
+    {
+      "claim": "Original Codex touched by this contour",
+      "allowed": false,
+      "basis": "no Codex launch or protected surface mutation was performed"
+    }
+  ],
+  "false_green_status": "blocked_by_claim_matrix"
+}

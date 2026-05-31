@@ -1,0 +1,14 @@
+{
+  "api_openai_com_absence_proven": false,
+  "captured_at_utc": "2026-05-26T20:01:35.203812Z",
+  "direct_non_wbp_model_egress_absent_proven": false,
+  "final_e2e_claimed": false,
+  "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+  "full_network_absence_proven": false,
+  "live_network_capture_attempted": false,
+  "native_launch_attempted": false,
+  "owner_visible_response_context_only": true,
+  "packet_kind": "bounded_process_egress_summary",
+  "reason_class": "BACKGROUND_CODEX_NOISE",
+  "status": "ok"
+}

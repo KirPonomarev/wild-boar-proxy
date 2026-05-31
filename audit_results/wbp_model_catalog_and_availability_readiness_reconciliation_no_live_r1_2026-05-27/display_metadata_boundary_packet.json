@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T09:06:05.233661Z",
+  "catalog_visibility_is_model_usability": false,
+  "display_metadata_fields": [
+    "label",
+    "display_name",
+    "lane",
+    "family",
+    "intelligence_tier",
+    "speed_tier",
+    "grouping"
+  ],
+  "display_metadata_is_runtime_truth": false,
+  "model_count": 6,
+  "packet_kind": "display_metadata_boundary",
+  "raw_catalog_source_mutated": false,
+  "source_packet_kind": "model_display_metadata",
+  "status": "ok",
+  "tier_label_is_capability_proof": false
+}

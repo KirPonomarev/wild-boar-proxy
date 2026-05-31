@@ -1,0 +1,54 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_CONTRACT_AND_DRY_RUN_SURFACE_PASS",
+  "date": "2026-05-24",
+  "browser": "Codex in-app browser",
+  "target": "http://127.0.0.1:8794/",
+  "server": "wild_boar_proxy.web_design_live_server",
+  "live_prompt_or_load_run": false,
+  "action": "clicked #codexCustomRecoveryContractAction",
+  "button_count": 1,
+  "console_errors_or_warnings": [],
+  "ui": {
+    "summary": "blocked · RECOVERY_CONTRACT_DRY_RUN_ONLY · custom_codex_recovery_contract_dry_run_only",
+    "chip": "dry-run only",
+    "contract_owner": "wbp_control_layer_contract_aggregator · aggregator only",
+    "live_ready": "false · dry-run contract",
+    "operator_ready": "false · not claimed",
+    "action_row_count": 12,
+    "dangerous_row_count": 7
+  },
+  "packet": {
+    "status": "blocked",
+    "machine_error_code": "RECOVERY_CONTRACT_DRY_RUN_ONLY",
+    "contract_block_reason_code": "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED",
+    "claim_scope": "custom_codex_recovery_contract_dry_run_only",
+    "contract_aggregator_only": true,
+    "contract_endpoint_mutation_allowed": false,
+    "recovery_live_ready": false,
+    "operator_ready_claimed": false,
+    "rollback_claimed": false,
+    "process_kill_claimed": false,
+    "current_codex_touched": false,
+    "original_codex_touched": false,
+    "browser_payload_allowed": false,
+    "browser_payload_allowed_keys": [],
+    "browser_forbidden_fields_rejected": true,
+    "fresh_truth": false,
+    "historical_isolation_proof_only": true,
+    "dangerous_actions_disabled": true,
+    "diagnostics_support_artifact_only": true,
+    "readonly_sources": {
+      "original_status_ok": true,
+      "custom_status_ok": false,
+      "accounts_readonly_ok": true,
+      "api_readonly_ok": true
+    },
+    "action_counts": {
+      "admitted": 2,
+      "delegated_readonly": 6,
+      "dry_run_only": 2,
+      "disabled": 2,
+      "total": 12
+    }
+  }
+}

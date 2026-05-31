@@ -1,0 +1,20 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "v2",
+  "status": "completed",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "why": [
+    "sync refreshed selected-backend participation evidence successfully and rotation inspect now reports fresh participation_evidence_present with multi_backend_snapshot",
+    "the same refresh regressed runtime truth back to desired_mode=stable / effective_mode=managed with effective_source=observed_source_active and consumer_activation_readiness=activation_pending",
+    "post-refresh status re-blocked claim_gate on policy_drift, so exact auth-source work is not canonically admissible even though selector evidence is now fresh",
+    "fresh multi-backend selector evidence is useful, but it must feed a new contradiction diagnose contour rather than auth-source narrowing"
+  ],
+  "next_contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "anti_loop_passed": true,
+  "next_exact_command": "python3 -m wild_boar_proxy status --json",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+    "sandbox auth.json materialization"
+  ]
+}

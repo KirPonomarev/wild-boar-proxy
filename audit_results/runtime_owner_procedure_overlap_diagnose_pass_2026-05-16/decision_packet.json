@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_OWNER_PROCEDURE_OVERLAP_DIAGNOSE_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "ADMIT_NARROW_RUNTIME_PROCEDURE_CHANGE_CONTOUR",
+  "most_likely_overlapping_procedure": "run_stable_runtime_launcher_attempt",
+  "overlap_class": "shared_launcher_backed_runtime_owner_procedure_overlap_with_missing_operational_serialization",
+  "evidence_strength": "moderate",
+  "retry_safe_without_procedure_change": false,
+  "requires_code_fix": false,
+  "requires_runtime_procedure_change": true,
+  "localization_improved_beyond_prior_owner_path_contour": true,
+  "exclusive_top_level_command_proved": false,
+  "why": [
+    "the shared helper run_stable_runtime_launcher_attempt is the only active-chain procedure proven to hold serialized_lock across a launcher subprocess and to be reachable from multiple admitted runtime surfaces",
+    "the bounded retry contour itself did not run launch smoke, but it did run sync, rotation inspect, and status; status delegates to healthcheck, which is one of the helper's admitted entry lanes",
+    "the same live holder pid 53546 blocked both sync and immediate rotation-after-sync, which fits a longer launcher-backed owner procedure better than a short observation lock",
+    "launch smoke belongs to the earlier runtime reproof contour rather than the retry contour, so procedure-level localization is tighter when expressed at the shared helper layer rather than by naming one exclusive top-level command",
+    "status_after_sync later observed deterministic_stable_recovery_result.status=not_invoked, so current evidence still stops short of proving one exclusive top-level caller"
+  ],
+  "next_admitted_contour": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_PASS",
+  "forbidden_next_moves": [
+    "repeat sync --json before changing runtime procedure serialization discipline",
+    "claim selector refresh success",
+    "claim an exclusive top-level holder command without packet identity support",
+    "reopen auth admission, onboarding, route mutation, or stage/pilot work",
+    "bundle unrelated execution-core repair into this diagnosis contour"
+  ]
+}

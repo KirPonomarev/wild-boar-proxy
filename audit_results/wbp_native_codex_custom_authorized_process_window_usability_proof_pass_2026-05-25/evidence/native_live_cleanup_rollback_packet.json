@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "packet_kind": "native_cleanup_rollback_execution",
+  "captured_at_utc": "2026-05-25T10:08:33.826074Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_runtime_surface": "bounded_dispatch_only",
+  "ui_mutation_performed": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "native_launch_complete": false,
+  "product_status_upgraded": false,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "cleanup_attempted": true,
+  "rollback_attempted": false,
+  "cleanup_or_rollback_status": "ok",
+  "cleanup_blocked_reason_class": "",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_AUTHORIZED_PROCESS_WINDOW_USABILITY_PROOF_PASS_R6",
+  "cleanup_method": "killpg_term_then_verify_exit",
+  "cleanup_scope": "bounded_custom_process_group_only"
+}

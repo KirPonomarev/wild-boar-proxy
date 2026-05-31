@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-05-27T16:29:09.383217Z",
+  "checks": [
+    {
+      "name": "identity_kept_to_identity_path_only",
+      "passed": true
+    },
+    {
+      "name": "continuity_kept_to_owner_visible_only",
+      "passed": true
+    },
+    {
+      "name": "storage_not_widened_to_durable_thread_history",
+      "passed": true
+    },
+    {
+      "name": "keychain_kept_unknown_when_not_reobserved",
+      "passed": true
+    },
+    {
+      "name": "owner_action_kept_reference_only",
+      "passed": true
+    },
+    {
+      "name": "original_reversibility_not_widened_to_equivalence",
+      "passed": true
+    },
+    {
+      "name": "source_false_green_audits_remain_ok",
+      "passed": true
+    }
+  ],
+  "contour_final_status": "WBP_CUSTOM_PROFILE_AND_KEYCHAIN_CLASSIFIED_WITH_LIMITS",
+  "findings": [],
+  "forbidden_claims_present": false,
+  "packet_kind": "custom_profile_and_keychain_false_green_audit",
+  "source_packets": {
+    "keychain_false_green": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_keychain_prompt_behavior_import_r1_2026-05-27/keychain_prompt_false_green_audit.json",
+    "keychain_independent_audit": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_keychain_prompt_behavior_import_r1_2026-05-27/independent_keychain_prompt_behavior_audit.json",
+    "profile_false_green": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_history_import_r1_2026-05-27/persistent_profile_false_green_audit.json",
+    "profile_independent_audit": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_history_import_r1_2026-05-27/independent_persistent_profile_audit.json"
+  },
+  "status": "ok"
+}

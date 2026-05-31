@@ -1,0 +1,35 @@
+{
+  "captured_at_utc": "2026-05-27T08:51:25.022158Z",
+  "matrix_is_derived_not_truth_source": true,
+  "matrix_source_packets": [
+    "direct_non_stream_response_shape_packet.json",
+    "direct_stream_response_shape_packet.json",
+    "responses_tool_loop_packet.json",
+    "failure_semantics_packet.json",
+    "responses_live_non_native_summary_packet.json"
+  ],
+  "packet_kind": "responses_live_compatibility_matrix",
+  "status": "ok",
+  "surfaces": [
+    {
+      "proven": true,
+      "status": "ok",
+      "surface": "non_stream"
+    },
+    {
+      "proven": true,
+      "status": "ok",
+      "surface": "streaming"
+    },
+    {
+      "proven": true,
+      "status": "ok",
+      "surface": "tool_loop_followup"
+    },
+    {
+      "proven": true,
+      "status": "ok",
+      "surface": "failure_semantics"
+    }
+  ]
+}

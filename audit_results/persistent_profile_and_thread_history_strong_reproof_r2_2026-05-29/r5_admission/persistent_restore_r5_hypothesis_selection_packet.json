@@ -1,0 +1,48 @@
+{
+  "all_r4_hypotheses_treated_equal": false,
+  "auth_token_secret_surfaces_selected": false,
+  "captured_at_utc": "2026-05-29T05:45:36.552475Z",
+  "packet_kind": "persistent_restore_r5_hypothesis_selection",
+  "r4_candidate_count": 300,
+  "r4_hypothesis_count": 300,
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "selected_hypotheses": [
+    {
+      "durable_restoration_proven": false,
+      "exists_now": true,
+      "r4_hypothesis_path_present": true,
+      "raw_content_recorded": false,
+      "relative_path": "session_index.jsonl",
+      "selection_reason": "high_signal_session_surface",
+      "selection_score": 100,
+      "state_class": "session_state",
+      "surface_type": "jsonl"
+    },
+    {
+      "durable_restoration_proven": false,
+      "exists_now": true,
+      "r4_hypothesis_path_present": true,
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-06-47-019e6766-2330-74f1-94d8-633b9aca2982.jsonl",
+      "selection_reason": "high_signal_session_surface",
+      "selection_score": 90,
+      "state_class": "session_state",
+      "surface_type": "jsonl"
+    },
+    {
+      "durable_restoration_proven": false,
+      "exists_now": true,
+      "r4_hypothesis_path_present": true,
+      "raw_content_recorded": false,
+      "relative_path": "sessions/2026/05/27/rollout-2026-05-27T06-40-44-019e6785-390e-7a41-8b8a-30d123a9bbb6.jsonl",
+      "selection_reason": "high_signal_session_surface",
+      "selection_score": 90,
+      "state_class": "session_state",
+      "surface_type": "jsonl"
+    }
+  ],
+  "selected_hypothesis_count": 3,
+  "selection_policy": "1_to_3_high_signal_session_surfaces_only",
+  "status": "ok"
+}

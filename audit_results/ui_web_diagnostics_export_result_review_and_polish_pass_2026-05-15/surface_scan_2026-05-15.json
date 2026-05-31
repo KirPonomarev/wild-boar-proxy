@@ -1,0 +1,87 @@
+{
+  "contour_id": "UI_WEB_DIAGNOSTICS_EXPORT_RESULT_REVIEW_AND_POLISH_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "99684e9b043cbaf2a09121bbaa7a5724cbc86eb4",
+  "scan_scope": [
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_live_server.py",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py"
+  ],
+  "reviewed_surfaces": [
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "89-96",
+      "classification": "canonical_support_artifact",
+      "finding": "export_diagnostics remains action_role=support_artifact, mutates_runtime=false, affects_primary_truth=false, and post_action_refresh_required=false."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "1100-1109",
+      "classification": "sanitization_enforced",
+      "finding": "diagnostics export result reduces bundle_path to basename, normalizes redaction_status, adds support_artifact_only claim scope, and replaces changed_files with diagnostics_bundle markers."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "1123-1135",
+      "classification": "redaction_state_boundary",
+      "finding": "redaction proof is normalized to enabled, failed, or unreported; missing proof is not promoted to enabled."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1038-1077",
+      "classification": "compact_result_polished",
+      "finding": "export diagnostics compact action panel uses diagnosticsExportResultModel state/visual/copy instead of generic ok success."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1334-1348",
+      "classification": "ledger_state_polished",
+      "finding": "action ledger entries for export diagnostics use diagnosticsExportResultModel state and visual class."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1517-1525",
+      "classification": "expanded_details_bounded",
+      "finding": "expanded export details show artifact_ref, redaction state, changed_files count, and support_artifact_only scope."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1580-1692",
+      "classification": "state_grammar_polished",
+      "finding": "diagnostics export states include created, redaction_unreported, redaction_failed, artifact_unavailable, timeout, invalid_json, running, command_error, and integration_failure."
+    },
+    {
+      "path": "tests/test_web_design_ui.py",
+      "lines": "1786-1790,2060-2085,2210-2233",
+      "classification": "ui_guard_tests",
+      "finding": "tests assert missing redaction proof is amber/unreported, full paths do not leak, enabled redaction is support blue, failed redaction is red, and no runtime-health green appears."
+    },
+    {
+      "path": "tests/test_web_design_live_server.py",
+      "lines": "1714-1756",
+      "classification": "server_guard_tests",
+      "finding": "tests assert basename-only artifact metadata, diagnostics_bundle markers, redaction_status normalization, support_artifact_only scope, and no private tmp paths in returned JSON."
+    }
+  ],
+  "negative_scan_summary": {
+    "runtime_health_overclaim_copy_found": false,
+    "full_bundle_path_rendering_found": false,
+    "changed_files_path_rendering_found": false,
+    "raw_logs_display_found": false,
+    "raw_argv_display_found": false,
+    "raw_json_default_display_found": false,
+    "command_adapter_change_required": false,
+    "allowlist_change_required": false,
+    "runtime_change_required": false
+  },
+  "adjacent_risks": [
+    {
+      "scope": "desktop_shell",
+      "classification": "out_of_scope",
+      "summary": "A read-only inspector noted desktop shell diagnostics export path display as a future parity topic. This web/live-server contour did not change desktop/native surfaces."
+    }
+  ],
+  "verdict": "PASS"
+}

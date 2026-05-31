@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "artifact_file_count": 3,
+  "secret_pattern_scan_returncode": 1,
+  "secret_pattern_matches_present": false,
+  "secret_pattern_matches": [],
+  "notes": [
+    "secret_ref labels are allowed; raw provider key material is forbidden",
+    "direct provider probe output was redacted to status/http/model only"
+  ]
+}

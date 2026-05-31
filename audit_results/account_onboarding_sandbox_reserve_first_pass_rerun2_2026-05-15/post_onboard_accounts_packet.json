@@ -1,0 +1,60 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "human_message": "Account registry snapshot is available.",
+  "machine_error_code": "OK",
+  "changed_files": [],
+  "next_action": "none",
+  "liveness": "unknown",
+  "severity": "recoverable",
+  "operator_action": "none",
+  "accounts": [
+    {
+      "id": "auth",
+      "type": "cliproxy-auth-file",
+      "label": "auth.json",
+      "enabled": true,
+      "priority": 100,
+      "pool": "reserve",
+      "status": "unknown",
+      "fail_count": 0,
+      "success_count": 0,
+      "last_success": null,
+      "last_error": "",
+      "last_error_class": "",
+      "cooldown_until": null,
+      "proxy_mode": "auto-detect",
+      "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+      "added_at": "2026-05-15T15:26:42.498471+00:00",
+      "disabled_reason": "",
+      "drain_until": null,
+      "last_probe_level": null,
+      "last_probe_at": null,
+      "last_deep_probe_at": null,
+      "last_transition_at": null,
+      "manual_hold": false,
+      "half_open_since": null,
+      "notes": "Onboarded automatically at 2026-05-15T15:26:42.498291+00:00"
+    }
+  ],
+  "registry_identity": {
+    "status": "clear",
+    "machine_error_code": "OK",
+    "duplicate_backend_ids": [],
+    "duplicate_auth_basenames": [],
+    "missing_auth_refs": [],
+    "empty_auth_ref_backends": [],
+    "invalid_auth_basenames": [],
+    "invalid_backend_pools": [],
+    "registry_schema_version": 2,
+    "unsupported_schema_versions": [],
+    "claim_blockers": [],
+    "next_action": "none"
+  },
+  "pool_policy": {
+    "active_min": 0,
+    "active_target": 0,
+    "reserve_target": 0
+  },
+  "stable_default_backend_id": ""
+}

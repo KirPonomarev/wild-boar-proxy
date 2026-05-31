@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "contour": "CONCURRENT_OWNER_PATH_SOURCE_LOCALIZATION_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "CONTINUE_STOP_AND_DIAGNOSE_WITH_RUNTIME_OWNER_PROCEDURE_OVERLAP_DIAGNOSE",
+  "owner_source_localized": "partially_localized_ranked_candidates",
+  "owner_source_class": "admissible_concurrent_runtime_activity_with_orchestration_overlap",
+  "most_likely_owner_source": "launch_smoke_or_healthcheck_stable_recovery_launcher_lane",
+  "evidence_strength": "moderate",
+  "retry_forbidden_or_admitted": "forbidden",
+  "requires_code_fix": false,
+  "requires_runtime_procedure_fix": true,
+  "why": [
+    "repeated LOCK_HELD packets carried live holder pids and zero changed_files, which keeps stale-lock cleanup off the table",
+    "the bounded retry contour observed the same holder pid 53546 on sync and on immediate rotation-after-sync, which fits a longer-lived owner path better than a short read-only observation critical section",
+    "stable launcher lanes in run_launch_smoke and in healthcheck recovery hold serialized_lock across subprocess.run([launcher_script, smoke]) and are the strongest active-chain candidates for that longer hold time",
+    "status --json is not lock-free in practice because it delegates into run_healthcheck, which can itself enter launcher-backed owner paths",
+    "rollout rotation inspect also shares the same lock, so procedure-level overlap between observation and mutation lanes remains a real contributing risk even though it is a weaker exclusive-source candidate",
+    "current evidence localizes the lock source class more tightly, but it still does not prove one exclusive command surface by packet identity alone"
+  ],
+  "next_admitted_contour": "RUNTIME_OWNER_PROCEDURE_OVERLAP_DIAGNOSE_PASS",
+  "forbidden_next_moves": [
+    "repeat sync --json before narrowing the overlapping runtime procedure owner",
+    "claim selector refresh success",
+    "claim a code-level serialization bug is proven",
+    "reopen auth admission, onboarding, route mutation, or stage/pilot work",
+    "bundle repair into this localization contour"
+  ]
+}

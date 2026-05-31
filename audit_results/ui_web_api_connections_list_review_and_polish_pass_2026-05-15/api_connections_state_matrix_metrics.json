@@ -1,0 +1,354 @@
+{
+  "fixture_healthy": {
+    "url": "http://127.0.0.1:8765/?screen=api-connections&state=healthy",
+    "banner": "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "visibleSvgs": 0,
+    "visibleImgs": 3,
+    "headers": [
+      "Маршрут",
+      "Провайдер",
+      "Модель",
+      "Registry",
+      "Validation",
+      "Secret ref",
+      "Last check",
+      "Действия"
+    ],
+    "buttons": [
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Удаление доступно только для disabled route после server preflight."
+      },
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Черновик маршрута · missing surface",
+        "scrollWidth": 276,
+        "clientWidth": 276,
+        "disabled": true,
+        "title": "Route builder needs a separate admitted command surface."
+      }
+    ],
+    "rows": [
+      "wbp-openrouter-primaryOpenRouter registry entry · registry entryopenrouterdeepseek/deepseek-chatenablednot checkedOPENROUTER_PRIMARYavailable12:44Проверить маршрутДеталиУдалить route",
+      "wbp-openrouter-reserveOpenRouter disabled entry · registry entryopenrouterdeepseek/deepseek-chatdisablednot checkedOPENROUTER_RESERVEunknown—Проверить маршрутДеталиУдалить route"
+    ]
+  },
+  "fixture_degraded": {
+    "url": "http://127.0.0.1:8765/?screen=api-connections&state=degraded",
+    "banner": "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "visibleSvgs": 0,
+    "visibleImgs": 3,
+    "headers": [
+      "Маршрут",
+      "Провайдер",
+      "Модель",
+      "Registry",
+      "Validation",
+      "Secret ref",
+      "Last check",
+      "Действия"
+    ],
+    "buttons": [
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Удаление доступно только для disabled route после server preflight."
+      },
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Черновик маршрута · missing surface",
+        "scrollWidth": 276,
+        "clientWidth": 276,
+        "disabled": true,
+        "title": "Route builder needs a separate admitted command surface."
+      }
+    ],
+    "rows": [
+      "wbp-openrouter-primaryOpenRouter registry entry · registry entryopenrouterdeepseek/deepseek-chatmissing secretblocked by secretOPENROUTER_PRIMARYmissing—Проверить маршрутДеталиУдалить route",
+      "wbp-openrouter-reserveOpenRouter disabled entry · registry entryopenrouterdeepseek/deepseek-chatdisablednot checkedOPENROUTER_RESERVEunknown—Проверить маршрутДеталиУдалить route"
+    ]
+  },
+  "fixture_down": {
+    "url": "http://127.0.0.1:8765/?screen=api-connections&state=down",
+    "banner": "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "visibleSvgs": 0,
+    "visibleImgs": 3,
+    "headers": [
+      "Маршрут",
+      "Провайдер",
+      "Модель",
+      "Registry",
+      "Validation",
+      "Secret ref",
+      "Last check",
+      "Действия"
+    ],
+    "buttons": [
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Удаление доступно только для disabled route после server preflight."
+      },
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Черновик маршрута · missing surface",
+        "scrollWidth": 276,
+        "clientWidth": 276,
+        "disabled": true,
+        "title": "Route builder needs a separate admitted command surface."
+      }
+    ],
+    "rows": [
+      "wbp-openrouter-primaryOpenRouter registry entry · registry entryopenrouterdeepseek/deepseek-chatenablednot checkedOPENROUTER_PRIMARYavailable12:44Проверить маршрутДеталиУдалить route",
+      "wbp-openrouter-reserveOpenRouter disabled entry · registry entryopenrouterdeepseek/deepseek-chatdisablednot checkedOPENROUTER_RESERVEunknown—Проверить маршрутДеталиУдалить route"
+    ]
+  },
+  "fixture_stale": {
+    "url": "http://127.0.0.1:8765/?screen=api-connections&state=stale",
+    "banner": "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "visibleSvgs": 0,
+    "visibleImgs": 3,
+    "headers": [
+      "Маршрут",
+      "Провайдер",
+      "Модель",
+      "Registry",
+      "Validation",
+      "Secret ref",
+      "Last check",
+      "Действия"
+    ],
+    "buttons": [
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Удаление доступно только для disabled route после server preflight."
+      },
+      {
+        "text": "Проверить маршрут",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+      },
+      {
+        "text": "Детали",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Readonly route details are deferred to a separate surface."
+      },
+      {
+        "text": "Удалить route",
+        "scrollWidth": 192,
+        "clientWidth": 192,
+        "disabled": true,
+        "title": "Переключите экран на live-источник перед выполнением действий."
+      },
+      {
+        "text": "Черновик маршрута · missing surface",
+        "scrollWidth": 276,
+        "clientWidth": 276,
+        "disabled": true,
+        "title": "Route builder needs a separate admitted command surface."
+      }
+    ],
+    "rows": [
+      "wbp-openrouter-primaryOpenRouter registry entry · registry entryopenrouterdeepseek/deepseek-chatenablednot checkedOPENROUTER_PRIMARYavailable12:44Проверить маршрутДеталиУдалить route",
+      "wbp-openrouter-reserveOpenRouter disabled entry · registry entryopenrouterdeepseek/deepseek-chatdisablednot checkedOPENROUTER_RESERVEunknown—Проверить маршрутДеталиУдалить route"
+    ]
+  },
+  "live_integration_failure": {
+    "url": "http://127.0.0.1:8765/?screen=api-connections&source=live",
+    "banner": "Live-readonly маршруты недоступны. Предыдущие данные не используются.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "screenBottom": 647,
+    "screenHeight": 479,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "visibleSvgs": 0,
+    "visibleImgs": 1,
+    "headers": [
+      "Маршрут",
+      "Провайдер",
+      "Модель",
+      "Registry",
+      "Validation",
+      "Secret ref",
+      "Last check",
+      "Действия"
+    ],
+    "buttons": [
+      {
+        "text": "Черновик маршрута · missing surface",
+        "scrollWidth": 276,
+        "clientWidth": 276,
+        "disabled": true,
+        "title": "Route builder needs a separate admitted command surface."
+      }
+    ],
+    "rows": [
+      "Маршруты недоступны. Создание и изменение маршрутов остаются deferred до отдельного server-side builder."
+    ]
+  }
+}

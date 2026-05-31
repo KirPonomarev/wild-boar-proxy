@@ -1,0 +1,133 @@
+{
+  "captured_at_utc": "2026-05-27T06:30:39.437690Z",
+  "missing_summary_hashes": [],
+  "packet_kind": "persistent_pre_live_prior_reference_hashes",
+  "reference_hashes_are_live_proof": false,
+  "referenced_packet_count": 23,
+  "references": [
+    {
+      "contour_key": "r1_launcher_contract",
+      "summary_packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_readiness_summary_packet.json",
+      "summary_packet_sha256": "0061f7d7e0f7f20b56d87971eaa865221a8695472d1e62eed98f3552be88f481",
+      "supporting_packets": [
+        {
+          "packet_name": "persistent_launcher_contract_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_contract_packet.json",
+          "packet_sha256": "812f002dcd5e371679398b4f4c01804260f3158fa8d390a956a85845111d8b21"
+        },
+        {
+          "packet_name": "persistent_profile_identity_contract_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_profile_identity_contract_packet.json",
+          "packet_sha256": "5d081bc0e55e03e18c393de5070cf5d65fbc48e83f232162bd07e47d2ffe8e65"
+        },
+        {
+          "packet_name": "persistent_profile_path_authority_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_profile_path_authority_packet.json",
+          "packet_sha256": "25f2ed1ee1f912ca847ce2a3ca983371965c16d8ff08eae20cbe4c880c370351"
+        },
+        {
+          "packet_name": "original_codex_profile_non_dependency_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/original_codex_profile_non_dependency_packet.json",
+          "packet_sha256": "27435d911c3529402837bb1e155f48c87472700d96013bf9c5fd282b97ff4a15"
+        },
+        {
+          "packet_name": "persistent_launcher_non_substitution_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_non_substitution_packet.json",
+          "packet_sha256": "48ef11067ad4a843ea4d00a3f5337e313448138c8353bdc37a80bb9bfc1e6e00"
+        }
+      ]
+    },
+    {
+      "contour_key": "r2_dry_run_enforcement",
+      "summary_packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_launcher_enforcement_summary_packet.json",
+      "summary_packet_sha256": "c39ec6c1f8b766a97346b2436c15f9fbd828ece4144b23bd5d1f9cb6acfc8cd9",
+      "supporting_packets": [
+        {
+          "packet_name": "persistent_launcher_enforcement_contract_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_launcher_enforcement_contract_packet.json",
+          "packet_sha256": "fd107acea8776da01f17c9641c0b55237db8058c0b99bb73508000f227a2d33d"
+        },
+        {
+          "packet_name": "persistent_path_authority_enforcement_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_path_authority_enforcement_packet.json",
+          "packet_sha256": "05949e5cd66f4e01115d4ecc5b07c3a816f35fed32c2c1749412f5298d8aadb8"
+        },
+        {
+          "packet_name": "persistent_no_silent_fallback_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_no_silent_fallback_packet.json",
+          "packet_sha256": "75191c2da0fe908853490a81af204235b8c1516923560f8b59808899d1bfbfb0"
+        },
+        {
+          "packet_name": "persistent_original_profile_guard_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_original_profile_guard_packet.json",
+          "packet_sha256": "a87054dc9350544850427c8749e545e9ad9fb474b6bd1644395829cfc9ea2857"
+        },
+        {
+          "packet_name": "persistent_launcher_live_enforcement_non_claim_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_launcher_dry_run_enforcement_readiness_r2_2026-05-27/persistent_launcher_live_enforcement_non_claim_packet.json",
+          "packet_sha256": "acf4ca2ab11c6ee21efa0fcc9d6e22a6376160ae775f864a45a0e526db5c22cd"
+        }
+      ]
+    },
+    {
+      "contour_key": "r3_state_diff",
+      "summary_packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_state_diff_summary_packet.json",
+      "summary_packet_sha256": "842466adb2544af5ace98772b118f121b47c350b2574f9da6503b6d55d1b872c",
+      "supporting_packets": [
+        {
+          "packet_name": "persistent_profile_snapshot_schema_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_profile_snapshot_schema_packet.json",
+          "packet_sha256": "139f8a90579232cf3439b7b8e69c216a8bd9a05dbd908f6f22c7c05a76334e85"
+        },
+        {
+          "packet_name": "persistent_profile_diff_schema_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_profile_diff_schema_packet.json",
+          "packet_sha256": "71f098f625cb9bbb0f51cad6146e0f649cb93d22b75b8c2414278038981f9744"
+        },
+        {
+          "packet_name": "persistent_redaction_policy_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_redaction_policy_packet.json",
+          "packet_sha256": "bf3408d6a62a03ffc05233c3b530a4d3d729c17fb316a96cdff5607a20b32887"
+        },
+        {
+          "packet_name": "thread_history_non_claim_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/thread_history_non_claim_packet.json",
+          "packet_sha256": "be901a5db51cba12ff050bb41ec9e37ad8eccd834671bb0b6f85a2c25ca31ea6"
+        }
+      ]
+    },
+    {
+      "contour_key": "r4_backup_restore",
+      "summary_packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_restore_summary_packet.json",
+      "summary_packet_sha256": "c2fe8c3a215e36d9b6c5a31a500abd216dae2ab182ca08cb57cacefd5409b1e2",
+      "supporting_packets": [
+        {
+          "packet_name": "persistent_backup_restore_contract_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_restore_contract_packet.json",
+          "packet_sha256": "eb76ff4531cf477e56356533c4aca582791f258acda2b815103e2dd3a3a72a51"
+        },
+        {
+          "packet_name": "persistent_backup_path_authority_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_path_authority_packet.json",
+          "packet_sha256": "f982ec3db19ce632cd440fcb6c945bf057df6280cf660de9c7b4eeac1e77b955"
+        },
+        {
+          "packet_name": "persistent_restore_path_authority_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_restore_path_authority_packet.json",
+          "packet_sha256": "d7e621d70814024658a238a7e71fb22dd2966856d3751e8f3be606055852c4e2"
+        },
+        {
+          "packet_name": "persistent_destructive_action_guard_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_destructive_action_guard_packet.json",
+          "packet_sha256": "15c8246109ea3a0c46f987eb1eaf7f0b722d41934a045448d563540cb163a175"
+        },
+        {
+          "packet_name": "persistent_original_profile_backup_restore_guard_packet.json",
+          "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_original_profile_backup_restore_guard_packet.json",
+          "packet_sha256": "fe8364dcfe190c8673c27d9ea3231ac79869cbff0d456de4cdb282cc2359257e"
+        }
+      ]
+    }
+  ],
+  "status": "ok"
+}

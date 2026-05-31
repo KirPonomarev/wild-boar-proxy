@@ -1,0 +1,25 @@
+{
+  "contour": "LEGACY_IMPORT_DISCOVERY_OR_DRY_RUN_COMMAND_CONTOUR",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head_before_commit": "30fcf0c8",
+  "verification": [
+    {
+      "type": "build",
+      "command": "python3 -m py_compile wild_boar_proxy/web_design_live_server.py tests/test_web_design_live_server.py",
+      "result": "ok"
+    },
+    {
+      "type": "tests",
+      "command": "PYTHONPATH=<ephemeral tkinter+PIL stubs> python3 -m unittest tests.test_web_design_live_server tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_screens_are_inert_skeletons tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_routes_are_static_only -q",
+      "result": "ok",
+      "details": "109 tests OK",
+      "environment_note": "local python3 lacks _tkinter and Pillow; launch-time stubs only, no repo changes"
+    },
+    {
+      "type": "build",
+      "command": "git diff --check",
+      "result": "ok"
+    }
+  ],
+  "packet_evidence": "audit_results/legacy_import_discovery_or_dry_run_command_contour_pass_2026-05-25/evidence/action_packets.json"
+}

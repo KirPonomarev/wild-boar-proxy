@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T07:20:18.948506Z",
+  "cleanup_tmp_root_removed": true,
+  "full_e2e_claimed": false,
+  "packet_count_json": 25,
+  "secret_findings_after_remediation": 0,
+  "trace_response_body_sha256_present": true,
+  "trace_upstream_status": 200,
+  "unit_tests_count": 88
+}

@@ -1,0 +1,370 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_FINAL_VISUAL_FREEZE_PRECHECK",
+  "date": "2026-05-14",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "source": "fixture/demo only",
+  "execution_policy": {
+    "live_runtime_used": false,
+    "final_confirm_clicked": false,
+    "command_request_executed": false,
+    "runtime_mutation_attempted": false
+  },
+  "result": "PASS",
+  "tiny_repairs_applied": [
+    {
+      "classification": "freeze-blocking visual",
+      "files": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "summary": "renamed one overview action label to compact operator copy, tightened overview secondary action spacing, and reduced api-connections table minimum by 8px"
+    }
+  ],
+  "screen_cases": [
+    {
+      "name": "overview",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/overview_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "overview",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 938,
+          "width": 1158,
+          "height": 753
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 9,
+        "textOverflowNodes": [],
+        "setupForbidden": null,
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "accounts",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/accounts_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "accounts",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 193,
+          "bottom": 706,
+          "width": 1158,
+          "height": 513
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 12,
+        "textOverflowNodes": [],
+        "setupForbidden": null,
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "api-connections",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/api-connections_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "api-connections",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 785,
+          "width": 1158,
+          "height": 600
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 14,
+        "textOverflowNodes": [],
+        "setupForbidden": null,
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "diagnostics",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/diagnostics_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "diagnostics",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 193,
+          "bottom": 1255,
+          "width": 1158,
+          "height": 1062
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 5,
+        "textOverflowNodes": [],
+        "setupForbidden": null,
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "settings",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/settings_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "settings",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 1259,
+          "width": 1158,
+          "height": 1074
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 11,
+        "textOverflowNodes": [],
+        "setupForbidden": null,
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "setup",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/setup_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "setup",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 993,
+          "width": 1158,
+          "height": 808
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 8,
+        "textOverflowNodes": [],
+        "setupForbidden": {
+          "dataUiActionCount": 0,
+          "liveActionCount": 0,
+          "enabledButtonCount": 0,
+          "fileInputs": 0,
+          "pathLikeText": false
+        },
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "select-client",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/select-client_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "select-client",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 1041,
+          "width": 1158,
+          "height": 856
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 10,
+        "textOverflowNodes": [],
+        "setupForbidden": {
+          "dataUiActionCount": 0,
+          "liveActionCount": 0,
+          "enabledButtonCount": 0,
+          "fileInputs": 0,
+          "pathLikeText": false
+        },
+        "hasOverclaim": false
+      }
+    },
+    {
+      "name": "import-existing",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/import-existing_fixture_1600x1000.png",
+      "metrics": {
+        "screen": "import-existing",
+        "activeVisible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "bodyScrollHeight": 1000,
+        "viewportHeight": 1000,
+        "windowRect": {
+          "left": 28,
+          "right": 1572,
+          "top": 28,
+          "bottom": 972,
+          "width": 1544,
+          "height": 944
+        },
+        "activeRect": {
+          "left": 373,
+          "right": 1531,
+          "top": 185,
+          "bottom": 1157,
+          "width": 1158,
+          "height": 972
+        },
+        "activeDataActions": [],
+        "visibleButtonCount": 11,
+        "textOverflowNodes": [],
+        "setupForbidden": {
+          "dataUiActionCount": 0,
+          "liveActionCount": 0,
+          "enabledButtonCount": 0,
+          "fileInputs": 0,
+          "pathLikeText": false
+        },
+        "hasOverclaim": false
+      }
+    }
+  ],
+  "modal_cases": [
+    {
+      "name": "confirmation-modal",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/confirmation_modal_1600x1000.png",
+      "metrics": {
+        "kind": "confirm",
+        "visible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 625,
+          "left": 480,
+          "right": 1120,
+          "top": 188,
+          "bottom": 813
+        },
+        "finalConfirmClicked": false,
+        "forbiddenInputs": 0,
+        "hasOverclaim": false,
+        "boundaryText": "command request\nне runtime truth\nнужен JSON refresh",
+        "truthNote": "Это запрашивает желаемый managed mode. Фактический режим должен быть подтверждён обновлённым JSON."
+      }
+    },
+    {
+      "name": "onboard-modal",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/onboard_modal_1600x1000.png",
+      "metrics": {
+        "kind": "onboard",
+        "visible": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 575,
+          "left": 480,
+          "right": 1120,
+          "top": 213,
+          "bottom": 788
+        },
+        "finalConfirmClicked": false,
+        "forbiddenInputs": 0,
+        "hasOverclaim": false,
+        "boundaryText": "command request\nрезерв сначала\nрезультат только из packet",
+        "truthNote": "Это окно запускает ограниченный owner command request. Оно не сканирует файлы, не загружает учётные данные и не доказывает включение в рабочий поток."
+      }
+    }
+  ],
+  "blocker_candidates": []
+}

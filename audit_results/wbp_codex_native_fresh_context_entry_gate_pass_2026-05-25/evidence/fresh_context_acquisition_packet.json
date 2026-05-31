@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-25T14:47:43.133518Z",
+  "fresh_context_verified": false,
+  "operator_action_performed": false,
+  "operator_action_required": true,
+  "phase7_retry_admissible": false,
+  "reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED",
+  "status": "blocked",
+  "verdict": "operator_mediated_fresh_context_not_provided"
+}

@@ -20,6 +20,8 @@
 - timely sync is mandatory: branch push happens in the same closeout cycle as verification and commit
 - PR creation follows push as soon as the contour is ready for reviewable delivery
 - merge is allowed only after verification evidence exists for the contour
+- new or changed `audit_results/*closeout*.md` files must pass
+  `python3 tools/check_closeout_resilience.py` before commit
 
 ## Runtime discipline
 

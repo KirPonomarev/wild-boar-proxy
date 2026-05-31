@@ -1,0 +1,132 @@
+{
+  "contour": "SANDBOX_POST_PROMOTION_STATUS_ATTESTATION_REPAIR_PASS",
+  "captured_at_utc": "2026-05-15T16:23:29.978770+00:00",
+  "sandbox_env_map": {
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+  },
+  "prior_promote_packet_summary": {
+    "machine_error_code": "PROMOTION_STATUS_FAILED",
+    "status_observed_machine_error_code": "ATTESTATION_FAILED",
+    "status_observed_effective_mode": "stable",
+    "status_observed_endpoint": "http://127.0.0.1:8318/v1",
+    "routing_change_observed": false,
+    "rollback_outcome": "completed",
+    "final_outcome": "rollback_completed_after_failed_verification"
+  },
+  "prior_post_promote_status_summary": {
+    "machine_error_code": "ATTESTATION_FAILED",
+    "launch_blocking_reason": "models_surface_unavailable_or_invalid",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+  },
+  "current_status_packet_summary": {
+    "machine_error_code": "ATTESTATION_FAILED",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "launch_blocking_reason": "models_surface_unavailable_or_invalid",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+    "launcher_consumer_status": "repo_owned_default_consumer_provisioning_available",
+    "repo_owned_default_consumer_provisioned": false,
+    "external_launcher_readiness_status": "default_path_present_ownership_unverified"
+  },
+  "current_healthcheck_packet_summary": {
+    "machine_error_code": "ATTESTATION_FAILED",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "launch_blocking_reason": "models_surface_unavailable_or_invalid",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+  },
+  "current_sync_packet_summary": {
+    "machine_error_code": "OK",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-test/config.toml",
+      "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt"
+    ]
+  },
+  "listener_observation": {
+    "8318": {
+      "listening": true
+    },
+    "8320": {
+      "listening": false,
+      "error": "[Errno 61] Connection refused"
+    }
+  },
+  "external_models_surface": {
+    "routes_keys": [
+      "routes",
+      "schema_version"
+    ],
+    "route_count": 0,
+    "state": {
+      "schema_version": 2,
+      "policy": {
+        "paid_routes_enabled": false,
+        "paid_route_allowlist": [],
+        "paid_route_default": "blocked"
+      },
+      "adapter": {
+        "lifecycle_mode": "synthetic",
+        "state": "stopped",
+        "host": "127.0.0.1",
+        "port": null,
+        "base_url": null,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "started_at_utc": null,
+        "last_transition": "init"
+      },
+      "local_auth": {
+        "token_ref": "managed_local_token",
+        "token_present": false,
+        "token_created_at_utc": null
+      },
+      "routes": {}
+    },
+    "secrets_keys": []
+  },
+  "sandbox_runtime_files": {
+    "runtime_effective_mode": "stable",
+    "config_toml": "model = \"claude-sonnet-4-6-thinking\"\nmodel_provider = \"vibeproxy\"\nsandbox_mode = \"read-only\"\n\n[model_providers.vibeproxy]\nname = \"VibeProxy PoC\"\nbase_url = \"http://127.0.0.1:8318/v1\"\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\nsupports_websockets = false\n",
+    "launcher_script": "#!/bin/sh\nprintf %s\\n \"sandbox scaffold only; not launch-ready\"\nexit 64\n",
+    "supervisor_state": {
+      "schema_version": 2,
+      "version": 2,
+      "status": "unknown",
+      "effective_mode": "stable",
+      "last_sync_at": "2026-05-15T16:23:29.936737+00:00",
+      "last_error": "",
+      "selected_backend_ids": [],
+      "managed_port": 8320,
+      "current_proxy_url": "",
+      "stable_default_backend_id": "",
+      "active_count": 0,
+      "reserve_count": 1,
+      "retired_count": 0,
+      "healthy_count": 0,
+      "degraded_count": 0,
+      "down_count": 1
+    },
+    "registry_pool_policy": {
+      "active_min": 10,
+      "active_target": 10,
+      "reserve_target": 0
+    },
+    "registry_backend_ids": [
+      "auth"
+    ]
+  }
+}

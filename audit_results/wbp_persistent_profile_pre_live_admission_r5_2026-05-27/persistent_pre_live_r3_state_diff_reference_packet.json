@@ -1,0 +1,63 @@
+{
+  "captured_at_utc": "2026-05-27T06:30:39.437208Z",
+  "contour_key": "r3_state_diff",
+  "evidence_dir": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27",
+  "expected_final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_STATE_DIFF_REDACTION_READINESS_R3_CLASSIFIED",
+  "missing_supporting_packets": [],
+  "non_claim_flags": {
+    "custom_app_launch_attempted": false,
+    "final_e2e_claimed": false,
+    "keychain_behavior_classified": false,
+    "live_provider_request_attempted": false,
+    "native_launch_attempted": false,
+    "native_ux_claimed": false,
+    "original_reversibility_proven": false,
+    "owner_input_required": false,
+    "owner_prompt_required": false,
+    "persistent_profile_state_written": false,
+    "profile_storage_persistence_claimed": false,
+    "thread_history_preservation_claimed": false
+  },
+  "non_claim_overclaims": [],
+  "old_owner_visible_context_used_as_current_ui_proof": false,
+  "old_route_trace_used_as_current_route_proof": false,
+  "packet_hash_recorded": true,
+  "packet_kind": "persistent_pre_live_r3_state_diff_reference",
+  "prior_evidence_reclassified_to_stronger_claim": false,
+  "prior_final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_STATE_DIFF_REDACTION_READINESS_R3_CLASSIFIED",
+  "prior_final_status_ok": true,
+  "prior_ok_treated_as_live_proof": false,
+  "prior_status": "ok",
+  "prior_status_ok": true,
+  "r3_state_diff_readiness_used_as_saved_thread_proof": false,
+  "r4_backup_restore_readiness_used_as_backup_or_restore_execution": false,
+  "reason_class": "",
+  "status": "ok",
+  "summary_packet_name": "persistent_state_diff_summary_packet.json",
+  "summary_packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_state_diff_summary_packet.json",
+  "summary_packet_present": true,
+  "summary_packet_read_error": "",
+  "summary_packet_sha256": "842466adb2544af5ace98772b118f121b47c350b2574f9da6503b6d55d1b872c",
+  "supporting_packets": [
+    {
+      "packet_name": "persistent_profile_snapshot_schema_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_profile_snapshot_schema_packet.json",
+      "packet_sha256": "139f8a90579232cf3439b7b8e69c216a8bd9a05dbd908f6f22c7c05a76334e85"
+    },
+    {
+      "packet_name": "persistent_profile_diff_schema_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_profile_diff_schema_packet.json",
+      "packet_sha256": "71f098f625cb9bbb0f51cad6146e0f649cb93d22b75b8c2414278038981f9744"
+    },
+    {
+      "packet_name": "persistent_redaction_policy_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/persistent_redaction_policy_packet.json",
+      "packet_sha256": "bf3408d6a62a03ffc05233c3b530a4d3d729c17fb316a96cdff5607a20b32887"
+    },
+    {
+      "packet_name": "thread_history_non_claim_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_state_diff_redaction_readiness_r3_2026-05-27/thread_history_non_claim_packet.json",
+      "packet_sha256": "be901a5db51cba12ff050bb41ec9e37ad8eccd834671bb0b6f85a2c25ca31ea6"
+    }
+  ]
+}

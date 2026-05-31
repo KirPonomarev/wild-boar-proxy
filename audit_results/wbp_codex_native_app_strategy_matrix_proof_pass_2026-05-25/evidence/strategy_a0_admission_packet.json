@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "disqualified_by_static_evidence": true,
+  "disqualifier_kind": "repo_contract_mismatch",
+  "external_strategy_id": "A0_external_real_home_proxy_auth",
+  "failed_checks_if_applied_to_current_contract": [
+    "custom_requires_isolated_home_plan"
+  ],
+  "live_launch_performed": false,
+  "machine_error_code": "CUSTOM_NATIVE_REQUIRES_ISOLATED_HOME_PLAN",
+  "nearest_repo_canonical_candidate": "repo_canonical_custom_proxy_auth_isolated_home",
+  "packet_kind": "strategy_a0_admission",
+  "ref_lines": [
+    "wild_boar_proxy/native_launch_contract.py:124-139",
+    "wild_boar_proxy/native_launch_contract.py:441-460",
+    "wild_boar_proxy/runtime.py:998-1013"
+  ],
+  "repo_canon_alignment": false,
+  "runtime_claims_deferred": true,
+  "schema_version": 1,
+  "status": "blocked"
+}

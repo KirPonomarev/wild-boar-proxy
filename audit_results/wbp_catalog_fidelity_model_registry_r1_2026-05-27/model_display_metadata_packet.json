@@ -1,0 +1,104 @@
+{
+  "captured_at_utc": "2026-05-27T08:59:47.899590Z",
+  "display_metadata_is_runtime_truth": false,
+  "models": [
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "WBP direct-mistral-devstral-2512",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "wbp_api",
+      "model_id": "direct-mistral-devstral-2512",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "gpt-5.3-codex",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "codex_native",
+      "model_id": "gpt-5.3-codex",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "gpt-5.4",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "codex_native",
+      "model_id": "gpt-5.4",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "gpt-5.5",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "codex_native",
+      "model_id": "gpt-5.5",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "WBP provider/native-looking",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "wbp_api",
+      "model_id": "native-looking-external",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_claim_level": "listed_not_live_proven",
+      "display_name": "WBP deepseek-max",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane": "wbp_api",
+      "model_id": "wbp:deepseek-max",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    }
+  ],
+  "packet_kind": "model_display_metadata",
+  "status": "ok"
+}

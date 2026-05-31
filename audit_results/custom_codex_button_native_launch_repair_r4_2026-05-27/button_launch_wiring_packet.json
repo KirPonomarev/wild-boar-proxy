@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-27T19:35:00Z",
+  "status": "ok",
+  "contour": "CUSTOM_CODEX_BUTTON_NATIVE_LAUNCH_REPAIR_R4",
+  "overview_button_ui_action": "launch_custom_client_native",
+  "settings_button_ui_action": "launch_custom_client_native",
+  "overview_dispatch_wiring_removed": true,
+  "settings_dispatch_wiring_removed": true,
+  "source_files": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js"
+  ]
+}

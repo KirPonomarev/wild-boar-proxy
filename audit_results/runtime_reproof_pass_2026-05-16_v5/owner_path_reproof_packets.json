@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "packet_files": {
+    "healthcheck": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/healthcheck_packet.json",
+    "status_after_healthcheck": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/status_after_healthcheck.json",
+    "launch_smoke": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/launch_smoke_packet.json",
+    "status_after_launch_smoke": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/status_after_launch_smoke.json"
+  },
+  "packet_sequence_summary": [
+    {
+      "command": "healthcheck --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "changed_files": []
+    },
+    {
+      "command": "status --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    {
+      "command": "launch smoke --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+        "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+      ]
+    },
+    {
+      "command": "status --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear"
+    }
+  ]
+}

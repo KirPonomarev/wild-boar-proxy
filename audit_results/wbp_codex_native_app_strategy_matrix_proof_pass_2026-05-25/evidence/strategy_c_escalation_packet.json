@@ -1,0 +1,16 @@
+{
+  "candidate_priority": "escalation_only",
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "live_launch_available_now": false,
+  "machine_error_code": "SEPARATE_APP_COPY_DRY_RUN_ONLY",
+  "packet_kind": "strategy_c_escalation",
+  "ref_lines": [
+    "wild_boar_proxy/codex_launch_modes.py:198-209"
+  ],
+  "repo_surface_kind": "safe_app_copy_dry_run_only",
+  "repo_surface_present": true,
+  "runtime_claims_deferred": true,
+  "schema_version": 1,
+  "status": "ok",
+  "strategy_id": "C_separate_app_identity_copy"
+}

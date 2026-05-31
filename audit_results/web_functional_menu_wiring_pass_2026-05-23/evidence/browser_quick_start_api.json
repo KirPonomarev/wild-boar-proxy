@@ -1,0 +1,21 @@
+{
+  "hasDeepseekLabel": true,
+  "hasDeepseekRef": true,
+  "hasPrimaryRouteLabel": true,
+  "hasValidationFailedLabel": true,
+  "url": "http://127.0.0.1:8788/?source=live&screen=quick-start#api-connections",
+  "visibleButtons": [
+    {
+      "disabled": false,
+      "index": 8,
+      "text": "Подключить аккаунт",
+      "visible": true
+    },
+    {
+      "disabled": true,
+      "index": 9,
+      "text": "Проверить",
+      "visible": true
+    }
+  ]
+}

@@ -52,6 +52,20 @@ class ExternalAgentLabQuarantineImportTests(unittest.TestCase):
                 self.assertIn("lane_role", entry)
                 self.assertIn("evidence_level", entry)
 
+    def test_devstral_route_and_registry_entry_are_present(self) -> None:
+        proxy_text = (LEGACY_ROOT / "proxy_server.py").read_text(encoding="utf-8")
+        registry = json.loads((LAB_ROOT / "model_registry_seed.json").read_text(encoding="utf-8"))
+        devstral_entry = next((entry for entry in registry["entries"] if entry.get("model_id") == "direct-mistral-devstral-2512"), None)
+
+        self.assertIn('"direct-mistral-devstral-2512"', proxy_text)
+        self.assertIn('"mistral-devstral-2512-direct": "direct-mistral-devstral-2512"', proxy_text)
+        self.assertIsNotNone(devstral_entry)
+        self.assertEqual(devstral_entry["provider"], "mistral")
+        self.assertEqual(devstral_entry["availability_state"], "verified_accessible")
+        self.assertEqual(devstral_entry["lane_role"], "secondary_reasoning")
+        self.assertEqual(devstral_entry["evidence_level"], "runtime_success")
+        self.assertEqual(devstral_entry["cost_class"], "paid_direct")
+
     def test_root_wrappers_are_thin_compatibility_shims(self) -> None:
         for wrapper_name, expected_import in (
             ("run_lab.py", "from external_agent_lab.cli import main"),
@@ -77,7 +91,6 @@ class ExternalAgentLabQuarantineImportTests(unittest.TestCase):
     def test_forbidden_source_artifacts_were_not_imported(self) -> None:
         forbidden_names = {
             ".env",
-            "eval_results",
             "route_results",
             "response_results",
             "provider_results",

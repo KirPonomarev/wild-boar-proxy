@@ -1,0 +1,89 @@
+{
+  "actual_exact": "WBP_TWO",
+  "contour": "CODEX_CUSTOM_APP_REPEATABLE_OPERATOR_PROMPT_FLOW_PASS",
+  "exact_match": true,
+  "exit_code": 0,
+  "expected_exact": "WBP_TWO",
+  "jsonl_event_summary_tail": [
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "thread.started"
+    },
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "turn.started"
+    },
+    {
+      "event": null,
+      "item_role": null,
+      "item_type": "agent_message",
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "item.completed"
+    },
+    {
+      "event": null,
+      "json_parse_ok": true,
+      "message": null,
+      "role": null,
+      "type": "turn.completed"
+    }
+  ],
+  "jsonl_event_types": [
+    "thread.started",
+    "turn.started",
+    "item.completed",
+    "turn.completed"
+  ],
+  "last_message_file_stat": {
+    "exists": true,
+    "is_dir": false,
+    "is_file": true,
+    "mtime_ns": 1779550043488982835,
+    "sha256": "ff835d8f3310061b9df2a346210cf9fcb760d7f7abb071fe976d738011c67b00",
+    "size": 7
+  },
+  "local_proxy_env_stripped": true,
+  "no_proxy_for_localhost": true,
+  "prompt_id": "prompt_2",
+  "prompt_source_path": "/tmp/wbp-codex-custom-repeatable-flow-xujpuyup/prompts/prompt_2.txt",
+  "prompt_source_stat": {
+    "exists": true,
+    "is_dir": false,
+    "is_file": true,
+    "mtime_ns": 1779550033203085324,
+    "sha256": "61af56045fdf4b27b7f5c02b328010b2dfe9fe76c3e7c49dc1f2991ac9b8f3d9",
+    "size": 27
+  },
+  "prompt_text_sha256": "61af56045fdf4b27b7f5c02b328010b2dfe9fe76c3e7c49dc1f2991ac9b8f3d9",
+  "secret_value_recorded": false,
+  "stderr_file_stat": {
+    "exists": true,
+    "is_dir": false,
+    "is_file": true,
+    "mtime_ns": 1779550041788083076,
+    "sha256": "bb7dff314d3e8bae47d05f7049ad5c24601d3963a1718d586f3fdba99b69cdc4",
+    "size": 454
+  },
+  "stderr_preview": "2026-05-23T15:27:21.215936Z  WARN codex_core::plugins::startup_sync: startup remote plugin sync failed; will retry on next app-server start error=chatgpt authentication required to sync remote plugins\n2026-05-23T15:27:21.787907Z  WARN codex_core::plugins::manager: failed to warm featured plugin ids cache error=remote plugin sync request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n",
+  "stderr_warning_classes": [
+    "remote_plugin_sync_warning",
+    "remote_plugin_sync_401"
+  ],
+  "stdout_file_stat": {
+    "exists": true,
+    "is_dir": false,
+    "is_file": true,
+    "mtime_ns": 1779550043483732796,
+    "sha256": "e1b10491bc1ca3fb216bbe5657685e2d1193bf1941fa16c5f20498e8091bceb3",
+    "size": 320
+  },
+  "timed_out": false
+}

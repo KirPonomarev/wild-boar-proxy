@@ -1,0 +1,34 @@
+{
+  "browser_transcript": {
+    "captured_at_utc": "2026-05-23T16:05:04.470443Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:05:04.143593Z",
+        "exit_code": 0,
+        "final_message": "HARDENED_OK",
+        "prompt_id": "prompt_1",
+        "prompt_sha256": "6b76382f560defd0d0fa3f5f7171fc76951f7febe3f3c8d3af54d2097d09c11f",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "captured_at_utc": "2026-05-23T16:07:53.792476Z",
+  "process_transcript": {
+    "captured_at_utc": "2026-05-23T16:06:41.728631Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:06:41.727844Z",
+        "exit_code": 0,
+        "final_message": "PROCESS_HARDENED_OK",
+        "prompt_id": "prompt_1",
+        "prompt_sha256": "f69899bdc8302805f8994a6532f4d33b02cbbd9b5533c25d261c7e2c33e6bd35",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "secret_value_recorded": false
+}

@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-26T12:28:01.841985Z",
+  "direct_non_wbp_model_egress_absent_proven": false,
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+  "full_network_absence_proven": false,
+  "live_native_launch_attempted": true,
+  "native_ux_claimed": false,
+  "packet_kind": "native_direct_egress_summary",
+  "provider_compatibility_claimed": false,
+  "status": "blocked"
+}

@@ -1,0 +1,13 @@
+{
+  "contour": "WEB_DESIGN_FINISH_PASS_REENTRY_RECONCILIATION",
+  "checks": {
+    "raw_tmp_paths_recorded": false,
+    "raw_auth_ref_recorded": false,
+    "raw_token_recorded": false,
+    "raw_secret_recorded": false,
+    "browser_smoke_private_paths_absent": true
+  },
+  "notes": [
+    "Browser proof stores only booleans and bounded text assertions, not raw local paths or secrets."
+  ]
+}

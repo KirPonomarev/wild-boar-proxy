@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-29T04:43:04.124749Z",
+  "findings": [
+    {
+      "id": "plain_response_semantics_are_consumer_accepted_for_both_lanes",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "streaming_is_adapter_sse_only_not_consumer_proven",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "model_driven_function_tool_protocol_not_supported_by_current_adapter",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "tool_call_semantics_are_history_shaped_and_text_only_not_consumer_accepted",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "failure_packets_are_bounded_and_non_silent_in_observed_cases",
+      "severity": "info",
+      "status": "confirmed"
+    }
+  ],
+  "packet_kind": "independent_audit",
+  "status": "ok"
+}

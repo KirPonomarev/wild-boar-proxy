@@ -1,0 +1,109 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "observed_prior_drift": {
+    "reproduced_in_current_contour": false,
+    "prior_fields_that_diverged": [
+      "status.status",
+      "status.machine_error_code",
+      "status.liveness",
+      "status.last_error",
+      "healthcheck.status",
+      "healthcheck.machine_error_code",
+      "healthcheck.attestation.responses_ok",
+      "healthcheck.launch_readiness.status",
+      "healthcheck.launch_readiness.blocking_reason"
+    ]
+  },
+  "observed_current_sampling": {
+    "healthcheck_fields": {
+      "status": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "machine_error_code": [
+        "OK",
+        "OK",
+        "OK",
+        "OK",
+        "OK"
+      ],
+      "liveness": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "responses_ok": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "launch_readiness_status": [
+        "ready",
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ]
+    },
+    "status_fields": {
+      "status": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "machine_error_code": [
+        "OK",
+        "OK",
+        "OK",
+        "OK",
+        "OK"
+      ],
+      "liveness": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "attestation_summary_status": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "attestation_summary_code": [
+        "OK",
+        "OK",
+        "OK",
+        "OK",
+        "OK"
+      ],
+      "launch_readiness_status": [
+        "ready",
+        "ready",
+        "ready",
+        "ready",
+        "ready"
+      ]
+    }
+  },
+  "observed_facts": [
+    "current bounded sampling did not reproduce the prior ATTESTATION_FAILED drift",
+    "status --json remained semantically aligned with healthcheck --json in current bounded sampling",
+    "status attestation_summary timestamps lagged command timestamps because status performed its own delegated healthcheck path"
+  ],
+  "root_cause_hypotheses": [
+    "the earlier blocker was a transient owner-path observation flip across separate invocations",
+    "separate standalone healthcheck and status invocations can legitimately observe different moments because status runs its own healthcheck when no shared payload is supplied"
+  ]
+}

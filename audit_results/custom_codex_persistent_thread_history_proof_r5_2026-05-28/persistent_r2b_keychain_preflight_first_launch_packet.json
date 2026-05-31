@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T08:03:26.845245Z",
+  "isolated_default_keychain_verified": true,
+  "isolated_home": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/home",
+  "isolated_search_list_verified": true,
+  "keychain_item_read": false,
+  "keychain_reset_performed": false,
+  "packet_kind": "persistent_keychain_preflight",
+  "phase": "first_launch",
+  "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+  "prompt_observation_collected": false,
+  "prompt_observed": false,
+  "real_user_keychain_modified": false,
+  "reason_class": "OK",
+  "status": "ok"
+}

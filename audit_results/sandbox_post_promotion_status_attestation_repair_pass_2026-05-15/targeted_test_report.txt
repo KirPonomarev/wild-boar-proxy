@@ -1,0 +1,2 @@
+python3 -m unittest -q   tests.test_cli.CliTests.test_accounts_promote_status_verification_failure_rolls_back   tests.test_cli.CliTests.test_accounts_promote_promotes_reserve_backend_with_verified_active_routing   tests.test_cli.CliTests.test_sync_reports_config_toml_change_when_external_sync_promotes_base_url   tests.test_cli.CliTests.test_status_reports_default_launcher_provisioning_available_before_materialization
+RESULT: OK (4 tests, 3.658s)

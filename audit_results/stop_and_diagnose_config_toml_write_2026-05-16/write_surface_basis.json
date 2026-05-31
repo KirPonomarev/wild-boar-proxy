@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE",
+  "run_label": "config_toml_write",
+  "observed_at_utc": "2026-05-16T06:10:00Z",
+  "basis_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+  "runtime_write_surface_candidates_function": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 3354,
+    "function": "runtime_write_surface_candidates"
+  },
+  "runtime_write_surfaces": [
+    "registry_file",
+    "managed_config_file",
+    "config_toml",
+    "state_file",
+    "runtime_effective_mode_file",
+    "stable_runtime_generated_config_file",
+    "launcher_script",
+    "managed_pid_path"
+  ],
+  "contains_config_toml": true,
+  "changed_files_detection": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 6243,
+    "function": "detect_changed_files",
+    "comparison_basis": [
+      "st_mtime_ns",
+      "st_mode"
+    ],
+    "content_diff_based": false
+  },
+  "diagnostic_interpretation": {
+    "config_toml_is_repo_runtime_write_surface": true,
+    "changed_files_semantics": "filesystem_metadata_change"
+  }
+}

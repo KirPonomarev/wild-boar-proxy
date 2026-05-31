@@ -1,0 +1,8 @@
+{
+  "captured_at_utc": "2026-05-24T08:29:07.421741Z",
+  "machine_error_code": "CLAIM_GATE_BLOCKED",
+  "model_count": 8,
+  "selected_model": "gpt-5.3-codex",
+  "server_issued": true,
+  "status": "degraded"
+}

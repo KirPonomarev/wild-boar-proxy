@@ -1,0 +1,41 @@
+{
+  "admitted_count": 1,
+  "captured_at_utc": "2026-05-27T12:38:54.323533Z",
+  "currently_admitted_annexes": [
+    "role_profile_ui_polish"
+  ],
+  "packet_kind": "optional_annex_admission_status",
+  "rows": [
+    {
+      "annex_id": "provider_adapter_matrix",
+      "currently_admitted": false,
+      "evidence_status": "WBP_PROVIDER_ADAPTER_MATRIX_CLASSIFIED_WITH_LIMITS",
+      "status_class": "already_closed"
+    },
+    {
+      "annex_id": "app_server_bridge_research",
+      "currently_admitted": false,
+      "evidence_status": "WBP_APP_SERVER_BRIDGE_RESEARCH_CLASSIFIED_WITH_LIMITS",
+      "status_class": "already_closed"
+    },
+    {
+      "annex_id": "remote_control_readiness_gate",
+      "currently_admitted": false,
+      "evidence_status": "WBP_REMOTE_CONTROL_READINESS_GATE_CLASSIFIED_WITH_LIMITS",
+      "status_class": "already_closed"
+    },
+    {
+      "annex_id": "provider_benchmarking",
+      "currently_admitted": false,
+      "evidence_status": "WBP_PROVIDER_BENCHMARKING_NOT_YET_ADMITTED",
+      "status_class": "not_yet_admitted"
+    },
+    {
+      "annex_id": "role_profile_ui_polish",
+      "currently_admitted": true,
+      "evidence_status": "DESIGN_GATE_ADMITTED_AND_NOT_YET_CLOSED",
+      "status_class": "admitted"
+    }
+  ],
+  "status": "ok"
+}

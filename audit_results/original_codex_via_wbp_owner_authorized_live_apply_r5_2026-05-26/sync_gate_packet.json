@@ -1,0 +1,34 @@
+{
+  "captured_at_utc": "2026-05-26T14:57:06.443016Z",
+  "git_branch": "codex/external-agent-lab-isolated",
+  "git_head": "9512cdf953490eb2109f4849d662fa7663318c04",
+  "git_status_short": [
+    "M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json",
+    " M tools/original_codex_via_wbp_bounded_live_reversibility_probe.py",
+    " M wild_boar_proxy/native_filesystem_probe.py",
+    "?? audit_results/original_codex_via_wbp_owner_authorized_live_apply_r3_2026-05-26/",
+    "?? audit_results/original_codex_via_wbp_owner_authorized_live_apply_r4_2026-05-26/",
+    "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+    "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/",
+    "?? tests/test_original_live_reversibility_probe.py"
+  ],
+  "master_plan_written_to_repo": false,
+  "new_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26",
+  "packet_kind": "sync_gate",
+  "status": "blocked",
+  "unexpected_dirty_entries": [
+    "?? audit_results/original_codex_via_wbp_owner_authorized_live_apply_r3_2026-05-26/",
+    "?? audit_results/original_codex_via_wbp_owner_authorized_live_apply_r4_2026-05-26/",
+    "?? tests/test_original_live_reversibility_probe.py"
+  ]
+}

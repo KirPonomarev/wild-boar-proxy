@@ -1,0 +1,10 @@
+{
+  "blocked_rows_treated_as_fallback_targets": false,
+  "budget_presence_treated_as_hard_spend_protection": false,
+  "captured_at_utc": "2026-05-28T13:11:24.792623Z",
+  "compatibility_row_becomes_automatic_fallback_target": false,
+  "concurrency_limit_treated_as_performance_improvement": false,
+  "packet_kind": "false_green_boundary",
+  "quota_classification_treated_as_final_retry_policy": false,
+  "status": "ok"
+}

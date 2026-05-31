@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-26T17:59:03.608298Z",
+  "failed_checks": [
+    "host_context_required_for_native_launch",
+    "quiescent_current_codex_required_for_native_launch"
+  ],
+  "incidental_wbp_request_observed": false,
+  "incidental_wbp_request_promoted_to_route_proof": false,
+  "native_launch_admitted": false,
+  "native_launch_attempted": false,
+  "native_routing_proven": false,
+  "native_ux_proven": false,
+  "owner_prompt_required": false,
+  "owner_prompt_submitted": false,
+  "owner_ui_action_performed": false,
+  "packet_kind": "custom_native_launch_safety",
+  "reason_class": "NATIVE_LAUNCH_BLOCKED_BY_HOST_ENVIRONMENT",
+  "status": "blocked",
+  "wbp_route_required": false
+}

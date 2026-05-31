@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_VISUAL_MODEL_AND_DATA_GATE",
+  "date": "2026-05-14",
+  "auditor": "independent_scoped_subagent",
+  "scope": {
+    "artifacts": [
+      "audit_results/ui_web_diagnostics_detail_visual_model_spec_2026-05-14.md",
+      "audit_results/ui_web_diagnostics_detail_region_matrix_2026-05-14.json",
+      "audit_results/ui_web_diagnostics_detail_data_contract_2026-05-14.json"
+    ],
+    "code_changes": "none"
+  },
+  "checks": {
+    "spec_only_scope": {
+      "result": "PASS",
+      "evidence": "Spec declares exploration/admission/spec-only mode and keeps production UI implementation, live server semantic changes, command adapter changes, and runtime changes out of scope."
+    },
+    "canon_fit": {
+      "result": "PASS",
+      "evidence": "Artifacts keep diagnostics export as support-artifact metadata while status and healthcheck remain separately labeled runtime packet owners."
+    },
+    "layer_separation": {
+      "result": "PASS",
+      "evidence": "Region matrix separates support metadata, runtime summary, history chart, latest records, and bounded actions."
+    },
+    "json_validity": {
+      "result": "PASS",
+      "evidence": "Both JSON artifacts validated with JSON tooling."
+    },
+    "privacy_trace_scan": {
+      "result": "PASS",
+      "evidence": "No external reference service traces, install prompts, private absolute paths, downloaded external evidence, or secret material found in scoped artifacts."
+    },
+    "next_contour_bounds": {
+      "result": "PASS",
+      "evidence": "Next implementation contour blocks live history, live latest records, raw log tail, support-bundle open/read, new backend commands, and runtime.py changes."
+    }
+  },
+  "residual_risks": [
+    "Supplemental diagnostics detail image is described as owner-provided content/layout supplement but is not repo evidence.",
+    "Live chart and latest-record regions remain deferred until a future bounded redacted JSON command surface exists."
+  ],
+  "adjudication": {
+    "live_admitted_wording": "Tightened after audit by replacing broad admission labels with static-boundary, metadata-only, and separately labeled runtime-summary classifications.",
+    "supplemental_reference": "Accepted as non-evidence visual supplement only; no external screenshots or private paths are recorded."
+  },
+  "verdict": "PASS",
+  "blocks_commit": false,
+  "resume_from_here": "Create closeout, run final scans, commit, and push."
+}

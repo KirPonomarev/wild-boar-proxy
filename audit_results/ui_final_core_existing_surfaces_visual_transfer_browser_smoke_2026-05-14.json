@@ -1,0 +1,48 @@
+{
+  "contour": "UI_FINAL_CORE_EXISTING_SURFACES_VISUAL_TRANSFER",
+  "date": "2026-05-14",
+  "browser_target": "http://127.0.0.1:8765/",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "screenshots_dir": "audit_results/ui_final_core_existing_surfaces_visual_transfer_screenshots_2026-05-14",
+  "screens": [
+    {
+      "screen": "overview",
+      "url": "/?screen=overview&state=healthy",
+      "loaded": true,
+      "screenshot": "overview.png"
+    },
+    {
+      "screen": "accounts",
+      "url": "/?screen=accounts&state=healthy",
+      "loaded": true,
+      "screenshot": "accounts.png"
+    },
+    {
+      "screen": "diagnostics",
+      "url": "/?screen=diagnostics&state=healthy",
+      "loaded": true,
+      "screenshot": "diagnostics.png"
+    },
+    {
+      "screen": "settings",
+      "url": "/?screen=settings&state=healthy",
+      "loaded": true,
+      "screenshot": "settings.png"
+    },
+    {
+      "screen": "api-connections",
+      "url": "/?screen=api-connections&state=healthy",
+      "loaded": true,
+      "screenshot": "api-connections.png"
+    }
+  ],
+  "manual_visual_notes": [
+    "Settings was corrected from an initial four-column hub that caused narrow text wrapping to a two-column hub that keeps endpoint and status text readable.",
+    "Diagnostics chart renders as an in-app SVG chart block and remains fixture/demo-only, not runtime health evidence.",
+    "Accounts and API Connections tables remain horizontally bounded with existing action buttons and no new route editor controls."
+  ],
+  "resume_from_here": "Use screenshots as evidence during final audit and closeout."
+}

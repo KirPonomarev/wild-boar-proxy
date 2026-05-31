@@ -1,0 +1,18 @@
+{
+  "blocked_status_if_timeout": "ORIGINAL_CODEX_VIA_WBP_BLOCKED_ROUTE_TRACE_MISSING",
+  "captured_at_utc": "2026-05-26T14:28:06.622890Z",
+  "failed_checks": [
+    "restore_attempt_required_after_trace_timeout",
+    "restore_verification_required_after_trace_timeout"
+  ],
+  "packet_kind": "original_live_trace_timeout_policy",
+  "reason_class": "TRACE_TIMEOUT_RESTORE_FIRST_NOT_PROVEN",
+  "restore_attempted_after_timeout": false,
+  "restore_first_after_timeout": true,
+  "restore_verified_after_timeout": false,
+  "retry_mutation_allowed": false,
+  "second_launch_allowed_before_restore": false,
+  "status": "blocked",
+  "timeout_seconds": 60,
+  "trace_observed": false
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "status": "not_checked_live",
+  "reason": "authorization_gate_failed_before_session_readiness",
+  "session_created": false,
+  "browser_payload_checked_live": false,
+  "forbidden_browser_fields_policy": [
+    "backend_id",
+    "route_id",
+    "api_key",
+    "token",
+    "secret",
+    "auth",
+    "path",
+    "backend",
+    "route"
+  ],
+  "server_selected_backend_claim": "not_claimed"
+}

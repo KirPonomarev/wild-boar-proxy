@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-27T18:09:48.076461Z",
+  "catalog_alignment_truth_preserved": true,
+  "classification": "final_bounded_acceptance_synthesis",
+  "custom_owner_accepted_truth_preserved": true,
+  "direct_non_wbp_egress_known_blocker_explicit": true,
+  "final_status": "WBP_WEB_AND_CUSTOM_CODEX_WORKING_WITH_OWNER_UI_WAIVER_AND_KNOWN_LIMITS",
+  "imported_evidence_only": true,
+  "no_short_complete_alias": true,
+  "one_provider_lane_truth_preserved": true,
+  "packet_kind": "final_acceptance_summary",
+  "persistence_keychain_limits_explicit": true,
+  "status": "ok",
+  "web_control_truth_preserved": true
+}

@@ -1,0 +1,28 @@
+{
+  "browser_boundary": "Browser proof is UI evidence only; process_isolation_proof.json is authoritative for current Codex isolation.",
+  "captured_at_utc": "2026-05-23T16:07:53.804027Z",
+  "checks": {
+    "browser_dom_secret_findings_empty": true,
+    "browser_not_used_as_isolation_proof": true,
+    "browser_response_machine_backed": true,
+    "browser_selected_model_server_issued": true,
+    "browser_status_honest_claim_gate_blocked": true,
+    "browser_visual_proof_present": true,
+    "claim_ledger_present": true,
+    "existing_web_ui_integration_not_claimed": true,
+    "gui_desktop_claim_not_made": true,
+    "harness_script_repo_owned": true,
+    "process_protected_surfaces_unchanged": true,
+    "process_response_machine_backed": true,
+    "process_selected_model_server_issued": true,
+    "process_tmp_removed": true,
+    "provider_route_claim_not_made": true,
+    "redaction_clean": true,
+    "rotation_load_claim_not_made": true,
+    "static_scope_not_production": true,
+    "targeted_tests_passed_before_live": true
+  },
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_HARDENING_PASS",
+  "passed": true,
+  "subagent_audit_summary": "Mill/gpt-5.4-mini required browser proof not be counted as isolation proof, server-issued model selection, explicit forbidden browser field coverage, clean redaction, claim ledger, and no broad stable/rotation claims. Integrated in harness tests and artifacts."
+}

@@ -1,0 +1,262 @@
+[
+  {
+    "truth_topic": "overview_live_pending_honesty",
+    "canonical_source": "status --json + mode get --json",
+    "live_source": "/api/live-readonly (fetch pending)",
+    "ui_screen": "overview",
+    "phase": "pending",
+    "canonical_value": {
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "live_value": {
+      "fetch_state": "pending"
+    },
+    "ui_claim": {
+      "dataset_source": "live",
+      "runtime_chip": "Загрузка",
+      "banner": "Загрузка live-readonly. Предыдущие fixture-данные не используются как truth.",
+      "desired_mode": "—",
+      "effective_mode": "—",
+      "endpoint": "—",
+      "active_count": "—",
+      "problem_count": "—"
+    },
+    "verdict": "match",
+    "notes": "Pending phase is judged by honesty, not by final runtime values."
+  },
+  {
+    "truth_topic": "overview_runtime_mode",
+    "canonical_source": "status --json + mode get --json",
+    "live_source": "/api/live-readonly",
+    "ui_screen": "overview",
+    "phase": "final",
+    "canonical_value": {
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    },
+    "live_value": {
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    },
+    "ui_claim": {
+      "desired_mode": "Стабильный",
+      "effective_mode": "Стабильный",
+      "runtime_chip": "Работает"
+    },
+    "verdict": "match",
+    "notes": ""
+  },
+  {
+    "truth_topic": "overview_runtime_endpoint",
+    "canonical_source": "status --json + healthcheck --json",
+    "live_source": "/api/live-readonly",
+    "ui_screen": "overview",
+    "phase": "final",
+    "canonical_value": {
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "live_value": {
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "ui_claim": {
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "verdict": "match",
+    "notes": ""
+  },
+  {
+    "truth_topic": "overview_pool_summary",
+    "canonical_source": "accounts list --json",
+    "live_source": "/api/live-readonly",
+    "ui_screen": "overview",
+    "phase": "final",
+    "canonical_value": {
+      "active": 17,
+      "reserve": 0,
+      "hold": 0,
+      "retired": 8,
+      "healthy": 11,
+      "problem": 14,
+      "visible_count": 25
+    },
+    "live_value": {
+      "active": 17,
+      "active_note": "17 active в status packet",
+      "hold": 0,
+      "hold_note": "аккаунты на manual hold",
+      "problem": 14,
+      "problem_note": "аккаунты degraded/down/error",
+      "reserve": 0,
+      "reserve_note": "0 reserve в status packet"
+    },
+    "ui_claim": {
+      "active": 17,
+      "reserve": 0,
+      "hold": 0,
+      "problem": 14
+    },
+    "verdict": "match",
+    "notes": ""
+  },
+  {
+    "truth_topic": "overview_rollout_warning",
+    "canonical_source": "rollout rotation inspect --json",
+    "live_source": "/api/live-readonly",
+    "ui_screen": "overview",
+    "phase": "final",
+    "canonical_value": {
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected."
+    },
+    "live_value": {
+      "has_warnings": true,
+      "warnings": [
+        {
+          "command_id": "rollout_rotation_inspect",
+          "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
+          "label": "rollout rotation inspect --json",
+          "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+          "role": "rollout_evidence",
+          "severity": "warning"
+        }
+      ]
+    },
+    "ui_claim": {
+      "banner": "Live-readonly с предупреждениями. rollout rotation inspect --json: Rotation participation evidence is contradicted because stable policy drift is still detected.",
+      "sidebar_status": "Runtime status summary is available."
+    },
+    "verdict": "match",
+    "notes": "Sidebar status stays on the status packet human message while the warning is carried by the overview banner."
+  },
+  {
+    "truth_topic": "quick_start_accounts_summary",
+    "canonical_source": "accounts list --json",
+    "live_source": "/api/accounts-readonly",
+    "ui_screen": "quick-start",
+    "phase": "final",
+    "canonical_value": {
+      "connected": 25,
+      "working": 11,
+      "to_check": 14
+    },
+    "live_value": {
+      "connected": 25,
+      "working": 11,
+      "to_check": 14
+    },
+    "ui_claim": {
+      "connected": 25,
+      "working": 11,
+      "to_check": 14,
+      "source": "live"
+    },
+    "verdict": "match",
+    "notes": "Generic hidden overview shell placeholders on quick-start are excluded from the quick-start verdict."
+  },
+  {
+    "truth_topic": "accounts_registry_identity",
+    "canonical_source": "accounts list --json",
+    "live_source": "/api/accounts-readonly",
+    "ui_screen": "accounts",
+    "phase": "final",
+    "canonical_value": {
+      "status": "clear",
+      "machine_error_code": "OK",
+      "duplicate_backend_ids": [],
+      "duplicate_auth_basenames": [],
+      "missing_auth_refs": [],
+      "empty_auth_ref_backends": [],
+      "invalid_auth_basenames": [],
+      "invalid_backend_pools": [],
+      "registry_schema_version": 2,
+      "unsupported_schema_versions": [],
+      "claim_blockers": [],
+      "next_action": "none"
+    },
+    "live_value": {
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "status": "clear"
+    },
+    "ui_claim": {
+      "registry_status": "Идентичность registry: clear · OK"
+    },
+    "verdict": "match",
+    "notes": ""
+  },
+  {
+    "truth_topic": "accounts_pool_summary",
+    "canonical_source": "accounts list --json",
+    "live_source": "/api/accounts-readonly",
+    "ui_screen": "accounts",
+    "phase": "final",
+    "canonical_value": {
+      "active": 17,
+      "reserve": 0,
+      "hold": 0,
+      "retired": 8,
+      "healthy": 11,
+      "problem": 14,
+      "visible_count": 25
+    },
+    "live_value": {
+      "active": 17,
+      "capacity_target": 25,
+      "degraded": 0,
+      "down": 13,
+      "healthy": 11,
+      "hold": 0,
+      "human_message": "Account registry snapshot is available.",
+      "last_error": "",
+      "machine_error_code": "OK",
+      "problem": 14,
+      "reserve": 0,
+      "retired": 8,
+      "visible_count": 25
+    },
+    "ui_claim": {
+      "active_chip": "17 активных",
+      "reserve_chip": "0 резерв",
+      "hold_chip": "0 удержание",
+      "problem_chip": "14 проблемных",
+      "visible_count": "Показано 25 из 25"
+    },
+    "verdict": "match",
+    "notes": ""
+  },
+  {
+    "truth_topic": "api_connections_summary",
+    "canonical_source": "external-models status --json + external-models models --json",
+    "live_source": "/api/api-connections-readonly",
+    "ui_screen": "api-connections",
+    "phase": "final",
+    "canonical_value": {
+      "routes_count": 0,
+      "enabled_count": 0,
+      "attention_count": 0,
+      "latest_check": "",
+      "adapter_state": "stopped",
+      "models_source": "local_routes_registry"
+    },
+    "live_value": {
+      "routes_count": 0,
+      "enabled_count": 0,
+      "attention_count": 0,
+      "latest_check": "",
+      "adapter_state": "stopped",
+      "models_source": "local_routes_registry"
+    },
+    "ui_claim": {
+      "routes_count": 0,
+      "enabled_count": 0,
+      "attention_count": 0,
+      "latest_check": "Нет данных",
+      "sidebar_status": "Список API-подключений собран из пакетов команд."
+    },
+    "verdict": "match",
+    "notes": "The broad probe's generic registryStatus field is ignored here because it reads a hidden demo node from another screen, not the visible API connections claim."
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "captured_at_utc": "2026-05-23T16:05:04.143593Z",
+  "command_surface": {
+    "args_shape": [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--ignore-rules",
+      "--sandbox",
+      "read-only",
+      "-C",
+      "<temp-work>",
+      "--json",
+      "-o",
+      "<temp-last-message>",
+      "-"
+    ],
+    "binary": "<codex>"
+  },
+  "duration_seconds": 3.607,
+  "exit_code": 0,
+  "final_message": "HARDENED_OK",
+  "last_message_file_stat": {
+    "exists": true,
+    "size": 11
+  },
+  "local_proxy_env_stripped": true,
+  "no_proxy_for_localhost": true,
+  "prompt_id": "prompt_1",
+  "prompt_text_sha256": "6b76382f560defd0d0fa3f5f7171fc76951f7febe3f3c8d3af54d2097d09c11f",
+  "secret_value_recorded": false,
+  "selected_model": "gpt-5.3-codex",
+  "stderr_file_stat": {
+    "exists": true,
+    "size": 252
+  },
+  "stderr_warning_classes": [],
+  "stdin_prompt_used": true,
+  "stdout_file_stat": {
+    "exists": true,
+    "size": 323
+  },
+  "temp_codex_home_under_tmp": true,
+  "temp_home_under_tmp": true,
+  "timed_out": false
+}

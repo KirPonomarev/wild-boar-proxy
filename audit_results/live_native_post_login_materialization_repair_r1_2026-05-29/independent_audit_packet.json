@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-29T03:23:12.654810Z",
+  "direct_native_probe_http_status": 503,
+  "material_mismatch_detected": false,
+  "materialization_gap_classification": "existing_auth_ref_stale_and_unchanged_after_session_expiry",
+  "owner_dependency_classification": "owner_action_expired",
+  "recommended_closure": "existing_auth_ref_stale_and_unchanged_after_session_expiry",
+  "runtime_loaded_count": 0
+}

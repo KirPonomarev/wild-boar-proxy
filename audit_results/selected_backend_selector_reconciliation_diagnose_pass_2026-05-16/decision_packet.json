@@ -1,0 +1,18 @@
+{
+  "contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS",
+  "decision": "GO_TO_STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "divergence_type": "stable_policy_source_family_drift_with_stale_participation_snapshot",
+  "selected_snapshot_matches_approved_target_exactly": true,
+  "current_owner_eligible_auth_ref_count": 11,
+  "approved_target_entry_count": 9,
+  "selected_snapshot_count": 9,
+  "approved_target_runtime_ready_now": false,
+  "exact_selector_basis_admitted": false,
+  "exact_source_admitted": false,
+  "materialization_earned_now": false,
+  "next_contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "next_contour_class": "reconciliation",
+  "reason": "current selector-side participation evidence aligns with the approved target family, while current owner-path policy/source-copy truth has drifted to a broader eligible family and status reports observed source as the only runtime-ready family; reconcile family-level stable policy surfaces before reopening selector or exact-source admission"
+}

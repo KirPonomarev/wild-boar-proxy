@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T19:52:02.719199Z",
+  "packet_kind": "model_availability_reference",
+  "reference_only": true,
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-26/model_availability_matrix.json",
+  "referenced_packet_status": "present",
+  "referenced_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "repo_root": "/Volumes/Work/wild-boar-proxy",
+  "reproved_in_this_contour": false,
+  "status": "ok"
+}

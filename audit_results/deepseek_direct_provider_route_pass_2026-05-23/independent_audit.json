@@ -1,0 +1,38 @@
+{
+  "checks": [
+    {
+      "evidence": "credentials provider deepseek added with DEEPSEEK_API_KEY refs",
+      "id": "deepseek_provider_spec",
+      "status": "pass"
+    },
+    {
+      "evidence": "secrets.env metadata shows only DEEPSEEK_API_KEY ref; content not captured",
+      "id": "secret_ref_migration",
+      "status": "pass"
+    },
+    {
+      "evidence": "wbp-deepseek-v3 now provider=deepseek base_url=https://api.deepseek.com model=deepseek-chat",
+      "id": "route_replaced",
+      "status": "pass"
+    },
+    {
+      "evidence": "DeepSeek validate/check returned provider_auth_failed",
+      "id": "provider_truth",
+      "status": "blocked"
+    },
+    {
+      "evidence": "web validation_label=validate failed and visual red",
+      "id": "web_no_false_green",
+      "status": "pass"
+    },
+    {
+      "evidence": "artifact scan found no API key patterns",
+      "id": "redaction",
+      "status": "pass"
+    }
+  ],
+  "residual_risks": [
+    "A valid DeepSeek API key/access is required before route can become connected."
+  ],
+  "status": "clean_direct_lane_added_provider_auth_failed"
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "packet_kind": "owner_keychain_prompt_observation",
+  "owner_observed_keychain_prompt": true,
+  "prompt_text": "Для хранения «Codex Key» не найдена связка ключей.",
+  "owner_action": "cancel",
+  "owner_reported_custom_codex_loaded_after_cancel": true,
+  "keychain_modified_by_contour": false,
+  "keychain_default_reset_clicked": false,
+  "machine_keychain_state_proven": false,
+  "status": "blocked_for_full_native_pass",
+  "machine_error_code": "KEYCHAIN_PROMPT_OBSERVED_OWNER_CANCELLED",
+  "secret_value_recorded": false
+}

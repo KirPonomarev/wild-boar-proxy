@@ -1,0 +1,11 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "human_message": "Missing JSON file: /Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "machine_error_code": "MISSING_JSON_FILE",
+  "changed_files": [],
+  "next_action": "user_action",
+  "liveness": "unknown",
+  "severity": "fatal",
+  "operator_action": "user_action"
+}

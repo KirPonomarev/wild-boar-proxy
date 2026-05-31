@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T09:57:56.320203Z",
+  "packet_kind": "reference_digest",
+  "reference_packets_reproved_here": false,
+  "references": [
+    {
+      "path": "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
+      "reference_only": true,
+      "sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126"
+    },
+    {
+      "path": "audit_results/wbp_codex_cli_runner_via_wbp_smoke_r1_2026-05-27/cli_runner_summary_packet.json",
+      "reference_only": true,
+      "sha256": "93913c649b891a274ad2908893f6ca4ced3afc790549f93f4eccd7871091a1d4"
+    },
+    {
+      "path": "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_direct_only_summary_packet.json",
+      "reference_only": true,
+      "sha256": "180bb3bfae520d6d16d6a990b3d30da71d85907b3cc4ff1b80cfbb86c62e0635"
+    }
+  ],
+  "status": "ok"
+}

@@ -1,0 +1,33 @@
+{
+  "captured_at_utc": "2026-05-24T01:46:24.204451Z",
+  "expected_wire_repair_head_or_later": "6719d8d5",
+  "git_status_tracked": "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated",
+  "head": "6719d8d5",
+  "healthcheck": {
+    "liveness": "healthy",
+    "machine_error_code": "OK",
+    "responses_ok": true,
+    "responses_proof_passed": true,
+    "status": "ok"
+  },
+  "status": {
+    "claim_gate": {
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "next_action": "inspect_claim_gate",
+      "sources": [
+        "policy_drift"
+      ],
+      "status": "blocked"
+    },
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "launch_capable_backend_count": 15,
+    "liveness": "healthy",
+    "machine_error_code": "OK",
+    "status": "ok"
+  }
+}

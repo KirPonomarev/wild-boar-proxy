@@ -1,0 +1,14 @@
+{
+  "contour": "RUNTIME_SELECTOR_PREREQUISITE_REGRESSION_DIAGNOSE_PASS",
+  "decision": "GO_TO_RUNTIME_REPROOF_PASS",
+  "runtime_primary": true,
+  "selector_primary": false,
+  "mixed_present": true,
+  "mixed_primary": false,
+  "claim_gate_clear_now": false,
+  "selector_fresh_now": false,
+  "effective_source_matches_desired_now": false,
+  "next_contour": "RUNTIME_REPROOF_PASS",
+  "next_contour_class": "reproof",
+  "reason": "both runtime and selector prereq surfaces are regressed, but current claim-gate blockage and observed-source fallback are driven by stale runtime activation evidence, while selector staleness remains a secondary participation blocker that does not directly control current runtime truth"
+}

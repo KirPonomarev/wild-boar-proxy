@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+  "date": "2026-05-14",
+  "auditor": "independent_scoped_subagent",
+  "checks": [
+    {
+      "check": "ui_only_production_changes",
+      "result": "PASS",
+      "evidence": [
+        "tracked production diff is limited to web design UI HTML and CSS",
+        "test diff is limited to UI guard tests",
+        "no live server, command adapter, runtime, or desktop semantic files are changed"
+      ]
+    },
+    {
+      "check": "settings_readonly_allowlist_no_mutation",
+      "result": "PASS",
+      "evidence": [
+        "settings screen has readonly marker and config-mode marker",
+        "settings safe actions remain the existing allowlisted actions",
+        "tests guard absence of save/config mutation language and forbidden browser payloads",
+        "browser smoke reports settings actions as the existing allowlist and no completion claim"
+      ]
+    },
+    {
+      "check": "setup_select_import_inert_surface",
+      "result": "PASS",
+      "evidence": [
+        "setup/select/import screens use disabled visual skeletons with left-step rail and inert bottom bars",
+        "tests guard no data-ui-action, no live-action, no file input, no path/source directory/backend/auth/sensitive fields, and no completion/import-success claims",
+        "browser smoke reports data_actions=[], active_controls=[], file_inputs=0, and has_completion_claim=false for setup-like screens"
+      ]
+    },
+    {
+      "check": "locked_baseline_geometry",
+      "result": "PASS",
+      "evidence": [
+        "settings/setup layout max width is 720px",
+        "setup-flow layout uses left rail plus 720px workbench",
+        "setup hero padding is 24px",
+        "form row min-height is 38px",
+        "matrix records the same baseline geometry"
+      ]
+    },
+    {
+      "check": "browser_smoke_pass_1600x1000",
+      "result": "PASS",
+      "evidence": [
+        "browser smoke result is PASS at 1600x1000",
+        "all four target screens are covered",
+        "screenshots are present as repo-relative evidence"
+      ]
+    },
+    {
+      "check": "external_reference_trace_scan",
+      "result": "PASS",
+      "evidence": [
+        "no forbidden external service terms were found in the scoped implementation diff and artifacts"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Import Existing is visually longer than the viewport and relies on normal main-pane vertical scrolling.",
+    "Real setup discovery, native picker, and import transaction remain deferred until separate admitted command surfaces exist."
+  ],
+  "verdict": "PASS",
+  "blocks_commit": false,
+  "resume_from_here": "Create closeout, run final scans, commit, and push."
+}

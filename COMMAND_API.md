@@ -16,6 +16,7 @@ All operator commands must support `--json`.
 ## Required commands
 
 - `status --json`
+- `invariant-check --json`
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
@@ -38,6 +39,14 @@ All operator commands must support `--json`.
 - `accounts release <id> --json`
 - `accounts retire <id> --json`
 - `accounts onboard --json`
+- `accounts login start --provider sandbox --json`
+- `accounts login start --provider codex --mode device --json`
+- `accounts login status --session <id> --json`
+- `accounts login complete --session <id> --state <state> --proof <proof> --json`
+- `accounts login complete --session <id> --json`
+- `accounts login cancel --session <id> --json`
+- `external-models credentials admit --provider <provider> --source owner-env --json`
+- `external-models credentials status --provider <provider> --json`
 - `diagnostics export --json`
 - `installer init --json`
 - `legacy import --source-dir <path> --json`
@@ -45,6 +54,51 @@ All operator commands must support `--json`.
 - `companion uninstall --json`
 - `package experimental build --output-dir <path> --json`
 - `package experimental verify --manifest <path> --json`
+- `package launchable build --output-dir <path> [--runtime-executable <path>] --json`
+- `package launchable verify --manifest <path> --json`
+
+## Runtime invariant check owner surface
+
+`invariant-check --json` is a read-only runtime truth guard. It machine-checks a
+bounded set of runtime invariants and emits advisory recovery hints.
+
+It must not execute recovery, mutate runtime state, or write runtime files.
+
+Additional required fields:
+
+- `invariant_result`
+- `recovery_hints`
+
+`invariant_result` must include:
+
+- `status` (`passed` or `failed`)
+- `passed`
+- `failed`
+- `checks`
+
+Each check must include:
+
+- `id`
+- `status` (`pass` or `fail`)
+- `severity`
+- `evidence_source`
+- `human_message`
+- `machine_error_code`
+
+Each recovery hint must include:
+
+- `machine_error_code`
+- `priority_score`
+- `impact`
+- `urgency`
+- `recoverability`
+- `risk`
+- `diagnosis`
+- `operator_action`
+- `allowed_next_commands`
+
+Any critical invariant failure must produce a non-green command packet with
+`machine_error_code=RUNTIME_INVARIANT_FAILED`.
 
 ## Required response fields
 
@@ -88,13 +142,35 @@ It must emit:
 - a package artifact (`tar.gz` or `zip`) built from allowlisted repo
   source/docs material only
 - a checksum manifest for the artifact
-- metadata with plan version/date when available
+- metadata with repository truth policy when available
 
 The package surface must not include runtime/private data such as auth files,
 runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
 
 `package experimental verify --manifest <path> --json` is the owner surface for
 artifact existence + checksum verification from the manifest.
+
+## Additional launchable package owner surface
+
+`package launchable build --output-dir <path> [--runtime-executable <path>] --json`
+is the owner surface for local launchable desktop package materialization.
+
+It must emit:
+
+- one launchable desktop artifact path
+- a checksum manifest for the artifact
+- metadata with the selected runtime executable and runtime-capability probe
+- integrity binding for both the artifact and the companion metadata used for
+  launchability claims
+- only allowlisted repo source/docs material plus the minimal launcher/bundle
+  scaffolding required for packaged launch
+
+The launchable package surface must not include runtime/private data such as
+auth files, runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+`package launchable verify --manifest <path> --json` is the owner surface for
+artifact existence + checksum verification + launchable bundle boundary +
+metadata-integrity verification from the manifest.
 
 ## Additional onboarding owner surface
 
@@ -103,6 +179,14 @@ truth.
 The onboarding owner lane supports external launcher invocation modes `--once`
 and `--loop`; the selected mode must remain visible in the emitted owner
 packet command surface.
+
+When no `--auth-ref` is provided and no sandbox-local auth candidate exists,
+the historical owner helper may start the engine-owned Codex login flow through
+`cli-proxy-api -codex-login` for compatibility. New web/account-connect flows
+must prefer the sessionized Codex login owner surface documented below. In a
+web sandbox runner any login flow must write only to a sandbox-scoped auth
+directory; the browser still never sends tokens, passwords, auth files, local
+paths, backend ids, or auth refs.
 
 Onboarding success must not be inferred from external onboarding process exit
 code alone.
@@ -156,6 +240,303 @@ Reserve-first onboarding remains separate from promotion.
 `accounts onboard --json` must not place a newly admitted backend directly into
 `active`, and any ambiguous or missing identity proof must stop with
 `operator_action = user_action`.
+
+## Additional sandbox login owner surface
+
+`accounts login start --provider sandbox --json` is the owner surface for
+sandbox-only login admission session issuance.
+
+`accounts login complete --session <id> --state <state> --proof <proof> --json`
+is the owner surface for session-bound sandbox login completion.
+
+Sandbox login packets must remain strict JSON and use the command payload
+envelope. Session storage is control-layer managed only:
+
+- `<managed_dir>/login-sessions/<id>.json`
+- required session fields:
+  `login_session_id`, `provider`, `state`, `nonce`, `created_at`, `expires_at`,
+  `used`
+
+Completion must enforce machine-readably:
+
+- provider/session validation (`sandbox` only)
+- session existence
+- exact state match
+- proof equality `sandbox-ok`
+- TTL expiry rejection
+- replay rejection when `used=true`
+
+Start success should expose:
+
+- `next_action=login_complete`
+- `login_session_id`
+- `state`
+- `nonce`
+- `expires_at`
+- `login_url`
+- `login_result.status=started`
+- `login_result.auth_materialized=false`
+
+Completion success may materialize only sandbox-owned synthetic auth under
+managed storage and must return:
+
+- `next_action=accounts_onboard`
+- `auth_ref`
+- `auth_ref_scope=sandbox`
+- `login_result.status=completed`
+- `login_result.auth_materialized=true`
+- `login_result.used=true`
+
+Completion packets must not expose token/secret/password values.
+
+## Additional Codex login session owner surface
+
+`accounts login start --provider codex --mode device --json` is the owner
+surface for sessionized Codex device login handoff.
+
+`accounts login status --session <id> --json` is the read-only owner surface
+for session state, device handoff status, and sandbox auth materialization
+proof.
+
+`accounts login complete --session <id> --json` is the owner surface for
+session-bound reserve-first onboarding after auth materializes.
+
+`accounts login cancel --session <id> --json` is the owner surface for
+bounded cancellation of a session-owned login process.
+
+Codex login session packets must remain strict JSON and use the command payload
+envelope. Session storage is owner-managed only:
+
+- `<managed_dir>/login-sessions/<id>.json`
+- `<managed_dir>/login-sessions/<id>.stdout.log`
+- `<managed_dir>/login-sessions/<id>.stderr.log`
+
+Required session fields include:
+
+- `login_session_id`
+- `provider=codex`
+- `mode=device`
+- `pid`
+- `created_at`
+- `expires_at`
+- `state`
+- `device_url`
+- `device_code_present`
+- `auth_materialized`
+- `auth_ref`
+- `sandbox_scope`
+- `used`
+
+Start must enforce machine-readably:
+
+- provider validation (`codex`)
+- mode validation (`device`)
+- sandbox-scoped auth-dir proof before spawn
+- session creation under managed storage
+- bounded spawn of `cli-proxy-api -codex-device-login -no-browser`
+- device handoff capture from owner stdout
+
+Start success should expose:
+
+- `next_action=wait_for_login`
+- `provider=codex`
+- `mode=device`
+- `session_id`
+- `login_session_id`
+- `device_url`
+- `device_code`
+- `device_code_present=true`
+- `login_result.status=waiting_for_user`
+- `login_result.auth_materialized=false`
+- `login_result.browser_secret_intake=false`
+- `login_result.browser_path_intake=false`
+
+Status must enforce machine-readably:
+
+- session existence
+- provider/session binding
+- TTL expiry detection
+- stale pid refresh
+- sandbox auth artifact detection without exposing secret contents
+
+Status success should expose:
+
+- `next_action=wait_for_login|accounts_onboard|none`
+- `login_result.status`
+  (`waiting_for_user|auth_materialized|completed|failed|expired|cancelled`)
+- `login_result.device_url`
+- `login_result.device_code_present`
+- `login_result.auth_materialized`
+- `login_result.auth_ref_present`
+
+Complete must enforce machine-readably:
+
+- session existence
+- provider/session binding (`codex`)
+- replay rejection when `used=true`
+- reject before `auth_materialized=true`
+- owner-side onboarding only through `accounts onboard --json --auth-ref <session auth>`
+- reserve-first onboarding proof
+- `active_routing_changed=false`
+
+Complete success should expose:
+
+- `next_action=accounts_refresh`
+- `login_result.status=completed`
+- `login_result.auth_materialized=true`
+- `login_result.used=true`
+- nested `onboarding_result`
+
+Cancel must enforce machine-readably:
+
+- session existence
+- provider/session binding (`codex`)
+- termination bounded to session-owned pid only
+
+Cancel success should expose:
+
+- `next_action=none`
+- `login_result.status=cancelled`
+- `login_result.cancelled_process_owned_by_session=true`
+
+Codex login packets must not expose token/secret/password values or raw auth
+JSON.
+
+## Additional external-models credential admission owner surface
+
+`external-models credentials admit --provider <provider> --source owner-env --json`
+is the owner surface for sandbox-only provider credential admission used by API
+route connect flows.
+
+`external-models credentials status --provider <provider> --json` is the
+read-only owner surface for credential presence proof.
+
+Admission and status packets must remain strict JSON and use the command
+payload envelope. The owner surface must enforce machine-readably:
+
+- provider allowlist validation
+- source validation (`owner-env` only for this contour)
+- sandbox write-target proof before write
+- sandbox-only secrets materialization
+- secret redaction in packet payloads
+
+Admission success should expose:
+
+- `next_action=api_route_connect`
+- `credential_result.status=admitted`
+- `credential_result.provider`
+- `credential_result.source=owner-env`
+- `credential_result.credential_ref`
+- `credential_result.credential_present=true`
+- `credential_result.secret_value_exposed=false`
+- `credential_result.browser_secret_intake=false`
+- `credential_result.browser_path_intake=false`
+- `credential_result.scope=sandbox`
+
+Status success should expose:
+
+- `next_action=none`
+- `credential_result.status` (`present` or `missing`)
+- `credential_result.provider`
+- `credential_result.credential_ref`
+- `credential_result.credential_present`
+- `credential_result.secret_value_exposed=false`
+- `credential_result.scope=sandbox`
+
+Admission and status packets must not expose token/secret/password values or
+raw owner-env dumps.
+
+## Additional local token owner surface
+
+`token --json` is the owner surface for bounded inspection of the local WBP
+token contract used by trusted machine consumers.
+
+`token` without `--json` is a machine-consumer surface for trusted local
+consumers such as Codex `auth.command`. It prints the plain local listener
+bearer token to stdout and must not be used as a browser surface.
+
+In the pinned local observation used by the auth-command contract proof contour
+(`codex-cli 0.128.0`), `auth.command` behaved as an exact executable string,
+not a command-plus-args packet surface. For that bounded observation, the
+repo-owned execution helper lives at the repository root:
+
+- `wbp_codex_auth_command.py`
+
+That helper is allowed to emit the plain local listener bearer token to stdout
+for its trusted machine consumer only. It is not a browser surface and it is
+not packet truth by itself.
+
+The token contract must remain bounded and machine-readably enforce:
+
+- source kind is the stable runtime generated config
+- output shape is `plain_token_stdout`
+- token is local-only
+- browser secret intake is false
+- browser path intake is false
+- JSON packet surfaces do not expose the token value
+
+`token --json` success should expose:
+
+- `next_action=none`
+- `data.token_source_kind=stable_runtime_generated_config`
+- `data.token_output_shape=plain_token_stdout`
+- `data.token_present=true`
+- `data.token_emitted=false`
+- `data.secret_value_exposed=false`
+- `data.scope=owner_local_listener`
+- `data.local_only=true`
+
+The plain `token` surface is allowed to emit the bearer token only to stdout for
+its trusted machine consumer. It is not a packet truth surface and must not be
+used as evidence by itself.
+
+## Additional Codex CLI runner surface
+
+`codex-runner smoke --json --prompt <text>` is a bounded non-native Codex CLI
+runner surface.
+
+It must remain explicitly non-native and machine-readably enforce:
+
+- `consumer_kind=codex_cli_runner`
+- `native_app_claimed=false`
+- reusable runner launch surface classification
+- isolated session root / `CODEX_HOME` ownership via session packet truth
+- transcript packet present
+- cleanup packet present
+
+This surface is not native `Codex.app`, not a window proof surface, and not an
+Original-via-WBP surface.
+
+## Additional external-models route verification surfaces
+
+`external-models routes validate --route <id> --json` is the owner surface for
+route-level provider model visibility proof.
+
+`external-models check --route <id> --json` is the owner surface for route-level
+provider smoke proof.
+
+Both surfaces must remain route-local. They may write route observation state and
+network evidence, but they must not claim live listener readiness or mutate Codex
+account routing.
+
+Verification must block before any provider network call when:
+
+- the route is disabled;
+- the route has `cost_class=paid_direct`;
+- the route secret is missing or invalid.
+
+Disabled routes must return a non-green packet with
+`machine_error_code=route_disabled` and `data.route_state=blocked`.
+
+Successful route validation/check packets should expose:
+
+- `verification_scope=route_provider_only`
+- `requested_model`
+- `effective_model`
+- `provider`
+- `listener_proven=false`
+- `runtime_claim_blocked=true`
+- `profile_ready=false`
 
 ## Additional launch-client owner surface
 
@@ -388,6 +769,20 @@ They must not be synthesized from registry active ids, registry active counts,
 or routing-candidate counts.
 Selected backend ids without `observed_at_utc` from the same observation event
 must not be treated as available participation evidence.
+
+When the owner path materializes a selected backend snapshot from live-capable
+registry entries, candidate ordering must be deterministic and machine-readable.
+The current runtime ranking policy is:
+
+1. lower `priority` first;
+2. lower `fail_count` first;
+3. higher `success_count` first;
+4. `backend_id` ascending as a stable tie-breaker.
+
+`auth_pool_hygiene` may expose `ranking_policy.status=applied` and the ordered
+`launch_capable_backend_ids`. This ranking is a candidate-selection input only;
+it must not bypass lifecycle gates, selected-backend evidence validation, or
+reserve/active policy proof.
 
 `evidence_strength` is the normalized strength axis and must use:
 
@@ -1081,7 +1476,7 @@ It must expose explicit machine-readable separation between:
 - observed stable inventory reporting
 - registry source-copy inputs
 - approved repair-target contract surface
-- future target reconciliation plan
+- future target reconciliation steps
 - repair apply authority
 
 Required stable-repair contract groups:

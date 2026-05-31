@@ -1,0 +1,23 @@
+{
+  "packet_kind": "auth_command_output_format",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "codex_runtime_shape": "exact_executable_string_path",
+  "plain_token_stdout_required": true,
+  "spaced_string_command_exit_code": 1,
+  "spaced_string_stamp_exists": false,
+  "spaced_string_upstream_status": 401,
+  "spaced_string_machine_error_code": "TRACE_UPSTREAM_HTTP_401",
+  "spaced_string_failed_to_start": true,
+  "wrong_token_control_exit_code": 1,
+  "wrong_token_control_stamp_exists": true,
+  "wrong_token_control_upstream_status": 401,
+  "wrong_token_control_final_message": "",
+  "helper_path_exit_code": 0,
+  "helper_path_stamp_exists": true,
+  "helper_path_upstream_status": 200,
+  "helper_path_final_message": "WBP_PROVIDER_LIVE_OK",
+  "captured_at_utc": "2026-05-25T12:57:35.131759Z",
+  "schema_version": 1,
+  "secret_value_recorded": false
+}

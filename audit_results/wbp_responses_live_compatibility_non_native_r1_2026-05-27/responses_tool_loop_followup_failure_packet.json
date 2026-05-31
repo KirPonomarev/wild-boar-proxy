@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-27T08:51:25.022107Z",
+  "failure_observed": true,
+  "machine_error_code": "OK",
+  "negative_control_error_code": "",
+  "negative_control_error_param": "input",
+  "negative_control_error_type": "invalid_request_error",
+  "negative_control_failure_cause": "provider_error",
+  "negative_control_failure_counts_as_model_unavailable": false,
+  "negative_control_failure_counts_as_provider_incompatible": false,
+  "negative_control_response_shape_accepted": false,
+  "negative_control_upstream_status_code": 400,
+  "packet_kind": "responses_tool_loop_followup_failure",
+  "request_attempted": true,
+  "status": "ok"
+}

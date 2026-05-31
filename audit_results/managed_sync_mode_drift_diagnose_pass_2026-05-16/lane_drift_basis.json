@@ -1,0 +1,55 @@
+{
+  "contour": "MANAGED_SYNC_MODE_DRIFT_DIAGNOSE_PASS",
+  "status_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_inventory_source": "auth-dir",
+    "effective_stable_runtime_consumer_source_status": "observed_source_active",
+    "consumer_activation_readiness_status": "activation_pending",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+    ]
+  },
+  "rotation_packet": {
+    "machine_error_code": "OK",
+    "evidence_status": "participation_evidence_present",
+    "evidence_freshness": "fresh",
+    "evidence_reason": "multi_backend_snapshot",
+    "selected_backend_count": 15,
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_claim_surface_source": "approved_repair_target"
+  },
+  "current_runtime_files": {
+    "runtime_effective_mode_file": {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "value": "managed"
+    },
+    "config_toml_base_url": {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "value": "http://127.0.0.1:8320/v1"
+    },
+    "supervisor_state_effective_mode": {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "value": "managed"
+    }
+  },
+  "state_snapshots": {
+    "selected_backend_snapshot": {
+      "source_name": "sync --json",
+      "observed_at_utc": "2026-05-15T22:35:24.474177+00:00",
+      "claim_scope": "bounded_local_participation_evidence_only"
+    },
+    "stable_runtime_consumer_snapshot": {
+      "selected_source_kind": "approved_repair_target",
+      "activation_outcome": "approved_target_activated",
+      "observed_at_utc": "2026-05-15T22:30:09.069487+00:00"
+    }
+  }
+}

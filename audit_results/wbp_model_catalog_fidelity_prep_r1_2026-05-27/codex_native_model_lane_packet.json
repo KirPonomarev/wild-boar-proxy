@@ -1,0 +1,222 @@
+{
+  "captured_at_utc": "2026-05-27T04:50:29.330291Z",
+  "lane": "codex_native",
+  "model_availability_proven": false,
+  "model_count": 3,
+  "models": [
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "gpt-5.3-codex",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "gpt-5.3-codex",
+      "lane": "codex_native",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.3-codex",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "gpt_account_or_alias",
+      "provider_model_id": "",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "source_class": "current_build_catalog_visible",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "gpt-5.4",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "gpt-5.4",
+      "lane": "codex_native",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.4",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "gpt_account_or_alias",
+      "provider_model_id": "",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "source_class": "current_build_catalog_visible",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "gpt-5.5",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "gpt-5.5",
+      "lane": "codex_native",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.5",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "gpt_account_or_alias",
+      "provider_model_id": "",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "source_class": "current_build_catalog_visible",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    }
+  ],
+  "packet_kind": "codex_native_model_lane",
+  "physical_provider_identity_assumed": false,
+  "provider_class_or_source_class_only": true,
+  "status": "ok"
+}

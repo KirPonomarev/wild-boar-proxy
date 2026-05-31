@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "audit_id": "NATIVE_CUSTOM_BOUNDED_DISPATCH_FALSE_GREEN_AUDIT",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_BOUNDED_DISPATCH_AND_WINDOW_OBSERVATION_PASS_R2",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "owner_authorization_present": false,
+  "live_dispatch_attempted": false,
+  "custom_dispatch_claims_bounded": true,
+  "original_deferred_honestly": true,
+  "no_prompt_attempted": true,
+  "no_route_inference_attempted": true,
+  "no_native_completion_claim": true,
+  "window_observation_not_upgraded_to_usability": true,
+  "web_workbench_substituted": false,
+  "screenshot_substituted_for_packet_truth": false,
+  "current_codex_touched": false,
+  "audit_verdict": "pass_blocked_before_live_dispatch"
+}

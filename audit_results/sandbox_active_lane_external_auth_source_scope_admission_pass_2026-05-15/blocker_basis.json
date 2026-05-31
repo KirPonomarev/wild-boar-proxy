@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "machine_basis": {
+    "baseline_sandbox_auth": {
+      "auth_file": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "status_machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    "read_only_external_auth_override": {
+      "auth_file": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "mutation_executed": false,
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "models_ok": true,
+      "responses_ok": false,
+      "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+    },
+    "registry_binding": {
+      "backend_id": "auth",
+      "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+      "rebind_needed_by_current_fact": false
+    },
+    "auth_metadata": {
+      "sandbox_auth_digest": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+      "sandbox_openai_api_key_len": 35,
+      "external_auth_digest": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8",
+      "external_openai_api_key_len": 60
+    }
+  }
+}

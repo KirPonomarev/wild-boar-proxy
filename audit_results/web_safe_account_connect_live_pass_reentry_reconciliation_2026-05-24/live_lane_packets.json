@@ -1,0 +1,69 @@
+{
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS_REENTRY_RECONCILIATION",
+  "source": "local_sandbox_phase_handler",
+  "packets": {
+    "actions_metadata": {
+      "action_phase": "sandbox_actions",
+      "sandbox_preflight_status": "admitted",
+      "onboard_account_available": true,
+      "account_login_status_available": true,
+      "account_login_complete_available": true,
+      "account_login_cancel_available": true
+    },
+    "start_packet": {
+      "ui_action": "onboard_account",
+      "status": "ok",
+      "action_role": "account_onboarding",
+      "session_id": "codex-test-session",
+      "confirmation_required": true,
+      "post_action_refresh_required": false,
+      "machine_error_code": "OK",
+      "login_bridge_status": "waiting_for_user",
+      "provider": "codex",
+      "mode": "device",
+      "device_url_present": true,
+      "device_code_present": true,
+      "browser_secret_intake": false,
+      "browser_path_intake": false
+    },
+    "status_packet": {
+      "ui_action": "account_login_status",
+      "status": "ok",
+      "session_id": "codex-test-session",
+      "machine_error_code": "OK",
+      "login_bridge_status": "auth_materialized",
+      "next_action": "accounts_onboard",
+      "auth_materialized": true,
+      "auth_ref_present": true,
+      "auth_ref_scope": "sandbox"
+    },
+    "complete_packet": {
+      "ui_action": "account_login_complete",
+      "status": "ok",
+      "session_id": "codex-test-session",
+      "machine_error_code": "OK",
+      "post_action_refresh_required": true,
+      "login_bridge_status": "completed",
+      "next_action": "accounts_refresh",
+      "final_outcome": "explicit_auth_imported_to_reserve",
+      "reserve_first_proven": true,
+      "pool_after_onboarding": "reserve",
+      "active_routing_changed": false,
+      "selected_backend_id": "acct-new",
+      "validate_outcome": "ok",
+      "sync_outcome": "ok",
+      "ui_state": "success"
+    },
+    "blocked_packet": {
+      "ui_action": "onboard_account",
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "forbidden_example": "auth_ref"
+    },
+    "invalid_session_packet": {
+      "ui_action": "account_login_complete",
+      "status": "integration_failure",
+      "machine_error_code": "UI_LOGIN_SESSION_ID_INVALID"
+    }
+  }
+}

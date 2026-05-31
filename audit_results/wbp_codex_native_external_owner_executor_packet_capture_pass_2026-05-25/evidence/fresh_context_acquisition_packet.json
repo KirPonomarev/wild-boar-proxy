@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-25T15:25:19.291199Z",
+  "fresh_context_verified": true,
+  "operator_action_performed": true,
+  "operator_action_required": true,
+  "phase7_retry_admissible": false,
+  "reason_class": "QUIESCENT_PRECONDITION_STILL_FAILED",
+  "status": "blocked",
+  "verdict": "fresh_context_present_but_quiescent_precondition_failed"
+}

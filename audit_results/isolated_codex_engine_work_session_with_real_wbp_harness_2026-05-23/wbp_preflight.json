@@ -1,0 +1,154 @@
+{
+  "acceptable": false,
+  "allowed_commands_only": true,
+  "commands": [
+    {
+      "args": [
+        "python3",
+        "-m",
+        "wild_boar_proxy",
+        "status",
+        "--json"
+      ],
+      "duration_s": 3.254,
+      "exit_code": 0,
+      "packet_summary": {
+        "configured_model": "gpt-5.5",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "human_message": "Runtime status summary is available.",
+        "launch_readiness": {
+          "blocking_reason": "",
+          "launch_capable_backend_count": 15,
+          "machine_error_code": "OK",
+          "status": "ready"
+        },
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "requested_model": "gpt-5.5",
+        "status": "ok"
+      },
+      "started_at_utc": "2026-05-23T11:59:01.665670+00:00",
+      "stderr_tail": "",
+      "stdout_tail": "ficient\": false, \"snapshot_presence_alone_sufficient\": false, \"bounded_reenable_lane_eligible_required\": true, \"proxy_path_failure_codes_separate\": [\"PROXY_PATH_BROKEN\", \"PROXY_REPROBE_FAILED\"], \"generic_listener_down_fallback\": \"LISTENER_DOWN\", \"overclassification_forbidden\": true}, \"re_enable_method_contract\": {\"status\": \"owner_path_emitted\", \"owner_path_scope\": \"bounded_control_layer_recovery_action\", \"owner_command_surface\": \"healthcheck --json\", \"reuse_private_launch_smoke_helper_allowed\": true, \"launcher_protocol_widening_required\": false, \"launchd_integration_forbidden\": true, \"os_service_manager_integration_forbidden\": true, \"generic_service_supervision_forbidden\": true}, \"approved_target_recovery_outcome\": \"separate\", \"observed_source_fallback_recovery_outcome\": \"separate\", \"recovery_failure_outcome\": \"separate\", \"top_level_truth_boundaries\": {\"status\": \"contract_ready\", \"top_level_final_truth_fields\": [\"status\", \"machine_error_code\", \"liveness\", \"endpoint\"], \"nested_recovery_surface\": \"deterministic_stable_recovery_result\", \"final_live_truth_separate\": true, \"launch_smoke_owner_lane_fields_forbidden\": true, \"status_second_owner_forbidden\": true, \"sync_owner_lane_forbidden\": true}, \"top_level_machine_error_code_rules\": {\"status\": \"owner_path_emitted\", \"stable_service_disabled_final_code\": \"STABLE_SERVICE_DISABLED\", \"stable_service_disabled_requires_final_unhealthy\": true, \"ok_after_successful_reenable\": \"OK\", \"generic_listener_down_fallback\": \"LISTENER_DOWN\", \"proxy_path_codes_remain_separate\": true}, \"live_runtime_observation_required\": true, \"mode_truth_redefinition_forbidden\": true, \"last_known_good_proxy_persistence_in_scope\": false}, \"consumer_activation_readiness\": {\"status\": \"activation_pending\", \"machine_error_code\": \"STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING\", \"reason\": \"desired_consumer_source_differs_from_effective_observation\", \"next_step\": \"activation_contour\"}, \"deterministic_stable_recovery_result\": {\"status\": \"not_invoked\", \"owner_command_surface\": \"healthcheck --json\", \"delegated_from_status\": true, \"attempted\": false, \"entry_lane\": \"not_invoked\", \"outcome\": \"not_invoked\", \"re_enable_method\": \"\", \"selected_source_kind\": \"\", \"selected_source_path\": \"\", \"generated_config_regenerated\": false, \"snapshot_refreshed\": false, \"fallback_reason\": \"\", \"live_runtime_observation_confirmed\": false, \"confirmation_basis\": \"\", \"effectful_claim_allowed\": false, \"guardrail_status\": \"not_invoked\"}}, \"launch_readiness\": {\"status\": \"ready\", \"owner_command_surface\": \"healthcheck --json\", \"delegated_from_status\": true, \"real_inference_required\": true, \"listener_reachable\": true, \"models_surface_reachable\": true, \"responses_proof_passed\": true, \"truth_alignment_passed\": true, \"base_url_match\": true, \"effective_mode_match\": true, \"model_match\": true, \"proxy_url_match\": true, \"gate_passed\": true, \"blocking_reason\": \"\", \"failed_checks\": [], \"machine_error_code\": \"OK\", \"last_error\": \"\", \"auth_pool_hygiene_status\": \"launch_capable_available\", \"launch_capable_backend_count\": 15}, \"runtime_guardrails\": {\"status\": \"clear\", \"owner_command_surface\": \"status --json\", \"lock_status\": \"available\", \"launch_readiness_status\": \"ready\", \"launch_blocking_reason\": \"\", \"auth_pool_hygiene_status\": \"launch_capable_available\", \"auth_pool_blocking_reason\": \"\", \"recovery_guardrail_status\": \"not_invoked\", \"recovery_confirmation_basis\": \"\", \"recovery_effectful_claim_allowed\": false, \"failed_checks\": [], \"blocking_reason\": \"\", \"delegated_from_status\": true}, \"registry_identity_summary\": {\"status\": \"clear\", \"machine_error_code\": \"OK\"}, \"claim_gate\": {\"status\": \"blocked\", \"machine_error_code\": \"CLAIM_GATE_BLOCKED\", \"blocked_claims\": [\"active-only-traffic\", \"pool-participation-correct\", \"stable-15-proved\"], \"sources\": [\"policy_drift\"], \"next_action\": \"inspect_claim_gate\"}, \"last_error\": \"\", \"attestation_summary\": {\"status\": \"ok\", \"machine_error_code\": \"OK\", \"attestation_source\": \"healthcheck --json\", \"observed_at_utc\": \"2026-05-23T11:59:04.902003+00:00\"}}\n",
+      "timeout": false
+    },
+    {
+      "args": [
+        "python3",
+        "-m",
+        "wild_boar_proxy",
+        "healthcheck",
+        "--json"
+      ],
+      "duration_s": 7.122,
+      "exit_code": 0,
+      "packet_summary": {
+        "configured_model": "gpt-5.5",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "human_message": "Runtime attestation passed.",
+        "launch_readiness": {
+          "blocking_reason": "",
+          "launch_capable_backend_count": 15,
+          "machine_error_code": "OK",
+          "status": "ready"
+        },
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "requested_model": "gpt-5.5",
+        "status": "ok"
+      },
+      "started_at_utc": "2026-05-23T11:59:04.920085+00:00",
+      "stderr_tail": "",
+      "stdout_tail": " {\"status\": \"owner_path_emitted\", \"field\": \"deterministic_stable_recovery_result.entry_lane\", \"nested_recovery_surface\": true, \"top_level_machine_error_code_separate\": true, \"allowed_values\": [\"managed_preflight_failure\", \"stable_service_disabled\", \"explicit_stable_recovery_lane\", \"not_invoked\"]}, \"failure_taxonomy_redesign_forbidden\": true, \"shared_activation_mechanics\": {\"status\": \"owner_path_emitted\", \"reuse_existing_launch_smoke_activation_helper\": true, \"generated_config_file\": \"/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml\", \"handoff_env_var\": \"WBP_STABLE_CONFIG\", \"snapshot_topic\": \"stable_runtime_consumer_snapshot\", \"owner_paths\": [\"healthcheck --json\", \"launch smoke --json\"]}, \"generated_config_regeneration_status\": \"owner_path_emitted\", \"generated_config_regeneration_policy\": \"regenerate_each_recovery_attempt\", \"generated_config_derivation_source\": \"current_baseline_stable_config_plus_current_approved_target_reference\", \"generated_config_regeneration_owner_paths\": [\"healthcheck --json\", \"launch smoke --json\"], \"stale_generated_config_authoritative\": false, \"generated_config_existence_alone_sufficient\": false, \"snapshot_refresh_status\": \"owner_path_emitted\", \"snapshot_refresh_after_stable_live_outcome\": true, \"snapshot_refresh_owner_paths\": [\"healthcheck --json\", \"launch smoke --json\"], \"snapshot_schema_widening_required\": false, \"new_persisted_recovery_metadata_required\": false, \"stable_service_disabled_classification\": {\"status\": \"owner_path_emitted\", \"classification_surface\": \"deterministic_stable_recovery_result.entry_lane\", \"control_layer_classification\": true, \"persisted_engine_state_flag\": false, \"positive_evidence_required\": true, \"desired_mode_alone_sufficient\": false, \"generated_config_existence_alone_sufficient\": false, \"snapshot_presence_alone_sufficient\": false, \"bounded_reenable_lane_eligible_required\": true, \"proxy_path_failure_codes_separate\": [\"PROXY_PATH_BROKEN\", \"PROXY_REPROBE_FAILED\"], \"generic_listener_down_fallback\": \"LISTENER_DOWN\", \"overclassification_forbidden\": true}, \"re_enable_method_contract\": {\"status\": \"owner_path_emitted\", \"owner_path_scope\": \"bounded_control_layer_recovery_action\", \"owner_command_surface\": \"healthcheck --json\", \"reuse_private_launch_smoke_helper_allowed\": true, \"launcher_protocol_widening_required\": false, \"launchd_integration_forbidden\": true, \"os_service_manager_integration_forbidden\": true, \"generic_service_supervision_forbidden\": true}, \"approved_target_recovery_outcome\": \"separate\", \"observed_source_fallback_recovery_outcome\": \"separate\", \"recovery_failure_outcome\": \"separate\", \"top_level_truth_boundaries\": {\"status\": \"contract_ready\", \"top_level_final_truth_fields\": [\"status\", \"machine_error_code\", \"liveness\", \"endpoint\"], \"nested_recovery_surface\": \"deterministic_stable_recovery_result\", \"final_live_truth_separate\": true, \"launch_smoke_owner_lane_fields_forbidden\": true, \"status_second_owner_forbidden\": true, \"sync_owner_lane_forbidden\": true}, \"top_level_machine_error_code_rules\": {\"status\": \"owner_path_emitted\", \"stable_service_disabled_final_code\": \"STABLE_SERVICE_DISABLED\", \"stable_service_disabled_requires_final_unhealthy\": true, \"ok_after_successful_reenable\": \"OK\", \"generic_listener_down_fallback\": \"LISTENER_DOWN\", \"proxy_path_codes_remain_separate\": true}, \"live_runtime_observation_required\": true, \"mode_truth_redefinition_forbidden\": true, \"last_known_good_proxy_persistence_in_scope\": false}, \"deterministic_stable_recovery_result\": {\"status\": \"not_invoked\", \"owner_command_surface\": \"healthcheck --json\", \"delegated_from_status\": false, \"attempted\": false, \"entry_lane\": \"not_invoked\", \"outcome\": \"not_invoked\", \"re_enable_method\": \"\", \"selected_source_kind\": \"\", \"selected_source_path\": \"\", \"generated_config_regenerated\": false, \"snapshot_refreshed\": false, \"fallback_reason\": \"\", \"live_runtime_observation_confirmed\": false, \"confirmation_basis\": \"\", \"effectful_claim_allowed\": false, \"guardrail_status\": \"not_invoked\"}}\n",
+      "timeout": false
+    },
+    {
+      "args": [
+        "python3",
+        "-m",
+        "wild_boar_proxy",
+        "accounts",
+        "list",
+        "--json"
+      ],
+      "duration_s": 0.107,
+      "exit_code": 0,
+      "packet_summary": {
+        "human_message": "Account registry snapshot is available.",
+        "liveness": "unknown",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "status": "ok"
+      },
+      "started_at_utc": "2026-05-23T11:59:12.042371+00:00",
+      "stderr_tail": "",
+      "stdout_tail": "nabled\": true, \"priority\": 100, \"pool\": \"active\", \"status\": \"healthy\", \"fail_count\": 0, \"success_count\": 2, \"last_success\": \"2026-05-15T22:35:21.441503+00:00\", \"last_error\": \"\", \"last_error_class\": \"\", \"cooldown_until\": null, \"proxy_mode\": \"auto-detect\", \"auth_ref\": \"/Users/kirillponomarev/.cli-proxy-api/codex-k.ponomarev.pro@gmail.com-free.json\", \"added_at\": \"2026-05-07T17:57:36.476652+00:00\", \"disabled_reason\": \"\", \"drain_until\": null, \"last_probe_level\": \"shallow\", \"last_probe_at\": \"2026-05-15T22:35:21.441503+00:00\", \"last_deep_probe_at\": \"2026-05-15T22:05:36.192021+00:00\", \"last_transition_at\": \"2026-05-15T22:05:36.192021+00:00\", \"manual_hold\": false, \"half_open_since\": null, \"notes\": \"Onboarded automatically at 2026-05-07T17:57:36.374491+00:00\"}, {\"id\": \"kabanui7070\", \"type\": \"cliproxy-auth-file\", \"label\": \"kabanui7070@outlook.com\", \"enabled\": true, \"priority\": 100, \"pool\": \"active\", \"status\": \"healthy\", \"fail_count\": 0, \"success_count\": 2, \"last_success\": \"2026-05-15T22:35:21.745463+00:00\", \"last_error\": \"\", \"last_error_class\": \"\", \"cooldown_until\": null, \"proxy_mode\": \"auto-detect\", \"auth_ref\": \"/Users/kirillponomarev/.cli-proxy-api/codex-kabanui7070@outlook.com-free.json\", \"added_at\": \"2026-05-07T17:59:03.592258+00:00\", \"disabled_reason\": \"\", \"drain_until\": null, \"last_probe_level\": \"shallow\", \"last_probe_at\": \"2026-05-15T22:35:21.745463+00:00\", \"last_deep_probe_at\": \"2026-05-15T22:05:37.340589+00:00\", \"last_transition_at\": \"2026-05-15T22:05:37.340589+00:00\", \"manual_hold\": false, \"half_open_since\": null, \"notes\": \"Onboarded automatically at 2026-05-07T17:59:03.488009+00:00\"}, {\"id\": \"kp8750410\", \"type\": \"cliproxy-auth-file\", \"label\": \"kp8750410@gmail.com\", \"enabled\": true, \"priority\": 100, \"pool\": \"active\", \"status\": \"healthy\", \"fail_count\": 0, \"success_count\": 2, \"last_success\": \"2026-05-15T22:35:22.745632+00:00\", \"last_error\": \"\", \"last_error_class\": \"\", \"cooldown_until\": null, \"proxy_mode\": \"auto-detect\", \"auth_ref\": \"/Users/kirillponomarev/.cli-proxy-api/codex-kp8750410@gmail.com-free.json\", \"added_at\": \"2026-05-07T18:03:13.596246+00:00\", \"disabled_reason\": \"\", \"drain_until\": null, \"last_probe_level\": \"shallow\", \"last_probe_at\": \"2026-05-15T22:35:22.745632+00:00\", \"last_deep_probe_at\": \"2026-05-15T22:05:38.305373+00:00\", \"last_transition_at\": \"2026-05-15T22:05:38.305373+00:00\", \"manual_hold\": false, \"half_open_since\": null, \"notes\": \"Onboarded automatically at 2026-05-07T18:03:13.464693+00:00\"}, {\"id\": \"kp8750410-team\", \"type\": \"cliproxy-auth-file\", \"label\": \"kp8750410@gmail.com\", \"enabled\": true, \"priority\": 100, \"pool\": \"active\", \"status\": \"degraded\", \"fail_count\": 2, \"success_count\": 0, \"last_success\": \"2026-05-11T15:20:53.590041+00:00\", \"last_error\": \"HTTP 401: {\\\"error\\\":{\\\"message\\\":\\\"Your authentication token has been invalidated. Please try signing in again.\\\",\\\"type\\\":\\\"authentication_error\\\",\\\"code\\\":\\\"auth_unavailable\\\"}}\", \"last_error_class\": \"auth\", \"cooldown_until\": \"2026-05-15T22:40:22.665217+00:00\", \"proxy_mode\": \"auto-detect\", \"auth_ref\": \"/Users/kirillponomarev/.cli-proxy-api/codex-e5c048fc-kp8750410@gmail.com-team.json\", \"added_at\": \"2026-05-11T15:20:05.618303+00:00\", \"disabled_reason\": \"\", \"drain_until\": null, \"last_probe_level\": \"deep\", \"last_probe_at\": \"2026-05-15T22:35:22.665217+00:00\", \"last_deep_probe_at\": \"2026-05-11T15:20:53.590041+00:00\", \"last_transition_at\": \"2026-05-15T22:35:22.665217+00:00\", \"manual_hold\": false, \"half_open_since\": null, \"notes\": \"Onboarded automatically at 2026-05-11T15:20:05.482408+00:00\"}], \"registry_identity\": {\"status\": \"clear\", \"machine_error_code\": \"OK\", \"duplicate_backend_ids\": [], \"duplicate_auth_basenames\": [], \"missing_auth_refs\": [], \"empty_auth_ref_backends\": [], \"invalid_auth_basenames\": [], \"invalid_backend_pools\": [], \"registry_schema_version\": 2, \"unsupported_schema_versions\": [], \"claim_blockers\": [], \"next_action\": \"none\"}, \"pool_policy\": {\"active_target\": 20, \"active_min\": 20, \"reserve_target\": 0}, \"stable_default_backend_id\": \"gpt2026bis-team\"}\n",
+      "timeout": false
+    },
+    {
+      "args": [
+        "python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "status",
+        "--json"
+      ],
+      "duration_s": 0.092,
+      "exit_code": 0,
+      "packet_summary": {
+        "data": {
+          "observed_routes_count": 0,
+          "routes_count": 0
+        },
+        "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+        "liveness": "not_applicable",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "status": "ok"
+      },
+      "started_at_utc": "2026-05-23T11:59:12.149387+00:00",
+      "stderr_tail": "",
+      "stdout_tail": "{\"status\": \"ok\", \"exit_code\": 0, \"human_message\": \"External-models synthetic lifecycle status collected without live runtime claims.\", \"machine_error_code\": \"OK\", \"changed_files\": [], \"next_action\": \"none\", \"liveness\": \"not_applicable\", \"severity\": \"recoverable\", \"operator_action\": \"none\", \"data\": {\"foundation_phase\": \"C3\", \"adapter_runtime_available\": false, \"lifecycle_mode\": \"synthetic\", \"adapter_state\": \"stopped\", \"listener_proven\": false, \"runtime_claim_blocked\": true, \"profile_ready\": false, \"routes_count\": 0, \"observed_routes_count\": 0, \"observed_routes\": {}, \"available_secret_refs\": [], \"paths\": {\"routes_file\": \"/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json\", \"state_file\": \"/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json\", \"secrets_file\": \"/Users/kirillponomarev/.wild-boar-proxy/external-models/secrets.env\", \"evidence_dir\": \"/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence\"}, \"adapter\": {\"lifecycle_mode\": \"synthetic\", \"state\": \"stopped\", \"host\": \"127.0.0.1\", \"port\": null, \"base_url\": null, \"listener_proven\": false, \"runtime_claim_blocked\": true, \"started_at_utc\": null, \"last_transition\": \"init\"}, \"local_auth\": {\"token_ref\": \"managed_local_token\", \"token_present\": false, \"token_created_at_utc\": null}}, \"timestamp_utc\": \"2026-05-23T11:59:12Z\"}\n",
+      "timeout": false
+    },
+    {
+      "args": [
+        "python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "check",
+        "--route",
+        "wbp-deepseek-v3",
+        "--json"
+      ],
+      "duration_s": 0.088,
+      "exit_code": 1,
+      "packet_summary": {
+        "data": {},
+        "human_message": "Route not found: wbp-deepseek-v3",
+        "liveness": "unknown",
+        "machine_error_code": "route_not_found",
+        "next_action": "user_action",
+        "status": "error"
+      },
+      "started_at_utc": "2026-05-23T11:59:12.241791+00:00",
+      "stderr_tail": "",
+      "stdout_tail": "{\"status\": \"error\", \"exit_code\": 1, \"human_message\": \"Route not found: wbp-deepseek-v3\", \"machine_error_code\": \"route_not_found\", \"changed_files\": [], \"next_action\": \"user_action\", \"liveness\": \"unknown\", \"severity\": \"fatal\", \"operator_action\": \"user_action\", \"data\": {}, \"timestamp_utc\": \"2026-05-23T11:59:12Z\"}\n",
+      "timeout": false
+    }
+  ],
+  "forbidden_commands_not_run": [
+    "sync",
+    "mode set",
+    "policy stage set",
+    "rollout stage advance",
+    "account lifecycle mutation",
+    "route mutation",
+    "owner recovery"
+  ],
+  "schema_version": 1
+}

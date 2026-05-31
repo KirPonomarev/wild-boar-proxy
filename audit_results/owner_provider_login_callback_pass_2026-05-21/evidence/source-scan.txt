@@ -1,0 +1,11 @@
+Command:
+rg -n "def run_accounts_login_start|provider != \"sandbox\"|supported_providers|accounts_login_status|callback|owner-login" wild_boar_proxy/runtime.py wild_boar_proxy/cli.py wild_boar_proxy/web_design_live_server.py COMMAND_API.md tests/test_cli.py tests/test_web_design_live_server.py
+
+Result:
+wild_boar_proxy/runtime.py:3431:    return f"{sandbox_login_url_base()}/owner-login/sandbox?{query}"
+wild_boar_proxy/runtime.py:10452:def run_accounts_login_start(paths: RuntimePaths, provider: str) -> dict[str, Any]:
+wild_boar_proxy/runtime.py:10453:    if provider != "sandbox":
+wild_boar_proxy/runtime.py:10464:                "supported_providers": ["sandbox"],
+tests/test_cli.py:7635:        self.assertIn("/owner-login/sandbox?", str(payload["login_url"]))
+tests/test_web_design_live_server.py:3268:            "http://127.0.0.1:8788/owner-login/sandbox?"
+tests/test_web_design_live_server.py:3279:                "http://127.0.0.1:8788/owner-login/sandbox?"

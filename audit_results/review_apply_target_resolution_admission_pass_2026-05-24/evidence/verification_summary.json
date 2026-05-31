@@ -1,0 +1,45 @@
+{
+  "contour": "CONTOUR_04A",
+  "date_utc": "2026-05-24T20:37:48Z",
+  "base_head": "ea8f101292311c7813b8edb82bd1368b65b9d273",
+  "status": "completed",
+  "final_verdict": "CONTOUR_04A_PASS",
+  "touched_files": [
+    "wild_boar_proxy/review_bridge_apply_admission.py",
+    "wild_boar_proxy/review_bridge_session_store.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "tests/test_review_bridge_apply_admission.py",
+    "tests/test_review_bridge_live_server.py",
+    "audit_results/review_apply_target_resolution_admission_pass_2026-05-24/spec.md",
+    "audit_results/review_apply_target_resolution_admission_pass_2026-05-24/evidence/verification_summary.json",
+    "audit_results/review_apply_target_resolution_admission_pass_2026-05-24/evidence/preflight_packets.json",
+    "audit_results/review_apply_target_resolution_admission_pass_2026-05-24/evidence/independent_audit_report.json",
+    "audit_results/review_apply_target_resolution_admission_pass_2026-05-24/closeout.md"
+  ],
+  "verification": {
+    "targeted_review_bridge_suite": {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest -q tests.test_review_bridge_apply_admission tests.test_review_bridge_live_server tests.test_review_bridge_packet_import tests.test_review_bridge_command_bus",
+      "tests_ok": 27
+    },
+    "adjacent_web_suite": {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest -q tests.test_web_design_command_adapter tests.test_web_design_live_server",
+      "tests_ok": 123
+    },
+    "py_compile": {
+      "command": "python3 -m py_compile wild_boar_proxy/review_bridge_apply_admission.py wild_boar_proxy/review_bridge_session_store.py wild_boar_proxy/web_design_live_server.py tests/test_review_bridge_apply_admission.py tests/test_review_bridge_live_server.py",
+      "ok": true
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "ok": true
+    }
+  },
+  "scope_assertions": {
+    "real_apply_enabled": false,
+    "manuscript_write_performed": false,
+    "filesystem_mutation_performed": false,
+    "import_contract_redesigned": false,
+    "ui_drift_present": false,
+    "default_live_server_preflight_opt_in_only": true
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "captured_at": "2026-05-15T15:03:29.249857+00:00",
+  "installer_init_returncode": 0,
+  "installer_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Installer baseline initialization completed.",
+    "machine_error_code": "OK",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-test/managed/bin",
+      "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts",
+      "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+      "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status",
+      "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh"
+    ],
+    "next_action": "none",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "installer_result": {
+      "status": "owner_path_emitted",
+      "final_outcome": "baseline_initialized",
+      "owner_helper_paths": [
+        "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts",
+        "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+        "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status",
+        "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh"
+      ]
+    },
+    "external_models_result": {
+      "status": "owner_path_emitted",
+      "final_outcome": "layout_initialized",
+      "root_dir": "/Users/kirillponomarev/.codex-custom-test/external-models",
+      "secrets_mode": "0o600"
+    }
+  },
+  "forbidden_live_path_drift_detected": false,
+  "helper_paths_materialized": true,
+  "helper_paths_executable": true,
+  "unsafe_live_strings_detected": false
+}

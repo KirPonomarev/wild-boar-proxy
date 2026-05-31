@@ -1,0 +1,221 @@
+{
+  "captured_at_utc": "2026-05-26T21:00:49.327860Z",
+  "external_provider_live_compatibility_proven": false,
+  "lane": "wbp_api",
+  "model_count": 3,
+  "models": [
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "external_alias",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "WBP direct-mistral-devstral-2512",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "direct-mistral-devstral-2512",
+      "lane": "wbp_api",
+      "live_availability_proven": false,
+      "model_id": "direct-mistral-devstral-2512",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "external_alias",
+      "provider_model_id": "direct-mistral-devstral-2512",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_external_alias",
+      "source_class": "server_registry",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "external_route",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "WBP provider/native-looking",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "provider/native-looking",
+      "lane": "wbp_api",
+      "live_availability_proven": false,
+      "model_id": "native-looking-external",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "external_route",
+      "provider_model_id": "provider/native-looking",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "server_owned_external_route",
+      "source_class": "server_registry",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "aliases": [],
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "proof_level": "unproven",
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "provider_class": "external_route",
+        "reasoning": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "proof_level": "classified",
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "proof_level": "unproven",
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "display_name": "WBP deepseek-max",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "label": "deepseek-max",
+      "lane": "wbp_api",
+      "live_availability_proven": false,
+      "model_id": "wbp:deepseek-max",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "physical_provider": "",
+      "physical_provider_proven": false,
+      "provider_class": "external_route",
+      "provider_model_id": "deepseek-max",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "server_owned_external_route",
+      "source_class": "server_registry",
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "unsupported_capabilities_advertised": false
+    }
+  ],
+  "packet_kind": "wbp_api_model_lane",
+  "provider_family_adapter_compatibility_proven": false,
+  "status": "ok"
+}

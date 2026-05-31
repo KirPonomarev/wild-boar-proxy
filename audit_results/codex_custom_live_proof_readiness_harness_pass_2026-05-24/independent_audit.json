@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_LIVE_PROOF_READINESS_HARNESS_PASS",
+  "status": "passed_with_classified_partial",
+  "auditor": {
+    "agent_id": "019e56c6-0a4b-7301-8359-86b35c63690f",
+    "nickname": "Harvey",
+    "model_class": "gpt-5.4-mini",
+    "mode": "read_only",
+    "live_commands_run": false
+  },
+  "findings": [
+    {
+      "requirement": "forbidden browser fields rejected",
+      "verdict": "covered",
+      "evidence": [
+        "wild_boar_proxy/codex_custom_sessions.py forbidden helpers and prompt packets",
+        "wild_boar_proxy/operator_surface.py forbidden_browser_fields and run_prompt",
+        "tests/test_codex_custom_sessions.py",
+        "tests/test_operator_surface.py",
+        "tests/test_codex_launch_modes.py"
+      ]
+    },
+    {
+      "requirement": "backend route model server-issued",
+      "verdict": "partial",
+      "evidence": [
+        "wild_boar_proxy/codex_model_registry.py server-issued model truth",
+        "wild_boar_proxy/codex_account_selection.py selected_backend_server_issued",
+        "wild_boar_proxy/codex_custom_sessions.py model and backend glue"
+      ],
+      "risk": "route provenance is inferred, not first-class route_server_issued truth in the core session packet"
+    },
+    {
+      "requirement": "no success without WBP trace",
+      "verdict": "covered",
+      "evidence": [
+        "wild_boar_proxy/codex_custom_sessions.py prompt_packet",
+        "wild_boar_proxy/operator_surface.py run_prompt",
+        "tests/test_codex_custom_sessions.py trace tests",
+        "tests/test_operator_surface.py trace observer tests"
+      ]
+    },
+    {
+      "requirement": "prompt not passed via argv",
+      "verdict": "covered",
+      "evidence": [
+        "wild_boar_proxy/operator_surface.py run_prompt uses stdin dash",
+        "tests/test_operator_surface.py test_run_prompt_uses_stdin_dash_and_redacted_transcript"
+      ]
+    },
+    {
+      "requirement": "current Codex profile not used",
+      "verdict": "covered",
+      "evidence": [
+        "wild_boar_proxy/operator_surface.py temp HOME and CODEX_HOME",
+        "wild_boar_proxy/codex_custom_sessions.py current_codex_home_used false",
+        "tests/test_operator_surface.py",
+        "tests/test_codex_custom_sessions.py"
+      ]
+    },
+    {
+      "requirement": "current Codex app not mutated",
+      "verdict": "partial_before_patch",
+      "evidence": [
+        "wild_boar_proxy/operator_surface.py protected_snapshot and run_process_isolation_proof",
+        "audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/process_isolation_proof.json"
+      ],
+      "risk": "needed a focused repo-level unit test for this exact harness"
+    }
+  ],
+  "orchestrator_resolution": [
+    "Added a targeted non-live unit test in tests/test_operator_surface.py for run_process_isolation_proof protected surfaces unchanged behavior.",
+    "Classified route provenance as partial and required route provenance packet in the future live contour only if a route-backed source is actually selected."
+  ],
+  "verdict": "readiness harness is acceptable for non-live closeout; future live pass must preserve the classified route provenance stop condition."
+}

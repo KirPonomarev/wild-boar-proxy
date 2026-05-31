@@ -1,0 +1,67 @@
+{
+  "contour": "external_lab_c24",
+  "date": "2026-05-11",
+  "gate": "gate_a_runtime_integration",
+  "mandatory_criteria": [
+    {
+      "criterion": "same_day_live_20_account_contour_executed",
+      "status": "closed_by_evidence",
+      "reason": "Prior accepted same-day live contour remains part of the preserved evidence chain and C24 did not invalidate it.",
+      "evidence_refs": [
+        "audit_results/external_lab_c20_runtime_execution_packet_2026-05-10.json",
+        "audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json"
+      ]
+    },
+    {
+      "criterion": "20_accounts_registered_across_active_and_reserve",
+      "status": "closed_by_evidence",
+      "reason": "C24 postflight account snapshot shows 25 registered accounts with 17 active and 0 reserve.",
+      "evidence_refs": [
+        "audit_results/external_lab_c24_precondition_packet_2026-05-11.json",
+        "audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json"
+      ]
+    },
+    {
+      "criterion": "staged_promotion_passes_rollback_points",
+      "status": "closed_by_evidence",
+      "reason": "C23 owner-path targeted promotion tests remain preserved and C24 introduced no contradicting evidence on that surface.",
+      "evidence_refs": [
+        "audit_results/external_lab_c23_runtime_execution_packet_2026-05-11.json"
+      ]
+    },
+    {
+      "criterion": "bounded_probing_works_without_request_storm",
+      "status": "closed_by_evidence",
+      "reason": "No contradictory no-storm machine signal was introduced in C24.",
+      "evidence_refs": [
+        "audit_results/external_lab_c17_no_storm_threshold_packet_2026-05-10.json",
+        "audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json"
+      ]
+    },
+    {
+      "criterion": "c24_hard_check_suite_clean_or_explicitly_adjudicated",
+      "status": "closed_by_evidence",
+      "reason": "Focused runtime-contract recheck passed, full tests.test_cli passed, and UI-facing regression suites passed.",
+      "evidence_refs": [
+        "audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json"
+      ]
+    },
+    {
+      "criterion": "no_contradictory_machine_signal_reopens_gate_a_closure",
+      "status": "blocked_by_runtime_precondition",
+      "reason": "Postflight owner surfaces still report CLAIM_GATE_BLOCKED on status and ROTATION_EVIDENCE_CONTRADICTED on rotation inspect due to policy drift; C22 preflight explicitly states contradictory machine signals reopen Gate A closure.",
+      "evidence_refs": [
+        "audit_results/external_lab_c22_integration_preflight_packet_2026-05-11.json",
+        "audit_results/external_lab_c24_runtime_execution_packet_2026-05-11.json"
+      ]
+    }
+  ],
+  "summary": {
+    "closed_by_evidence": 5,
+    "evidence_progress": 0,
+    "live_only_pending": 0,
+    "blocked_by_runtime_precondition": 1,
+    "blocked_by_auth_or_quota": 0,
+    "unresolved_mandatory_count": 1
+  }
+}

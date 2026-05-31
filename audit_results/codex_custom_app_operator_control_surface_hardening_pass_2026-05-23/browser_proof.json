@@ -1,0 +1,82 @@
+{
+  "url": "http://127.0.0.1:62501/",
+  "initialStatus": "status=ok health=ok claim_gate=blocked",
+  "selectedModel": "gpt-5.3-codex",
+  "response": {
+    "exit_code": 0,
+    "final_message": "HARDENED_OK",
+    "machine_error_code": "OK",
+    "prompt_id": "prompt_1",
+    "selected_model": "gpt-5.3-codex",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "transcript": {
+    "captured_at_utc": "2026-05-23T16:05:04.470443Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:05:04.143593Z",
+        "exit_code": 0,
+        "final_message": "HARDENED_OK",
+        "prompt_id": "prompt_1",
+        "prompt_sha256": "6b76382f560defd0d0fa3f5f7171fc76951f7febe3f3c8d3af54d2097d09c11f",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "runtime": {
+    "captured_at_utc": "2026-05-23T16:05:00.200003Z",
+    "claim_gate": {
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "next_action": "inspect_claim_gate",
+      "sources": [
+        "policy_drift"
+      ],
+      "status": "blocked"
+    },
+    "control_surface": {
+      "browser_secret_fields": false,
+      "localhost_only": true,
+      "raw_path_fields": false
+    },
+    "health": {
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    },
+    "models": {
+      "chosen_model_visible": true,
+      "model_ids": [
+        "gpt-5.4-mini",
+        "gpt-5.5",
+        "codex-auto-review",
+        "gpt-image-2",
+        "gpt-5.3-codex-spark",
+        "gpt-5.2",
+        "gpt-5.3-codex",
+        "gpt-5.4"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "status": {
+      "configured_model": "gpt-5.5",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    }
+  },
+  "domSecretFindings": [],
+  "screenshotPath": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/evidence/hardened_operator_surface_browser.png",
+  "capturedAtUtc": "2026-05-23T16:05:04.874Z",
+  "browserSession": "Hardened operator surface"
+}

@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "contour": "CONCURRENT_OWNER_PATH_SOURCE_LOCALIZATION_PASS",
+  "basis_branch": "codex/external-agent-lab-isolated",
+  "basis_head": "86dc999",
+  "lock_file": "wild-boar-proxy.lock",
+  "localization_scope": "owner paths that can acquire the same lock inside the active selector/runtime chain",
+  "ranked_candidates": [
+    {
+      "rank": 1,
+      "owner_source": "launch_smoke_or_healthcheck_stable_recovery_launcher_lane",
+      "owner_source_class": "admissible_concurrent_runtime_activity",
+      "evidence_strength": "moderate",
+      "command_surfaces": [
+        "launch smoke --json",
+        "healthcheck --json when deterministic stable recovery is entered",
+        "status --json when it delegates into healthcheck recovery"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:6278",
+        "wild_boar_proxy/runtime.py:5526",
+        "wild_boar_proxy/runtime.py:5175"
+      ],
+      "lock_sites": [
+        "wild_boar_proxy/runtime.py:3381"
+      ],
+      "critical_section_kind": "holds serialized_lock across launcher subprocess.run([launcher_script, smoke])",
+      "mutation_scope": [
+        "stable runtime generated config",
+        "runtime state snapshot write surfaces",
+        "launcher-adjacent runtime surfaces"
+      ],
+      "fit_with_packet_chain": [
+        "repeated LOCK_HELD packets carried live holder pids and zero changed_files on the blocked sync path",
+        "the same holder pid 53546 blocked both sync and immediate rotation-after-sync in the bounded retry contour, which fits a longer-running launcher lane better than a short observation lock",
+        "the active chain already included runtime reproof and later status surfaces, both of which canonically traverse launcher-capable runtime lanes"
+      ],
+      "counterpoints": [
+        "no packet in the current artifact chain names the exact command surface that owned pid 53546",
+        "the prior runtime reproof closeout said healthcheck itself did not invoke stable recovery in that successful reproof contour"
+      ]
+    },
+    {
+      "rank": 2,
+      "owner_source": "healthcheck_current_proxy_auto_adoption_owner_lane",
+      "owner_source_class": "admissible_concurrent_runtime_activity",
+      "evidence_strength": "low_to_moderate",
+      "command_surfaces": [
+        "healthcheck --json when proxy-path attestation degrades into auto-adoption",
+        "status --json when it delegates into that healthcheck lane"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:5526",
+        "wild_boar_proxy/runtime.py:5796",
+        "wild_boar_proxy/runtime.py:1225",
+        "wild_boar_proxy/runtime.py:5175"
+      ],
+      "lock_sites": [
+        "wild_boar_proxy/runtime.py:5796",
+        "wild_boar_proxy/runtime.py:1225"
+      ],
+      "critical_section_kind": "holds serialized_lock across current-proxy activation subprocess.run",
+      "mutation_scope": [
+        "current proxy owner-path runtime surfaces",
+        "launcher-consumer prerequisite materialization",
+        "runtime state rollback snapshots"
+      ],
+      "fit_with_packet_chain": [
+        "this lane can also hold the same lock across a subprocess and therefore can create the same long-held holder-pid symptom as the retry contour observed"
+      ],
+      "counterpoints": [
+        "current packet chain does not carry proxy-path-broken evidence near the repeated selector lock failure",
+        "there is weaker active-lane evidence for this path than for the stable launcher lane"
+      ]
+    },
+    {
+      "rank": 3,
+      "owner_source": "rollout_rotation_inspect_observation_lock_overlap",
+      "owner_source_class": "orchestration_overlap",
+      "evidence_strength": "low",
+      "command_surfaces": [
+        "rollout rotation inspect --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:6885"
+      ],
+      "lock_sites": [
+        "wild_boar_proxy/runtime.py:6940"
+      ],
+      "critical_section_kind": "short observation lock around registry/state reads",
+      "mutation_scope": [
+        "observation only; no intended mutation"
+      ],
+      "fit_with_packet_chain": [
+        "this command unexpectedly shares the same lock with sync, so orchestration that overlaps inspect and sync can self-block"
+      ],
+      "counterpoints": [
+        "the read-only observation section is short and is a weaker fit for the same holder pid blocking two consecutive commands"
+      ]
+    },
+    {
+      "rank": 4,
+      "owner_source": "parallel_sync_owner_path",
+      "owner_source_class": "orchestration_overlap",
+      "evidence_strength": "low",
+      "command_surfaces": [
+        "sync --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:6746"
+      ],
+      "lock_sites": [
+        "wild_boar_proxy/runtime.py:6756"
+      ],
+      "critical_section_kind": "managed sync mutation lane",
+      "mutation_scope": [
+        "managed runtime surfaces",
+        "selected_backend_snapshot on success only"
+      ],
+      "fit_with_packet_chain": [
+        "a concurrent sync would take the same lock and return the same live-holder symptom"
+      ],
+      "counterpoints": [
+        "current artifact chain does not show a second admitted sync owner path in flight",
+        "this candidate adds no extra explanatory power beyond generic cross-process overlap"
+      ]
+    },
+    {
+      "rank": 5,
+      "owner_source": "stable_repair_apply_or_target_switch_apply_overlap",
+      "owner_source_class": "orchestration_overlap",
+      "evidence_strength": "very_low",
+      "command_surfaces": [
+        "stable repair --apply --json",
+        "stable target switch --apply --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:4513",
+        "wild_boar_proxy/runtime.py:3466"
+      ],
+      "lock_sites": [
+        "wild_boar_proxy/runtime.py:4678",
+        "wild_boar_proxy/runtime.py:3592"
+      ],
+      "critical_section_kind": "repair/apply mutation lane",
+      "mutation_scope": [
+        "stable auth repair target",
+        "runtime reconciliation surfaces"
+      ],
+      "fit_with_packet_chain": [
+        "these commands can take the same lock and would block sync if a separate operator/runtime procedure ran them concurrently"
+      ],
+      "counterpoints": [
+        "the master-plan lane explicitly parked these apply contours and the current artifact chain carries no evidence that one of them actually ran during the repeated selector failure"
+      ]
+    }
+  ],
+  "non_candidates": [
+    {
+      "owner_source": "stale_lock_cleanup_failure",
+      "rejected_because": "serialized_lock unlinks stale lock files before retry and prior diagnosis plus tests already ruled that class out"
+    },
+    {
+      "owner_source": "same_thread_reentrant_nested_helper",
+      "rejected_because": "serialized_lock explicitly permits same-thread reentrant use, so nested helper calls inside one command do not explain cross-process live holder pids"
+    },
+    {
+      "owner_source": "stable_repair_dry_run",
+      "rejected_because": "the dry-run path preflights lock availability but does not itself become the long-lived mutation holder in the active chain"
+    }
+  ],
+  "packet_basis": [
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_2026-05-16_v3/sync_refresh_packet.json",
+      "fact": "first failed sync reported LOCK_HELD by pid 3256 with changed_files=[]"
+    },
+    {
+      "source": "audit_results/stop_and_diagnose_selector_lock_held_2026-05-16/lock_verdict.json",
+      "fact": "first lock was already classified as true_concurrent_lock_with_post_packet_release"
+    },
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/sync_refresh_packet.json",
+      "fact": "bounded retry sync reported LOCK_HELD by pid 53546"
+    },
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/rotation_after_sync.json",
+      "fact": "immediate post-sync rotation inspect reported the same live holder pid 53546"
+    },
+    {
+      "source": "audit_results/runtime_reproof_pass_2026-05-16_v4/decision_packet.json",
+      "fact": "the immediately preceding runtime lane used launch smoke to re-earn runtime green while selector freshness still remained stale"
+    }
+  ],
+  "code_basis": [
+    {
+      "path": "wild_boar_proxy/runtime.py:5061-5113",
+      "fact": "serialized_lock raises LOCK_HELD only for a live holder pid and retries through stale lock unlink"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:3381-3415",
+      "fact": "stable launcher attempts hold serialized_lock across subprocess.run([launcher_script, smoke])"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:5526-5821",
+      "fact": "healthcheck can enter either stable recovery or current-proxy adoption lanes that acquire the same lock"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:6278-6416",
+      "fact": "launch smoke uses the same launcher lane and then re-checks health"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:6746-6847",
+      "fact": "sync acquires the same lock and only refreshes selected_backend_snapshot on successful completion"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:6885-7055",
+      "fact": "rollout rotation inspect also acquires the same lock by default even though it is an observation surface"
+    }
+  ],
+  "root_localization_summary": {
+    "owner_source_localized": "partially_localized_ranked_candidates",
+    "most_likely_owner_source": "launch_smoke_or_healthcheck_stable_recovery_launcher_lane",
+    "primary_class": "admissible_concurrent_runtime_activity_with_orchestration_overlap",
+    "retry_safe_without_fix": false,
+    "requires_code_fix": false,
+    "requires_runtime_procedure_fix": true
+  }
+}

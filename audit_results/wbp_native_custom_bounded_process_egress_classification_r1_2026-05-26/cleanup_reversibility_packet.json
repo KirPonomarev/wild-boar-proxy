@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:35.119056Z",
+  "cleanup_not_required_reason": "native_launch_not_attempted",
+  "custom_processes_gone": true,
+  "filesystem_safety_proven": false,
+  "hidden_cleanup_performed": false,
+  "packet_kind": "cleanup_reversibility",
+  "status": "ok",
+  "tmp_root_removed": true
+}

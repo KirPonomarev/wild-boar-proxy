@@ -1,0 +1,53 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "source_classes": [
+    {
+      "class": "sandbox_owned_auth_material",
+      "observed": false,
+      "evidence": {
+        "sandbox_auth_json_count": 0,
+        "sandbox_codex_json_count": 0
+      },
+      "admissible_now": false,
+      "reason": "no upstream auth material is currently present inside the admitted sandbox root"
+    },
+    {
+      "class": "adjacent_non_live_local_auth_material",
+      "observed": false,
+      "evidence": {
+        "currently_named_surface": ""
+      },
+      "admissible_now": false,
+      "reason": "no adjacent non-live local source class is currently evidenced or canonically named"
+    },
+    {
+      "class": "forbidden_live_root_auth_material",
+      "observed": true,
+      "evidence": {
+        "forbidden_root_inventory": [
+          {
+            "root": "/Users/kirillponomarev/.codex-custom-cli",
+            "auth_json_count": 2,
+            "codex_json_count": 28
+          },
+          {
+            "root": "/Users/kirillponomarev/.cli-proxy-api",
+            "auth_json_count": 0,
+            "codex_json_count": 25
+          }
+        ]
+      },
+      "admissible_now": false,
+      "reason": "observed candidates exist, but they live under forbidden live/working roots and therefore require a narrower source-specific admission contour before any materialization can be honest"
+    },
+    {
+      "class": "not_yet_canonically_nameable_external_source",
+      "observed": false,
+      "evidence": {
+        "current_instance": ""
+      },
+      "admissible_now": false,
+      "reason": "no exact upstream class outside the forbidden roots is currently evidenced strongly enough to admit"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "audit_id": "INDEPENDENT_AUDIT_WBP_CODEX_NATIVE_QUIESCENT_VERDICT_AND_EVIDENCE_RECONCILIATION_2026-05-25",
+  "audit_date": "2026-05-25",
+  "auditor": "opencode-orchestrator",
+  "status": "ok",
+  "current_contour_truth_boundary": {
+    "accepted": "QUIESCENT_BASELINE_PROVEN_AND_PHASE7_ADMISSIBLE",
+    "accepted_because": [
+      {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+        "facts": {
+          "phase7_retry_admissible": true,
+          "fresh_context_verified": true,
+          "operator_action_performed": true,
+          "verdict": "FRESH_CONTEXT_ENTRY_ADMISSIBLE"
+        }
+      },
+      {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+        "facts": {
+          "final_verdict": "EXTERNAL_DETACHED_CONTEXT_PROVEN_AND_PHASE7_ADMISSIBLE",
+          "phase7_retry_admissible": true,
+          "hosted_by_protected_codex_session": false,
+          "quiescent_current_codex_precondition_satisfied": true
+        }
+      },
+      {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+        "facts": {
+          "default_process_count": 0,
+          "root_app_pids": [],
+          "quiescent_current_codex_precondition_satisfied": true
+        }
+      }
+    ]
+  },
+  "non_claims_frozen": [
+    {
+      "claim": "launchd_detached_executor_capture_for_current_contour",
+      "rejected_because": {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+        "facts": {
+          "executor_ppid": 87110,
+          "host_process_chain_length": 4,
+          "contains_opencode_ancestry": true
+        }
+      }
+    },
+    {
+      "claim": "native_filesystem_isolation_proof",
+      "rejected_because": {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+        "facts": {
+          "filesystem_retry_attempted": false,
+          "protected_surface_mutation_performed": false
+        }
+      }
+    },
+    {
+      "claim": "native_window_proof",
+      "rejected_because": {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+        "facts": {
+          "window_inventory_observed": false,
+          "window_inventory_reason": "process_only_probe"
+        }
+      }
+    },
+    {
+      "claim": "native_provider_routing_proof",
+      "rejected_because": {
+        "packet": "audit_results/wbp_codex_native_owner_quiescent_baseline_proof_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+        "facts": {
+          "provider_reproof_claim_present": false
+        }
+      }
+    }
+  ],
+  "dirty_historical_evidence_classification": {
+    "status": "addendum_needed_ambiguity",
+    "not_a_packet_contradiction": true,
+    "ambiguity_source": {
+      "packet": "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+      "facts": {
+        "executor_ppid": 1,
+        "host_process_chain_length": 2,
+        "meaning": "stronger_launchd_detached_executor_fact_than_current_contour"
+      }
+    }
+  },
+  "final_verdict": "blocked_needs_addendum"
+}

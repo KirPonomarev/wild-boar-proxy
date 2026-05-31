@@ -1,0 +1,54 @@
+{
+  "contour": "UI_WEB_OVERVIEW_VISUAL_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent explorer agent",
+  "result": "pass",
+  "items": {
+    "git_diff_scope": {
+      "status": "pass",
+      "tracked_modified": [
+        "tests/test_web_design_ui.py",
+        "wild_boar_proxy/web_design_ui/assets/boar_mark.png",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "relevant_untracked": [
+        "wild_boar_proxy/web_design_ui/assets/icons/phosphor/",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/"
+      ]
+    },
+    "no_runtime_command_adapter_live_server_desktop_mods": {
+      "status": "pass",
+      "evidence": "Diff name list showed only tests and web_design_ui frontend assets/files."
+    },
+    "overview_contracts_preserved": {
+      "status": "pass",
+      "evidence": [
+        "index.html still contains id=\"sourcePicker\" and id=\"statePicker\" with the same demo/live option values.",
+        "Visible overview actions still carry launch_client_dispatch, refresh_health_detail, export_diagnostics, stable_repair_plan, set_mode_managed, sync_runtime, launch_smoke, and set_mode_stable.",
+        "overview.js still binds sourcePicker/statePicker in DOMContentLoaded, refreshCurrentSource(), setScreen(), and setSourceCopy()."
+      ]
+    },
+    "phosphor_assets_only": {
+      "status": "pass",
+      "evidence": "13 PNG files under wild_boar_proxy/web_design_ui/assets/icons/phosphor; no archive or pack file was present."
+    },
+    "screenshots_exist": {
+      "status": "pass",
+      "files": [
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/baseline_overview_healthy_1600x1000.png",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_healthy_1600x1000.png",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_degraded_1600x1000.png",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_down_1600x1000.png",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_stale_1600x1000.png",
+        "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_live_integration_failure_1600x1000.png"
+      ]
+    }
+  },
+  "external_reference_check": {
+    "status": "pass",
+    "note": "No remote CDN/import references in modified web UI files; no external reference service traces found by main scan."
+  },
+  "blockers": []
+}

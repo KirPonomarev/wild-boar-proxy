@@ -1,0 +1,20 @@
+{
+  "account_pool_health_proven": false,
+  "auth_command_contract_required": true,
+  "auth_precondition_classified": true,
+  "auth_proven_counts_as_model_availability": false,
+  "auth_reproved_in_this_contour": false,
+  "auth_strategy_reference": {
+    "contract_path": "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_precedence_contract_packet.json",
+    "contract_sha256": "b4519e51d4e043449f0b0e93d724c5043aa8b0f2b5524324c4b0cd4b3aebe6ac",
+    "reference_only": true,
+    "summary_path": "audit_results/wbp_provider_auth_strategy_precedence_r1_2026-05-27/provider_auth_strategy_summary_packet.json",
+    "summary_sha256": "4784240a9cbae4d96ba2b7a5f91d424560cc54a816833199ef60b59ec77ba126"
+  },
+  "captured_at_utc": "2026-05-27T09:06:05.233400Z",
+  "model_availability_proven_by_auth": false,
+  "packet_kind": "model_availability_auth_precondition",
+  "raw_secret_recorded": false,
+  "selected_strategy": "auth.command",
+  "status": "ok"
+}

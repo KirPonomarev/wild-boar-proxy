@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T20:50:43.297561Z",
+  "packet_kind": "responses_tool_call_shape",
+  "status": "ok",
+  "tool_call_emitted_counts_as_loop_compatible": false,
+  "upstream_message_roles": [
+    "assistant",
+    "assistant"
+  ]
+}

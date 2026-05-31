@@ -1,0 +1,16 @@
+{
+  "candidate_sha256": "022b6e3550afded2d25cf339ce6cb1a139c4ef672b69232ce060bd39acf3df07",
+  "captured_at_utc": "2026-05-29T05:45:36.551130Z",
+  "durable_restoration_proven_by_r4": false,
+  "hypothesis_sha256": "ea1de468542f88c09fe67ef5d5ab820e2e4959fe1baf78d2f8dfec24f7cc6705",
+  "packet_kind": "persistent_restore_r5_r4_reference",
+  "r4_counts_as_r5_proof": false,
+  "r4_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_storage_schema_attribution_r4_2026-05-27",
+  "r4_final_status": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_RESTORATION_HYPOTHESES_CLASSIFIED_WITH_LIMITS",
+  "r4_hypothesis_count": 300,
+  "r4_schema_observed_count": 20,
+  "reason_class": "",
+  "status": "ok",
+  "storage_level_thread_history_proven_by_r4": false,
+  "summary_sha256": "89ded7cca3f09e5306dcb92915b10ddc6a4d01e4733a1b185a336cda8b0b3bc8"
+}

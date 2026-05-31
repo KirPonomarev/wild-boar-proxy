@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_SETUP_CLIENT_SELECT_IMPORT_DECISION",
+  "created_at": "2026-05-13",
+  "artifact_type": "ui_screen_passports",
+  "privacy_boundary": {
+    "external_reference_service_named": false,
+    "external_reference_artifacts_included": false,
+    "repo_safe_wording_only": true
+  },
+  "passports": [
+    {
+      "screen_id": "02_setup_client",
+      "source_html": "wild_boar_proxy_redesign/html/02_setup_client.html",
+      "source_png": "wild_boar_proxy_redesign/png/02_setup_client.png",
+      "role": "setup admission candidate",
+      "current_repo_status": "not_implemented_as_web_screen",
+      "admission_status": "partial_readonly",
+      "truth_sources_allowed": [
+        "status --json",
+        "mode get --json",
+        "server-owned metadata only if already configured"
+      ],
+      "future_actions_allowed_only_after_separate_contour": [
+        "setup discovery from command-owned packet",
+        "bounded setup navigation",
+        "server-owned host-client candidate display"
+      ],
+      "forbidden_first_pass": [
+        "browser-submitted executable path",
+        "browser-submitted work directory",
+        "direct filesystem scan from UI",
+        "direct config/state/log parsing",
+        "claiming setup readiness without command truth"
+      ],
+      "source_visible_controls": [
+        "setup progress",
+        "find automatically",
+        "specify manually",
+        "change path",
+        "back",
+        "cancel",
+        "continue"
+      ],
+      "admission_notes": [
+        "Static progress/navigation can be rendered, but setup truth must come from strict JSON packets.",
+        "Manual path controls are not admitted in web UI because browser-origin local paths are forbidden.",
+        "Automatic discovery needs a dedicated command-owned discovery surface before implementation."
+      ],
+      "desktop_transfer_notes": [
+        "Manual path selection may be reconsidered only in desktop/native picker phase after owner approval.",
+        "Desktop renderer still must pass candidate ids or command-owned references, not raw shell strings."
+      ]
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "source_html": "wild_boar_proxy_redesign/html/03_select_codex_client.html",
+      "source_png": "wild_boar_proxy_redesign/png/03_select_codex_client.png",
+      "role": "host-client selection admission candidate",
+      "current_repo_status": "not_implemented_as_web_screen",
+      "admission_status": "deferred",
+      "truth_sources_allowed": [
+        "future command-owned host-client discovery packet",
+        "future command-owned host-client selection packet"
+      ],
+      "future_actions_allowed_only_after_separate_contour": [
+        "filter server-supplied candidates",
+        "select server-supplied candidate id",
+        "save selected candidate through strict JSON command",
+        "support open-location action for server-owned known location"
+      ],
+      "forbidden_first_pass": [
+        "choose file from browser",
+        "verify arbitrary browser path",
+        "persist path/config directly",
+        "treat launch client as path verification",
+        "claim selected profile success without command truth"
+      ],
+      "source_visible_controls": [
+        "search by name or path",
+        "choose file",
+        "verify path",
+        "select candidate",
+        "show in file manager",
+        "save selection",
+        "cancel"
+      ],
+      "admission_notes": [
+        "Current web command adapter contains launch_client as disabled-by-default and only server-supplies launch_client_path.",
+        "Launch client is dispatch truth only and must not be repurposed as a selector or verifier.",
+        "A browser-safe implementation needs server-owned discovery result ids."
+      ],
+      "desktop_transfer_notes": [
+        "Desktop may later own native picker UX, but command semantics must remain strict JSON and bounded.",
+        "Selection persistence needs a command API contract before visual controls become active."
+      ]
+    },
+    {
+      "screen_id": "08_import_existing",
+      "source_html": "wild_boar_proxy_redesign/html/08_import_existing.html",
+      "source_png": "wild_boar_proxy_redesign/png/08_import_existing.png",
+      "role": "legacy import admission candidate",
+      "current_repo_status": "not_implemented_as_web_screen",
+      "admission_status": "deferred",
+      "truth_sources_allowed": [
+        "legacy import --source-dir <path> --json only after safe server-owned source-dir mediation",
+        "future legacy import discovery/dry-run packet",
+        "status --json after any mutation",
+        "accounts list --json after any mutation",
+        "mode get --json after any mutation"
+      ],
+      "future_actions_allowed_only_after_separate_contour": [
+        "find installation through command-owned discovery",
+        "create snapshot through explicit command-owned surface",
+        "verify import plan through non-mutating strict JSON dry-run",
+        "apply import through server-owned source-dir mediation and strong confirmation",
+        "rollback through explicit command-owned rollback surface"
+      ],
+      "forbidden_first_pass": [
+        "browser-submitted source directory",
+        "direct scan of legacy config/state/auth files from UI",
+        "dynamic account-count claims without command packet",
+        "import apply without strong confirmation and post-action refresh",
+        "rollback button without command-owned rollback contract"
+      ],
+      "source_visible_controls": [
+        "found installation card",
+        "show in file manager",
+        "find installation",
+        "create snapshot",
+        "verify",
+        "apply import",
+        "rollback",
+        "cancel"
+      ],
+      "admission_notes": [
+        "The CLI command exists, but source-dir path handling is not a safe web-browser payload.",
+        "The render's account counts and safety statuses are dynamic truth claims and require strict JSON import-plan evidence.",
+        "Legacy import implementation remains separate from first-pass settings and setup display."
+      ],
+      "desktop_transfer_notes": [
+        "Desktop import UX should start from discovery/dry-run evidence, not arbitrary path submission.",
+        "Snapshot and rollback affordances require explicit command contracts before activation."
+      ]
+    }
+  ]
+}

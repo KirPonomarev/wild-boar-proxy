@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION",
+  "mode": "admission/spec-only",
+  "date": "2026-05-14",
+  "final_verdict": "RUNTIME_ATTESTATION_DETAIL_READONLY_ADMITTED_WITH_EXISTING_PACKETS",
+  "current_repo_facts": [
+    "UI_READINESS_SPEC already defines Runtime Status as status --json with optional operator-triggered healthcheck detail",
+    "status --json is the primary operator runtime truth surface",
+    "healthcheck --json is the owner path for live runtime attestation",
+    "status --json already carries attestation_summary and stable_runtime_consumer",
+    "healthcheck --json already carries deterministic_stable_recovery_contract and deterministic_stable_recovery_result",
+    "path-bearing and implementation-bearing fields exist in current packets and must remain excluded from UI admission"
+  ],
+  "areas": [
+    {
+      "surface": "primary_runtime_truth_summary",
+      "current_admission": "READONLY_ADMITTED_WITH_EXISTING_PACKETS",
+      "reason": "status --json is already the required primary runtime truth surface."
+    },
+    {
+      "surface": "attestation_detail_fields_from_healthcheck",
+      "current_admission": "READONLY_ADMITTED_WITH_EXISTING_PACKETS",
+      "reason": "UI_READINESS_SPEC already lists healthcheck-backed attestation detail fields for operator-triggered detail."
+    },
+    {
+      "surface": "stable_runtime_consumer_summary",
+      "current_admission": "READONLY_ADMITTED_WITH_EXISTING_PACKETS",
+      "reason": "COMMAND_API and tests already define readonly stable_runtime_consumer contract fields in status --json."
+    },
+    {
+      "surface": "delegated_recovery_detail_summary",
+      "current_admission": "READONLY_ADMITTED_WITH_EXISTING_PACKETS",
+      "constraints": [
+        "secondary only",
+        "must not replace top-level runtime truth",
+        "must preserve observation_only vs confirmed distinction"
+      ]
+    },
+    {
+      "surface": "path_bearing_internal_detail",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "selected_source_path is path-bearing internal detail",
+        "resolved_path/config_file/snapshot_file/generated_config_file are implementation detail",
+        "browser must not become a file/location inspector"
+      ]
+    },
+    {
+      "surface": "browser_owned_super_verdict",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "UI must not synthesize a stronger runtime verdict than packets prove",
+        "status truth and healthcheck owner truth must not collapse into one browser-owned verdict"
+      ]
+    }
+  ],
+  "admitted_field_groups": {
+    "status_primary_truth": [
+      "status",
+      "human_message",
+      "machine_error_code",
+      "next_action",
+      "liveness",
+      "severity",
+      "operator_action",
+      "desired_mode",
+      "effective_mode",
+      "endpoint",
+      "current_proxy_url",
+      "attestation_summary",
+      "last_error"
+    ],
+    "healthcheck_attestation_detail": [
+      "listener_ok",
+      "models_ok",
+      "responses_ok",
+      "effective_mode_match",
+      "base_url_match",
+      "selected_backends_digest",
+      "observed_at_utc",
+      "attestation_source",
+      "runtime_version"
+    ],
+    "stable_runtime_consumer_summary": [
+      "stable_runtime_consumer.status",
+      "desired_stable_runtime_consumer_source.status",
+      "desired_stable_runtime_consumer_source.source_kind",
+      "effective_stable_runtime_consumer_source.status",
+      "effective_stable_runtime_consumer_source.source_kind",
+      "effective_stable_runtime_consumer_source.matches_desired",
+      "consumer_activation_readiness.status",
+      "consumer_activation_readiness.machine_error_code",
+      "consumer_activation_readiness.reason"
+    ],
+    "delegated_recovery_summary": [
+      "deterministic_stable_recovery_result.status",
+      "attempted",
+      "entry_lane",
+      "outcome",
+      "re_enable_method",
+      "selected_source_kind",
+      "live_runtime_observation_confirmed",
+      "confirmation_basis",
+      "effectful_claim_allowed",
+      "guardrail_status"
+    ]
+  },
+  "excluded_fields": [
+    "selected_source_path",
+    "resolved_path",
+    "config_file",
+    "snapshot_file",
+    "generated_config_file",
+    "current_snapshot",
+    "inventory_dir",
+    "reference_file"
+  ],
+  "browser_payload_rules": {
+    "allowed_now": [
+      "ui_action"
+    ],
+    "conditionally_allowed_later": [
+      "readonly_presentation_mode"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "path",
+      "token",
+      "secret",
+      "recovery_selector",
+      "strategy_selector",
+      "raw_packet_fragments"
+    ]
+  },
+  "implementation_allowed_in_this_contour": false
+}

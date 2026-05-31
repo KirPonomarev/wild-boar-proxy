@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-28T14:37:06.643874Z",
+  "classification": "synthetic_storage_only_with_limits",
+  "launcher_selection_status": "ok",
+  "native_visible_thread_history_proven": false,
+  "observed_state_classes": [
+    "session_state",
+    "thread_history",
+    "unclassified_profile_state"
+  ],
+  "owner_visible_thread_context_only": true,
+  "owner_visible_thread_counted_as_storage_proof": false,
+  "packet_kind": "final_dual_lane_history",
+  "persistent_profile_id": "wbp-custom-main",
+  "profile_storage_changed": true,
+  "role_slot_persistence_counted_as_thread_history": false,
+  "route_trace_counted_as_saved_thread_proof": false,
+  "same_persistent_profile_identity": true,
+  "status": "ok",
+  "synthetic_history_state_preserved": true,
+  "synthetic_paths_written": [
+    "thread-history/bounded-thread.marker",
+    "session-state/session-state.json"
+  ],
+  "thread_history_class_observed": true
+}

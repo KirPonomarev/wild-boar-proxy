@@ -1,0 +1,21 @@
+{
+  "backup_execution_attempted": false,
+  "captured_at_utc": "2026-05-27T06:21:14.406191Z",
+  "cleanup_execution_attempted": false,
+  "delete_execution_attempted": false,
+  "destructive_action_performed": false,
+  "dry_run_only": true,
+  "execution_flags": {
+    "backup_execution_allowed": false,
+    "cleanup_execution_allowed": false,
+    "delete_execution_allowed": false,
+    "restore_execution_allowed": false
+  },
+  "owner_authorization_required_for_delete": true,
+  "owner_authorization_required_for_destructive_restore": true,
+  "owner_authorized_destructive_action": false,
+  "packet_kind": "persistent_destructive_action_guard",
+  "reason_class": "",
+  "restore_execution_attempted": false,
+  "status": "ok"
+}

@@ -1,0 +1,12 @@
+test_accounts_login_start_requires_json_flag (tests.test_cli.CliTests.test_accounts_login_start_requires_json_flag) ... ok
+test_accounts_login_complete_requires_json_flag (tests.test_cli.CliTests.test_accounts_login_complete_requires_json_flag) ... ok
+test_accounts_login_start_sandbox_strict_json_and_session_persisted (tests.test_cli.CliTests.test_accounts_login_start_sandbox_strict_json_and_session_persisted) ... ok
+test_accounts_login_start_rejects_unsupported_provider (tests.test_cli.CliTests.test_accounts_login_start_rejects_unsupported_provider) ... ok
+test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay (tests.test_cli.CliTests.test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay) ... ok
+test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets (tests.test_cli.CliTests.test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets) ... ok
+test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change (tests.test_cli.CliTests.test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 3.180s
+
+OK

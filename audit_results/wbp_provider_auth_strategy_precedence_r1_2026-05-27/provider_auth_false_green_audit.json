@@ -1,0 +1,22 @@
+{
+  "allowed_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "blocked_packets": [],
+  "captured_at_utc": "2026-05-27T06:49:37.883184Z",
+  "checks": [
+    {
+      "name": "all_contract_packets_ok",
+      "passed": true
+    },
+    {
+      "name": "no_forbidden_cross_layer_true_flags",
+      "passed": true
+    },
+    {
+      "name": "auth_strategy_not_model_or_live_proof",
+      "passed": true
+    }
+  ],
+  "forbidden_true_flags": [],
+  "packet_kind": "provider_auth_false_green_audit",
+  "status": "ok"
+}

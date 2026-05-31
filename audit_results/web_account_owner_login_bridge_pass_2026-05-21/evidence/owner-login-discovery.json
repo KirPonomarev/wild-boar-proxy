@@ -1,0 +1,58 @@
+{
+  "contour": "WEB_ACCOUNT_OWNER_LOGIN_BRIDGE_PASS",
+  "date": "2026-05-21",
+  "verdict": "STOP_AND_DIAGNOSE",
+  "owner_browser_login_surface_exists": false,
+  "canon_findings": [
+    {
+      "file": "CANON.md",
+      "lines": "24-32",
+      "finding": "Wild Boar Proxy is the managing layer; CLIProxyAPI is the engine; auth flows belong to the engine."
+    },
+    {
+      "file": "COMMAND_API.md",
+      "lines": "123-182",
+      "finding": "accounts onboard --json is the owner truth surface for reserve-first onboarding and must prove identity, reserve placement, and no active routing change."
+    }
+  ],
+  "existing_owner_capabilities": [
+    {
+      "surface": "accounts onboard --json",
+      "file": "wild_boar_proxy/cli.py",
+      "lines": "112-118,354-363",
+      "finding": "CLI exposes accounts onboard --json with auth-ref, loop, skip-login, no-sync, and non-interactive flags."
+    },
+    {
+      "surface": "codex-account-onboard helper",
+      "file": "wild_boar_proxy/sandbox_owner_helpers.py",
+      "lines": "393-426,491-497",
+      "finding": "Helper can use explicit --auth-ref or sandbox-local auth file; without such source it exits with no sandbox-local auth candidate."
+    },
+    {
+      "surface": "run_onboard",
+      "file": "wild_boar_proxy/runtime.py",
+      "lines": "12571-12880",
+      "finding": "Runtime wraps helper execution and proves reserve-first onboarding after helper mutation, but does not start a browser login session."
+    }
+  ],
+  "web_guardrails": [
+    {
+      "file": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "120-142",
+      "finding": "Web onboarding metadata explicitly forbids browser secrets, file paths, and credentials."
+    },
+    {
+      "file": "tests/test_web_design_live_server.py",
+      "lines": "1237-1262",
+      "finding": "Tests verify onboard_account rejects raw adapter action plus auth_ref, source_dir, password, and backend_id browser payloads."
+    }
+  ],
+  "missing_surfaces": [
+    "strict JSON owner command for browser login start",
+    "owner-owned login_url/session/callback result packet",
+    "owner callback/session validation surface",
+    "owner-owned sandbox-only auth materialization packet suitable for web bridge"
+  ],
+  "required_next_contour": "ACCOUNT_OWNER_BROWSER_LOGIN_ADMISSION_PASS"
+}
+

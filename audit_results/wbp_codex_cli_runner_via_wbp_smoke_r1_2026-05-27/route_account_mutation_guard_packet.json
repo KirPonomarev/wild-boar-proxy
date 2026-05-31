@@ -1,0 +1,8 @@
+{
+  "active_route_or_account_mutation_claimed": false,
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "dynamic_registry_counters_used_as_truth": false,
+  "packet_kind": "route_account_mutation_guard",
+  "route_account_authority_surfaces_unchanged": true,
+  "status": "passed"
+}

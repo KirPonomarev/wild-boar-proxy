@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-27T12:04:26.821156Z",
+  "one_representative_model_counts_as_family_wide_proof": false,
+  "packet_kind": "provider_representative_model_scope",
+  "rows": [
+    {
+      "family_wide_proof": false,
+      "provider_family": "deepseek",
+      "representative_model_scope_explicit": true,
+      "representative_models": [
+        "deepseek-chat",
+        "deepseek-v4-flash"
+      ]
+    },
+    {
+      "family_wide_proof": false,
+      "provider_family": "openrouter",
+      "representative_model_scope_explicit": true,
+      "representative_models": [
+        "deepseek/deepseek-chat"
+      ]
+    }
+  ],
+  "status": "ok"
+}

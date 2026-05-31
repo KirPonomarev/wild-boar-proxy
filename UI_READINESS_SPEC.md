@@ -74,7 +74,7 @@ The first UI implementation may bind buttons only to existing command surfaces.
 | Smoke Test | `launch smoke --json` | Required | `status --json` | Bounded runtime smoke evidence only. |
 | Stable Repair Dry Run | `stable repair --dry-run --json` | Not required | `status --json` | Non-mutating recovery planning surface. |
 | Stable Repair Apply | `stable repair --apply --json` | Required | `status --json` | Mutates only command-owned stable repair target surfaces. |
-| Add Account | `accounts onboard --json` | Required | `accounts list --json`, `status --json` | New account must enter reserve first. |
+| Add Account | `accounts login start/status/complete --provider codex --mode device --json` | Required | `accounts list --json`, `status --json` | Web must use the owner Codex device login session bridge; completion onboards to reserve first. |
 | Validate Account | `accounts validate <id> --json` | Not required | `accounts list --json` | Does not promote or route. |
 | Recheck Account | `accounts validate <id> --json` | Not required | `accounts list --json` | UI label alias for validate; no separate command exists. |
 | Promote Account | `accounts promote <id> --json` | Required | `accounts list --json`, `status --json` | Promotion is not scale proof. |

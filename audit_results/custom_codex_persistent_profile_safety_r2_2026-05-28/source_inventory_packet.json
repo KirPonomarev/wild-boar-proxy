@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-28T08:25:38.610310Z",
+  "current_contour_backup_created": false,
+  "invalid_json_packets": {},
+  "loaded_packet_count": 8,
+  "missing_packets": [],
+  "packet_kind": "persistent_profile_safety_source_inventory",
+  "repair_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_backup_rollback_repair_r1_2026-05-27",
+  "required_packets": [
+    "backup_repair_summary_packet.json",
+    "rollback_readiness_packet.json",
+    "state_backup_manifest_packet.json",
+    "cache_exclusion_manifest_packet.json",
+    "timestamped_backup_complete_marker_packet.json",
+    "backup_repair_policy_packet.json",
+    "backup_repair_false_green_audit.json",
+    "incomplete_backup_classification_packet.json"
+  ],
+  "source_chain_is_historical_completed_evidence": true,
+  "status": "ok"
+}

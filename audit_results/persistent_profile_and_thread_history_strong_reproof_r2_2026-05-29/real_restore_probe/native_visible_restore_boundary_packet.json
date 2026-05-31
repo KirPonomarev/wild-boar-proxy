@@ -1,0 +1,13 @@
+{
+  "blocked_native_restore_observation_is_acceptable_if_packet_honest": true,
+  "captured_at_utc": "2026-05-29T05:44:50.253348Z",
+  "helper_level_reload_counts_as_native_visible_restore": false,
+  "helper_level_reload_observed": true,
+  "native_app_relaunch_attempted": false,
+  "native_visible_restore_claimed": false,
+  "native_visible_restore_observed": false,
+  "owner_confirmation_collected": false,
+  "packet_kind": "native_visible_restore_boundary",
+  "reason_native_visible_restore_not_upgraded": "No exact native app relaunch and user-visible restored thread observation was performed in this surgical contour.",
+  "status": "ok"
+}

@@ -1,0 +1,74 @@
+{
+  "account_id": "",
+  "action_claim_scope": "owner credential status/admit -> owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser api_key/route_id/secret/path запрещены",
+  "action_role": "api_route_admission",
+  "affects_primary_truth": false,
+  "confirmation_required": true,
+  "mutates_runtime": false,
+  "mutation_class": "api_route_registry_admission",
+  "post_action_refresh_required": true,
+  "result": {
+    "changed_files": [
+      "api_route_connect_artifact"
+    ],
+    "data": {
+      "add_machine_error_code": "OK",
+      "add_status": "ok",
+      "admission_mode": "create",
+      "api_route_connect_phase": "created_and_validated",
+      "api_route_connect_preflight": {
+        "browser_path_intake": false,
+        "browser_route_id_intake": false,
+        "browser_secret_intake": false,
+        "current_session_untouched": true,
+        "machine_error_code": "OK",
+        "reason": "Server-owned api-connections-readonly gate admitted API route connect path.",
+        "refresh_surface": "api-connections-readonly",
+        "source_kind": "server_owned_api_connections_readonly",
+        "status": "admitted",
+        "write_surface": "external_models_route_registry_mutation_only"
+      },
+      "browser_api_key_intake": false,
+      "browser_path_intake": false,
+      "browser_route_id_intake": false,
+      "browser_secret_intake": false,
+      "credential_admit_command_status": "ok",
+      "credential_admit_machine_error_code": "OK",
+      "credential_admit_status": "admitted",
+      "credential_admitted": true,
+      "credential_expected_refs": [
+        "OPENROUTER_API_KEY",
+        "WBP_OPENROUTER_API_KEY",
+        "WBP_PROVIDER_OPENROUTER_API_KEY"
+      ],
+      "credential_owner_source_kind": "owner_env",
+      "credential_phase": "credential_admitted",
+      "credential_present": true,
+      "credential_provider_dashboard_url": "https://openrouter.ai/settings/keys",
+      "credential_ref": "OPENROUTER_API_KEY",
+      "credential_status": "missing",
+      "credential_status_command_status": "ok",
+      "credential_status_machine_error_code": "OK",
+      "credential_supported_sources": [
+        "owner-env"
+      ],
+      "owner_source_kind": "server_owned_route_spec",
+      "refresh_surface": "api-connections-readonly",
+      "route_id": "wbp-web-primary-openrouter",
+      "route_spec_path_exposed": false,
+      "secret_value_exposed": false,
+      "validate_machine_error_code": "OK",
+      "validate_status": "ok"
+    },
+    "human_message": "External-models route validation captured provider evidence without claiming runtime readiness.",
+    "machine_error_code": "OK",
+    "next_action": "none",
+    "status": "ok"
+  },
+  "route_id": "",
+  "schema_version": 1,
+  "session_id": "",
+  "source": "ui_action",
+  "status": "ok",
+  "ui_action": "api_route_connect"
+}

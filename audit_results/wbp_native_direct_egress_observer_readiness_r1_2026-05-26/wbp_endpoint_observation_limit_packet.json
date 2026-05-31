@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T19:52:02.633283Z",
+  "counts_as_direct_egress_absence": false,
+  "counts_as_model_availability": false,
+  "counts_as_native_ux": false,
+  "counts_as_network_peer_observation_only": true,
+  "counts_as_response_accepted_by_codex": false,
+  "counts_as_route_proof": false,
+  "endpoint": "",
+  "fresh_native_launch_attempted": false,
+  "packet_kind": "wbp_endpoint_observation_limit",
+  "status": "ok",
+  "wbp_endpoint_observed": false
+}

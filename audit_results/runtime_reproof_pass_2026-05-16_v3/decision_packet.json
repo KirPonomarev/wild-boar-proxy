@@ -1,0 +1,20 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v3",
+  "status": "completed",
+  "final_verdict": "GO_TO_EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "why": [
+    "healthcheck left the runtime-consumer gap unresolved, with effective source still observed and activation readiness still pending",
+    "launch smoke succeeded with launcher_exit_code=0 and promoted effective stable runtime consumer truth to approved_target_active_by_activation_evidence",
+    "post-smoke status cleared claim_gate and policy_drift while desired and effective runtime consumer truth both pointed to approved_repair_target",
+    "post-smoke rotation inspect remained OK/fresh/present with no selector regression"
+  ],
+  "next_contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "anti_loop_passed": true,
+  "next_exact_command": "python3 -m wild_boar_proxy auth ref-source admission --json",
+  "forbidden_next_moves": [
+    "SELECTOR_REFRESH_OWNER_PATH_PASS",
+    "sandbox auth.json materialization",
+    "repeating launch smoke without new evidence"
+  ]
+}

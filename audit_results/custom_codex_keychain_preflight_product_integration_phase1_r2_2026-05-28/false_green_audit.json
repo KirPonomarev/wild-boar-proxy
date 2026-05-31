@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-28T00:00:00Z",
+  "status": "ok",
+  "packet_kind": "false_green_audit",
+  "material_issues_found": [],
+  "independent_audit_findings_repaired": [
+    "late isolated-HOME write-surface guard before mkdir on symlinked Library",
+    "root_app_pids fallback removed from custom pid/window proof"
+  ],
+  "prompt_avoidance_promoted_to_auth_success": false,
+  "real_user_keychain_mutation_claimed": false,
+  "runtime_wide_rollout_claimed": false,
+  "host_level_prompt_suppression_claimed": false,
+  "independent_web_live_validation_claimed": false,
+  "verification_limits": [
+    "tests/test_web_design_live_server.py could not be collected in the local Python environment because _tkinter is unavailable",
+    "Phase 1 closes mechanism integration only; separate live-validation contour still required for host-level prompt suppression through the product path"
+  ]
+}

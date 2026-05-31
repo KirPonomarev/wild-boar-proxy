@@ -1,0 +1,21 @@
+{
+  "all_protected_surfaces_unchanged": false,
+  "app_asar_sha256_recorded": true,
+  "app_binary_sha256_recorded": true,
+  "bundle_boundary_status": "ok",
+  "bundle_hash_counts_as_full_runtime_integrity": false,
+  "bundle_hash_observed_scope_only": true,
+  "captured_at_utc": "2026-05-28T15:02:21.843287Z",
+  "classification": "inspection_only_untouched_with_ambient_drift_blocker",
+  "codesign_recheck_performed": false,
+  "current_contour_non_mutation_equals_global_untouched": false,
+  "current_contour_non_mutation_observed": true,
+  "drift_attribution_class": "ambient_external",
+  "dyld_insert_libraries_present": false,
+  "inspection_only_equals_live_native_proof": false,
+  "inspection_only_evidence": true,
+  "original_codex_runtime_input": false,
+  "original_codex_untouched_within_admitted_scope": true,
+  "packet_kind": "original_codex_untouched",
+  "status": "ok"
+}

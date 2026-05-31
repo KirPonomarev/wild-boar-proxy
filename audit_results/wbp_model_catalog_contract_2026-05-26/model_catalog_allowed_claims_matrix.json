@@ -1,0 +1,39 @@
+{
+  "allowed_claims": [
+    "catalog_generated_from_server_owned_sources",
+    "catalog_schema_validated",
+    "model_ids_are_server_issued",
+    "default_model_is_explicit",
+    "capability_claims_are_classified",
+    "unsupported_capabilities_not_advertised",
+    "browser_authority_blocked",
+    "current_codex_auth_json_not_required"
+  ],
+  "captured_at_utc": "2026-05-26T08:14:28.618807Z",
+  "claim_limits": {
+    "catalog_proves_account_health": false,
+    "catalog_proves_egress": false,
+    "catalog_proves_native": false,
+    "catalog_proves_route": false,
+    "model_listed_means_usable": false
+  },
+  "final_allowed_status": "WBP_MODEL_CATALOG_CONTRACT_CLASSIFIED_AND_GUARDED",
+  "forbidden_claims": [
+    "live_model_availability_proven",
+    "gpt_5_5_works",
+    "all_models_work",
+    "account_health_proven",
+    "native_codex_proven",
+    "cli_runner_proven",
+    "direct_egress_absent",
+    "final_e2e_proven"
+  ],
+  "forbidden_statuses": [
+    "GPT_5_5_WORKS",
+    "ALL_MODELS_WORK",
+    "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+    "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED",
+    "WBP_NATIVE_CODEX_APP_LAUNCH_COMPLETE"
+  ],
+  "schema_version": 1
+}

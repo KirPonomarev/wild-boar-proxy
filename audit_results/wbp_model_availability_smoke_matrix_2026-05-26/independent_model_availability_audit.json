@@ -1,0 +1,27 @@
+{
+  "auditor": "Pasteur",
+  "captured_at_utc": "2026-05-26T09:42:41Z",
+  "contour": "WBP_MODEL_AVAILABILITY_SMOKE_MATRIX_R1",
+  "evidence_references": [
+    "wild_boar_proxy/model_availability.py",
+    "tests/test_model_availability.py",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_availability_matrix.json",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_direct_preflight_packets/",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_error_classification_packet.json",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/secret_redaction_audit.json",
+    "audit_results/wbp_model_availability_smoke_matrix_2026-05-26/historical_dirt_quarantine_packet.json"
+  ],
+  "findings": {
+    "account_pool_health_overclaimed": false,
+    "all_models_overclaimed": false,
+    "direct_egress_overclaimed": false,
+    "gpt_5_5_has_own_passed_packet": true,
+    "native_or_cli_overclaimed": false,
+    "prompt_or_auth_raw_material_recorded": false,
+    "status_401_403_429_503_model_absence_by_default": false,
+    "streaming_or_tool_loop_overclaimed": false
+  },
+  "packet_kind": "independent_model_availability_audit",
+  "required_fix": "",
+  "status": "pass"
+}

@@ -1,0 +1,23 @@
+{
+  "auth_command_reference_only": true,
+  "candidate_byte_length": 5806,
+  "candidate_sha256": "6f070b66411eef5c6375893473ed658549b749afafb8a1dbb8a01dc924d8ba76",
+  "candidate_text_recorded": false,
+  "captured_at_utc": "2026-05-26T14:48:19.076347Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "expected_diff_summary": [
+    "set model_provider=wbp",
+    "set model=gpt-5.4",
+    "set model_providers.wbp.base_url=http://127.0.0.1:63670/v1",
+    "set model_providers.wbp.wire_api=responses",
+    "set model_providers.wbp.requires_openai_auth=false",
+    "set model_providers.wbp.auth.command=server_owned_path"
+  ],
+  "experimental_bearer_token_in_candidate": false,
+  "failed_checks": [],
+  "packet_kind": "original_live_temporary_config_candidate",
+  "raw_auth_token_in_candidate": false,
+  "reason_class": "",
+  "status": "ok",
+  "temporary_route_apply_performed": false
+}

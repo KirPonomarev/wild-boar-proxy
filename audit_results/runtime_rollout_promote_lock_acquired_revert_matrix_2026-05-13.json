@@ -1,0 +1,84 @@
+{
+  "contour_id": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_REVERT",
+  "created_at": "2026-05-13",
+  "head_before_revert": "cc6bd3d",
+  "mode": "fail_closed_revert",
+  "final_state": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_REVERTED_FAIL_CLOSED",
+  "basis": {
+    "previous_proof_gate": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_PROOF_GATE",
+    "previous_recommendation": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+    "canon_reason": "The lock-acquired run_promote bypass delegated selected-backend proof to stage-advance postflight, but the proof gate did not find an explicit requested_backend_id in selected_backend_ids postflight condition."
+  },
+  "scope": {
+    "runtime_files_changed": [
+      "wild_boar_proxy/runtime.py"
+    ],
+    "runtime_files_staged_for_commit": [],
+    "artifact_files_added": [
+      "audit_results/runtime_rollout_promote_lock_acquired_revert_matrix_2026-05-13.json",
+      "audit_results/runtime_rollout_promote_lock_acquired_revert_closeout_2026-05-13.md"
+    ],
+    "forbidden_scope_touched": false,
+    "ui_files_touched": false,
+    "desktop_files_touched": false,
+    "generated_evidence_tail_staged": false,
+    "live_runtime_mutation_performed": false
+  },
+  "reverted_hunk": {
+    "file": "wild_boar_proxy/runtime.py",
+    "function": "run_promote",
+    "pre_revert_current_line_refs": [
+      "wild_boar_proxy/runtime.py:11591-11604"
+    ],
+    "removed_items": [
+      "selected_backend_verified variable",
+      "selected_backend_requirement_met variable",
+      "lock_acquired branch setting selected_backend_requirement_met to true",
+      "routing predicate use of selected_backend_requirement_met"
+    ],
+    "restored_predicate": "and backend_id in verified_selected_backend_ids",
+    "result": "run_promote again requires the requested backend id to appear in verified_selected_backend_ids before routing_change_observed can be true."
+  },
+  "remaining_runtime_diff_after_revert": {
+    "file": "wild_boar_proxy/runtime.py",
+    "diff_stat": {
+      "files_changed": 1,
+      "insertions": 7,
+      "deletions": 0
+    },
+    "remaining_hunks": [
+      {
+        "id": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_DECISION",
+        "function": "dispatch_external_client",
+        "line_ref": "wild_boar_proxy/runtime.py:436-442",
+        "status": "unchanged_pending_owner_decision",
+        "summary": "The launch-dispatch settle loop remains the only runtime.py worktree diff after this revert."
+      }
+    ],
+    "third_runtime_hunk_observed": false
+  },
+  "tests": [
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_accounts_promote_status_verification_failure_rolls_back tests.test_cli.CliTests.test_accounts_promote_policy_verification_failure_rolls_back tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion tests.test_cli.CliTests.test_rollout_stage_advance_15_reports_truthful_changed_files_after_promotion tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+      "result": "PASS",
+      "tests_ran": 6,
+      "duration_seconds": 9.089
+    }
+  ],
+  "inspector_pre_edit": {
+    "performed": true,
+    "result": "PASS",
+    "summary": "Read-only inspector confirmed exactly two runtime.py diff hunks before edit, identified the run_promote bypass hunk boundaries, confirmed the restored predicate, and confirmed the launch-dispatch settle-loop hunk should remain untouched."
+  },
+  "acceptance": {
+    "run_promote_predicate_restored": true,
+    "selected_backend_requirement_bypass_removed": true,
+    "launch_dispatch_hunk_untouched": true,
+    "launch_dispatch_hunk_staged": false,
+    "targeted_tests_passed": true,
+    "runtime_tail_remaining": [
+      "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_DECISION"
+    ]
+  },
+  "next_required_contour": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_DECISION"
+}

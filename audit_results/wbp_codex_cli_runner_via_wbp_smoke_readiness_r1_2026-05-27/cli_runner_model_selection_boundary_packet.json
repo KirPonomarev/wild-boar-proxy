@@ -1,0 +1,28 @@
+{
+  "browser_can_supply_model_authority": false,
+  "candidate_ids": [
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.5",
+    "direct-mistral-devstral-2512"
+  ],
+  "candidate_selected_for_future_smoke": true,
+  "candidate_selection_source": "model_availability_readiness_reference",
+  "captured_at_utc": "2026-05-27T05:10:09.731697Z",
+  "client_can_override_model_provider_account": false,
+  "gpt_5_5_availability_claimed": false,
+  "model_availability_claimed": false,
+  "model_availability_reproved_in_this_contour": false,
+  "model_readiness_reference": {
+    "candidate_matrix_path": "audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27/model_availability_candidate_matrix_packet.json",
+    "candidate_matrix_sha256": "fde940f6c2510a4343755bd8003dd425062f9498f23ee8527c41dc203692a2c2",
+    "reference_only": true,
+    "summary_path": "audit_results/wbp_model_availability_smoke_matrix_readiness_r1_2026-05-27/model_availability_readiness_summary_packet.json",
+    "summary_sha256": "7d30caec0eb7f203ad1d5099ec81987aaa5960f20140a771cca92c2656208928"
+  },
+  "packet_kind": "cli_runner_model_selection_boundary",
+  "preferred_candidate_model_id": "gpt-5.3-codex",
+  "selection_counts_as_cli_smoke_pass": false,
+  "selection_counts_as_model_availability": false,
+  "status": "ok"
+}

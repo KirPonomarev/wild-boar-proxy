@@ -1,0 +1,23 @@
+{
+  "authority_owner": "server",
+  "captured_at_utc": "2026-05-27T04:50:29.330296Z",
+  "catalog_metadata_becomes_runtime_truth": false,
+  "display_metadata_becomes_runtime_truth": false,
+  "later_required_proof_levels": [
+    "listed",
+    "selectable",
+    "request_reaches_wbp",
+    "route_selected",
+    "upstream_accepts",
+    "response_accepted_by_codex",
+    "streaming_classified",
+    "tool_loop_classified"
+  ],
+  "model_availability_proven": false,
+  "native_codex_selected_model_proven": false,
+  "packet_kind": "runtime_truth",
+  "response_accepted_by_codex_proven": false,
+  "route_selected_proven": false,
+  "status": "ok",
+  "upstream_accepts_proven": false
+}

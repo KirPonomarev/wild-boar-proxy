@@ -1,0 +1,27 @@
+{
+  "allowed_protected_surface_labels": [
+    {
+      "label": "protected_surface_path_label_only",
+      "path": "audit_results/codex_custom_single_traced_prompt_live_pass_2026-05-24/baseline.json"
+    },
+    {
+      "label": "protected_surface_path_label_only",
+      "path": "audit_results/codex_custom_single_traced_prompt_live_pass_2026-05-24/current_codex_untouched.json"
+    },
+    {
+      "label": "protected_surface_path_label_only",
+      "path": "audit_results/codex_custom_single_traced_prompt_live_pass_2026-05-24/evidence/attempt1_session_shape_bug/current_codex_untouched.json"
+    },
+    {
+      "label": "protected_surface_path_label_only",
+      "path": "audit_results/codex_custom_single_traced_prompt_live_pass_2026-05-24/postcheck.json"
+    }
+  ],
+  "captured_at_utc": "2026-05-24T01:14:10.634249Z",
+  "findings": [],
+  "machine_error_code": "OK",
+  "raw_auth_file_content_recorded": false,
+  "raw_auth_ref_exposed": false,
+  "secret_value_recorded": false,
+  "status": "ok"
+}

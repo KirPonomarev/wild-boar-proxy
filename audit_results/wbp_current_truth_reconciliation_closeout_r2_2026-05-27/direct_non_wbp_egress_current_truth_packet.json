@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T13:56:39Z",
+  "packet_kind": "direct_non_wbp_egress_current_truth",
+  "status": "ok",
+  "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_OBSERVED",
+  "reason_class": "DIRECT_NON_WBP_MODEL_EGRESS_OBSERVED",
+  "direct_non_wbp_model_egress_observed": true,
+  "direct_non_wbp_model_egress_absent_within_bounded_window": false,
+  "direct_egress_absence_proven": false,
+  "api_openai_com_absence_proven": false,
+  "domain_attribution_available": false,
+  "full_network_absence_proven": false,
+  "native_launch_attempted_from_current_thread": false,
+  "allowed_claim_without_domain_attribution": "no observed direct non-WBP model peer during bounded attributed window",
+  "forbidden_claim_without_domain_attribution": "api.openai.com absent",
+  "source_packets": [
+    "audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/network_claim_classification_packet.json",
+    "audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/import_derived_domain_attribution_limit_packet.json"
+  ]
+}

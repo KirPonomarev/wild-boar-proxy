@@ -1,0 +1,22 @@
+{
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T11:33:07.928068Z",
+  "cleanup_interpreted": false,
+  "egress_claimed": false,
+  "exit_code_used_as_proof": false,
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_dir_exists": false,
+  "final_status": "OWNER_EXTERNAL_EXECUTION_NO_EVIDENCE_PRODUCED",
+  "launch_admission_interpreted": false,
+  "model_availability_reproved": false,
+  "native_safety_pass_claimed": false,
+  "owner_attestation_required_for_evidence_produced": true,
+  "owner_external_execution_evidence_produced": false,
+  "owner_reported_execution": false,
+  "packet_kind": "owner_external_execution_result",
+  "protected_surface_interpreted": false,
+  "routing_claimed": false,
+  "safety_interpreted": false,
+  "status": "ok",
+  "ux_claimed": false
+}

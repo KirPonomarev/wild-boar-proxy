@@ -1,0 +1,19 @@
+{
+  "auth_header_recorded": false,
+  "captured_at_utc": "2026-05-26T13:40:33.757768Z",
+  "forwarded_to_wbp": true,
+  "model_id": "",
+  "packet_kind": "wbp_trace_observation",
+  "raw_auth_recorded": false,
+  "raw_prompt_recorded": false,
+  "request_body_sha256": "dde12c30ee4434a2a344bf8a265de30e0295a8539d17db53dbb9869e6ea89040",
+  "request_observed": true,
+  "response_body_sha256": "a1b85d4eb8937586629461c06836d1b00867bc9c2d68daa58275308fb8f0207b",
+  "response_hash_recorded": true,
+  "response_observed": true,
+  "route_status": "confirmed",
+  "status": "ok",
+  "trace_path": "/v1/responses",
+  "upstream_status": 200,
+  "upstream_status_ok": true
+}

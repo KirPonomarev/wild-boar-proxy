@@ -1,0 +1,282 @@
+{
+  "account_health_proven": false,
+  "allowed_browser_fields": [
+    "model_id"
+  ],
+  "allowed_claims": [
+    "catalog_generated_from_server_owned_sources",
+    "catalog_schema_validated",
+    "model_ids_are_server_issued",
+    "default_model_is_explicit",
+    "capability_claims_are_classified",
+    "unsupported_capabilities_not_advertised",
+    "browser_authority_blocked",
+    "current_codex_auth_json_not_required"
+  ],
+  "base_url": "http://127.0.0.1:8318/v1",
+  "browser_authority": {
+    "auth_path": false,
+    "backend_id": false,
+    "base_url": false,
+    "catalog_path": false,
+    "model_provider": false,
+    "route_id": false,
+    "token": false,
+    "wire_api": false
+  },
+  "captured_at_utc": "2026-05-26T08:14:28.374336Z",
+  "catalog_deterministic_order": "model_id_ascending",
+  "catalog_generated_by": "wbp_server",
+  "catalog_source": "server_owned_operator_status_plus_enabled_external_routes",
+  "claim_limits": {
+    "catalog_proves_account_health": false,
+    "catalog_proves_egress": false,
+    "catalog_proves_native": false,
+    "catalog_proves_route": false,
+    "model_listed_means_usable": false
+  },
+  "cli_runner_proven": false,
+  "contract_scope": "provider_catalog_only",
+  "current_codex_auth_json_dependency": false,
+  "default_model": "gpt-5.3-codex",
+  "default_model_explicit": true,
+  "default_model_in_catalog": true,
+  "direct_egress_absence_proven": false,
+  "final_e2e_proven": false,
+  "forbidden_browser_fields": [
+    "all_proxy",
+    "api_key",
+    "apikey",
+    "auth",
+    "auth_path",
+    "backend_id",
+    "base_url",
+    "codex_home",
+    "endpoint",
+    "home",
+    "http_proxy",
+    "https_proxy",
+    "model_provider",
+    "openai_base_url",
+    "path",
+    "provider",
+    "proxy",
+    "route_id",
+    "runtime_config",
+    "secret",
+    "token",
+    "wire_api"
+  ],
+  "forbidden_claims": [
+    "live_model_availability_proven",
+    "gpt_5_5_works",
+    "all_models_work",
+    "account_health_proven",
+    "native_codex_proven",
+    "cli_runner_proven",
+    "direct_egress_absent",
+    "final_e2e_proven"
+  ],
+  "inference_called": false,
+  "keychain_dependency": false,
+  "live_api_checked": false,
+  "machine_error_code": "OK",
+  "model_count": 4,
+  "model_provider": "cliproxy",
+  "models": [
+    {
+      "account_health_proven": false,
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "label": "gpt-5.3-codex",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.3-codex",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "provider_class": "gpt_account_or_alias",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "label": "gpt-5.4",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.4",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "provider_class": "gpt_account_or_alias",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "provider_class": "gpt_account_or_alias",
+        "reasoning": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "label": "gpt-5.5",
+      "live_availability_proven": false,
+      "model_id": "gpt-5.5",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "provider_class": "gpt_account_or_alias",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "cliproxy_gpt_account_or_alias",
+      "unsupported_capabilities_advertised": false
+    },
+    {
+      "account_health_proven": false,
+      "availability_claim_level": "listed_not_live_proven",
+      "capabilities": {
+        "chat_completions": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "context_window": {
+          "status": "unclassified",
+          "value": null
+        },
+        "images": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "provider_class": "external_route",
+        "reasoning": {
+          "advertised": false,
+          "status": "unclassified"
+        },
+        "responses": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "shape_declared"
+        },
+        "streaming": {
+          "live_acceptance_proven_by_catalog": false,
+          "status": "classified_elsewhere"
+        },
+        "tools": {
+          "advertised": false,
+          "status": "unclassified"
+        }
+      },
+      "direct_egress_proven_by_catalog": false,
+      "label": "openrouter/upstream",
+      "live_availability_proven": false,
+      "model_id": "wbp-web-primary-openrouter",
+      "model_id_authority": "server_issued",
+      "native_proven_by_catalog": false,
+      "provider_class": "external_route",
+      "route_proven_by_catalog": false,
+      "server_issued": true,
+      "source": "server_owned_external_route",
+      "unsupported_capabilities_advertised": false
+    }
+  ],
+  "native_codex_proven": false,
+  "negative_claim_basis": "catalog_contract_only_no_live_api_or_consumer_acceptance_call",
+  "network_calls_made": false,
+  "original_codex_mutation": false,
+  "provider_called": false,
+  "raw_upstream_secret_exposed": false,
+  "schema_version": 1,
+  "server_owned_source": true,
+  "status": "ok",
+  "wire_api": "responses"
+}

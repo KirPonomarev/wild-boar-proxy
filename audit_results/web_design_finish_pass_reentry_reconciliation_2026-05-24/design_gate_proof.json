@@ -1,0 +1,24 @@
+{
+  "contour": "WEB_DESIGN_FINISH_PASS_REENTRY_RECONCILIATION",
+  "design_gate_token": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+  "gate_evidence": [
+    {
+      "file": "audit_results/stage20_c6_verification_packet.json",
+      "final_verdict": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+    },
+    {
+      "file": "audit_results/web_design_gate_admission_check_pass_2026-05-16/closeout.md",
+      "status": "admitted"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/index.html",
+      "ui_claim_token_present": true
+    },
+    {
+      "file": "tests/test_web_design_ui.py",
+      "ui_claim_token_tested": true
+    }
+  ],
+  "current_branch_gate_status": "evidenced",
+  "repo_owned_gate_drift_found": false
+}

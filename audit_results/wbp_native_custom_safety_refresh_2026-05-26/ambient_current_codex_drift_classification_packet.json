@@ -1,0 +1,42 @@
+{
+  "captured_at_utc": "2026-05-26T09:52:51.098460Z",
+  "current_codex_root_baseline_preserved": true,
+  "drift_repeatability": "repeated",
+  "final_verdict": "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE",
+  "quiescent_current_codex_precondition_required": true,
+  "reason_class": "",
+  "repeated_path_drift": true,
+  "repeated_surface_drift": true,
+  "status": "ok",
+  "window_changed_surfaces": [
+    {
+      "codex_dir": [
+        "logs_2.sqlite",
+        "logs_2.sqlite-shm",
+        "logs_2.sqlite-wal",
+        "sessions/2026/05/24/rollout-2026-05-24T20-20-04-019e5b00-42d8-73b0-8966-3caad69ef9a0.jsonl",
+        "state_5.sqlite-shm",
+        "state_5.sqlite-wal"
+      ],
+      "default_app_support_codex": [
+        "DawnGraphiteCache/data_1",
+        "DawnWebGPUCache/data_1",
+        "GPUCache/data_1"
+      ]
+    },
+    {
+      "codex_dir": [
+        "logs_2.sqlite",
+        "logs_2.sqlite-shm",
+        "logs_2.sqlite-wal",
+        "models_cache.json",
+        "sessions/2026/05/24/rollout-2026-05-24T20-20-04-019e5b00-42d8-73b0-8966-3caad69ef9a0.jsonl",
+        "state_5.sqlite-shm",
+        "state_5.sqlite-wal"
+      ]
+    }
+  ],
+  "window_count": 2,
+  "windows_all_unchanged": 0,
+  "windows_with_any_drift": 2
+}

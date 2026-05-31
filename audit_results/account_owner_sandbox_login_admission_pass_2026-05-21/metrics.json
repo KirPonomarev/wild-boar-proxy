@@ -1,0 +1,88 @@
+{
+  "contour": "ACCOUNT_OWNER_SANDBOX_LOGIN_ADMISSION_PASS",
+  "date": "2026-05-21",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_finalize": "ced7dae",
+  "status": "closed_success",
+  "code_changes": {
+    "files": [
+      "wild_boar_proxy/runtime.py",
+      "wild_boar_proxy/cli.py",
+      "tests/test_cli.py",
+      "tests/test_web_design_live_server.py",
+      "COMMAND_API.md"
+    ],
+    "scope": "owner login admission commands, managed session/auth surfaces, strict JSON packets, targeted tests, and deterministic test isolation for stable listener assumptions"
+  },
+  "owner_packets": {
+    "login_start": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "login_complete",
+      "provider": "sandbox"
+    },
+    "login_complete": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "accounts_onboard",
+      "provider": "sandbox",
+      "auth_ref_scope": "sandbox"
+    },
+    "onboard_after_complete": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "final_outcome": "explicit_auth_imported_to_reserve",
+      "reserve_first_enforced": true,
+      "active_routing_changed": false
+    },
+    "accounts_list_after": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "reserve_count": 1
+    }
+  },
+  "verification": {
+    "required_commands": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q",
+        "status": "pass",
+        "summary": "Ran 569 tests. Evidence: evidence/full-unittest-stdout.txt and evidence/full-unittest-stderr.txt"
+      },
+      {
+        "command": "git diff --check",
+        "status": "pass"
+      },
+      {
+        "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "status": "pass"
+      },
+      {
+        "command": "python3 tools/check_closeout_resilience.py --staged-only",
+        "status": "pass"
+      }
+    ],
+    "supporting_commands": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible tests.test_cli.CliTests.test_healthcheck_reports_working_reprobe_candidate_without_greenwash tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+        "status": "pass",
+        "summary": "Ran 6 tests after isolating sync/stable probes."
+      },
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_web_design_live_server.WebDesignLiveServerTests.test_real_json_runner_supports_sandbox_onboard_from_profile_cwd tests.test_web_design_live_server.WebDesignLiveServerTests.test_http_sandbox_readonly_endpoints_follow_sandbox_target",
+        "status": "pass",
+        "summary": "Ran 2 tests after adding per-test stable probe."
+      },
+      {
+        "command": "lsof -nP -iTCP:8318 -sTCP:LISTEN",
+        "status": "observed_then_isolated",
+        "summary": "Live listener was cli-proxy-api via launchd; it was stopped for verification and tests no longer require ambient 8318."
+      }
+    ]
+  },
+  "artifacts": {
+    "spec": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/spec.md",
+    "closeout": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/closeout.md",
+    "independent_audit": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/independent_audit.json",
+    "evidence_dir": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/evidence"
+  }
+}

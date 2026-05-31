@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-28T13:19:22.302448Z",
+  "cli_runner_wall_clock_duration_present": true,
+  "cross_surface_comparison_currently_admitted": false,
+  "failed_run_machine_error_codes": [
+    "ENGINE_PROMPT_FAILED"
+  ],
+  "failed_runs_retained": true,
+  "mixed_timing_surfaces_detected": true,
+  "operator_surface_wall_clock_duration_present": true,
+  "packet_kind": "measurement_integrity",
+  "packet_latency_comes_from_runner_reported_duration": true,
+  "run_count_declared": 5,
+  "status": "ok",
+  "transcript_entry_count": 6,
+  "transcript_preserves_failed_or_blocked_events": true
+}

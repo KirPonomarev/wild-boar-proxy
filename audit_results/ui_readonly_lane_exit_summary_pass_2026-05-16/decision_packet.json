@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contour": "UI_READONLY_LANE_EXIT_SUMMARY_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "STOP_UI_READONLY_LANE_AND_RETURN_TO_RUNTIME_DIAGNOSIS",
+  "live_mutation_performed": false,
+  "new_command_execution_surface_added": false,
+  "ui_readonly_lane_exit_summary": {
+    "source": "existing_ui_state_and_canon_backed_blockers_only",
+    "uses_existing_state": [
+      "desktop.dataset.source",
+      "existing_action_metadata",
+      "existing_snapshot_command_ledger_state"
+    ],
+    "display_only": true,
+    "starts_runtime_diagnosis_action": false,
+    "persists_history": false,
+    "forbidden_runtime_claims": [
+      "runtime_healthy",
+      "selector_progress_recovered",
+      "exact_auth_source_ready",
+      "onboarding_ready",
+      "stage_ready",
+      "rollout_ready",
+      "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+    ],
+    "next_contour_text": "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION"
+  },
+  "runtime_live_action_chain": {
+    "status": "parked",
+    "reason_code": "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+  },
+  "next_contour": "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION"
+}

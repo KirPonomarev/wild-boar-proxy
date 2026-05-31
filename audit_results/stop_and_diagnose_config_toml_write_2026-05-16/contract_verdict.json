@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE",
+  "run_label": "config_toml_write",
+  "verdict": "contour_contract_wrong",
+  "machine_reason": "DECLARED_WRITE_SURFACES_UNDERDECLARED_RUNTIME_TRUTH",
+  "findings": [
+    "runtime_write_surface_candidates(paths) explicitly includes config_toml",
+    "run_launch_smoke() reports changed_files via detect_changed_files(before, runtime_write_surface_candidates(paths))",
+    "repo-owned default launcher smoke branch writes WBP_CONFIG_TOML directly",
+    "tests assert config.toml appears in launch smoke changed_files"
+  ],
+  "test_evidence": [
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "line": 6102,
+      "name": "test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target",
+      "asserts_config_toml_in_changed_files": true
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "line": 6290,
+      "name": "test_launch_smoke_records_conservative_observed_source_fallback_when_launcher_exits_nonzero_during_approved_target_attempt",
+      "asserts_config_toml_in_changed_files": true
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "line": 15250,
+      "name": "test_launch_smoke_wraps_external_launcher_and_reports_fallback",
+      "asserts_config_toml_in_changed_files": true
+    }
+  ],
+  "runtime_behavior_wrong": false,
+  "next_contour_class": "contract_alignment",
+  "next_action": "open a narrow contour to align admitted launch-smoke write surfaces and governing docs with repo/runtime truth before any new live selector or runtime continuation"
+}

@@ -1,0 +1,39 @@
+{
+  "contour": "UI_WEB_API_CONNECTIONS_PAGE_OPERATOR_ALIGNMENT_PASS",
+  "auditor": "Dirac explorer plus orchestrator verification",
+  "captured_at": "2026-05-20T22:59:07+0300",
+  "verdict": "pass",
+  "facts": {
+    "api_connections_screen": "wild_boar_proxy/web_design_ui/index.html#apiConnectionsScreen",
+    "rendering_code": "wild_boar_proxy/web_design_ui/scripts/overview.js#renderApiConnectionsSnapshot",
+    "css_surface": "wild_boar_proxy/web_design_ui/styles/overview.css#.api-connections-table-card",
+    "existing_route_actions_preserved": [
+      "api_route_validate",
+      "api_route_check",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_remove",
+      "api_route_profile",
+      "api_route_evidence_capture"
+    ],
+    "forbidden_route_actions_absent": [
+      "api_route_create",
+      "api_route_update",
+      "api_route_draft"
+    ]
+  },
+  "checks": {
+    "page_became_more_operator_facing": true,
+    "old_default_debug_copy_removed": true,
+    "deferred_builder_still_deferred": true,
+    "no_file_path_token_inputs": true,
+    "no_false_ready_success_configured_claims": true,
+    "no_runtime_adapter_live_server_docs_touched": true,
+    "browser_acceptance_confirmed": true,
+    "tests_passed": true
+  },
+  "residual_risks": [
+    "Fixture screenshot capture timed out once in the in-app browser, but DOM/metric acceptance for fixture passed and live screenshot was captured.",
+    "Full visual parity for Diagnostics and Settings remains outside this contour."
+  ]
+}

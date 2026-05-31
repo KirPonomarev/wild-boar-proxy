@@ -1,0 +1,16 @@
+{
+  "authorization_status": "authorized_by_owner_gate",
+  "broad_authorization_accepted": false,
+  "captured_at_utc": "2026-05-27T08:51:00.088229Z",
+  "exact_owner_authorization_required": true,
+  "generic_start_phrase_accepted": false,
+  "live_request_allowed": true,
+  "live_request_attempted": false,
+  "machine_error_code": "OK",
+  "near_miss_authorization_accepted": false,
+  "next_action": "execute_bounded_live_non_native_probe",
+  "owner_authorization_phrase_present": true,
+  "packet_kind": "live_authorization",
+  "status": "ok",
+  "stopped_before_live_provider_model_request": false
+}

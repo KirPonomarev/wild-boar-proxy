@@ -1,0 +1,31 @@
+{
+  "contour": "external_models_c1_foundation_contract",
+  "date": "2026-05-12",
+  "auditor": "independent_subagent_read_only",
+  "result": "passed_with_outside_scope_observations",
+  "findings": [
+    {
+      "severity": "high",
+      "file": "wild_boar_proxy/runtime.py",
+      "summary": "Dirty promote-path behavior drift observed outside the C1 contour.",
+      "in_contour": false
+    },
+    {
+      "severity": "medium",
+      "file": "wild_boar_proxy/runtime.py",
+      "summary": "Dirty dispatch helper polling drift observed outside the C1 contour.",
+      "in_contour": false
+    }
+  ],
+  "checks": {
+    "canonical_payload_fields": "passed",
+    "config_state_split": "passed",
+    "real_test_surfaces": "passed",
+    "zero_test_guard": "passed"
+  },
+  "verbatim_summary": [
+    "external-models commands go through canonical payload helpers",
+    "routes.json remains declarative while state.json holds observed state and policy",
+    "new test modules are real and module-backed"
+  ]
+}

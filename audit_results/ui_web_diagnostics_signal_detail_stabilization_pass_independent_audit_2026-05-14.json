@@ -1,0 +1,48 @@
+{
+  "contour": "UI_WEB_DIAGNOSTICS_SIGNAL_DETAIL_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent explorer agent 019e2759-b69c-7010-95ca-c8c515d4cd75",
+  "verdict": "no findings",
+  "findings": [],
+  "verified": {
+    "scope": {
+      "result": "pass",
+      "details": "The target change set stayed inside web_design_ui index/script/style files, tests/test_web_design_ui.py, contour screenshots, and Phosphor PNG icon additions."
+    },
+    "command_boundaries": {
+      "result": "pass",
+      "details": "Diagnostics keeps export_diagnostics as the only active Diagnostics command path. Full-check, lifecycle, human-open, and danger affordances are disabled/deferred."
+    },
+    "browser_payloads": {
+      "result": "pass",
+      "details": "Browser payload keys remain bounded to ui_action plus existing account_id/route_id surfaces; no new payload keys were added."
+    },
+    "visual_fit": {
+      "result": "pass",
+      "details": "After screenshots are 1600x1000 and DOM metrics show mainScrollHeight equals mainClientHeight, no horizontal overflow, diagnostics bottom below the 934px acceptance line, and zero visible svg elements inside #diagnosticsScreen."
+    },
+    "live_failure_truth": {
+      "result": "pass",
+      "details": "Live integration failure shows deferred/no-history state and does not reuse old healthy fixture history."
+    },
+    "leak_scan": {
+      "result": "pass",
+      "details": "No forbidden external reference service strings were found in the target diff."
+    },
+    "tests": {
+      "result": "pass",
+      "details": "node --check passed; python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q passed with 87 tests."
+    }
+  },
+  "commands_run_by_auditor": [
+    "git status --short",
+    "git diff --stat -- web_design_ui/index.html scripts/overview.js styles/overview.css tests/test_web_design_ui.py audit_results/ui_web_diagnostics_signal_detail_stabilization_pass_screenshots",
+    "git diff -- wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css tests/test_web_design_ui.py",
+    "rg -n action and payload boundary markers",
+    "rg -n diagnostics/telemetry/signal/stale/no data/healthy/green/svg/<svg/data-live-state/fixtureState/metrics/1600x1000",
+    "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "python3 -m unittest tests.test_web_design_ui",
+    "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+    "git diff --check -- wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css tests/test_web_design_ui.py"
+  ]
+}

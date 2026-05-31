@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-05-28T12:15:39.229604Z",
+  "gaps": [
+    {
+      "blocks_runtime_claim": true,
+      "id": "live_native_relaunch_not_attempted_here",
+      "status": "open"
+    },
+    {
+      "blocks_runtime_claim": false,
+      "id": "owner_visible_thread_continuity_not_proven_here",
+      "status": "open"
+    },
+    {
+      "blocks_runtime_claim": false,
+      "id": "storage_level_thread_history_uses_synthetic_owned_state_only",
+      "status": "open"
+    },
+    {
+      "blocks_runtime_claim": false,
+      "id": "role_slot_persistence_not_linked_to_persistent_profile_root_here",
+      "status": "open"
+    },
+    {
+      "blocks_runtime_claim": true,
+      "id": "runtime_slot_dispatch_and_simultaneous_execution_remain_later_contours",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "persistent_profile_gap_matrix",
+  "status": "ok"
+}

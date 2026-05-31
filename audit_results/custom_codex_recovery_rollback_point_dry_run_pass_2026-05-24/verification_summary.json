@@ -1,0 +1,54 @@
+{
+  "status": "passed",
+  "captured_at": "2026-05-24",
+  "commands": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "passed"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_codex_recovery_contract -q",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server.WebDesignCodexCustomSessionEndpointTests.test_codex_custom_recovery_rollback_point_dry_run_endpoint_is_readonly tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_surface_is_bounded_and_readonly -q",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_codex_recovery_contract tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "status": "passed",
+      "tests": 188
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_operator_surface tests.test_web_design_command_adapter -q",
+      "status": "passed",
+      "tests": 33
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    },
+    {
+      "command": "browser proof via http://127.0.0.1:8794/",
+      "status": "passed",
+      "server_stopped_after_proof": true
+    },
+    {
+      "command": "independent read-only subagent audit",
+      "status": "passed",
+      "findings": 0
+    }
+  ],
+  "claims": {
+    "rollback_point_dry_run_contract": true,
+    "rollback_point_creation": false,
+    "snapshot_file_creation": false,
+    "rollback_apply": false,
+    "process_kill": false,
+    "operator_ready": false,
+    "current_codex_touched": false,
+    "original_codex_touched": false
+  }
+}

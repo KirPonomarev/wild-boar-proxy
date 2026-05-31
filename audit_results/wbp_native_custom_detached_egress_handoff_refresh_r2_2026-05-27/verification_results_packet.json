@@ -1,0 +1,42 @@
+{
+  "captured_at_utc": "2026-05-26T21:53:00Z",
+  "commands": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/native_filesystem_probe.py tools/native_custom_detached_egress_execution_handoff_probe.py tests/test_native_filesystem_probe.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_native_filesystem_probe",
+      "result": "passed",
+      "test_count": 193
+    },
+    {
+      "command": "python3 tools/native_custom_detached_egress_execution_handoff_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir audit_results/wbp_native_custom_detached_egress_handoff_refresh_r2_2026-05-27 --external-evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_R2_2026-05-27 --model gpt-5.4-mini --wait-seconds 90 --ready-final-status WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED --blocked-final-status WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_BLOCKED_FALSE_GREEN_AUDIT",
+      "final_status": "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_native_filesystem_probe tests.test_native_launch_dispatch tests.test_native_launch_contract tests.test_repo_hygiene tests.test_closeout_resilience",
+      "result": "passed",
+      "test_count": 252
+    },
+    {
+      "command": "JSON parse audit_results/wbp_native_custom_detached_egress_handoff_refresh_r2_2026-05-27/*.json",
+      "json_files": 21,
+      "result": "passed"
+    },
+    {
+      "command": "secret scan audit_results/wbp_native_custom_detached_egress_handoff_refresh_r2_2026-05-27",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "external_result_imported": false,
+  "native_launch_attempted": false,
+  "packet_kind": "verification_results",
+  "positive_egress_absence_claimed": false,
+  "status": "ok"
+}

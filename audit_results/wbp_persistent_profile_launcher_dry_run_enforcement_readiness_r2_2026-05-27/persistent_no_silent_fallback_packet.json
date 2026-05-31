@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T05:59:36.078480Z",
+  "fallback_rejected": true,
+  "fallback_rejection_counts_as_live_runtime_rejection": false,
+  "fallback_validation_failed_checks": [
+    "silent_persistent_to_ephemeral_fallback_forbidden"
+  ],
+  "packet_kind": "persistent_no_silent_fallback",
+  "silent_persistent_to_ephemeral_fallback_allowed": false,
+  "status": "ok"
+}

@@ -1,0 +1,92 @@
+{
+  "captured_at_utc": "2026-05-26T07:53:04.799778Z",
+  "case_count": 10,
+  "case_ids": [
+    "non_stream_text",
+    "stream_text",
+    "upstream_4xx_error",
+    "upstream_5xx_error",
+    "unknown_model_error",
+    "tool_call_request",
+    "tool_call_output_followup",
+    "reasoning_item_input",
+    "large_prompt_redaction",
+    "image_tool_unsupported"
+  ],
+  "files": [
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/fixture_matrix.json",
+      "sha256": "ae8863142f48ff2a645068417e677534ef72e6fa26e4d03f5414c755c680d105",
+      "size": 3709
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/image_tool_unsupported_case.json",
+      "sha256": "c40aac464a5a95fac14e0cc35fa131c0c18574a3dbd18855da333dcf5a87d73a",
+      "size": 326
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/large_prompt_redaction_case.json",
+      "sha256": "a96717ccf154d52beef8665a6c47489cba26abb8d51a18c1aedbd586ba8959f7",
+      "size": 258
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/non_stream_text_request.json",
+      "sha256": "47c6f762a46192b72adec66b1350cfbc8b24b250b8b30cbe72f38c966fc62bde",
+      "size": 267
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/non_stream_text_response.json",
+      "sha256": "ee30271de7d49a545afefc6cc387e645e10d6481c4d133be5280625ed493aab9",
+      "size": 190
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/reasoning_item_input.json",
+      "sha256": "175118147653d1e9bbb7e514e8b517ec51867a651a0e1e231d7d8b1966ac9abc",
+      "size": 492
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/reasoning_item_output.json",
+      "sha256": "051f588242fe0c40e74d106715a8eda054a3dd71992a8a8ff4d52f97f8aa5754",
+      "size": 123
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/stream_text_events.ndjson",
+      "sha256": "a2ae5b5974d7378a18d0441492113aab8bd93f16e5bb7ac7d77558aedc77cef6",
+      "size": 326
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/stream_text_request.json",
+      "sha256": "d2c831d8eccdc3cb5ce0df869c74e83af850d0fa5c027105a16337060722600d",
+      "size": 95
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/tool_call_output_followup.json",
+      "sha256": "47ff63a414e09ba45597f453dc7e26c2432f6c490a874494aabb112f871998b6",
+      "size": 499
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/tool_call_request.json",
+      "sha256": "cd6fad171ae99b58d21882b645da0af1d3deec9cd42e55961961461871e972b8",
+      "size": 373
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/unknown_model_request.json",
+      "sha256": "a8e892c4e8dc306fbaa450854191eaf4518a526ccafbab94a3d97c0790730029",
+      "size": 60
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/upstream_4xx_error.json",
+      "sha256": "797901f288d2b29f8bd4138bb9615d96997f48b86901c7c83dcdd1a61a117617",
+      "size": 108
+    },
+    {
+      "path": "tests/fixtures/wbp_responses_compatibility/upstream_5xx_error.json",
+      "sha256": "310d803c76483d5ed14191d090320738465a47fc36a9cfc5e74dd944da75c592",
+      "size": 109
+    }
+  ],
+  "fixture_count": 14,
+  "fixture_dir": "/Volumes/Work/wild-boar-proxy/tests/fixtures/wbp_responses_compatibility",
+  "machine_error_code": "OK",
+  "status": "ok"
+}

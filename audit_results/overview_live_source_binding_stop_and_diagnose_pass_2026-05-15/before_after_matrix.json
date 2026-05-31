@@ -1,0 +1,52 @@
+[
+  {
+    "screen": "overview",
+    "phase": "pending_live_fetch",
+    "field": "desktop.dataset.source",
+    "before_ui": "fixture",
+    "after_ui": "live",
+    "expected": "live",
+    "verdict": "fixed",
+    "notes": "Source handoff is now honest before the live packet resolves."
+  },
+  {
+    "screen": "overview",
+    "phase": "pending_live_fetch",
+    "field": "brandCaption",
+    "before_ui": "демо-просмотр UI",
+    "after_ui": "live только чтение",
+    "expected": "live только чтение",
+    "verdict": "fixed",
+    "notes": "Demo caption no longer survives during live fetch."
+  },
+  {
+    "screen": "overview",
+    "phase": "pending_live_fetch",
+    "field": "runtimeChip",
+    "before_ui": "Неизвестно",
+    "after_ui": "Загрузка",
+    "expected": "Загрузка",
+    "verdict": "fixed",
+    "notes": "Pending state is explicit instead of looking like fixture truth."
+  },
+  {
+    "screen": "overview",
+    "phase": "pending_live_fetch",
+    "field": "pool_counts",
+    "before_ui": "0/0/0/0 fixture placeholders",
+    "after_ui": "—/—/—/—",
+    "expected": "—/—/—/—",
+    "verdict": "fixed",
+    "notes": "Pending live fetch no longer displays fixture counts."
+  },
+  {
+    "screen": "overview",
+    "phase": "final_live_fetch",
+    "field": "desired/effective/endpoint/pool",
+    "before_ui": "stable mismatch reported from transient fixture shell",
+    "after_ui": "stable/stable, endpoint http://127.0.0.1:8318/v1, active 17 reserve 0 hold 0 problem 14",
+    "expected": "match /api/live-readonly",
+    "verdict": "fixed",
+    "notes": "Final live render converges to readonly packet truth."
+  }
+]

@@ -1,0 +1,57 @@
+{
+  "contour_id": "UI_WEB_CONFIRMATION_SYSTEM_HARDENING",
+  "date": "2026-05-13",
+  "auditor": "independent read-only subagent",
+  "verdict": "PASS_WITH_PREEXISTING_DIRTY_TAIL_RISK",
+  "claims": [
+    {
+      "claim": "confirmation policy remains frontend UX only",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:73-135",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:296-305",
+        "wild_boar_proxy/web_design_live_server.py:54-221",
+        "wild_boar_proxy/web_design_live_server.py:346-436"
+      ]
+    },
+    {
+      "claim": "duplicate-submit guard is meaningful",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:670-707",
+        "wild_boar_proxy/web_design_ui/index.html:843-845"
+      ]
+    },
+    {
+      "claim": "no new action ids or forbidden surfaces were exposed",
+      "verdict": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/index.html:829-837",
+        "tests/test_web_design_ui.py:452-457"
+      ]
+    },
+    {
+      "claim": "tests cover the new behavior",
+      "verdict": "PASS_STATIC_LEVEL",
+      "evidence": [
+        "tests/test_web_design_ui.py:403-457"
+      ],
+      "residual": "coverage is static/string-level; browser smoke separately verifies modal policy copy opens from metadata-backed UI"
+    },
+    {
+      "claim": "scope is clean across the whole worktree",
+      "verdict": "FAIL_PREEXISTING_DIRTY_TAIL",
+      "evidence": [
+        "wild_boar_proxy/runtime.py has pre-existing dirty changes",
+        "external_agent_lab/** has pre-existing dirty changes",
+        "audit_results/external_lab_* pre-existing untracked artifacts remain"
+      ],
+      "disposition": "not staged or included in this UI contour; deferred to WORKTREE_TAIL_ADJUDICATION"
+    }
+  ],
+  "orchestrator_assessment": {
+    "diff_scope_verdict": "PASS",
+    "worktree_scope_verdict": "PASS_WITH_RESIDUAL_PREEXISTING_TAIL",
+    "commit_policy": "stage only UI confirmation files, tests, and this contour's audit artifacts"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "contour": "external_lab_c24",
+  "date": "2026-05-11",
+  "stage": "precondition",
+  "evidence_inputs": [
+    "/tmp/c24_status_pre.json",
+    "/tmp/c24_health_pre.json",
+    "/tmp/c24_accounts_pre.json",
+    "/tmp/c24_rotation_pre.json"
+  ],
+  "commands": [
+    {
+      "source_packet": "/tmp/c24_status_pre.json",
+      "status": "error",
+      "machine_error_code": "LOCK_HELD",
+      "liveness": "unknown",
+      "classification": "live_owner_surface_locked"
+    },
+    {
+      "source_packet": "/tmp/c24_health_pre.json",
+      "status": "error",
+      "machine_error_code": "LOCK_HELD",
+      "liveness": "unknown",
+      "classification": "live_owner_surface_locked"
+    },
+    {
+      "source_packet": "/tmp/c24_accounts_pre.json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "accounts_total": 25,
+      "pool_policy_active_target": 20,
+      "pool_policy_reserve_target": 0,
+      "registry_identity_status": "clear",
+      "registry_identity_machine_error_code": "OK"
+    },
+    {
+      "source_packet": "/tmp/c24_rotation_pre.json",
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "liveness": "unknown",
+      "severity": "recoverable",
+      "operator_action": "user_action",
+      "delegated_active_count": 17,
+      "delegated_backend_count": 25,
+      "classification": "live_runtime_truth_contradiction_out_of_scope_for_quota_handling"
+    }
+  ],
+  "precondition_result": {
+    "local_remediation_readiness": "ready",
+    "blocked_by_auth_or_quota": false,
+    "blocked_by_live_runtime_precondition": true,
+    "live_runtime_repair_allowed_in_c24": false,
+    "notes": [
+      "C24 proceeds on bounded code/test remediation only.",
+      "Live owner-surface lock and rotation contradiction are preserved as evidence, not repaired in this contour."
+    ]
+  }
+}

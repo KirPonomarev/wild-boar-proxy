@@ -1,0 +1,37 @@
+{
+  "default_owner_behavior": {
+    "source": "paths.auth_file",
+    "path": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+    "code_surface": "wild_boar_proxy/sandbox_owner_helpers.py:395-403",
+    "result_when_missing": "SystemExit: No sandbox-local auth candidate is available."
+  },
+  "explicit_owner_behavior": {
+    "source": "--auth-ref PATH",
+    "code_surface": "wild_boar_proxy/sandbox_owner_helpers.py:393-404",
+    "validation": "validate_auth_payload(auth_path)",
+    "supported_by_tests": [
+      "tests/test_cli.py:7200-7254",
+      "tests/test_cli.py:7396-7444"
+    ]
+  },
+  "inventory_snapshot_behavior": {
+    "function": "get_onboarding_auth_snapshot_before_login(paths)",
+    "code_surface": "wild_boar_proxy/runtime.py:1483-1529",
+    "inventory_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable",
+    "inventory_source": {
+      "source": "stable_config_parent",
+      "path": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable",
+      "path_resolution": "fallback",
+      "exists": true
+    },
+    "matching_pattern": "codex-*.json",
+    "observed_count": 0
+  },
+  "diagnosis": {
+    "discovery_bug_observed": false,
+    "env_binding_bug_observed": false,
+    "missing_auth_material_observed": true,
+    "default_auth_file_missing": true,
+    "inventory_candidates_missing": true
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "captured_at_utc": "2026-05-27T06:30:39.437490Z",
+  "contour_key": "r4_backup_restore",
+  "evidence_dir": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27",
+  "expected_final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_RESTORE_DRY_RUN_READINESS_R4_CLASSIFIED",
+  "missing_supporting_packets": [],
+  "non_claim_flags": {
+    "backup_created": false,
+    "cleanup_attempted": false,
+    "custom_app_launch_attempted": false,
+    "final_e2e_claimed": false,
+    "keychain_behavior_classified": false,
+    "live_provider_request_attempted": false,
+    "native_launch_attempted": false,
+    "native_ux_claimed": false,
+    "original_reversibility_proven": false,
+    "owner_input_required": false,
+    "persistent_profile_state_written": false,
+    "profile_storage_persistence_claimed": false,
+    "restore_executed": false,
+    "rollback_executed": false,
+    "rollback_proven": false,
+    "thread_history_preservation_claimed": false
+  },
+  "non_claim_overclaims": [],
+  "old_owner_visible_context_used_as_current_ui_proof": false,
+  "old_route_trace_used_as_current_route_proof": false,
+  "packet_hash_recorded": true,
+  "packet_kind": "persistent_pre_live_r4_backup_restore_reference",
+  "prior_evidence_reclassified_to_stronger_claim": false,
+  "prior_final_status": "WBP_CUSTOM_PERSISTENT_PROFILE_BACKUP_RESTORE_DRY_RUN_READINESS_R4_CLASSIFIED",
+  "prior_final_status_ok": true,
+  "prior_ok_treated_as_live_proof": false,
+  "prior_status": "ok",
+  "prior_status_ok": true,
+  "r3_state_diff_readiness_used_as_saved_thread_proof": false,
+  "r4_backup_restore_readiness_used_as_backup_or_restore_execution": false,
+  "reason_class": "",
+  "status": "ok",
+  "summary_packet_name": "persistent_backup_restore_summary_packet.json",
+  "summary_packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_restore_summary_packet.json",
+  "summary_packet_present": true,
+  "summary_packet_read_error": "",
+  "summary_packet_sha256": "c2fe8c3a215e36d9b6c5a31a500abd216dae2ab182ca08cb57cacefd5409b1e2",
+  "supporting_packets": [
+    {
+      "packet_name": "persistent_backup_restore_contract_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_restore_contract_packet.json",
+      "packet_sha256": "eb76ff4531cf477e56356533c4aca582791f258acda2b815103e2dd3a3a72a51"
+    },
+    {
+      "packet_name": "persistent_backup_path_authority_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_backup_path_authority_packet.json",
+      "packet_sha256": "f982ec3db19ce632cd440fcb6c945bf057df6280cf660de9c7b4eeac1e77b955"
+    },
+    {
+      "packet_name": "persistent_restore_path_authority_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_restore_path_authority_packet.json",
+      "packet_sha256": "d7e621d70814024658a238a7e71fb22dd2966856d3751e8f3be606055852c4e2"
+    },
+    {
+      "packet_name": "persistent_destructive_action_guard_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_destructive_action_guard_packet.json",
+      "packet_sha256": "15c8246109ea3a0c46f987eb1eaf7f0b722d41934a045448d563540cb163a175"
+    },
+    {
+      "packet_name": "persistent_original_profile_backup_restore_guard_packet.json",
+      "packet_path": "audit_results/wbp_persistent_profile_backup_restore_dry_run_readiness_r4_2026-05-27/persistent_original_profile_backup_restore_guard_packet.json",
+      "packet_sha256": "fe8364dcfe190c8673c27d9ea3231ac79869cbff0d456de4cdb282cc2359257e"
+    }
+  ]
+}

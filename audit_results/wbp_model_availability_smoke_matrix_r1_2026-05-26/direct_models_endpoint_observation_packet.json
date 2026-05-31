@@ -1,0 +1,22 @@
+{
+  "auth_header_recorded": false,
+  "body_hash": "e0074487f0a32626c8194cfaabffd28062557fb485f49a07a82742ec6d74309c",
+  "body_len": 663,
+  "captured_at_utc": "2026-05-26T18:44:55.210088Z",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "http_status": 200,
+  "model_count": 8,
+  "model_ids": [
+    "gpt-5.5",
+    "codex-auto-review",
+    "gpt-image-2",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini"
+  ],
+  "packet_kind": "direct_models_endpoint_observation",
+  "secret_value_recorded": false,
+  "status": "ok"
+}

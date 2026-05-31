@@ -1,0 +1,27 @@
+{
+  "argv_template": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "codex-runner",
+    "smoke",
+    "--json",
+    "--prompt",
+    "<redacted-future-cli-runner-prompt>"
+  ],
+  "argv_template_hash": "dbc43532751ee273dc2ffc22cc59ea0e2bf4e02bb0202d2ba23b4a387c030239",
+  "captured_at_utc": "2026-05-27T05:10:09.731231Z",
+  "codex_runner_smoke_executed": false,
+  "command_executed": false,
+  "command_shape_counts_as_cli_smoke_pass": false,
+  "command_shape_counts_as_model_availability": false,
+  "command_shape_prepared": true,
+  "live_provider_request_attempted": false,
+  "native_launch_attempted": false,
+  "owner_prompt_required": false,
+  "packet_kind": "cli_runner_command_shape",
+  "prompt_placeholder_recorded": true,
+  "raw_prompt_recorded": false,
+  "runner_surface": "wild-boar-proxy codex-runner smoke --json --prompt <text>",
+  "status": "ok"
+}

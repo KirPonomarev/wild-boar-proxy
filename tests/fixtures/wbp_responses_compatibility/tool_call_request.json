@@ -1,0 +1,21 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "Need a command",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant",
+      "type": "message"
+    },
+    {
+      "arguments": "{\"cmd\":\"pwd\"}",
+      "call_id": "call_fixture_1",
+      "name": "shell",
+      "type": "function_call"
+    }
+  ],
+  "model": "wbp-fixture-route"
+}

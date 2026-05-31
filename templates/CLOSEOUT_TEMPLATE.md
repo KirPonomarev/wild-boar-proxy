@@ -14,7 +14,17 @@
 
 - status:
 - final verdict:
-- next action:
+- closure state: CLOSED
+
+## Contour Capsule
+
+- goal:
+- branch:
+- head:
+- touched files:
+- tests run:
+- blocked risks:
+- closure state: CLOSED
 
 ## Verification
 
@@ -43,5 +53,10 @@
 ## Notes
 
 - blockers encountered:
-- follow-up contour:
+- resume from here: CLOSED
+
+> Fill all `Contour Capsule` fields with concrete values before commit.
+> Placeholder values are not accepted by resilience checks.
+> Future plans, next-contour pointers, and master-plan routes belong outside
+> the repository. Closeout artifacts record completed evidence only.
 ```

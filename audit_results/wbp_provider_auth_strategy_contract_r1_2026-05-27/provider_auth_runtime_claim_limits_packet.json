@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T04:34:56.213654Z",
+  "model_availability_claimed": false,
+  "native_launch_claimed": false,
+  "packet_kind": "provider_auth_runtime_claim_limits",
+  "provider_request_proven": false,
+  "route_proof_claimed": false,
+  "runtime_trace_present": false,
+  "selected_auth_claimed_as_live_used_without_trace": false,
+  "selected_auth_live_used": false,
+  "selected_auth_source_classified": true,
+  "selected_strategy": "auth.command",
+  "status": "ok"
+}

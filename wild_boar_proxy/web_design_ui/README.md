@@ -1,0 +1,62 @@
+<!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
+# Web Design UI Preview
+
+This directory contains the web transfer of the `01_overview_dashboard` design
+frame from the local render package.
+
+The default mode remains fixture-backed:
+
+- no live command execution
+- no runtime/state/log file reads
+- no desktop shell integration
+- no replacement of `wild_boar_proxy/web_ui.py`
+
+Fixtures imitate the expected UI input shape only. They are not runtime truth,
+not evidence, and not acceptance for live binding.
+
+Open locally with:
+
+```sh
+python3 -m http.server 8787 --directory wild_boar_proxy/web_design_ui
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:8787/?state=healthy
+```
+
+For live read-only preview, use the bounded local server:
+
+```sh
+python3 -m wild_boar_proxy.web_design_live_server --port 8788
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:8788/?source=live
+```
+
+Live mode uses strict JSON command packets through `web_design_command_adapter`
+to hydrate readonly snapshots and action metadata. Mutation and
+support-artifact action buttons remain disabled until sandbox admission contours
+explicitly reopen them.
+
+The Codex Custom session controls are a separate admitted owner surface. They
+may create isolated session state and run the bounded prompt endpoint only
+through server-issued model/backend selection, temporary `HOME`/`CODEX_HOME`,
+stdin prompt transport, and redacted JSON result packets. They must not expose
+browser-supplied model/backend/route/account/path/auth fields or imply general
+runtime mutation.
+
+Available fixture states:
+
+- `healthy`
+- `degraded`
+- `down`
+- `stale`
+- `unknown`
+- `integration_failure`

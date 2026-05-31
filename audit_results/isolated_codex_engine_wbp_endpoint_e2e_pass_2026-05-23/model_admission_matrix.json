@@ -1,0 +1,20 @@
+{
+  "admission_decision": "admitted_for_single_engine_smoke",
+  "available_gpt_models_observed": [
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "gpt-image-2"
+  ],
+  "captured_at_utc": "2026-05-23T15:05:32.281168+00:00",
+  "chosen_model_visible": true,
+  "codex_facing_model": "gpt-5.3-codex",
+  "configured_model": "gpt-5.5",
+  "configured_model_visible": true,
+  "contour": "ISOLATED_CODEX_ENGINE_WBP_ENDPOINT_E2E_PASS",
+  "does_not_restrict_future_catalog": true,
+  "not_deepseek_provider_route_proof": true
+}

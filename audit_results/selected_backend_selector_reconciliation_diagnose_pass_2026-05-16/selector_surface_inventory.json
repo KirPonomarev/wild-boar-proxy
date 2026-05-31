@@ -1,0 +1,83 @@
+{
+  "contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS",
+  "surfaces": [
+    {
+      "surface": "runtime_state.selected_backend_snapshot",
+      "scope": "bounded_local_participation_evidence_only",
+      "authority_layer": "supervisor_owner_observed",
+      "status": "valid_but_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "selected_backend_count": 9,
+      "selected_backend_ids": [
+        "beep-outlook-team",
+        "gpt2026bis-team",
+        "k-gpt-pro-2",
+        "k-gpt-pro-3k",
+        "k-ponomarev-photo",
+        "kip85905-team",
+        "new-gpt-bis",
+        "new-new22222",
+        "pig-outlook-team"
+      ],
+      "staleness": "stale"
+    },
+    {
+      "surface": "stable_repair_target_inventory",
+      "scope": "approved_control_owned_target_family",
+      "authority_layer": "control_layer_target_truth",
+      "status": "materialized_family_present",
+      "entry_count": 9,
+      "entries": [
+        "codex-21c5ac82-gpt2026bis@gmail.com-team.json",
+        "codex-21c5ac82-kip85905@gmail.com-team.json",
+        "codex-fa241136-beep.gpt@outlook.com-team.json",
+        "codex-fa241136-pig.gpt@outlook.com-team.json",
+        "codex-k.gpt.pro.2@outlook.com-free.json",
+        "codex-k.gpt.pro.3k@outlook.com-free.json",
+        "codex-k.ponomarev.photo@gmail.com-free.json",
+        "codex-new.gpt.bis@outlook.com-free.json",
+        "codex-new.new22222@outlook.com-free.json"
+      ]
+    },
+    {
+      "surface": "stable_repair_dry_run.registry_source_inputs",
+      "scope": "current_policy_eligible_source_copy_family",
+      "authority_layer": "owner_path_packet",
+      "status": "current_family_emitted",
+      "entry_count": 11,
+      "backend_ids": [
+        "gpt2026bis-team",
+        "kip85905-team",
+        "pig-outlook-team",
+        "beep-outlook-team",
+        "k-ponomarev-photo",
+        "k-gpt-pro-2",
+        "k-gpt-pro",
+        "new-new22222",
+        "new-new55555",
+        "new-gpt-bis",
+        "kp8750410-team"
+      ]
+    },
+    {
+      "surface": "status.stable_runtime_consumer",
+      "scope": "current_runtime_consumer_source_family",
+      "authority_layer": "status_owner_path_delegated_truth",
+      "desired_source_kind": "observed_stable_inventory_source",
+      "desired_resolved_path": "/Users/kirillponomarev/.cli-proxy-api",
+      "desired_selection_reason": "approved_target_not_ready_for_runtime_consumption",
+      "effective_source_kind": "observed_stable_inventory_source",
+      "effective_resolved_path": "/Users/kirillponomarev/.cli-proxy-api",
+      "effective_matches_desired": true
+    },
+    {
+      "surface": "stable_runtime_consumer_snapshot",
+      "scope": "runtime_state_activation_snapshot",
+      "authority_layer": "runtime_state_snapshot_only",
+      "status": "stale_snapshot",
+      "selected_source_kind": "approved_repair_target",
+      "selected_source_path": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+      "activation_outcome": "approved_target_activated"
+    }
+  ]
+}

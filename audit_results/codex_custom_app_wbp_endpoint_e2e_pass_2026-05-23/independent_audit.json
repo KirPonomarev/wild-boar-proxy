@@ -1,0 +1,80 @@
+{
+  "captured_at_utc": "2026-05-23T15:15:00.689847+00:00",
+  "checks": {
+    "app_launcher_exit_zero": true,
+    "chosen_gpt_model_visible": true,
+    "current_codex_profile_unchanged": true,
+    "current_codex_profile_unchanged_after_plugin_warning": true,
+    "deepseek_only_success_path": false,
+    "final_message_exact_wbp_ok": true,
+    "gui_desktop_claim_not_made": true,
+    "models_probe_200": true,
+    "persistent_launchservices_registration_not_used": true,
+    "post_healthcheck_ok": true,
+    "post_status_ok": true,
+    "previous_closeout_truth_repaired": true,
+    "provider_route_claim_not_made": true,
+    "remote_plugin_sync_warning_non_blocking": true,
+    "static_safety_gate_pass": true,
+    "temp_root_removed": true
+  },
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "evaluation_contract": {
+    "required_false": [
+      "deepseek_only_success_path"
+    ],
+    "required_true": [
+      "previous_closeout_truth_repaired",
+      "static_safety_gate_pass",
+      "models_probe_200",
+      "chosen_gpt_model_visible",
+      "app_launcher_exit_zero",
+      "final_message_exact_wbp_ok",
+      "current_codex_profile_unchanged",
+      "temp_root_removed",
+      "post_status_ok",
+      "post_healthcheck_ok",
+      "provider_route_claim_not_made",
+      "gui_desktop_claim_not_made",
+      "persistent_launchservices_registration_not_used",
+      "remote_plugin_sync_warning_non_blocking",
+      "current_codex_profile_unchanged_after_plugin_warning"
+    ]
+  },
+  "notes": [
+    "Subagent report reviewed and integrated before closeout.",
+    "False values in required_false are expected pass conditions, not failures.",
+    "Child Codex emitted remote plugin sync 401 warning, but engine response succeeded and current Codex profile/storage remained unchanged."
+  ],
+  "subagent_pending": false,
+  "subagent_summary": {
+    "agent_id": "019e5564-49f0-7782-bf29-a5ebc84bf49f",
+    "hard_stops": [
+      "STOP_AND_DIAGNOSE on failing tests, contract mismatch, hidden correctness assumptions, cross-subsystem scope creep, contradictory command output.",
+      "Do not infer success from PID/OS-dispatch/headless evidence alone.",
+      "Do not mutate current ~/.codex or default Codex storage.",
+      "Do not claim GUI/Desktop or provider-route proof from app-launcher engine proof."
+    ],
+    "model_class": "5.4-mini scanner",
+    "nickname": "Pascal",
+    "overclaim_risks": [
+      "launch client/OS dispatch is not GUI/session/connectivity truth.",
+      "WBP headless engine proof is not provider-route proof.",
+      "Provider-route validate/check is not listener readiness, account routing, or GUI proof."
+    ],
+    "required_artifacts_confirmed": [
+      "status/healthcheck pre and post",
+      "authenticated /v1/models with local proxy handling disabled",
+      "codex exec --json exact WBP_OK",
+      "redaction_audit",
+      "independent_audit",
+      "endpoint_truth",
+      "isolation_diff",
+      "post_reclear",
+      "static_safety_gate",
+      "app/process proof"
+    ],
+    "verdict": "integrated"
+  },
+  "verdict": "pass"
+}

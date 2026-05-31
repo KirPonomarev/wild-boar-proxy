@@ -1,0 +1,32 @@
+{
+  "contour": "WEB_API_OWNER_CREDENTIAL_SETUP_PASS",
+  "date": "2026-05-22",
+  "verdict": "pass",
+  "checks": [
+    {
+      "name": "browser_payload_secret_free",
+      "status": "pass",
+      "evidence": "tests/test_web_design_live_server.py::test_api_route_connect_rejects_forbidden_browser_fields"
+    },
+    {
+      "name": "missing_credential_not_connected",
+      "status": "pass",
+      "evidence": "audit_results/web_api_owner_credential_setup_pass_2026-05-22/evidence/api-route-connect-missing.json"
+    },
+    {
+      "name": "inline_owner_setup_lane_visible",
+      "status": "pass",
+      "evidence": "audit_results/web_api_owner_credential_setup_pass_2026-05-22/evidence/browser-run-summary.json"
+    },
+    {
+      "name": "secret_redaction",
+      "status": "pass",
+      "evidence": "audit_results/web_api_owner_credential_setup_pass_2026-05-22/evidence/redaction-check.json"
+    }
+  ],
+  "notes": [
+    "The live proof server currently lacks OPENROUTER owner env, so browser proof closes on the credential-missing lane rather than a connected route.",
+    "No browser-side secret intake or route-id intake was introduced."
+  ]
+}
+

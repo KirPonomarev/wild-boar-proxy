@@ -1,0 +1,15 @@
+{
+  "browser_payload_allowed_keys": [],
+  "captured_at_utc": "2026-05-25T01:40:10.580849Z",
+  "custom_codex_home_allowed": false,
+  "custom_home_allowed": false,
+  "host_boundary": "protected_baseline",
+  "launch_claim_scope": "status_only",
+  "machine_error_code": "OK",
+  "mode_id": "original_codex",
+  "mutation_allowed": false,
+  "proxy_allowed": false,
+  "proxy_injection_allowed": false,
+  "schema_version": 1,
+  "status": "ok"
+}

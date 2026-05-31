@@ -1,0 +1,12 @@
+{
+  "bounded_retry_attempts": 2,
+  "bounded_retry_methods": [
+    "git push origin branch with trace2 timeout",
+    "git -c http.version=HTTP/1.1 push origin branch with timeout"
+  ],
+  "captured_at_utc": "2026-05-27T13:04:30.348342Z",
+  "infinite_retry_performed": false,
+  "packet_kind": "role_profile_ui_retry_boundary",
+  "silent_timeout_treated_as_success": false,
+  "status": "ok"
+}

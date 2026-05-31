@@ -1,0 +1,13 @@
+{
+  "binding_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/native_route_trace_binding_packet.json",
+  "captured_at_utc": "2026-05-27T10:53:06.819615Z",
+  "forwarded_to_wbp": true,
+  "packet_kind": "final_e2e_route_reference",
+  "request_observed": true,
+  "response_observed": true,
+  "route_reference_counts_as_direct_egress_absence": false,
+  "route_trace_bound": true,
+  "status": "ok",
+  "trace_path": "/v1/responses",
+  "trace_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/wbp_trace_observation_packet.json"
+}

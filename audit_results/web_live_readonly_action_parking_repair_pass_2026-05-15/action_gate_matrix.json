@@ -1,0 +1,32 @@
+{
+  "contour": "WEB_LIVE_READONLY_ACTION_PARKING_REPAIR_PASS",
+  "default_action_phase": "live_readonly",
+  "available_actions": [
+    "refresh_health_detail",
+    "stable_repair_plan"
+  ],
+  "parked_actions": [
+    "api_route_allow",
+    "api_route_check",
+    "api_route_disable",
+    "api_route_evidence_capture",
+    "api_route_profile",
+    "api_route_remove",
+    "api_route_validate",
+    "demote_account",
+    "export_diagnostics",
+    "hold_account",
+    "launch_client_dispatch",
+    "launch_smoke",
+    "onboard_account",
+    "promote_account",
+    "release_account",
+    "retire_account",
+    "set_mode_managed",
+    "set_mode_stable",
+    "sync_runtime",
+    "validate_account"
+  ],
+  "default_http_post_behavior": "parked actions return integration_failure with machine_error_code UI_ACTION_PHASE_PARKED",
+  "explicit_full_phase_behavior": "future capability tests and later contours may use FULL_ACTION_PHASE explicitly without deleting action plumbing"
+}

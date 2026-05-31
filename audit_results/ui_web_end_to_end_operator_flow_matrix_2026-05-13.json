@@ -1,0 +1,219 @@
+{
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW",
+  "date": "2026-05-13",
+  "type": "verification_integration_evidence",
+  "status": "implemented_verified_independent_audit_pass",
+  "canon_basis": [
+    "CANON.md: runtime truth wins; no false or stale green",
+    "MASTER_PLAN.md: UI companion consumes strict JSON command surfaces",
+    "COMMAND_API.md: command contract defines admitted command meaning",
+    "DELIVERY_RULES.md: dirty tail is not accepted as normal work",
+    "AGENTS.md: strict JSON command surfaces are primary truth"
+  ],
+  "scope": {
+    "included": [
+      "fake-runner HTTP operator flow",
+      "overview live readonly load",
+      "accounts live readonly load",
+      "validate account",
+      "hold account",
+      "release account",
+      "promote account",
+      "demote account",
+      "retire account",
+      "reserve-first onboard",
+      "diagnostics export support action",
+      "settings/setup/select/import deferred action metadata guard",
+      "forbidden runtime command absence check"
+    ],
+    "excluded": [
+      "runtime.py",
+      "desktop files",
+      "real owner-path runtime command execution",
+      "new command surface",
+      "server allowlist expansion",
+      "adapter argv changes",
+      "external reference service artifacts",
+      "external_agent_lab dirty tail"
+    ]
+  },
+  "changed_files": [
+    {
+      "path": "tests/test_web_design_live_server.py",
+      "change": "added test_http_operator_flow_uses_fake_runner_and_canonical_refreshes"
+    },
+    {
+      "path": "audit_results/ui_web_end_to_end_operator_flow_matrix_2026-05-13.json",
+      "change": "operator-flow evidence matrix"
+    },
+    {
+      "path": "audit_results/ui_web_end_to_end_operator_flow_browser_smoke_2026-05-13.json",
+      "change": "in-app browser smoke transcript"
+    },
+    {
+      "path": "audit_results/ui_web_end_to_end_operator_flow_independent_audit_2026-05-13.json",
+      "change": "independent audit packet"
+    },
+    {
+      "path": "audit_results/ui_web_end_to_end_operator_flow_closeout_2026-05-13.md",
+      "change": "contour closeout"
+    }
+  ],
+  "operator_flow_test": {
+    "file": "tests/test_web_design_live_server.py",
+    "line_start": 1134,
+    "line_end": 1268,
+    "runner": "MappingRunner",
+    "server": "ThreadingHTTPServer with build_handler(runner=MappingRunner(live_payloads()))",
+    "real_runtime_commands": false,
+    "assertions": [
+      "index loads in live source mode",
+      "/api/live-readonly returns source=live_readonly and status=ok",
+      "/api/accounts-readonly returns source=accounts_readonly and status=ok",
+      "/api/actions does not expose adapter_command_id",
+      "setup_discovery, select_client, and legacy_import are absent from exposed actions",
+      "all covered action responses use source=ui_action and status=ok",
+      "covered actions do not affect primary truth",
+      "onboard_account reports reserve_only_success with reserve_first_proven=true",
+      "export_diagnostics remains support_artifact and does not require post-action refresh",
+      "policy stage set, rollout stage advance, and stable repair apply are not executed"
+    ]
+  },
+  "command_sequence_evidence": [
+    {
+      "ui_action": "validate_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts validate acct-active --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "hold_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts hold acct-active --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "release_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts release acct-hold --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "promote_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts promote acct-reserve --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "demote_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts demote acct-active --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "retire_account",
+      "sequence": [
+        "accounts list --json",
+        "accounts retire acct-reserve --json",
+        "accounts list --json"
+      ],
+      "meaning": "preflight, bounded action, canonical accounts refresh"
+    },
+    {
+      "ui_action": "onboard_account",
+      "sequence": [
+        "accounts onboard --json",
+        "accounts list --json"
+      ],
+      "meaning": "reserve-first owner packet, canonical accounts refresh"
+    },
+    {
+      "ui_action": "export_diagnostics",
+      "sequence": [
+        "diagnostics export --json"
+      ],
+      "meaning": "support artifact action only; not runtime health truth"
+    }
+  ],
+  "browser_smoke": {
+    "tool": "Codex in-app browser",
+    "target": "http://127.0.0.1:8788/?source=live&screen=accounts",
+    "transcript": "audit_results/ui_web_end_to_end_operator_flow_browser_smoke_2026-05-13.json",
+    "runner": "fake MappingRunner live payloads",
+    "observations": [
+      "accounts page loaded with live accounts truth copy",
+      "validate_account button for acct-active was clicked",
+      "confirmation modal was accepted once",
+      "overview action ledger showed ui_action=validate_account",
+      "overview action ledger showed account=acct-active",
+      "overview action ledger showed status=ok",
+      "overview action ledger showed refresh=live refresh ok",
+      "truth note preserved canonical refreshed JSON requirement",
+      "diagnostics action on overview showed ui_action=export_diagnostics, status=ok, refresh=not required, and non-truth ledger note"
+    ]
+  },
+  "independent_audit": {
+    "artifact": "audit_results/ui_web_end_to_end_operator_flow_independent_audit_2026-05-13.json",
+    "auditor": "Aquinas",
+    "status": "PASS",
+    "residual_browser_smoke_narrative_risk": "mitigated by checked-in browser smoke transcript"
+  },
+  "verification": {
+    "targeted_live_server": {
+      "command": "python3 -m unittest tests.test_web_design_live_server -q",
+      "result": "Ran 31 tests in 1.584s OK"
+    },
+    "targeted_ui_live_adapter": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "Ran 70 tests in 1.955s OK"
+    },
+    "node_syntax": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "OK"
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -q",
+      "result": "Ran 564 tests in 191.819s OK"
+    },
+    "zero_test_guard": {
+      "discarded_command": "python3 -m unittest discover -q",
+      "discarded_result": "Ran 0 tests in 0.000s OK",
+      "accepted_as_evidence": false,
+      "followup": "reran with explicit -s tests and observed 564 tests"
+    },
+    "leak_scan": {
+      "external_reference_service_marker_scan_result": "no matches",
+      "contour_owned_sensitive_marker_scan_result": "no matches",
+      "wide_token_header_note": "A workspace-wide token-header scan finds pre-existing test/runtime strings outside this contour; no contour-owned file contains those markers.",
+      "repo_privacy_note": "Exact private reference-service marker terms are intentionally not recorded in this artifact."
+    },
+    "pytest_note": "python3 system environment has no pytest module; repo tests are runnable via unittest in this workspace"
+  },
+  "boundary_checks": {
+    "browser_command_id_allowed": false,
+    "browser_raw_argv_allowed": false,
+    "browser_shell_allowed": false,
+    "browser_arbitrary_path_allowed": false,
+    "browser_config_mutation_allowed": false,
+    "direct_state_or_log_reads_added": false,
+    "desktop_files_touched": false,
+    "runtime_files_touched": false,
+    "dirty_tail_staged": false
+  },
+  "next_contour": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT"
+}

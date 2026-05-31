@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "upstream unavailable",
+    "type": "server_error"
+  },
+  "status_code": 503
+}

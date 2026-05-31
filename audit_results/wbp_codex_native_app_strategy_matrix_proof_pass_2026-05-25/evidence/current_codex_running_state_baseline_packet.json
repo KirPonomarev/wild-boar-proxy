@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "current_codex_process_count": 41,
+  "current_codex_process_observed": true,
+  "current_codex_process_sample": [
+    "41266 /Applications/Codex.app/Contents/MacOS/Codex",
+    "41272 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=gpu-process --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex ...",
+    "41274 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility --utility-sub-type=network.mojom.NetworkService --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex ...",
+    "41308 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+    "41342 /Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer) --type=renderer --user-data-dir=/Users/kirillponomarev/Library/Application Support/Codex ..."
+  ],
+  "default_user_data_dir_observed_in_process_args": true,
+  "default_user_data_dir_path": "/Users/kirillponomarev/Library/Application Support/Codex",
+  "later_live_comparison_required": true,
+  "later_live_comparison_rules": [
+    "current Codex process tree must be captured before custom launch",
+    "current Codex process tree must remain running or remain restartable after custom contour",
+    "default user-data-dir usage by current Codex must not be counted as custom isolation proof",
+    "custom proof must distinguish current Codex from custom candidate by profile_dir/codex_home/window identity chain"
+  ],
+  "machine_error_code": "OK",
+  "packet_kind": "current_codex_running_state_plan",
+  "runtime_only_claims_deferred": true,
+  "schema_version": 1,
+  "status": "ok"
+}

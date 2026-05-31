@@ -1,0 +1,140 @@
+{
+  "browser_instrumentation_boundary": {
+    "affected_surface": "~/Library/Application Support/Codex top directory/browser cache metadata",
+    "authoritative_clean_rerun": "process_only_safety_rerun.json",
+    "classification": "operator_tooling_mutated_current_codex_browser_storage",
+    "not_attributed_to_child_codex_engine": true,
+    "status": "observed"
+  },
+  "captured_at_utc": "2026-05-23T15:50:27.275734Z",
+  "cleanup": {
+    "error": "",
+    "other_prefix_roots_removed": [
+      "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-custom-operator-surface-f2ke0tfe"
+    ],
+    "removed": true,
+    "target_tmp_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-custom-operator-surface-2lpr8w3p"
+  },
+  "comparisons": {
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": false,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    }
+  },
+  "current_codex_untouched": true,
+  "protected_post_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779545624067618182,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "d470b8daa0b62b526474bfcd6c6aa87b46436a717d113c7ea8a9703eb0ba07a6",
+      "size": 4871
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779551322989754284,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_pre_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779545624067618182,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "d470b8daa0b62b526474bfcd6c6aa87b46436a717d113c7ea8a9703eb0ba07a6",
+      "size": 4871
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779551058548728642,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "server_port_lsof_after_stop": {
+    "cmd": [
+      "bash",
+      "-lc",
+      "lsof -nP -iTCP:62446 -sTCP:LISTEN || true"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": "",
+    "timestamp_utc": "2026-05-23T15:50:26.311802Z"
+  }
+}

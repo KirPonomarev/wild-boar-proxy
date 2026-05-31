@@ -1,0 +1,25 @@
+{
+  "command": "WBP_EXTERNAL_MODELS_DIR=/Users/kirillponomarev/.codex-custom-test/external-models python3 -m wild_boar_proxy external-models routes list --json",
+  "result": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "count": 1,
+    "routes": [
+      {
+        "route_id": "wbp-claude-sonnet-4-6-thinking",
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "endpoint_path": "/chat/completions",
+        "upstream_model": "claude-sonnet-4-6-thinking",
+        "compatibility": "openai_chat_completions",
+        "auth": {
+          "type": "none"
+        },
+        "cost_class": "paid_or_free_limited",
+        "lane_role": "candidate",
+        "fallback_eligible": false,
+        "enabled": true
+      }
+    ]
+  }
+}

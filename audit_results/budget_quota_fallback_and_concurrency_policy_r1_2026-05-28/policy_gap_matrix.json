@@ -1,0 +1,37 @@
+{
+  "captured_at_utc": "2026-05-28T13:11:24.792620Z",
+  "gaps": [
+    {
+      "id": "hard_budget_enforcement_not_proven_in_custom_session_runtime",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "operator_surface_pre_execution_spend_gate_not_proven_here",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "explicit_quota_retry_policy_not_proven_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "automatic_fallback_policy_remains_absent_or_manual_only",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "web_launch_default_model_substitution_not_closed_here",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "concurrent_paid_fanout_remains_forbidden_or_unproven",
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "policy_gap_matrix",
+  "status": "ok"
+}

@@ -1,0 +1,33 @@
+{
+  "actions": [
+    {
+      "action": "selected_sandbox_lane_as_canonical_for_next_engine_harness",
+      "mutation": "none",
+      "reason": "sandbox lane already carries route and credential proof; default lane lacks route and direct secret copy is forbidden"
+    },
+    {
+      "action": "no_default_route_copy",
+      "mutation": "none",
+      "reason": "route metadata alone would not pass check without credential; secret transfer by file/manual artifact is forbidden"
+    },
+    {
+      "action": "next_harness_contract",
+      "mutation": "artifact_only",
+      "required_env": {
+        "WBP_EXTERNAL_MODELS_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models",
+        "WBP_MANAGED_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+        "WBP_PROFILE_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile"
+      },
+      "required_preflight_command": "WBP_PROFILE_DIR=... WBP_MANAGED_DIR=... WBP_EXTERNAL_MODELS_DIR=... python3 -m wild_boar_proxy external-models check --route wbp-deepseek-v3 --json"
+    },
+    {
+      "action": "temporary_web_readonly_proof",
+      "artifact": "web_readonly_proof.json",
+      "mutation": "transient_process_only",
+      "result": "api-connections-readonly returned route wbp-deepseek-v3 green; process stopped"
+    }
+  ],
+  "repo_files_changed": [],
+  "runtime_files_changed": [],
+  "schema_version": 1
+}

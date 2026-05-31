@@ -86,6 +86,31 @@ Load context in this order:
 Do not flood the agent with entire codebases or entire docs when a small focused
  subset is enough for the task at hand.
 
+### 3.1 Thread / Compaction Resilience
+
+Treat thread context as volatile. Treat repo packets and commits as durable.
+
+- Do not create repo-local thread checkpoint files during normal work.
+- Keep temporary recovery notes outside the repo, for example
+  `/private/tmp/wbp-thread-checkpoints/`.
+- Create repo artifacts only at contour boundaries, and only when the contour or
+  closeout discipline requires them.
+- Prefer bounded, path-scoped tool output:
+  `git status --short --untracked-files=no`, `git diff --stat`,
+  `git diff -- <paths>`, `rg`, `sed -n`, and `jq` selectors.
+- Do not commit raw tool dumps, archived thread extracts, private research
+  notes, external-reference artifacts, tokens, logs, or large JSONL extracts.
+- At closeout, include a `Contour Capsule` with goal, branch, head, touched
+  files, tests run, blocked risks, and closure state.
+- At closeout, `resume from here` must be `CLOSED`. Future plans, next-contour
+  pointers, master-plan routes, and repair queues belong outside the repo.
+- Before committing a new or changed closeout artifact, run:
+  `python3 tools/check_closeout_resilience.py`
+- Enable automatic enforcement in local clones:
+  `bash tools/install_git_hooks.sh`
+- Commit-time hook must block staged closeout artifacts that keep placeholder
+  values for `Contour Capsule` fields or `resume from here`.
+
 ## 4. Assumptions Explicit
 
 State key assumptions before work begins, especially when they affect:
@@ -136,7 +161,7 @@ Use explicit decision ownership.
 
 - local implementation choices inside approved scope
 - narrow internal naming/structure decisions
-- task decomposition inside an agreed plan
+- task decomposition inside approved scope
 
 If ownership is unclear, do not continue as if it were obvious.
 
@@ -338,10 +363,13 @@ Require it after a completed contour.
 
 ## 19. Staleness Rule
 
-If `rules`, `spec`, `ADR`, `runbook`, or `plan` no longer reflect reality, they
-are `suspect until refreshed`.
+If `rules`, `spec`, `ADR`, or `runbook` no longer reflect reality, they are
+`suspect until refreshed`.
 
 Old text does not become authoritative merely by existing in the repo.
+
+Planning documents are not repository truth. Do not store master plans,
+roadmaps, next-contour queues, or repair plans in the repo.
 
 ## 20. Process Override Rule
 

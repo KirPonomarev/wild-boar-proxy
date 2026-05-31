@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "packet_kind": "custom_live_attempt_receipt",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_AUTHORIZED_PROCESS_WINDOW_USABILITY_PROOF_PASS_R6",
+  "status": "partial_blocked",
+  "machine_error_code": "NATIVE_CUSTOM_LIVE_PROOF_BLOCKED_AFTER_DISPATCH",
+  "observed_pid": 87999,
+  "process_running_observed": true,
+  "window_process_query": "Codex, true, false, false, 0",
+  "window_query_rc": 1,
+  "window_query_error_class": "SystemEventsInvalidIndex",
+  "runtime_effective_mode": "stable",
+  "launch_log_markers": [
+    "Starting Codex Custom",
+    "window ready-to-show",
+    "window main frame finished load"
+  ],
+  "owner_reported_keychain_reset_prompt": true,
+  "machine_keychain_log_activity_present": true,
+  "machine_keychain_reset_prompt_proven": false,
+  "cleanup_completed": true
+}

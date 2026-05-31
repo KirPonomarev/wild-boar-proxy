@@ -1,0 +1,85 @@
+{
+  "contour": "UI_WEB_API_CONNECTIONS_CANONICAL_LIST_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "viewport": "1600x1000",
+  "states": {
+    "fixture_healthy": {
+      "status": "PASS",
+      "screen_bottom": 705,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 3,
+      "active_api_actions": [
+        "api_route_validate",
+        "api_route_validate"
+      ],
+      "row_menus": 2,
+      "overflows": []
+    },
+    "fixture_degraded": {
+      "status": "PASS",
+      "screen_bottom": 705,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 3,
+      "active_api_actions": [
+        "api_route_validate",
+        "api_route_validate"
+      ],
+      "row_menus": 2,
+      "overflows": []
+    },
+    "fixture_down": {
+      "status": "PASS",
+      "screen_bottom": 705,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 3,
+      "active_api_actions": [
+        "api_route_validate",
+        "api_route_validate"
+      ],
+      "row_menus": 2,
+      "overflows": []
+    },
+    "fixture_stale": {
+      "status": "PASS",
+      "screen_bottom": 705,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 3,
+      "active_api_actions": [
+        "api_route_validate",
+        "api_route_validate"
+      ],
+      "row_menus": 2,
+      "overflows": []
+    },
+    "live_integration_failure": {
+      "status": "PASS",
+      "screen_bottom": 647,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "visible_svg_icons": 0,
+      "visible_img_icons": 1,
+      "active_api_actions": [],
+      "row_menus": 0,
+      "overflows": []
+    }
+  },
+  "security_surface": {
+    "raw_route_json_input": false,
+    "secret_value_input": false,
+    "file_input": false,
+    "stdin_surface": false,
+    "browser_path_input": false,
+    "active_create_update": false,
+    "active_remove": false,
+    "active_validate_only": true
+  },
+  "verdict": "PASS"
+}

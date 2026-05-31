@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS_REENTRY",
+  "run_label": "v1",
+  "head_basis": "d3ba927",
+  "sequence": [
+    "healthcheck --json",
+    "status --json",
+    "launch smoke --json",
+    "status --json"
+  ],
+  "summary": {
+    "healthcheck": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "runtime_guardrails_status": "clear",
+      "lock_status": "available",
+      "changed_files": []
+    },
+    "status_after_healthcheck": {
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "launch_smoke": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+        "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+      ]
+    },
+    "status_after_launch_smoke": {
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear",
+      "changed_files": [
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+      ]
+    }
+  }
+}

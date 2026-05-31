@@ -1,0 +1,49 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "human_message": "Account onboarding failed without producing a detectable new backend.",
+  "machine_error_code": "ONBOARD_FAILED",
+  "changed_files": [],
+  "next_action": "user_action",
+  "liveness": "unknown",
+  "severity": "recoverable",
+  "operator_action": "user_action",
+  "command": [
+    "--once"
+  ],
+  "stderr_sideband": "No sandbox-local auth candidate is available.",
+  "onboarding_result": {
+    "status": "owner_path_emitted",
+    "attempted": true,
+    "input_mode": "detected_new_auth",
+    "explicit_auth_ref": "",
+    "new_backend_ids": [],
+    "selected_backend_id": "",
+    "selection_status": "no_new_backend_detected",
+    "reserve_first_enforced": false,
+    "auth_snapshot_before_login_status": "ok",
+    "auth_snapshot_before_login_count": 0,
+    "auth_snapshot_before_login_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "auth_snapshot_before_login_source": {
+      "source": "stable_config_parent",
+      "path": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable",
+      "path_resolution": "fallback",
+      "exists": true
+    },
+    "pool_after_onboarding": {
+      "active": 0,
+      "reserve": 0,
+      "retired": 0
+    },
+    "validate_attempted": false,
+    "validate_outcome": "not_attempted",
+    "sync_attempted": false,
+    "sync_outcome": "not_attempted",
+    "status_observed": null,
+    "lifecycle_admission": null,
+    "external_command_exit_code": 1,
+    "external_command_status": "nonzero",
+    "active_routing_changed": "",
+    "final_outcome": "import_failed"
+  }
+}

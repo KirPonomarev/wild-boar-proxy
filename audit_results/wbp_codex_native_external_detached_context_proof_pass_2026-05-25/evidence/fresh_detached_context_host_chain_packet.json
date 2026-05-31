@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-25T15:09:49.962347Z",
+  "executor_command": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/Work/wild-boar-proxy/tools/native_fresh_detached_context_admission_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence",
+  "executor_pid": 17393,
+  "executor_ppid": 8428,
+  "host_process_chain": [
+    {
+      "command": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/Work/wild-boar-proxy/tools/native_fresh_detached_context_admission_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence",
+      "pid": 17393,
+      "ppid": 8428
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+      "pid": 8428,
+      "ppid": 8386
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/MacOS/Codex",
+      "pid": 8386,
+      "ppid": 1
+    },
+    {
+      "command": "/sbin/launchd",
+      "pid": 1,
+      "ppid": 0
+    }
+  ],
+  "host_process_chain_length": 4
+}

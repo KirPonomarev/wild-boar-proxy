@@ -1,0 +1,41 @@
+{
+  "auditor": "Faraday",
+  "mode": "independent_factual_audit",
+  "changed_files": [
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "confirmed_behaviors": [
+    {
+      "file": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "396-412, 997-1014",
+      "fact": "onboard_account is admitted in sandbox_actions and still gated by sandbox preflight plus accounts-readonly preflight before dispatch"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "955-1012, 1735-1740, 1979-2009, 3594-3605",
+      "fact": "Quick Start modal switches from dry-run to live reserve-first flow only after an admitted preview in the current session"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "730-839, 1869-1976",
+      "fact": "onboarding refresh verdict is derived from the accounts snapshot and keeps mismatch non-success"
+    },
+    {
+      "file": "tests/test_web_design_live_server.py",
+      "lines": "554-579, 618-645, 722-736",
+      "fact": "tests assert sandbox admission and live onboarding sandbox dispatch behavior"
+    },
+    {
+      "file": "tests/test_web_design_ui.py",
+      "lines": "2414-2441, 3015-3284",
+      "fact": "tests assert modal switch and accounts-snapshot refresh behavior"
+    }
+  ],
+  "findings": [],
+  "highest_severity": "none",
+  "medium_or_higher_issues": false
+}

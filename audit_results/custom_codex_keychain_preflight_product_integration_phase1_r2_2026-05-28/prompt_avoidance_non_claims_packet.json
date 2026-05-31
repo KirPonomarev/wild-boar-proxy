@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-28T00:00:00Z",
+  "status": "ok",
+  "packet_kind": "prompt_avoidance_non_claims",
+  "auth_fixed_claimed": false,
+  "keychain_fully_proven_claimed": false,
+  "all_users_guaranteed_fixed_claimed": false,
+  "persistence_fixed_claimed": false,
+  "prompt_absence_equals_auth_success_claimed": false,
+  "prompt_absence_equals_keychain_independence_claimed": false,
+  "host_level_prompt_suppression_closed_in_phase1": false
+}

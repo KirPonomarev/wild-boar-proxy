@@ -1,0 +1,37 @@
+{
+  "captured_at_utc": "2026-05-28T13:50:46.109823Z",
+  "findings": [
+    {
+      "id": "baseline_and_chain_both_run_under_authorized_plain_response_guards",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "bounded_chain_preserves_primary_coding_primary_step_separation",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "task_relevant_coding_artifact_is_observed_and_consumed_by_primary_return",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "same_execution_path_remains_false_even_when_structural_comparison_is_admitted",
+      "severity": "info",
+      "status": "confirmed"
+    },
+    {
+      "id": "workflow_superiority_claim_remains_not_admitted_under_harness_local_synthetic_outputs",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "general_productivity_gain_remains_unproven",
+      "severity": "high",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "independent_audit",
+  "status": "ok"
+}

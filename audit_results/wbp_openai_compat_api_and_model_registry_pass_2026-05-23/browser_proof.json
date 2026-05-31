@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contour": "WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS",
+  "browser_surface": "Codex in-app browser",
+  "server_type": "fake no-runtime local server serving static UI and stub JSON packets",
+  "live_runtime_touched": false,
+  "live_api_touched": false,
+  "clicked": [
+    "codexCustomModelsRefreshAction",
+    "codexCustomModelDryRunAction"
+  ],
+  "observed": {
+    "model_count": "2",
+    "compat_text": "shape declared · wire responses · live not checked",
+    "selected_model_before_dry_run": "gpt-5.3-codex",
+    "dry_run_shows_server_issued": true,
+    "dry_run_shows_no_network": true,
+    "dry_run_shows_zero_token": true,
+    "dry_run_shows_no_inference": true
+  }
+}

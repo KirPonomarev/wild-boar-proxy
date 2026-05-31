@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-27T12:33:15.208802Z",
+  "minimum_requirements": [
+    "adapter_present",
+    "auth_strategy_classified",
+    "generic_request_shape_classified",
+    "generic_response_shape_classified",
+    "generic_failure_semantics_classified",
+    "representative_model_scope_explicit",
+    "provider_specific_credential_present",
+    "provider_specific_route_observed",
+    "provider_specific_provider_check_or_validate"
+  ],
+  "packet_kind": "provider_benchmark_compatibility_floor",
+  "partial_compatibility_counts_as_benchmark_readiness": false,
+  "rows_failing_floor": [
+    "openrouter"
+  ],
+  "rows_meeting_floor": [
+    "deepseek"
+  ],
+  "status": "ok"
+}

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "live_prompt_requests": 0,
+  "diagnostic_retries": 0,
+  "account_api_requests_executed": 0,
+  "live_token_burn": 0,
+  "code_files_changed": 0,
+  "runtime_commands_executed": 0
+}

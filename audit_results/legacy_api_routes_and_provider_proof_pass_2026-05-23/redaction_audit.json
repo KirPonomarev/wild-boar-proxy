@@ -1,0 +1,9 @@
+{
+  "browser_api_key_intake": false,
+  "browser_secret_intake": false,
+  "files_scanned": 18,
+  "note": "Scanned contour artifacts for common API key leaks; secret env file content was not copied.",
+  "secret_value_findings": [],
+  "secrets_env_content_captured": false,
+  "status": "pass"
+}

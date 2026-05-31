@@ -1,0 +1,180 @@
+{
+  "contour": "UI_WEB_ACCOUNTS_PAGE_OPERATOR_ALIGNMENT_PASS",
+  "date": "2026-05-20",
+  "browser_metric_source": "Codex in-app browser DOM metrics + CUA click for drawer open",
+  "accounts_live": {
+    "account_error_overflow_mode": "ellipsis",
+    "account_table_contains_raw_iso": false,
+    "accounts_chips_count": 4,
+    "accounts_table": {
+      "bottom": 1676,
+      "height": 1361,
+      "left": 388,
+      "right": 1516,
+      "top": 315,
+      "width": 1128
+    },
+    "banner": {
+      "bottom": 192,
+      "height": 42,
+      "left": 369,
+      "right": 1535,
+      "top": 150,
+      "width": 1166
+    },
+    "brand_caption_text": "",
+    "brand_image": {
+      "height": 180,
+      "width": 180
+    },
+    "brand_name": {
+      "font_size": "16px",
+      "line_height": "20px"
+    },
+    "broken_images": [],
+    "clicked_row": {
+      "accountId": "gpt2026bis-team",
+      "text": "gpt2026bis-teamgpt***@***.comАктивныеРаботает—15.05, 22:35Открыть деталиПроверитьУдержатьПеревести в резервВывести из пу",
+      "x": 952,
+      "y": 431
+    },
+    "drawer": {
+      "bottom": 1000,
+      "height": 1000,
+      "left": 1080,
+      "right": 1600,
+      "top": 0,
+      "width": 520
+    },
+    "drawer_action_payloads": [
+      {
+        "accountId": "gpt2026bis-team",
+        "action": "validate_account",
+        "disabled": true,
+        "tag": "BUTTON",
+        "text": "Проверить"
+      },
+      {
+        "accountId": "gpt2026bis-team",
+        "action": "hold_account",
+        "disabled": true,
+        "tag": "BUTTON",
+        "text": "Удержать"
+      },
+      {
+        "accountId": "gpt2026bis-team",
+        "action": "demote_account",
+        "disabled": true,
+        "tag": "BUTTON",
+        "text": "Перевести в резерв"
+      },
+      {
+        "accountId": "gpt2026bis-team",
+        "action": "retire_account",
+        "disabled": true,
+        "tag": "BUTTON",
+        "text": "Вывести из пула"
+      }
+    ],
+    "drawer_open": true,
+    "drawer_payload_only_ui_action_and_account_id": true,
+    "drawer_title": "gpt2026bis-team",
+    "editable_path_token_inputs": 0,
+    "file_inputs": 0,
+    "filter_row": {
+      "bottom": 240,
+      "height": 34,
+      "left": 369,
+      "right": 1535,
+      "top": 206,
+      "width": 1166
+    },
+    "first_row_cells": [
+      {
+        "height": 53,
+        "text": "",
+        "width": 42
+      },
+      {
+        "height": 53,
+        "text": "open17-plusk.p***@***.com",
+        "width": 260
+      },
+      {
+        "height": 53,
+        "text": "Выведен",
+        "width": 120
+      },
+      {
+        "height": 53,
+        "text": "Недоступен",
+        "width": 140
+      },
+      {
+        "height": 53,
+        "text": "квота или usage limit",
+        "width": 352
+      },
+      {
+        "height": 53,
+        "text": "08.05, 20:56",
+        "width": 140
+      },
+      {
+        "height": 53,
+        "text": "Открыть детали",
+        "width": 74
+      }
+    ],
+    "forbidden_copy_present": false,
+    "header": {
+      "bottom": 134,
+      "height": 69,
+      "left": 369,
+      "right": 1535,
+      "top": 65,
+      "width": 1166
+    },
+    "no_horizontal_overflow": true,
+    "screen": "accounts",
+    "scrollWidth": 1600,
+    "source_pill_visible": false,
+    "table_card": {
+      "bottom": 956,
+      "height": 702,
+      "left": 369,
+      "right": 1535,
+      "top": 254,
+      "width": 1166
+    },
+    "table_row_count": 25,
+    "url": "http://127.0.0.1:8765/?screen=accounts&source=live",
+    "viewport": {
+      "height": 1000,
+      "width": 1600
+    },
+    "visible_img_icons": 44,
+    "visible_svg_icons": 0,
+    "screenshot_capture": {
+      "requested_files": [
+        "screenshots/account-drawer-open.png"
+      ],
+      "captured": false,
+      "browser_plugin_error": "Timed out running CDP command \"Page.captureScreenshot\" for tab 1"
+    },
+    "gates": {
+      "accounts_screen_live": true,
+      "no_horizontal_overflow": true,
+      "source_pill_hidden": true,
+      "visible_svg_icons_zero": true,
+      "broken_images_empty": true,
+      "no_file_inputs": true,
+      "no_editable_path_token_inputs": true,
+      "accounts_table_has_no_raw_iso": true,
+      "drawer_opens_from_row": true,
+      "drawer_payloads_are_ui_action_and_account_id": true,
+      "shared_brand_preserved": true,
+      "old_drawer_debug_copy_removed": true
+    }
+  }
+}

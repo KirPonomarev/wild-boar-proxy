@@ -1,0 +1,190 @@
+{
+  "captured_at_utc": "2026-05-23T16:06:41.744899Z",
+  "cleanup_error": "",
+  "comparisons": {
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    }
+  },
+  "protected_post_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779552332933574205,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "c0f65cfc4f583abc56bc9e8d5fffa24261a91e0c0ac114a728c3a43793d74446",
+      "size": 4982
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779552292648661641,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_pre_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779552332933574205,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "c0f65cfc4f583abc56bc9e8d5fffa24261a91e0c0ac114a728c3a43793d74446",
+      "size": 4982
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779552292648661641,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_surfaces_unchanged": true,
+  "run_result": {
+    "exit_code": 0,
+    "final_message": "PROCESS_HARDENED_OK",
+    "machine_error_code": "OK",
+    "prompt_id": "prompt_1",
+    "selected_model": "gpt-5.3-codex",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "secret_value_recorded": false,
+  "status_action": {
+    "captured_at_utc": "2026-05-23T16:06:38.429098Z",
+    "claim_gate": {
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "next_action": "inspect_claim_gate",
+      "sources": [
+        "policy_drift"
+      ],
+      "status": "blocked"
+    },
+    "control_surface": {
+      "browser_secret_fields": false,
+      "localhost_only": true,
+      "raw_path_fields": false
+    },
+    "health": {
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    },
+    "models": {
+      "chosen_model_visible": true,
+      "model_ids": [
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.5",
+        "codex-auto-review",
+        "gpt-image-2",
+        "gpt-5.3-codex-spark",
+        "gpt-5.2"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "status": {
+      "configured_model": "gpt-5.5",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "liveness": "healthy",
+      "machine_error_code": "OK",
+      "status": "ok"
+    }
+  },
+  "tmp_root_removed": true,
+  "transcript": {
+    "captured_at_utc": "2026-05-23T16:06:41.728631Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:06:41.727844Z",
+        "exit_code": 0,
+        "final_message": "PROCESS_HARDENED_OK",
+        "prompt_id": "prompt_1",
+        "prompt_sha256": "f69899bdc8302805f8994a6532f4d33b02cbbd9b5533c25d261c7e2c33e6bd35",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  }
+}

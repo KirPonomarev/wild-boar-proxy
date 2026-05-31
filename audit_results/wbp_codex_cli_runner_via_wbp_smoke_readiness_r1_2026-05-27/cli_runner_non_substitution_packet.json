@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-27T05:10:09.731709Z",
+  "cli_runner_readiness_is_cli_smoke_pass": false,
+  "cli_runner_response_is_native_codex_app_response": false,
+  "cli_runner_route_proof_is_responses_wire_compatibility": false,
+  "cli_runner_smoke_pass_is_direct_egress_absence": false,
+  "cli_runner_smoke_pass_is_final_e2e": false,
+  "cli_runner_smoke_pass_is_model_availability_matrix": false,
+  "cli_runner_smoke_pass_is_native_codex_app_proof": false,
+  "direct_egress_absence_claimed": false,
+  "final_e2e_claimed": false,
+  "inherited_layer_does_not_prove": [
+    "native_codex_app_usability",
+    "original_codex_reversibility",
+    "direct_egress_absence",
+    "codex_app_acceptance",
+    "model_availability_expansion",
+    "streaming_compatibility",
+    "tool_loop_compatibility",
+    "full_responses_wire_compatibility",
+    "final_e2e"
+  ],
+  "model_availability_claimed": false,
+  "native_app_claimed": false,
+  "packet_kind": "cli_runner_non_substitution",
+  "status": "ok",
+  "streaming_claimed": false,
+  "tool_loop_claimed": false
+}

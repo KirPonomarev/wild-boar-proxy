@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "date": "2026-05-14",
+  "browser_target": "http://127.0.0.1:8788",
+  "screenshots": [
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/accounts_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/accounts_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/api-connections_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/api-connections_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/confirmation_modal_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/confirmation_modal_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/diagnostics_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/diagnostics_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/import-existing_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/import-existing_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/onboard_modal_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/onboard_modal_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/overview_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/overview_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/select-client_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/select-client_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/settings_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/settings_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/setup_1365x900_crop_from_1600.png",
+      "width": 1365,
+      "height": 900,
+      "mode": "RGB"
+    },
+    {
+      "file": "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/setup_visible.png",
+      "width": 1600,
+      "height": 1000,
+      "mode": "RGB"
+    }
+  ],
+  "screens_1600x1000_captured": [
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/accounts_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/api-connections_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/confirmation_modal_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/diagnostics_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/import-existing_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/onboard_modal_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/overview_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/select-client_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/settings_visible.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/setup_visible.png"
+  ],
+  "screens_1365x900_crops_captured": [
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/accounts_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/api-connections_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/confirmation_modal_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/diagnostics_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/import-existing_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/onboard_modal_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/overview_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/select-client_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/settings_1365x900_crop_from_1600.png",
+    "audit_results/ui_final_design_system_rebase_screenshots_2026-05-14/setup_1365x900_crop_from_1600.png"
+  ],
+  "exact_1365x900_viewport_resize_proof": false,
+  "viewport_limitation": "The in-app browser exposed a 1600x1000 viewport. A data-URL iframe resize attempt was blocked by browser security policy, so no policy workaround was used. 1365x900 files are labeled crops, not resize-proof evidence.",
+  "modal_surfaces_captured": [
+    "confirmation_modal_visible.png",
+    "onboard_modal_visible.png"
+  ],
+  "expected_screen_count": 8,
+  "expected_modal_count": 2,
+  "resume_from_here": "Use screenshot evidence for owner review; exact 1365 viewport proof remains NOTE_AND_CONTINUE unless a permitted viewport-control tool is available."
+}

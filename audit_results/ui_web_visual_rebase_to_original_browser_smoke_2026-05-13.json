@@ -1,0 +1,63 @@
+{
+  "contour_id": "UI_WEB_VISUAL_REBASE_TO_ORIGINAL_RENDER",
+  "date": "2026-05-13",
+  "status": "passed",
+  "target": "http://127.0.0.1:8788",
+  "runner": "fake MappingRunner live payloads",
+  "screens_checked": [
+    {
+      "screen": "overview",
+      "url": "http://127.0.0.1:8788/?source=live&screen=overview",
+      "heading": "Обзор",
+      "observations": [
+        "live-readonly footer was visible",
+        "sidebar runtime status remained visible",
+        "canonical truth note remained tied to refreshed JSON"
+      ]
+    },
+    {
+      "screen": "accounts",
+      "heading": "Аккаунты",
+      "observations": [
+        "accounts screen loaded",
+        "validate_account was submitted for acct-active through the confirmation flow",
+        "action ledger reported ok status and live refresh ok"
+      ]
+    },
+    {
+      "screen": "diagnostics",
+      "heading": "Диагностика",
+      "observations": [
+        "diagnostics screen loaded as support-artifact view",
+        "copy did not present diagnostics as runtime health truth"
+      ]
+    },
+    {
+      "screen": "settings",
+      "heading": "Настройки",
+      "observations": [
+        "settings screen loaded as command-packet bounded view",
+        "unsupported mutation remains outside this contour"
+      ]
+    },
+    {
+      "screen": "setup_select_import",
+      "headings": [
+        "Setup",
+        "Выбор клиента",
+        "Импорт"
+      ],
+      "observations": [
+        "deferred setup/select/import screens loaded",
+        "copy remained inert and did not expose unsupported action execution"
+      ]
+    }
+  ],
+  "tool_note": "A long five-screen browser script timed out; the smoke was split into shorter checks and completed successfully.",
+  "boundary": {
+    "real_runtime_commands_used": false,
+    "new_ui_action_added": false,
+    "server_allowlist_changed": false,
+    "adapter_argv_changed": false
+  }
+}

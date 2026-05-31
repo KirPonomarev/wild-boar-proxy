@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-27T08:51:25.022125Z",
+  "classified_from_direct_non_stream_surface": false,
+  "controlled_negative_cases_exercised": true,
+  "failure_cause": "provider_error",
+  "failure_cause_classified": true,
+  "machine_error_code": "OK",
+  "negative_case_http_status": 400,
+  "negative_case_response_shape_accepted": false,
+  "packet_kind": "failure_semantics",
+  "request_attempted": true,
+  "retry_recommended": true,
+  "status": "ok"
+}

@@ -1,0 +1,40 @@
+{
+  "contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS",
+  "classifications": [
+    {
+      "pair": [
+        "runtime_state.selected_backend_snapshot",
+        "stable_repair_target_inventory"
+      ],
+      "classification": "expected_scope_alignment",
+      "why": [
+        "selected backend snapshot basenames match the approved repair-target inventory exactly",
+        "both surfaces represent the same current approved target family rather than current policy-eligible copy inputs"
+      ]
+    },
+    {
+      "pair": [
+        "runtime_state.selected_backend_snapshot",
+        "stable_repair_dry_run.registry_source_inputs"
+      ],
+      "classification": "actual_contradiction_plus_staleness",
+      "why": [
+        "selected snapshot remains stale participation evidence",
+        "current owner-path policy/source-copy family contains 11 eligible inputs while the selected snapshot family contains 9 and intersects at 8",
+        "rotation owner packet reports policy_drift_detected"
+      ]
+    },
+    {
+      "pair": [
+        "stable_runtime_consumer_snapshot",
+        "status.stable_runtime_consumer.desired_effective_source"
+      ],
+      "classification": "expected_scope_divergence_with_staleness",
+      "why": [
+        "activation snapshot is explicitly stale and snapshot-alone-insufficient",
+        "status reports desired and effective source as observed_stable_inventory_source because approved target is not ready for runtime consumption"
+      ]
+    }
+  ],
+  "dominant_divergence_type": "stable_policy_source_family_drift_with_stale_participation_snapshot"
+}

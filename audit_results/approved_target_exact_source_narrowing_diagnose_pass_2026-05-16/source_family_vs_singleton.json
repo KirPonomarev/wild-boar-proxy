@@ -1,0 +1,33 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "family_surface_inventory": [
+    {
+      "surface": "stable_repair_dry_run.registry_source_inputs.eligible_registry_auth_refs",
+      "count": 15,
+      "authority": "family_level_authoritative",
+      "singleton_capable": false
+    },
+    {
+      "surface": "runtime_state.selected_backend_snapshot.selected_backend_ids",
+      "count": 15,
+      "authority": "family_level_supporting",
+      "singleton_capable": false,
+      "freshness": "stale"
+    },
+    {
+      "surface": "selected_backend_selector_reconciliation prior packets",
+      "family_singleton_available_now": false,
+      "authority": "historical_supporting"
+    }
+  ],
+  "singleton_surface_inventory": [
+    {
+      "surface": "accounts onboard --json --auth-ref exact path match against added backend auth_ref",
+      "authority": "singleton_capable_for_new_unique_import_only",
+      "runnable_for_current_existing_active_family": false
+    }
+  ],
+  "narrowing_surface_exists": true,
+  "narrowing_surface_kind": "family_level_only",
+  "singleton_available_now": false
+}

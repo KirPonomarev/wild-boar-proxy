@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-29T05:44:50.253354Z",
+  "file_presence_treated_as_restore": false,
+  "helper_reload_profile_packet_claims_native_relaunch": false,
+  "helper_reload_treated_as_native_visible_restore": false,
+  "native_visible_restore_claimed_without_observation": false,
+  "original_codex_profile_used_as_history_proof": false,
+  "packet_kind": "real_history_restore_false_green_boundary",
+  "role_slot_persistence_treated_as_thread_history": false,
+  "stable_profile_identity_treated_as_thread_restore": false,
+  "status": "ok",
+  "thread_history_file_presence_treated_as_runtime_slot_truth": false
+}

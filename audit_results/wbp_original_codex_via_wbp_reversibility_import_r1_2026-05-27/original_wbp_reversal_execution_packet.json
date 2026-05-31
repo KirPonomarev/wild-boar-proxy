@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T10:36:04.248195Z",
+  "packet_kind": "original_wbp_reversal_execution_import",
+  "restore_matches_before": true,
+  "restore_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26/restore_verification_packet.json",
+  "restore_verified": true,
+  "reversal_executed_counts_as_reversibility_proof": false,
+  "rollback_execution_attempted": true,
+  "rollback_point_created": true,
+  "rollback_point_verified": true,
+  "rollback_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/original_codex_via_wbp_owner_authorized_live_apply_r5_2026-05-26/rollback_point_packet.json",
+  "status": "ok"
+}

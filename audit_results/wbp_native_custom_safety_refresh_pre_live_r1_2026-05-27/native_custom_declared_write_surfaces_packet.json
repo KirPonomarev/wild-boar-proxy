@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T09:57:56.319998Z",
+  "custom_app_launch_attempted": false,
+  "declared_write_surfaces": [
+    "tools/native_custom_safety_refresh_pre_live_r1_probe.py",
+    "tests/test_native_custom_safety_refresh_pre_live_r1_probe.py",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_safety_refresh_pre_live_r1_2026-05-27"
+  ],
+  "keychain_mutation_allowed": false,
+  "live_provider_request_attempted": false,
+  "native_launch_allowed": false,
+  "native_launch_attempted": false,
+  "original_codex_bundle_write_allowed": false,
+  "original_codex_profile_write_allowed": false,
+  "owner_prompt_required": false,
+  "packet_kind": "native_custom_declared_write_surfaces",
+  "persistent_custom_profile_write_allowed": false,
+  "protected_surfaces_write_allowed": false,
+  "route_account_model_provider_mutation_allowed": false,
+  "runtime_write_surfaces_declared": [],
+  "status": "ok"
+}

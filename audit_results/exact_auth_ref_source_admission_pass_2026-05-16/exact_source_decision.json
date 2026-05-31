@@ -1,0 +1,14 @@
+{
+  "contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "exact_source_admitted": false,
+  "singleton_basis_present": false,
+  "current_candidate_count": 15,
+  "current_candidate_family_kind": "selected_backend_snapshot_auth_refs",
+  "canonical_explicit_auth_owner_surface": "accounts onboard --json --auth-ref",
+  "canonical_explicit_auth_owner_surface_runnable_now": false,
+  "non_runnable_reason": "the owner surface proves successful onboarding only when a newly added backend is selected uniquely; current evidence concerns already-existing active family members",
+  "sandbox_materialization_earned_now": false,
+  "relevant_test_failure": "tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
+  "reason": "runtime and selector support are green, but exact auth-ref identity remains family-level, the available explicit-auth owner surface does not canonically admit one already-existing active auth_ref without new unique import evidence, and a relevant explicit-auth full-proof test is currently failing on this branch"
+}

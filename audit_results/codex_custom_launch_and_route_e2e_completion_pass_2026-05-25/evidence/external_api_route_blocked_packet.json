@@ -1,0 +1,77 @@
+{
+  "statusCode": 200,
+  "ok": true,
+  "body": {
+    "account_id": "",
+    "action_claim_scope": "owner credential status/admit -> owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser api_key/route_id/secret/path запрещены",
+    "action_role": "api_route_admission",
+    "affects_primary_truth": false,
+    "confirmation_required": true,
+    "mutates_runtime": false,
+    "mutation_class": "api_route_registry_admission",
+    "post_action_refresh_required": true,
+    "result": {
+      "changed_files": [],
+      "data": {
+        "add_machine_error_code": "NOT_RUN",
+        "add_status": "not_run",
+        "admission_mode": "credential_bridge",
+        "api_route_connect_phase": "credential_missing",
+        "api_route_connect_preflight": {
+          "browser_path_intake": false,
+          "browser_route_id_intake": false,
+          "browser_secret_intake": false,
+          "current_session_untouched": true,
+          "machine_error_code": "OK",
+          "reason": "Server-owned api-connections-readonly gate admitted API route connect path.",
+          "refresh_surface": "api-connections-readonly",
+          "source_kind": "server_owned_api_connections_readonly",
+          "status": "admitted",
+          "write_surface": "external_models_route_registry_mutation_only"
+        },
+        "browser_api_key_intake": false,
+        "browser_path_intake": false,
+        "browser_route_id_intake": false,
+        "browser_secret_intake": false,
+        "credential_admit_command_status": "command_error",
+        "credential_admit_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+        "credential_admit_status": "missing",
+        "credential_admitted": false,
+        "credential_expected_refs": [
+          "OPENROUTER_API_KEY",
+          "WBP_OPENROUTER_API_KEY",
+          "WBP_PROVIDER_OPENROUTER_API_KEY"
+        ],
+        "credential_owner_source_kind": "owner_env",
+        "credential_phase": "credential_missing",
+        "credential_present": false,
+        "credential_provider": "openrouter",
+        "credential_provider_dashboard_url": "https://openrouter.ai/settings/keys",
+        "credential_ref": "OPENROUTER_API_KEY",
+        "credential_status": "missing",
+        "credential_status_command_status": "ok",
+        "credential_status_machine_error_code": "OK",
+        "credential_supported_sources": [
+          "owner-env"
+        ],
+        "owner_source_kind": "server_owned_route_spec",
+        "refresh_surface": "api-connections-readonly",
+        "route_id": "",
+        "route_spec_path_exposed": false,
+        "secret_value_exposed": false,
+        "validate_machine_error_code": "NOT_RUN",
+        "validate_status": "not_run"
+      },
+      "human_message": "Owner credential source is missing for provider: openrouter",
+      "machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+      "next_action": "owner_action",
+      "status": "command_error"
+    },
+    "route_id": "",
+    "schema_version": 1,
+    "session_id": "",
+    "source": "ui_action",
+    "status": "command_error",
+    "ui_action": "api_route_connect"
+  }
+}

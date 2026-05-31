@@ -1,0 +1,10 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "destination_exists_now": false,
+  "prior_lane_decision": "GO_TO_SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "explicit_auth_ref_primary_lane_reopened": false,
+  "sandbox_write_surface_declared": true,
+  "root_local_rollback_if_write_stays_inside_sandbox": true
+}

@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-27T05:32:12.497285Z",
+  "custom_app_launch_attempted": false,
+  "declared_write_surfaces": [
+    "tools/keychain_system_prompt_behavior_readiness_r1_probe.py",
+    "tests/test_keychain_system_prompt_behavior_readiness_r1_probe.py",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_keychain_system_prompt_behavior_readiness_r1_2026-05-27"
+  ],
+  "keychain_mutation_allowed": false,
+  "keychain_reset_allowed": false,
+  "live_provider_request_attempted": false,
+  "native_launch_attempted": false,
+  "original_codex_keychain_mutation_allowed": false,
+  "owner_prompt_required": false,
+  "packet_kind": "declared_write_surfaces",
+  "route_account_model_provider_mutation_allowed": false,
+  "runtime_write_surfaces_declared": [],
+  "status": "ok"
+}

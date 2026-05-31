@@ -1,0 +1,14 @@
+{
+  "auth_boundary_proven": false,
+  "captured_at_utc": "2026-05-27T11:36:20.561824Z",
+  "current_live_prompt_behavior_proven": false,
+  "final_e2e_claimed": false,
+  "final_status": "CODEX_CUSTOM_KEYCHAIN_PROMPT_BEHAVIOR_CLASSIFIED_WITH_LIMITS",
+  "historical_pre_repair_prompt_observed": true,
+  "packet_kind": "keychain_prompt_summary",
+  "persistent_profile_continuity_claimed": false,
+  "repaired_isolated_lane_repeated_prompt_observed": false,
+  "route_proof_claimed": false,
+  "status": "ok",
+  "with_limits_required": true
+}

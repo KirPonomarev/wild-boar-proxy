@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_SESSION_MANAGER_PASS",
+  "status": "passed",
+  "auditor": {
+    "agent_id": "019e5699-7e50-72b2-b5cd-989fdf9c0421",
+    "model_class": "gpt-5.4-mini",
+    "mode": "read_only_scan",
+    "live_commands_run": false,
+    "secrets_read": false
+  },
+  "blocking_findings_addressed": [
+    "UI Run prompt button removed from non-live contour",
+    "web /sessions/:id/prompt route now returns not-admitted packet instead of calling run_prompt",
+    "tests updated to assert live prompt is not admitted and run_payloads remain empty",
+    "browser proof verifies no live /prompt request is emitted"
+  ],
+  "non_blocking_follow_ups": [
+    "live prompt internals remain for the later CODEX_CUSTOM_GPT_API_E2E_PASS contour and need redaction hardening before admission"
+  ]
+}

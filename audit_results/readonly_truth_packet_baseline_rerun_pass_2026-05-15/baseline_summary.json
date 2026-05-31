@@ -1,0 +1,80 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_RERUN_PASS",
+  "capture_series": [
+    {
+      "ts": "2026-05-15T18:55:16Z",
+      "cmd": "healthcheck --json",
+      "file": "healthcheck_owner_packet.json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "ts": "2026-05-15T18:55:18Z",
+      "cmd": "status --json",
+      "file": "status_delegated_packet.json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "ts": "2026-05-15T18:55:26Z",
+      "cmd": "mode get --json",
+      "file": "mode_packet.json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "ts": "2026-05-15T18:55:26Z",
+      "cmd": "accounts list --json",
+      "file": "accounts_packet.json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "ts": "2026-05-15T18:55:27Z",
+      "cmd": "rollout rotation inspect --json",
+      "file": "rollout_packet.json",
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED"
+    }
+  ],
+  "runtime_truth": {
+    "owner_status": "ok",
+    "owner_machine_error_code": "OK",
+    "owner_liveness": "healthy",
+    "owner_last_error": "",
+    "delegated_status": "ok",
+    "delegated_machine_error_code": "OK",
+    "delegated_liveness": "healthy",
+    "delegated_attestation_summary": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "attestation_source": "healthcheck --json",
+      "observed_at_utc": "2026-05-15T18:55:26.801704+00:00"
+    },
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "desired_mode": "stable",
+    "effective_mode": "stable"
+  },
+  "accounts": {
+    "account_count": 25,
+    "active_count": 17,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "healthy_count": 11,
+    "problem_count": 14,
+    "manual_hold_count": 0,
+    "stable_default_backend_id": "gpt2026bis-team"
+  },
+  "warnings_and_support": {
+    "rollout_status": "error",
+    "rollout_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "external_models_runtime_claim_blocked": true,
+    "external_models_routes_count": 0,
+    "external_models_models_count": 0,
+    "external_models_routes_list_count": 0
+  },
+  "coherence": {
+    "semantic_coherence": true,
+    "material_contradiction": false
+  }
+}

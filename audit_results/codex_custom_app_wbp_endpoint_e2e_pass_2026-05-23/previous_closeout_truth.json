@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-23T15:14:51.236704+00:00",
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "dry_run_ready": true,
+  "engine_closeout_commit_pending": false,
+  "engine_closeout_contains_current_repair_commit": true,
+  "engine_closeout_pushed_pending": false,
+  "truth_repair_commit_before_this_contour": "855aaec"
+}

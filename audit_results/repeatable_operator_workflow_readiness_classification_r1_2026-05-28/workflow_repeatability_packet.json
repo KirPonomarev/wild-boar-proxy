@@ -1,0 +1,16 @@
+{
+  "baseline_only_preferred_count": 1,
+  "captured_at_utc": "2026-05-28T13:58:15.624062Z",
+  "ceremony_only_count": 0,
+  "counts_not_used_as_primary_claim_basis": true,
+  "default_workflow_preference_proven": false,
+  "indeterminate_count": 0,
+  "operator_mediated_repeatability_only": true,
+  "packet_kind": "workflow_repeatability",
+  "repeatability_scope_classification": "bounded_task_class_probe_only",
+  "repeatable_usefulness_observed": true,
+  "repeatable_usefulness_threshold_met": true,
+  "status": "ok",
+  "task_class_count": 3,
+  "useful_with_limits_count": 2
+}

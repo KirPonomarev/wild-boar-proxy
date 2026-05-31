@@ -1,0 +1,56 @@
+{
+  "admission_ready": true,
+  "allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED",
+  "captured_at_utc": "2026-05-26T21:34:26.498362Z",
+  "checks": [
+    {
+      "evidence": "execution_mode_decision_packet.json",
+      "name": "execution_mode_ok",
+      "passed": true
+    },
+    {
+      "evidence": "isolated_codex_home_packet.json",
+      "name": "isolated_codex_home_planned",
+      "passed": true
+    },
+    {
+      "evidence": "isolated_user_data_dir_packet.json",
+      "name": "isolated_user_data_dir_planned",
+      "passed": true
+    },
+    {
+      "evidence": "no_ambient_authority_packet.json",
+      "name": "ambient_authority_not_used",
+      "passed": true
+    },
+    {
+      "evidence": "protected_surface_read_classification_packet.json",
+      "name": "protected_read_inspection_only",
+      "passed": true
+    },
+    {
+      "evidence": "cleanup_rollback_expectation_packet.json",
+      "name": "cleanup_rollback_expectation_safe",
+      "passed": true
+    },
+    {
+      "evidence": "native_integrity_packet.json",
+      "name": "native_integrity_preserved",
+      "passed": true
+    }
+  ],
+  "cli_runner_counted_as_native_proof": false,
+  "egress_claimed": false,
+  "final_e2e_claimed": false,
+  "launch_executed": false,
+  "model_availability_reproved": false,
+  "native_launch_attempted": false,
+  "native_launch_required_for_pass": false,
+  "native_route_proof_claimed": false,
+  "original_codex_reversibility_claimed": false,
+  "packet_kind": "native_custom_admission",
+  "reason_class": "",
+  "status": "ok",
+  "usable_window_claimed": false,
+  "ux_claimed": false
+}

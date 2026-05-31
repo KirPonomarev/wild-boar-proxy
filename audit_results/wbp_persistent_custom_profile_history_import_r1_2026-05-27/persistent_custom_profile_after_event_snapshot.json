@@ -1,0 +1,31 @@
+{
+  "captured_at_utc": "2026-05-27T11:16:00.869040Z",
+  "counts": {
+    "dirs": 4101,
+    "files": 23305,
+    "other": 0,
+    "symlinks": 144
+  },
+  "entry_count": 27550,
+  "exists": true,
+  "full_entry_list_recorded": false,
+  "max_mtime_ns": 1779854284090697083,
+  "packet_kind": "persistent_custom_profile_after_event_snapshot_import",
+  "phase": "r2c_after_first_owner_action",
+  "profile_fingerprint_sha256": "e8a7f24755160b34a467f7c0fc09d076f88e3ad3f25c2082c9ca05ccedbce34d",
+  "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "raw_content_recorded": false,
+  "source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/r2c_bounded_profile_manifest_after_first_action_packet.json",
+  "source_sha256": "447c81cdc1ab721c15327141fe6d947718629851482b96a183aa8273b840fd34",
+  "state_class_counts": {
+    "cache_or_incidental_state": 19255,
+    "integration_state_unclassified": 6674,
+    "provider_wbp_linkage_state": 161,
+    "session_state": 31,
+    "thread_history": 62,
+    "unclassified_profile_state": 1322,
+    "user_settings": 45
+  },
+  "status": "ok",
+  "total_file_bytes": 914525895
+}

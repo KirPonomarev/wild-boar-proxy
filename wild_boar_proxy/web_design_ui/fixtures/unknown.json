@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "state_id": "unknown",
+  "fixture_notice": "Только демо-просмотр. Unknown остаётся нейтральным.",
+  "runtime": {
+    "visual_state": "unknown",
+    "status_label": "Неизвестно",
+    "desired_mode": "unknown",
+    "effective_mode": "unknown",
+    "endpoint": "unknown",
+    "machine_error_code": "UNKNOWN_FIXTURE",
+    "human_message": "Демо: текущий пакет команды недоступен.",
+    "last_error": "нет подтверждения демо-состояния",
+    "observed_at_utc": "2026-05-12T21:00:00Z"
+  },
+  "pool_summary": {
+    "active": 0,
+    "reserve": 0,
+    "hold": 0,
+    "problem": 0,
+    "active_note": "неизвестно",
+    "reserve_note": "неизвестно",
+    "hold_note": "неизвестно",
+    "problem_note": "неизвестно"
+  },
+  "events": [
+    {
+      "level": "neutral",
+      "message": "Демо: состояние неизвестно, success не выводится",
+      "observed_at": "демо"
+    }
+  ]
+}

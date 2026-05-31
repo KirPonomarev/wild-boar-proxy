@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -49,9 +50,24 @@ REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
 REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
+LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
+    # Repo-owned v1 launcher before same-hash clean app copy selection.
+    "074dff0a0796ccc0042238caa9e1001a64c3ca4074123d86fd184bb0ad93c52d",
+}
+REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
+REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
+REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_SHA256="
+REPO_MANAGED_OPERATOR_WRAPPER_MARKER = "# WBP_REPO_MANAGED_OPERATOR_WRAPPER=v1"
+REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX = (
+    "# WBP_REPO_MANAGED_OPERATOR_WRAPPER_KIND="
+)
+REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX = (
+    "# WBP_REPO_MANAGED_OPERATOR_WRAPPER_SHA256="
+)
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
@@ -62,6 +78,10 @@ SCALE_GATE_STRICT_JSON_COMMAND_API = "STRICT_JSON_COMMAND_API_GATE"
 SCALE_GATE_STATE_SERIALIZATION = "STATE_SERIALIZATION_GATE"
 SCALE_GATE_FALLBACK_DRILL = "FALLBACK_DRILL_GATE"
 SCALE_GATE_EVIDENCE_PACKET = "SCALE_EVIDENCE_PACKET_GATE"
+SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT = 300
+SANDBOX_LOGIN_URL_BASE_DEFAULT = "http://127.0.0.1:8788"
+CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT = 5.0
+LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT = 2.0
 SCALE_GATE_ORDER = [
     SCALE_GATE_RUNTIME_ATTESTATION,
     SCALE_GATE_STRICT_JSON_COMMAND_API,
@@ -90,10 +110,29 @@ PROXY_REPROBE_MAX_CANDIDATES = 8
 PROXY_REPROBE_CONCURRENCY_LIMIT = 1
 PROXY_REPROBE_DEPTH = "shallow_socket_listener_only"
 PROXY_REPROBE_STRATEGY = "sequential_first_success"
+LEGACY_PROXY_REPROBE_DEFAULT_CANDIDATES = [
+    "http://127.0.0.1:10808",
+    "http://127.0.0.1:10809",
+    "socks5h://127.0.0.1:10808",
+    "socks5h://127.0.0.1:10809",
+]
+LEGACY_PROXY_REPROBE_EXCLUDED_PORTS = {
+    5000,
+    7000,
+    8318,
+    8319,
+    8320,
+    8321,
+    9150,
+    9151,
+    49157,
+}
 PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
     "env.WBP_PROXY_REPROBE_CANDIDATES",
     "runtime_state.last_known_good_proxy_url",
     "runtime_state.current_proxy_url",
+    "legacy.default_local_proxy_candidates",
+    "legacy.dynamic_local_listener_candidates",
 ]
 SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
     "engine_observed",
@@ -110,9 +149,15 @@ EXPERIMENTAL_PACKAGE_SCHEMA_VERSION = 1
 EXPERIMENTAL_PACKAGE_ARTIFACT_NAME = "experimental-package.tar.gz"
 EXPERIMENTAL_PACKAGE_MANIFEST_NAME = "experimental-package.manifest.json"
 EXPERIMENTAL_PACKAGE_METADATA_NAME = "experimental-package.metadata.json"
+LAUNCHABLE_PACKAGE_SCHEMA_VERSION = 1
+LAUNCHABLE_PACKAGE_APP_NAME = "WildBoarProxy.app"
+LAUNCHABLE_PACKAGE_MANIFEST_NAME = "launchable-package.manifest.json"
+LAUNCHABLE_PACKAGE_METADATA_NAME = "launchable-package.metadata.json"
+LAUNCHABLE_PACKAGE_EXECUTABLE_NAME = "WildBoarProxy"
+LAUNCHABLE_PACKAGE_ARTIFACT_KIND = "macos_app_bundle"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
-EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "MASTER_PLAN.md"
+EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "CANON.md"
 EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR = "wild_boar_proxy"
 EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
     ".env",
@@ -128,6 +173,11 @@ EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
     "runtime-effective-mode.txt",
     "stable-runtime-config.generated.yaml",
     "evidence-packet.json",
+}
+EXPERIMENTAL_EXTERNAL_MODELS_EXCLUDED_BASENAMES = {
+    "routes.json",
+    "state.json",
+    "secrets.env",
 }
 EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS = {
     ".codex-custom-cli",
@@ -185,6 +235,7 @@ class RuntimePaths:
     accounts_bin: Path
     onboard_bin: Path
     lock_file: Path
+    launcher_lock_file: Path
     repair_target_inventory_dir: Path
     repair_target_reference_file: Path
     target_switch_transaction_file: Path
@@ -263,6 +314,12 @@ class RuntimePaths:
                     "WBP_LOCK_FILE", str(managed_dir / "wild-boar-proxy.lock")
                 )
             ).expanduser(),
+            launcher_lock_file=Path(
+                os.environ.get(
+                    "WBP_LAUNCHER_LOCK_FILE",
+                    str(managed_dir / "stable-runtime-launch.lock"),
+                )
+            ).expanduser(),
             repair_target_inventory_dir=managed_dir / "stable-repair-target",
             repair_target_reference_file=managed_dir / "approved-repair-target.json",
             target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
@@ -312,11 +369,15 @@ def sanitized_env() -> dict[str, str]:
         "https_proxy",
         "all_proxy",
         CURRENT_PROXY_URL_HANDOFF_ENV,
+        "CODEX_HOME",
+        "OPENAI_API_KEY",
     ):
         env.pop(key, None)
     env["PATH"] = DETERMINISTIC_RUNTIME_PATH
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
+    env.setdefault("WBP_PYTHON_BIN", get_repo_owned_python_bin())
+    env.setdefault("WBP_REPO_ROOT", str(REPO_ROOT))
     return env
 
 
@@ -342,7 +403,11 @@ def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env["WBP_MANAGED_CONFIG_FILE"] = str(paths.managed_config_file)
     env["WBP_LAUNCHER_SCRIPT"] = str(paths.launcher_script)
     env["WBP_SYNC_SCRIPT"] = str(paths.sync_script)
+    env["WBP_ACCOUNTS_BIN"] = str(paths.accounts_bin)
+    env["WBP_ONBOARD_BIN"] = str(paths.onboard_bin)
     env["WBP_LOCK_FILE"] = str(paths.lock_file)
+    env["WBP_LAUNCHER_LOCK_FILE"] = str(paths.launcher_lock_file)
+    env.setdefault("WBP_EXTERNAL_MODELS_DIR", str(paths.managed_dir / "external-models"))
     return env
 
 
@@ -435,10 +500,12 @@ def dispatch_external_client(
             severity="recoverable",
             operator_action="retry",
         ) from exc
+    time.sleep(0.5)
     return {
         "dispatch_method": "detached_executable_spawn",
         "dispatch_observed": True,
         "dispatch_exit_code": None,
+        "process_observed_running": process.poll() is None,
         "stderr": "",
     }
 
@@ -549,10 +616,10 @@ def write_toml_string_atomic(path: Path, key: str, value: str) -> None:
 
 def read_api_key(path: Path) -> str:
     data = read_json(path)
-    api_key = data.get("OPENAI_API_KEY")
+    api_key = data.get("OPENAI_API_KEY") or data.get("access_token")
     if not api_key:
         raise RuntimeErrorInfo(
-            f"Missing OPENAI_API_KEY in {path}",
+            f"Missing OPENAI_API_KEY/access_token in {path}",
             machine_error_code="MISSING_API_KEY",
             operator_action="user_action",
         )
@@ -588,12 +655,14 @@ def http_get_json(url: str, api_key: str) -> dict[str, Any]:
 
 
 def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+    session_id = f"wbp-runtime-{uuid.uuid4().hex}"
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "X-Session-ID": session_id,
         },
     )
     with proxyless_urlopen(request, timeout=20) as response:
@@ -860,8 +929,28 @@ def default_launcher_script_path(profile_dir: Path) -> Path:
     return profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME
 
 
+def add_account_wrapper_path(profile_dir: Path) -> Path:
+    return profile_dir / "Add Account.command"
+
+
+def team_codex_login_wrapper_path(profile_dir: Path) -> Path:
+    return profile_dir / "team-codex-login.command"
+
+
+def managed_status_script_path(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "bin" / "codex-managed-status"
+
+
+def default_sync_script_path(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "supervisor-sync.sh"
+
+
 def launcher_path_is_default(paths: RuntimePaths) -> bool:
     return paths.launcher_script == default_launcher_script_path(paths.profile_dir)
+
+
+def sync_script_path_is_default(paths: RuntimePaths) -> bool:
+    return paths.sync_script == default_sync_script_path(paths)
 
 
 def compute_repo_managed_default_launcher_digest(script_payload: str) -> str:
@@ -883,6 +972,33 @@ def build_repo_owned_default_launcher_script_payload() -> str:
         [
             "set -eu",
             'mode="${1:-}"',
+            'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
+            'AUTH_FILE="$PROFILE_DIR/auth.json"',
+            'APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"',
+            'APP_HOME="$PROFILE_DIR/home"',
+            'APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"',
+            'APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"',
+            'APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"',
+            'APP_TMP_DIR="$PROFILE_DIR/tmp"',
+            'APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"',
+            'APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"',
+            'APP_PID_FILE="$APP_TMP_DIR/launcher.pid"',
+            'PROFILE_BASENAME="$(basename "$PROFILE_DIR")"',
+            'APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"',
+            'PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"',
+            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            'CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"',
+            'if [ -d "$PREFERRED_CODEX_APP_PATH" ] && [ -x "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" ]; then',
+            '  primary_bin_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
+            '  preferred_bin_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
+            '  primary_asar_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
+            '  preferred_asar_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
+            '  if [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ]; then',
+            '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
+            "  fi",
+            "fi",
+            'CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"',
+            'CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
             '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
@@ -896,6 +1012,80 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "  proxy_env() {",
             '    "$@"',
             "  }",
+            "fi",
+            'if [ "$mode" = "desktop" ]; then',
+            '  [ -f "$AUTH_FILE" ] || exit 9',
+            '  [ -d "$CODEX_APP_PATH" ] || exit 9',
+            '  [ -x "$CODEX_APP_BIN" ] || exit 9',
+            '  [ -d "$CODEX_APP_RESOURCES" ] || exit 9',
+            '  { [ -f "$CODEX_APP_RESOURCES/app.asar" ] || [ -d "$CODEX_APP_RESOURCES/app" ]; } || exit 9',
+            '  mkdir -p "$APP_USER_DATA_DIR" "$APP_SUPPORT_DIR" "$APP_CACHE_DIR" "$APP_HTTPSTORAGE_DIR" "$APP_TMP_DIR"',
+            '  printf "wbp launch app path: %s\\n" "$CODEX_APP_PATH" >> "$APP_STDOUT_LOG"',
+            '  if [ -e "$APP_RUNTIME_TMPDIR" ] && [ ! -L "$APP_RUNTIME_TMPDIR" ]; then',
+            '    printf "runtime tmp bind path occupied: %s\\n" "$APP_RUNTIME_TMPDIR" >&2',
+            "    exit 9",
+            "  fi",
+            '  ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"',
+            '  export CODEX_HOME="$PROFILE_DIR"',
+            '  export HOME="$APP_HOME"',
+            '  export XDG_CONFIG_HOME="$APP_HOME/.config"',
+            '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
+            '  export TMPDIR="$APP_RUNTIME_TMPDIR"',
+            '  export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"',
+            '  export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3} - "$AUTH_FILE" <<\'PY\'',
+            "import json",
+            "import sys",
+            "from pathlib import Path",
+            "path = Path(sys.argv[1]).expanduser()",
+            "data = json.loads(path.read_text(encoding=\"utf-8\"))",
+            "print(data.get(\"OPENAI_API_KEY\", \"\"))",
+            "PY",
+            ')"',
+            '  cd "$CODEX_APP_RESOURCES"',
+            "  shift || true",
+            '  WORKSPACE_PATH="${1:-}"',
+            '  if [ -n "$WORKSPACE_PATH" ]; then',
+            '    if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            '      env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' "--open-project=$WORKSPACE_PATH"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "    else",
+            '      "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' "--open-project=$WORKSPACE_PATH"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "    fi",
+            '    printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "    sleep 3",
+            '    kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            "    exit 0",
+            "  fi",
+            '  if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "  else",
+            '    "$CODEX_APP_BIN"'
+            ' "--user-data-dir=$APP_USER_DATA_DIR"'
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "  fi",
+            '  printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "  sleep 3",
+            '  kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
+            "  exit 0",
             "fi",
             'if [ "$mode" = "smoke" ]; then',
             '  printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
@@ -1014,6 +1204,29 @@ def repo_managed_default_launcher_payload_if_valid(path: Path) -> str | None:
     return script_payload
 
 
+def repo_managed_default_launcher_digest_if_valid(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 4:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_DEFAULT_LAUNCHER_MARKER:
+        return None
+    digest_line = lines[2]
+    if not digest_line.startswith(REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(
+        REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX
+    )
+    script_payload = "\n".join(lines[3:])
+    if expected_digest != compute_repo_managed_default_launcher_digest(script_payload):
+        return None
+    return expected_digest
+
+
 def repo_managed_default_launcher_signature_valid(path: Path) -> bool:
     return repo_managed_default_launcher_payload_if_valid(path) is not None
 
@@ -1029,6 +1242,253 @@ def repo_managed_default_launcher_recognized(path: Path) -> bool:
     return repo_managed_default_launcher_payload_recognized(script_payload)
 
 
+def repo_managed_default_launcher_legacy_recognized(path: Path) -> bool:
+    digest = repo_managed_default_launcher_digest_if_valid(path)
+    return digest in LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS
+
+
+def compute_repo_managed_owner_helper_digest(script_payload: str) -> str:
+    return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
+
+
+def compute_repo_managed_operator_wrapper_digest(script_payload: str) -> str:
+    return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
+
+
+def build_repo_owned_owner_helper_script_payload(helper_kind: str) -> str:
+    if helper_kind not in {"accounts", "onboard", "status", "sync"}:
+        raise RuntimeError(f"Unsupported owner helper kind: {helper_kind}")
+    helper_command = helper_kind
+    python_bin = get_repo_owned_python_bin()
+    return "\n".join(
+        [
+            "set -eu",
+            f'PY_BIN="${{WBP_PYTHON_BIN:-{python_bin}}}"',
+            f'REPO_ROOT="${{WBP_REPO_ROOT:-{REPO_ROOT}}}"',
+            'if [ -n "${PYTHONPATH:-}" ]; then',
+            '  export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"',
+            "else",
+            '  export PYTHONPATH="$REPO_ROOT"',
+            "fi",
+            (
+                'exec "$PY_BIN" -m wild_boar_proxy.sandbox_owner_helpers '
+                f"{helper_command} \"$@\""
+            ),
+        ]
+    )
+
+
+def render_repo_owned_owner_helper_script_text(helper_kind: str) -> str:
+    script_payload = build_repo_owned_owner_helper_script_payload(helper_kind)
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            REPO_MANAGED_OWNER_HELPER_MARKER,
+            f"{REPO_MANAGED_OWNER_HELPER_KIND_PREFIX}{helper_kind}",
+            (
+                f"{REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX}"
+                f"{compute_repo_managed_owner_helper_digest(script_payload)}"
+            ),
+            script_payload,
+        ]
+    )
+
+
+def repo_managed_owner_helper_payload_if_valid(
+    path: Path, helper_kind: str
+) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 5:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_OWNER_HELPER_MARKER:
+        return None
+    if lines[2] != f"{REPO_MANAGED_OWNER_HELPER_KIND_PREFIX}{helper_kind}":
+        return None
+    digest_line = lines[3]
+    if not digest_line.startswith(REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX)
+    script_payload = "\n".join(lines[4:])
+    if expected_digest != compute_repo_managed_owner_helper_digest(script_payload):
+        return None
+    return script_payload
+
+
+def repo_managed_owner_helper_recognized(path: Path, helper_kind: str) -> bool:
+    script_payload = repo_managed_owner_helper_payload_if_valid(path, helper_kind)
+    if script_payload is None:
+        return False
+    return script_payload == build_repo_owned_owner_helper_script_payload(helper_kind)
+
+
+def ensure_repo_owned_owner_helper(path: Path, helper_kind: str) -> None:
+    expected_text = render_repo_owned_owner_helper_script_text(helper_kind)
+    if not path.exists():
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not repo_managed_owner_helper_recognized(path, helper_kind):
+        return
+    current_text = path.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not os.access(path, os.X_OK):
+        path.chmod(0o755)
+
+
+def build_repo_owned_operator_wrapper_script_payload(wrapper_kind: str) -> str:
+    if wrapper_kind == "add-account":
+        return "\n".join(
+            [
+                "set -eu",
+                'printf "%s\\n" "Add Account.command is retired." >&2',
+                (
+                    'printf "%s\\n" "Use Wild Boar Proxy web: '
+                    'Connect account -> Codex device login session." >&2'
+                ),
+                (
+                    'printf "%s\\n" "Owner CLI fallback: accounts login start '
+                    '--provider codex --mode device --json." >&2'
+                ),
+                "exit 64",
+            ]
+        )
+    if wrapper_kind == "team-codex-login":
+        return "\n".join(
+            [
+                "set -eu",
+                'printf "%s\\n" "team-codex-login.command is retired." >&2',
+                (
+                    'printf "%s\\n" "Use Wild Boar Proxy web: '
+                    'Connect account -> Codex device login session." >&2'
+                ),
+                (
+                    'printf "%s\\n" "Owner CLI fallback: accounts login start '
+                    '--provider codex --mode device --json." >&2'
+                ),
+                "exit 64",
+            ]
+        )
+    raise RuntimeError(f"Unsupported operator wrapper kind: {wrapper_kind}")
+
+
+def render_repo_owned_operator_wrapper_script_text(wrapper_kind: str) -> str:
+    script_payload = build_repo_owned_operator_wrapper_script_payload(wrapper_kind)
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            REPO_MANAGED_OPERATOR_WRAPPER_MARKER,
+            f"{REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}{wrapper_kind}",
+            (
+                f"{REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX}"
+                f"{compute_repo_managed_operator_wrapper_digest(script_payload)}"
+            ),
+            script_payload,
+        ]
+    )
+
+
+def repo_managed_operator_wrapper_payload_if_valid(
+    path: Path, wrapper_kind: str
+) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 5:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_OPERATOR_WRAPPER_MARKER:
+        return None
+    if lines[2] != f"{REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}{wrapper_kind}":
+        return None
+    digest_line = lines[3]
+    if not digest_line.startswith(REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(
+        REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX
+    )
+    script_payload = "\n".join(lines[4:])
+    if expected_digest != compute_repo_managed_operator_wrapper_digest(script_payload):
+        return None
+    return script_payload
+
+
+def repo_managed_operator_wrapper_recognized(path: Path, wrapper_kind: str) -> bool:
+    script_payload = repo_managed_operator_wrapper_payload_if_valid(path, wrapper_kind)
+    if script_payload is None:
+        return False
+    return script_payload == build_repo_owned_operator_wrapper_script_payload(wrapper_kind)
+
+
+def ensure_repo_owned_operator_wrapper(path: Path, wrapper_kind: str) -> None:
+    expected_text = render_repo_owned_operator_wrapper_script_text(wrapper_kind)
+    if not path.exists():
+        write_executable_text_atomic(path, expected_text)
+        return
+    if repo_managed_operator_wrapper_payload_if_valid(path, wrapper_kind) is None:
+        return
+    current_text = path.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not os.access(path, os.X_OK):
+        path.chmod(0o755)
+
+
+def ensure_repo_owned_default_sync_helper(paths: RuntimePaths) -> None:
+    if not sync_script_path_is_default(paths):
+        return
+    expected_text = render_repo_owned_owner_helper_script_text("sync")
+    if not paths.sync_script.exists():
+        write_executable_text_atomic(paths.sync_script, expected_text)
+        return
+    current_text = paths.sync_script.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(paths.sync_script, expected_text)
+        return
+    if not os.access(paths.sync_script, os.X_OK):
+        paths.sync_script.chmod(0o755)
+
+
+def installer_owner_helper_paths(paths: RuntimePaths) -> list[Path]:
+    return [
+        paths.accounts_bin,
+        paths.onboard_bin,
+        managed_status_script_path(paths),
+        paths.sync_script,
+    ]
+
+
+def installer_operator_wrapper_paths(paths: RuntimePaths) -> list[Path]:
+    return [
+        add_account_wrapper_path(paths.profile_dir),
+        team_codex_login_wrapper_path(paths.profile_dir),
+    ]
+
+
+def ensure_repo_owned_owner_helper_chain(paths: RuntimePaths) -> None:
+    ensure_repo_owned_owner_helper(paths.accounts_bin, "accounts")
+    ensure_repo_owned_owner_helper(paths.onboard_bin, "onboard")
+    ensure_repo_owned_owner_helper(managed_status_script_path(paths), "status")
+    ensure_repo_owned_owner_helper(paths.sync_script, "sync")
+
+
+def ensure_repo_owned_operator_wrapper_chain(paths: RuntimePaths) -> None:
+    ensure_repo_owned_operator_wrapper(
+        add_account_wrapper_path(paths.profile_dir), "add-account"
+    )
+    ensure_repo_owned_operator_wrapper(
+        team_codex_login_wrapper_path(paths.profile_dir), "team-codex-login"
+    )
+
+
 def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
     if not launcher_path_is_default(paths):
         return
@@ -1036,7 +1496,11 @@ def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
     if not paths.launcher_script.exists():
         write_executable_text_atomic(paths.launcher_script, expected_text)
         return
-    if not repo_managed_default_launcher_recognized(paths.launcher_script):
+    recognized = repo_managed_default_launcher_recognized(paths.launcher_script)
+    legacy_recognized = repo_managed_default_launcher_legacy_recognized(
+        paths.launcher_script
+    )
+    if not recognized and not legacy_recognized:
         return
     current_text = paths.launcher_script.read_text(encoding="utf-8").rstrip("\n")
     if current_text != expected_text:
@@ -1354,6 +1818,43 @@ def get_rotation_selected_backend_snapshot(state: dict[str, Any]) -> dict[str, A
     }
 
 
+def get_selected_backend_observation_summary(state: dict[str, Any]) -> dict[str, Any]:
+    runtime_loaded_ids = selected_backend_ids_from_state(state)
+    snapshot = get_rotation_selected_backend_snapshot(state)
+    snapshot_ids = normalize_selected_backend_ids(snapshot.get("selected_backend_ids"))
+    snapshot_present = isinstance(state.get(SELECTED_BACKEND_SNAPSHOT_FIELD), dict)
+    observed_ids = list(runtime_loaded_ids)
+    observation_source = "runtime_state.selected_backend_ids"
+    observation_source_class = "legacy_flat_compatibility"
+    observation_freshness = rotation_snapshot_freshness(state)
+    snapshot_validation_status = str(snapshot.get("validation_status") or "legacy")
+    snapshot_validation_error = str(snapshot.get("validation_error") or "")
+    if not observed_ids and snapshot_present and snapshot_validation_status in {
+        "valid",
+        "legacy",
+    }:
+        observed_ids = snapshot_ids
+        observation_source = str(
+            snapshot.get("source") or "runtime_state.selected_backend_snapshot"
+        )
+        observation_source_class = str(
+            snapshot.get("source_class") or "runtime_state.selected_backend_snapshot"
+        )
+        observation_freshness = str(snapshot.get("freshness") or "unknown")
+    return {
+        "runtime_loaded_backend_ids": runtime_loaded_ids,
+        "runtime_loaded_backend_count": len(runtime_loaded_ids),
+        "observed_backend_ids": observed_ids,
+        "observed_backend_count": len(observed_ids),
+        "observation_source": observation_source,
+        "observation_source_class": observation_source_class,
+        "observation_freshness": observation_freshness,
+        "snapshot_present": snapshot_present,
+        "snapshot_validation_status": snapshot_validation_status,
+        "snapshot_validation_error": snapshot_validation_error,
+    }
+
+
 def get_auth_basename(auth_ref: Any) -> str:
     return Path(str(auth_ref or "")).name
 
@@ -1621,12 +2122,35 @@ def classify_backend_stage_posture_eligibility(
 
 
 def get_launch_capable_backend_ids(registry: dict[str, Any]) -> list[str]:
-    return sorted(
-        str(item.get("id")).strip()
+    ranked_backends = [
+        item
         for item in registry.get("backends", [])
         if str(item.get("id") or "").strip()
         and classify_backend_runtime_eligibility(item)[0] == "live_capable"
-    )
+    ]
+    ranked_backends.sort(key=backend_runtime_ranking_key)
+    return [str(item.get("id")).strip() for item in ranked_backends]
+
+
+def _coerce_backend_rank_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def backend_runtime_ranking_key(backend: dict[str, Any]) -> tuple[int, int, int, str]:
+    priority = _coerce_backend_rank_int(backend.get("priority"), default=100)
+    fail_count = max(0, _coerce_backend_rank_int(backend.get("fail_count"), default=0))
+    success_count = max(0, _coerce_backend_rank_int(backend.get("success_count"), default=0))
+    backend_id = str(backend.get("id") or "").strip()
+    return (priority, fail_count, -success_count, backend_id)
 
 
 def summarize_auth_pool_hygiene(
@@ -1651,14 +2175,23 @@ def summarize_auth_pool_hygiene(
         candidate_universe_backend_ids.append(normalized_id)
         class_backend_ids.setdefault(eligibility_class, []).append(normalized_id)
 
-    selected_backend_ids = sorted(
-        str(item) for item in state.get("selected_backend_ids", []) or []
+    selected_backend_observation = get_selected_backend_observation_summary(state)
+    selected_backend_ids = list(
+        selected_backend_observation["observed_backend_ids"]
     )
-    launch_capable_backend_ids = sorted(class_backend_ids["live_capable"])
+    runtime_loaded_backend_ids = list(
+        selected_backend_observation["runtime_loaded_backend_ids"]
+    )
+    launch_capable_backend_ids = get_launch_capable_backend_ids(registry)
     launch_capable_backend_id_set = set(launch_capable_backend_ids)
     selected_launch_capable_backend_ids = [
         backend_id
         for backend_id in selected_backend_ids
+        if backend_id in launch_capable_backend_id_set
+    ]
+    runtime_loaded_launch_capable_backend_ids = [
+        backend_id
+        for backend_id in runtime_loaded_backend_ids
         if backend_id in launch_capable_backend_id_set
     ]
     selected_unusable_backend_ids = [
@@ -1688,6 +2221,10 @@ def summarize_auth_pool_hygiene(
         "claim_scope": "bounded_runtime_auth_usability_only",
         "candidate_universe_backend_ids": sorted(candidate_universe_backend_ids),
         "launch_capable_backend_ids": launch_capable_backend_ids,
+        "ranking_policy": {
+            "status": "applied",
+            "fields": ["priority_ascending", "fail_count_ascending", "success_count_descending", "backend_id_ascending"],
+        },
         "quota_exhausted_backend_ids": sorted(class_backend_ids["quota_exhausted"]),
         "auth_invalid_backend_ids": sorted(class_backend_ids["auth_invalid"]),
         "cooldown_only_backend_ids": sorted(class_backend_ids["cooldown_only"]),
@@ -1697,11 +2234,104 @@ def summarize_auth_pool_hygiene(
         "launch_capable_backend_count": len(launch_capable_backend_ids),
         "candidate_universe_backend_count": len(candidate_universe_backend_ids),
         "selected_backend_ids_observed": selected_backend_ids,
+        "selected_backend_ids_runtime_loaded": runtime_loaded_backend_ids,
+        "selected_backend_runtime_loaded_count": len(runtime_loaded_backend_ids),
+        "selected_backend_runtime_loaded_launch_capable_ids": runtime_loaded_launch_capable_backend_ids,
+        "selected_backend_runtime_loaded_launch_capable_count": len(
+            runtime_loaded_launch_capable_backend_ids
+        ),
+        "selected_backend_observation_source": selected_backend_observation[
+            "observation_source"
+        ],
+        "selected_backend_observation_source_class": selected_backend_observation[
+            "observation_source_class"
+        ],
+        "selected_backend_observation_freshness": selected_backend_observation[
+            "observation_freshness"
+        ],
+        "selected_backend_snapshot_present": selected_backend_observation[
+            "snapshot_present"
+        ],
+        "selected_backend_snapshot_validation_status": selected_backend_observation[
+            "snapshot_validation_status"
+        ],
+        "selected_backend_snapshot_validation_error": selected_backend_observation[
+            "snapshot_validation_error"
+        ],
         "selected_launch_capable_backend_ids": selected_launch_capable_backend_ids,
         "selected_unusable_backend_ids": selected_unusable_backend_ids,
         "selected_launch_capable_backend_count": len(selected_launch_capable_backend_ids),
         "selected_unusable_backend_count": len(selected_unusable_backend_ids),
         "selection_alignment_status": selection_alignment_status,
+    }
+
+
+def build_native_auth_recovery_hint(
+    *,
+    machine_error_code: str,
+    auth_pool_hygiene: dict[str, Any],
+) -> dict[str, Any]:
+    launch_capable_backend_count = int(
+        auth_pool_hygiene.get("launch_capable_backend_count", 0) or 0
+    )
+    selected_backend_ids_observed = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_observed")
+    )
+    selected_backend_ids_runtime_loaded = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_runtime_loaded")
+    )
+    observed_count = len(selected_backend_ids_observed)
+    runtime_loaded_count = len(selected_backend_ids_runtime_loaded)
+    selected_backend_observation_source = str(
+        auth_pool_hygiene.get("selected_backend_observation_source") or ""
+    )
+    base_packet = {
+        "launch_capable_backend_count": launch_capable_backend_count,
+        "selected_backend_observed_count": observed_count,
+        "selected_backend_runtime_loaded_count": runtime_loaded_count,
+        "selected_backend_observation_source": selected_backend_observation_source,
+        "selection_gap_detected": runtime_loaded_count <= 0 and observed_count > 0,
+        "api_fallback_counts_as_native_recovery": False,
+        "claim_scope": "bounded_native_auth_recovery_only",
+    }
+    if machine_error_code != "AUTH_UNAVAILABLE":
+        return {
+            "status": "not_needed",
+            "machine_error_code": machine_error_code or "OK",
+            "owner_action_required": False,
+            "next_action": "none",
+            "command_surface": "",
+            "reason": "",
+            **base_packet,
+        }
+    if launch_capable_backend_count <= 0:
+        return {
+            "status": "blocked_no_launch_capable_backend",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "inspect_accounts_inventory",
+            "command_surface": "accounts list --json",
+            "reason": "auth_unavailable_without_launch_capable_backend",
+            **base_packet,
+        }
+    if observed_count <= 0:
+        return {
+            "status": "sync_recommended",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "sync",
+            "command_surface": "sync --json",
+            "reason": "launch_capable_available_without_selected_backend_observation",
+            **base_packet,
+        }
+    return {
+        "status": "owner_action_required",
+        "machine_error_code": machine_error_code,
+        "owner_action_required": True,
+        "next_action": "accounts_login_start",
+        "command_surface": "accounts login start --provider codex --mode device --json",
+        "reason": "auth_unavailable_after_selected_backend_observation",
+        **base_packet,
     }
 
 
@@ -2650,6 +3280,8 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
             "WBP_PROXY_REPROBE_CANDIDATES",
             LAST_KNOWN_GOOD_PROXY_URL_FIELD,
             "current_proxy_url",
+            "legacy.default_local_proxy_candidates",
+            "legacy.dynamic_local_listener_candidates",
         ],
         "candidate_inputs_bounded_local_only": True,
         "candidate_input_deduped_after_filter": True,
@@ -3207,6 +3839,392 @@ def emit_subprocess_output(*, stdout: str, stderr: str) -> None:
         sys.stderr.write(stdout)
 
 
+def sandbox_login_sessions_dir(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "login-sessions"
+
+
+def sandbox_login_auth_artifacts_dir(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "sandbox-auth"
+
+
+def codex_login_session_stdout_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.stdout.log"
+
+
+def codex_login_session_stderr_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.stderr.log"
+
+
+def login_session_ttl_seconds() -> int:
+    raw = str(
+        os.environ.get(
+            "WBP_LOGIN_SESSION_TTL_SECONDS",
+            os.environ.get(
+                "WBP_SANDBOX_LOGIN_SESSION_TTL_SECONDS",
+                SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT,
+            ),
+        )
+    ).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
+    return value if value > 0 else SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
+
+
+def sandbox_login_session_ttl_seconds() -> int:
+    return login_session_ttl_seconds()
+
+
+def sandbox_login_session_id_valid(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{8,128}", value))
+
+
+def sandbox_login_session_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    if not sandbox_login_session_id_valid(login_session_id):
+        raise RuntimeErrorInfo(
+            f"Invalid login session id: {login_session_id}",
+            machine_error_code="LOGIN_SESSION_ID_INVALID",
+            operator_action="user_action",
+        )
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.json"
+
+
+def sandbox_login_session_expired(session: dict[str, Any]) -> bool:
+    expires_at = parse_utc_datetime(session.get("expires_at"))
+    if expires_at is None:
+        return True
+    return datetime.now(timezone.utc) >= expires_at
+
+
+def sandbox_login_url_base() -> str:
+    raw = str(os.environ.get("WBP_SANDBOX_LOGIN_URL_BASE", SANDBOX_LOGIN_URL_BASE_DEFAULT)).strip()
+    return raw.rstrip("/") if raw else SANDBOX_LOGIN_URL_BASE_DEFAULT
+
+
+def build_sandbox_login_url(*, login_session_id: str, state: str, nonce: str) -> str:
+    query = urllib.parse.urlencode(
+        {
+            "provider": "sandbox",
+            "session": login_session_id,
+            "state": state,
+            "nonce": nonce,
+        }
+    )
+    return f"{sandbox_login_url_base()}/owner-login/sandbox?{query}"
+
+
+def build_sandbox_login_auth_payload(login_session_id: str) -> dict[str, Any]:
+    synthetic_key = f"sandbox-synthetic-key-{uuid.uuid4().hex}"
+    return {
+        "type": "apikey",
+        "provider": "sandbox",
+        "auth_scope": "sandbox",
+        "synthetic": True,
+        "synthetic_source": "sandbox-login",
+        "sandbox_login_session_id": login_session_id,
+        "issued_at": now_iso(),
+        "OPENAI_API_KEY": synthetic_key,
+    }
+
+
+def codex_device_login_handoff_timeout_seconds() -> float:
+    raw = str(
+        os.environ.get(
+            "WBP_CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS",
+            CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT,
+        )
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT
+    return value if value > 0 else CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT
+
+
+def login_session_cancel_grace_seconds() -> float:
+    raw = str(
+        os.environ.get(
+            "WBP_LOGIN_SESSION_CANCEL_GRACE_SECONDS",
+            LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT,
+        )
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT
+    return value if value > 0 else LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT
+
+
+def login_session_auth_inventory_dir(paths: RuntimePaths) -> tuple[Path, dict[str, Any]]:
+    return get_stable_auth_inventory_source(paths)
+
+
+def path_is_admitted_owner_login_inventory_path(paths: RuntimePaths, candidate: Path) -> bool:
+    resolved = candidate.expanduser().resolve(strict=False)
+    allowed_roots = [
+        paths.profile_dir.expanduser().resolve(strict=False),
+        paths.managed_dir.expanduser().resolve(strict=False),
+        paths.stable_config.parent.expanduser().resolve(strict=False),
+    ]
+    return any(resolved == root or root in resolved.parents for root in allowed_roots)
+
+
+def list_login_auth_inventory_entries(paths: RuntimePaths) -> list[Path]:
+    auth_dir, _ = login_session_auth_inventory_dir(paths)
+    if not auth_dir.is_dir():
+        return []
+    return sorted(path for path in auth_dir.glob("codex-*.json") if path.is_file())
+
+
+def login_session_entries_digest(entries: list[str]) -> str:
+    return get_auth_inventory_entries_digest(entries)
+
+
+def login_auth_inventory_entry_metadata(path: Path) -> dict[str, Any]:
+    stat_result = path.stat()
+    return {
+        "mtime_ns": int(stat_result.st_mtime_ns),
+        "size": int(stat_result.st_size),
+    }
+
+
+def snapshot_login_auth_inventory_metadata(paths: RuntimePaths) -> dict[str, dict[str, Any]]:
+    metadata: dict[str, dict[str, Any]] = {}
+    for path in list_login_auth_inventory_entries(paths):
+        metadata[str(path.expanduser().resolve(strict=False))] = login_auth_inventory_entry_metadata(
+            path
+        )
+    return metadata
+
+
+def resolve_cli_proxy_bin() -> Path:
+    return Path(
+        os.environ.get("WBP_CLIPROXY_BIN", "~/.local/bin/cli-proxy-api")
+    ).expanduser()
+
+
+def read_text_if_exists(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def parse_codex_device_handoff(text: str) -> tuple[str, str]:
+    url_match = re.search(r"^Codex device URL:\s*(\S+)\s*$", text, re.MULTILINE)
+    code_match = re.search(r"^Codex device code:\s*([A-Z0-9-]+)\s*$", text, re.MULTILINE)
+    return (
+        url_match.group(1).strip() if url_match else "",
+        code_match.group(1).strip() if code_match else "",
+    )
+
+
+def login_session_pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def terminate_login_session_pid(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    deadline = time.time() + login_session_cancel_grace_seconds()
+    while time.time() < deadline:
+        if not login_session_pid_is_running(pid):
+            return True
+        time.sleep(0.05)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return not login_session_pid_is_running(pid)
+    deadline = time.time() + login_session_cancel_grace_seconds()
+    while time.time() < deadline:
+        if not login_session_pid_is_running(pid):
+            return True
+        time.sleep(0.05)
+    return not login_session_pid_is_running(pid)
+
+
+def find_login_auth_candidates(
+    paths: RuntimePaths,
+    before_entries: list[str],
+    before_metadata: dict[str, dict[str, Any]] | None = None,
+) -> tuple[list[Path], dict[str, Any]]:
+    auth_dir, source = login_session_auth_inventory_dir(paths)
+    if not auth_dir.is_dir():
+        return [], source
+    before_set = {
+        str(Path(item).expanduser().resolve(strict=False)) for item in before_entries
+    }
+    candidates: list[Path] = []
+    for path in list_login_auth_inventory_entries(paths):
+        resolved = str(path.expanduser().resolve(strict=False))
+        if resolved not in before_set:
+            candidates.append(path)
+            continue
+        if not isinstance(before_metadata, dict):
+            continue
+        previous = before_metadata.get(resolved)
+        if not isinstance(previous, dict):
+            continue
+        current_metadata = login_auth_inventory_entry_metadata(path)
+        if current_metadata != previous:
+            candidates.append(path)
+    return candidates, source
+
+
+def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
+    scope = str(session.get("inventory_scope") or "")
+    if not scope:
+        scope = "sandbox" if bool(session.get("sandbox_scope", False)) else "unknown"
+    pid = int(session.get("pid", 0) or 0)
+    handoff_observed = bool(str(session.get("device_url", ""))) and bool(
+        session.get("device_code_present", False)
+    )
+    return {
+        "status": str(session.get("state", "")),
+        "provider": str(session.get("provider", "")),
+        "mode": str(session.get("mode", "")),
+        "session_id": str(session.get("login_session_id", "")),
+        "login_session_id": str(session.get("login_session_id", "")),
+        "device_url": str(session.get("device_url", "")),
+        "device_code": str(session.get("device_code", "")),
+        "device_code_present": bool(session.get("device_code_present", False)),
+        "auth_materialized": bool(session.get("auth_materialized", False)),
+        "auth_ref_present": bool(session.get("auth_ref")),
+        "used": bool(session.get("used", False)),
+        "scope": scope,
+        "created_at": str(session.get("created_at", "")),
+        "expires_at": str(session.get("expires_at", "")),
+        "handoff_observed": handoff_observed,
+        "session_process_alive": login_session_pid_is_running(pid),
+        "failure_reason": str(session.get("failure_reason", "")),
+        "browser_secret_intake": False,
+        "browser_path_intake": False,
+    }
+
+
+def load_login_session(
+    paths: RuntimePaths, login_session_id: str
+) -> tuple[Path, dict[str, Any]]:
+    session_path = sandbox_login_session_path(paths, login_session_id)
+    if not session_path.exists():
+        raise RuntimeErrorInfo(
+            "Login session was not found.",
+            machine_error_code="LOGIN_SESSION_NOT_FOUND",
+            operator_action="user_action",
+        )
+    session = read_json(session_path)
+    if not isinstance(session, dict):
+        raise RuntimeErrorInfo(
+            "Login session payload is invalid.",
+            machine_error_code="LOGIN_SESSION_INVALID",
+            operator_action="user_action",
+        )
+    return session_path, session
+
+
+def refresh_codex_login_session(
+    paths: RuntimePaths, login_session_id: str
+) -> tuple[dict[str, Any], list[str]]:
+    session_path, session = load_login_session(paths, login_session_id)
+    stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+    stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+    before = snapshot_path_states([session_path, stdout_path, stderr_path])
+    provider = str(session.get("provider", ""))
+    if provider != "codex":
+        return session, []
+    changed = False
+    stdout_text = read_text_if_exists(stdout_path)
+    device_url, device_code = parse_codex_device_handoff(stdout_text)
+    if device_url and str(session.get("device_url", "")) != device_url:
+        session["device_url"] = device_url
+        changed = True
+    if device_code and str(session.get("device_code", "")) != device_code:
+        session["device_code"] = device_code
+        session["device_code_present"] = True
+        changed = True
+    candidates, inventory_source = find_login_auth_candidates(
+        paths,
+        [str(item) for item in session.get("auth_inventory_before", []) or []],
+        before_metadata=session.get("auth_inventory_before_metadata"),
+    )
+    if session.get("auth_inventory_source") != inventory_source:
+        session["auth_inventory_source"] = inventory_source
+        changed = True
+    auth_materialized = bool(session.get("auth_materialized", False))
+    if len(candidates) == 1:
+        auth_ref = str(candidates[0])
+        if str(session.get("auth_ref", "")) != auth_ref:
+            session["auth_ref"] = auth_ref
+            changed = True
+        if not auth_materialized:
+            session["auth_materialized"] = True
+            changed = True
+        auth_materialized = True
+    elif len(candidates) > 1:
+        if str(session.get("failure_reason", "")) != "ambiguous_auth_materialization":
+            session["failure_reason"] = "ambiguous_auth_materialization"
+            changed = True
+        if str(session.get("state", "")) != "failed":
+            session["state"] = "failed"
+            changed = True
+
+    current_state = str(session.get("state", ""))
+    if sandbox_login_session_expired(session) and current_state not in {
+        "completed",
+        "cancelled",
+        "expired",
+    }:
+        pid = int(session.get("pid", 0) or 0)
+        if pid > 0:
+            terminate_login_session_pid(pid)
+        session["state"] = "expired"
+        changed = True
+    elif auth_materialized and current_state not in {"completed", "cancelled"}:
+        if current_state != "auth_materialized":
+            session["state"] = "auth_materialized"
+            changed = True
+    elif current_state in {"started", "waiting_for_user"}:
+        pid = int(session.get("pid", 0) or 0)
+        if login_session_pid_is_running(pid):
+            if current_state != "waiting_for_user":
+                session["state"] = "waiting_for_user"
+                changed = True
+            if session.pop("failure_reason", None) is not None:
+                changed = True
+        elif device_url and bool(session.get("device_code_present", False)):
+            if current_state != "failed":
+                session["state"] = "failed"
+                changed = True
+            if (
+                str(session.get("failure_reason", ""))
+                != "device_handoff_process_exited_before_auth_materialized"
+            ):
+                session["failure_reason"] = (
+                    "device_handoff_process_exited_before_auth_materialized"
+                )
+                changed = True
+        else:
+            session["state"] = "failed"
+            session["failure_reason"] = str(
+                session.get("failure_reason", "process_exited_before_auth_materialized")
+            )
+            changed = True
+
+    if changed:
+        write_json_atomic(session_path, session)
+    return session, detect_changed_files_by_state(before, [session_path, stdout_path, stderr_path])
+
+
 def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
     return [
         paths.registry_file,
@@ -3217,6 +4235,8 @@ def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
         managed_pid_path(paths),
+        sandbox_login_sessions_dir(paths),
+        sandbox_login_auth_artifacts_dir(paths),
     ]
 
 
@@ -3234,21 +4254,36 @@ def run_stable_runtime_launcher_attempt(
     selected_config_file = str(paths.stable_config)
     selected_source_kind = "observed_stable_inventory_source"
     selected_source_path = str(observed_path)
-    with serialized_lock(paths):
+    with launcher_procedure_lock(paths):
         if desired_kind == "approved_repair_target":
-            write_text_atomic(
-                paths.stable_runtime_generated_config_file,
-                build_generated_stable_runtime_config_text(paths),
+            with serialized_lock(paths):
+                write_text_atomic(
+                    paths.stable_runtime_generated_config_file,
+                    build_generated_stable_runtime_config_text(paths),
+                )
+                launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
+                    paths.stable_runtime_generated_config_file
+                )
+                activation_attempted = True
+                generated_config_regenerated = True
+                activation_method = "process_local_env_override"
+                selected_config_file = str(paths.stable_runtime_generated_config_file)
+                selected_source_kind = "approved_repair_target"
+                selected_source_path = str(paths.repair_target_inventory_dir)
+        if not paths.launcher_script.exists():
+            return StableRuntimeLaunchAttempt(
+                desired_kind=desired_kind,
+                observed_path=observed_path,
+                activation_attempted=activation_attempted,
+                generated_config_regenerated=generated_config_regenerated,
+                activation_method=activation_method,
+                selected_config_file=selected_config_file,
+                selected_source_kind=selected_source_kind,
+                selected_source_path=selected_source_path,
+                launcher_exit_code=127,
+                stdout="",
+                stderr=f"Missing launcher script: {paths.launcher_script}\n",
             )
-            launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
-                paths.stable_runtime_generated_config_file
-            )
-            activation_attempted = True
-            generated_config_regenerated = True
-            activation_method = "process_local_env_override"
-            selected_config_file = str(paths.stable_runtime_generated_config_file)
-            selected_source_kind = "approved_repair_target"
-            selected_source_path = str(paths.repair_target_inventory_dir)
         result = subprocess.run(
             [str(paths.launcher_script), "smoke"],
             capture_output=True,
@@ -3678,6 +4713,11 @@ def is_experimental_package_root_file_allowed(relative_path: Path) -> bool:
 def is_experimental_package_path_excluded(relative_path: Path) -> bool:
     lowered_parts = [part.lower() for part in relative_path.parts]
     basename = relative_path.name.lower()
+    if lowered_parts[:2] == ["wild_boar_proxy", "external_models"]:
+        if basename in EXPERIMENTAL_EXTERNAL_MODELS_EXCLUDED_BASENAMES:
+            return True
+        if "evidence" in lowered_parts[2:]:
+            return True
     if basename.startswith("."):
         return True
     if any(part.startswith(".") for part in lowered_parts):
@@ -3697,10 +4737,20 @@ def is_experimental_package_path_excluded(relative_path: Path) -> bool:
     return False
 
 
+def is_experimental_package_archive_entry_allowed(relative_path: Path) -> bool:
+    if len(relative_path.parts) == 1:
+        return is_experimental_package_root_file_allowed(relative_path)
+    if relative_path.parts[0] not in EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS:
+        return False
+    return not is_experimental_package_path_excluded(relative_path)
+
+
 def list_experimental_package_files(source_root: Path, output_dir: Path) -> list[Path]:
     package_files: list[Path] = []
     for root_entry in sorted(source_root.iterdir(), key=lambda item: item.name):
         if root_entry.name.startswith("."):
+            continue
+        if root_entry.is_symlink():
             continue
         if root_entry.resolve() == output_dir:
             continue
@@ -3726,24 +4776,174 @@ def list_experimental_package_files(source_root: Path, output_dir: Path) -> list
     return package_files
 
 
-def read_experimental_plan_metadata(source_root: Path) -> dict[str, str]:
-    plan_path = source_root / "MASTER_PLAN.md"
-    if not plan_path.is_file():
+def read_experimental_repository_metadata(source_root: Path) -> dict[str, str]:
+    canon_path = source_root / "CANON.md"
+    if not canon_path.is_file():
         return {}
-    plan_version = ""
-    plan_date = ""
-    for raw_line in plan_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("PLAN_VERSION:"):
-            plan_version = line.split(":", 1)[1].strip()
-        if line.startswith("PLAN_DATE:"):
-            plan_date = line.split(":", 1)[1].strip()
-    metadata: dict[str, str] = {}
-    if plan_version:
-        metadata["plan_version"] = plan_version
-    if plan_date:
-        metadata["plan_date"] = plan_date
-    return metadata
+    return {
+        "repository_truth_policy": "canon_contracts_code_tests_completed_evidence",
+        "repo_plan_files_allowed": "false",
+    }
+
+
+def launchable_package_app_path(output_dir: Path) -> Path:
+    return output_dir / LAUNCHABLE_PACKAGE_APP_NAME
+
+
+def launchable_package_executable_path(output_dir: Path) -> Path:
+    return (
+        launchable_package_app_path(output_dir)
+        / "Contents"
+        / "MacOS"
+        / LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+    )
+
+
+def launchable_package_info_plist_path(output_dir: Path) -> Path:
+    return launchable_package_app_path(output_dir) / "Contents" / "Info.plist"
+
+
+def launchable_package_resources_root(output_dir: Path) -> Path:
+    return launchable_package_app_path(output_dir) / "Contents" / "Resources" / "app"
+
+
+def resolve_launchable_package_runtime_executable(
+    runtime_executable_raw: str | None,
+) -> Path:
+    candidate = (
+        Path(runtime_executable_raw).expanduser()
+        if runtime_executable_raw
+        else Path(sys.executable)
+    )
+    if not candidate.is_absolute():
+        candidate = candidate.resolve()
+    if not candidate.exists() or not candidate.is_file():
+        raise RuntimeErrorInfo(
+            f"Launchable package runtime executable is missing: {candidate}",
+            machine_error_code="PACKAGE_RUNTIME_EXECUTABLE_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if not os.access(candidate, os.X_OK):
+        raise RuntimeErrorInfo(
+            f"Launchable package runtime executable is not executable: {candidate}",
+            machine_error_code="PACKAGE_RUNTIME_EXECUTABLE_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    return candidate
+
+
+def probe_runtime_tk_support(runtime_executable: Path) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            [str(runtime_executable), "-c", "import tkinter"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=sanitized_env(),
+        )
+    except OSError as exc:
+        return {
+            "status": "probe_failed",
+            "runtime_executable": str(runtime_executable),
+            "tkinter_available": False,
+            "probe_exit_code": None,
+            "probe_stderr": str(exc),
+        }
+    return {
+        "status": "probed",
+        "runtime_executable": str(runtime_executable),
+        "tkinter_available": result.returncode == 0,
+        "probe_exit_code": result.returncode,
+        "probe_stderr": result.stderr.strip(),
+    }
+
+
+def render_launchable_package_info_plist() -> str:
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>Wild Boar Proxy</string>
+  <key>CFBundleExecutable</key>
+  <string>WildBoarProxy</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.kirponomarev.wildboarproxy.experimental</string>
+  <key>CFBundleName</key>
+  <string>Wild Boar Proxy</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.0-experimental</string>
+</dict>
+</plist>"""
+
+
+def render_launchable_package_launcher_script(runtime_executable: Path) -> str:
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            "set -eu",
+            f'PYTHON_EXE="{runtime_executable}"',
+            'APP_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"',
+            'RESOURCE_APP="$APP_ROOT/Resources/app"',
+            'export PYTHONPATH="$RESOURCE_APP${PYTHONPATH:+:$PYTHONPATH}"',
+            'if [ "${1:-}" = "--smoke-installer-init-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy installer init --json "$@"',
+            "fi",
+            'if [ "${1:-}" = "--smoke-status-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy status --json "$@"',
+            "fi",
+            'if [ "${1:-}" = "--smoke-packaged-continuity-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell --smoke-packaged-continuity-json "$@"',
+            "fi",
+            'exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell "$@"',
+        ]
+    )
+
+
+def hash_directory_files(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(
+        (
+            candidate
+            for candidate in root.rglob("*")
+            if candidate.is_symlink() or candidate.is_file()
+        ),
+        key=lambda candidate: str(candidate.relative_to(root)),
+    ):
+        relative = str(path.relative_to(root)).replace(os.sep, "/")
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(os.readlink(path).encode("utf-8"))
+            digest.update(b"\0")
+            continue
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def list_launchable_package_entries(artifact_root: Path) -> list[Path]:
+    return sorted(
+        (
+            candidate
+            for candidate in artifact_root.rglob("*")
+            if candidate.is_symlink() or candidate.is_file()
+        ),
+        key=lambda candidate: str(candidate.relative_to(artifact_root)),
+    )
 
 
 def run_package_experimental_build(
@@ -3783,7 +4983,7 @@ def run_package_experimental_build(
             "included_files": [
                 str(path.relative_to(source_root)) for path in package_files
             ],
-            **read_experimental_plan_metadata(source_root),
+            **read_experimental_repository_metadata(source_root),
         }
         manifest = {
             "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
@@ -3899,6 +5099,51 @@ def run_package_experimental_verify(
                 }
             },
         )
+    violating_entries: list[str] = []
+    try:
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            for member in archive.getmembers():
+                relative_path = Path(member.name)
+                if relative_path.is_absolute() or any(
+                    part in ("", ".", "..") for part in relative_path.parts
+                ):
+                    violating_entries.append(member.name)
+                    continue
+                if member.issym() or member.islnk():
+                    violating_entries.append(member.name)
+                    continue
+                if not member.isfile():
+                    continue
+                if not is_experimental_package_archive_entry_allowed(relative_path):
+                    violating_entries.append(member.name)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to inspect experimental package contents: {exc}",
+            machine_error_code="PACKAGE_VERIFY_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+    if violating_entries:
+        return build_command_payload(
+            ok=False,
+            human_message="Experimental package boundary verification failed.",
+            machine_error_code="PACKAGE_BOUNDARY_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "boundary_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": True,
+                    "violating_entries": sorted(violating_entries),
+                }
+            },
+        )
     return build_command_payload(
         ok=True,
         human_message="Experimental package checksum verification passed.",
@@ -3915,6 +5160,341 @@ def run_package_experimental_verify(
                 "artifact_sha256_expected": str(expected_sha256),
                 "artifact_sha256_observed": observed_sha256,
                 "checksum_match": True,
+                "boundary_check": {
+                    "status": "passed",
+                    "violating_entries": [],
+                },
+            }
+        },
+    )
+
+
+def is_launchable_package_bundle_entry_allowed(relative_path: Path) -> bool:
+    normalized = relative_path.as_posix()
+    if normalized == "Contents/Info.plist":
+        return True
+    if normalized == f"Contents/MacOS/{LAUNCHABLE_PACKAGE_EXECUTABLE_NAME}":
+        return True
+    if relative_path.parts[:3] == ("Contents", "Resources", "app"):
+        embedded_relative = Path(*relative_path.parts[3:])
+        if not embedded_relative.parts:
+            return False
+        return is_experimental_package_archive_entry_allowed(embedded_relative)
+    return False
+
+
+def run_package_launchable_build(
+    _paths: RuntimePaths, output_dir_raw: str, *, runtime_executable_raw: str | None
+) -> dict[str, Any]:
+    output_dir = Path(output_dir_raw).expanduser().resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to prepare output directory: {output_dir} ({exc})",
+            machine_error_code="PACKAGE_OUTPUT_DIR_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+
+    source_root = get_experimental_package_source_root()
+    package_files = list_experimental_package_files(source_root, output_dir)
+    runtime_executable = resolve_launchable_package_runtime_executable(
+        runtime_executable_raw
+    )
+    runtime_probe = probe_runtime_tk_support(runtime_executable)
+    artifact_path = launchable_package_app_path(output_dir)
+    manifest_path = output_dir / LAUNCHABLE_PACKAGE_MANIFEST_NAME
+    metadata_path = output_dir / LAUNCHABLE_PACKAGE_METADATA_NAME
+    executable_path = launchable_package_executable_path(output_dir)
+    plist_path = launchable_package_info_plist_path(output_dir)
+    resources_root = launchable_package_resources_root(output_dir)
+    if artifact_path.exists():
+        shutil.rmtree(artifact_path)
+    try:
+        resources_root.mkdir(parents=True, exist_ok=True)
+        for file_path in package_files:
+            relative_path = file_path.relative_to(source_root)
+            destination = resources_root / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, destination)
+        write_text_atomic(plist_path, render_launchable_package_info_plist().rstrip("\n"))
+        write_executable_text_atomic(
+            executable_path,
+            render_launchable_package_launcher_script(runtime_executable),
+        )
+        artifact_digest = hash_directory_files(artifact_path)
+        metadata = {
+            "schema_version": LAUNCHABLE_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "source_root": str(source_root),
+            "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+            "runtime_executable": str(runtime_executable),
+            "runtime_probe": runtime_probe,
+            "allowlist": {
+                "top_level_dirs": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS),
+                "root_file_suffixes": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES),
+            },
+            "included_file_count": len(package_files),
+            "included_files": [
+                str(path.relative_to(source_root)) for path in package_files
+            ],
+            **read_experimental_repository_metadata(source_root),
+        }
+        write_json_artifact(metadata_path, metadata)
+        metadata_sha256 = hash_file(metadata_path)
+        manifest = {
+            "schema_version": LAUNCHABLE_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "artifact_path": artifact_path.name,
+            "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+            "artifact_sha256": artifact_digest,
+            "metadata_path": metadata_path.name,
+            "metadata_sha256": metadata_sha256,
+        }
+        write_json_artifact(manifest_path, manifest)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to build launchable desktop package: {exc}",
+            machine_error_code="PACKAGE_BUILD_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+
+    changed_files = [str(artifact_path), str(manifest_path), str(metadata_path)]
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Launchable desktop package built with embedded allowlisted files."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "package_result": {
+                "status": "built",
+                "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+                "source_root": str(source_root),
+                "artifact_path": str(artifact_path),
+                "manifest_path": str(manifest_path),
+                "metadata_path": str(metadata_path),
+                "artifact_sha256": artifact_digest,
+                "metadata_sha256": metadata_sha256,
+                "embedded_file_count": len(package_files),
+                "runtime_executable": str(runtime_executable),
+                "runtime_tkinter_available": runtime_probe["tkinter_available"] is True,
+            }
+        },
+    )
+
+
+def run_package_launchable_verify(
+    _paths: RuntimePaths, manifest_raw: str
+) -> dict[str, Any]:
+    manifest_path = Path(manifest_raw).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package manifest: {manifest_path}",
+            machine_error_code="PACKAGE_MANIFEST_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid launchable package manifest JSON: {exc}",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeErrorInfo(
+            "Launchable package manifest must be a JSON object.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_raw = manifest.get("artifact_path")
+    expected_sha256 = manifest.get("artifact_sha256")
+    metadata_path_raw = manifest.get("metadata_path")
+    expected_metadata_sha256 = manifest.get("metadata_sha256")
+    if (
+        not artifact_path_raw
+        or not expected_sha256
+        or not metadata_path_raw
+        or not expected_metadata_sha256
+    ):
+        raise RuntimeErrorInfo(
+            "Launchable package manifest is missing required checksum fields.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_candidate = Path(str(artifact_path_raw))
+    artifact_path = (
+        artifact_path_candidate
+        if artifact_path_candidate.is_absolute()
+        else (manifest_path.parent / artifact_path_candidate).resolve()
+    )
+    if not artifact_path.exists() or not artifact_path.is_dir():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package artifact directory: {artifact_path}",
+            machine_error_code="PACKAGE_ARTIFACT_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_sha256 = hash_directory_files(artifact_path)
+    checksum_match = observed_sha256 == str(expected_sha256)
+    if not checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package checksum verification failed.",
+            machine_error_code="PACKAGE_CHECKSUM_MISMATCH",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "checksum_mismatch",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": False,
+                }
+            },
+        )
+    metadata_path = (manifest_path.parent / str(metadata_path_raw)).resolve()
+    if not metadata_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package metadata: {metadata_path}",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_metadata_sha256 = hash_file(metadata_path)
+    metadata_checksum_match = observed_metadata_sha256 == str(expected_metadata_sha256)
+    if not metadata_checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package metadata verification failed.",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "metadata_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "metadata_path": str(metadata_path),
+                    "metadata_sha256_expected": str(expected_metadata_sha256),
+                    "metadata_sha256_observed": observed_metadata_sha256,
+                    "metadata_checksum_match": False,
+                }
+            },
+        )
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid launchable package metadata JSON: {exc}",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise RuntimeErrorInfo(
+            "Launchable package metadata must be a JSON object.",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    violating_entries: list[str] = []
+    for file_path in list_launchable_package_entries(artifact_path):
+        relative_path = file_path.relative_to(artifact_path)
+        if file_path.is_symlink():
+            violating_entries.append(relative_path.as_posix())
+            continue
+        if not is_launchable_package_bundle_entry_allowed(relative_path):
+            violating_entries.append(relative_path.as_posix())
+    executable_path = artifact_path / "Contents" / "MacOS" / LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+    plist_path = artifact_path / "Contents" / "Info.plist"
+    runtime_executable = ""
+    runtime_tkinter_available = False
+    runtime_executable = str(metadata.get("runtime_executable", ""))
+    runtime_probe = metadata.get("runtime_probe")
+    if isinstance(runtime_probe, dict):
+        runtime_tkinter_available = runtime_probe.get("tkinter_available") is True
+    runtime_path_exists = False
+    runtime_path_executable = False
+    if runtime_executable:
+        runtime_path = Path(runtime_executable)
+        runtime_path_exists = runtime_path.exists()
+        runtime_path_executable = runtime_path_exists and os.access(runtime_path, os.X_OK)
+    if not plist_path.is_file():
+        violating_entries.append("Contents/Info.plist")
+    if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
+        violating_entries.append(f"Contents/MacOS/{LAUNCHABLE_PACKAGE_EXECUTABLE_NAME}")
+    if violating_entries:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package boundary verification failed.",
+            machine_error_code="PACKAGE_BOUNDARY_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "boundary_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": True,
+                    "metadata_path": str(metadata_path),
+                    "metadata_sha256_expected": str(expected_metadata_sha256),
+                    "metadata_sha256_observed": observed_metadata_sha256,
+                    "metadata_checksum_match": True,
+                    "violating_entries": violating_entries,
+                    "runtime_executable": runtime_executable,
+                    "runtime_path_exists": runtime_path_exists,
+                    "runtime_path_executable": runtime_path_executable,
+                    "runtime_tkinter_available": runtime_tkinter_available,
+                }
+            },
+        )
+    return build_command_payload(
+        ok=True,
+        human_message="Launchable package verification passed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "package_result": {
+                "status": "verified",
+                "manifest_path": str(manifest_path),
+                "artifact_path": str(artifact_path),
+                "artifact_sha256_expected": str(expected_sha256),
+                "artifact_sha256_observed": observed_sha256,
+                "checksum_match": True,
+                "metadata_path": str(metadata_path),
+                "metadata_sha256_expected": str(expected_metadata_sha256),
+                "metadata_sha256_observed": observed_metadata_sha256,
+                "metadata_checksum_match": True,
+                "boundary_check": {"status": "passed", "violating_entries": []},
+                "runtime_executable": runtime_executable,
+                "runtime_path_exists": runtime_path_exists,
+                "runtime_path_executable": runtime_path_executable,
+                "runtime_tkinter_available": runtime_tkinter_available,
             }
         },
     )
@@ -4712,12 +6292,55 @@ def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
     return host, port
 
 
+def parse_dynamic_local_listener_candidates(raw_output: str) -> list[str]:
+    ports: list[int] = []
+    seen_ports: set[int] = set()
+    for match in re.finditer(r"(127\.0\.0\.1|localhost):(\d+)", raw_output):
+        port = int(match.group(2))
+        if port in LEGACY_PROXY_REPROBE_EXCLUDED_PORTS:
+            continue
+        if port < 1024 or port > 65535:
+            continue
+        if port in seen_ports:
+            continue
+        seen_ports.add(port)
+        ports.append(port)
+    candidates: list[str] = []
+    for port in ports:
+        candidates.append(f"http://127.0.0.1:{port}")
+    for port in ports:
+        candidates.append(f"socks5h://127.0.0.1:{port}")
+    return candidates
+
+
+def discover_dynamic_local_proxy_candidates() -> list[str]:
+    lsof_bin = shutil.which("lsof")
+    if not lsof_bin:
+        return []
+    try:
+        result = subprocess.run(
+            [lsof_bin, "-nP", "-iTCP", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            env=sanitized_env(),
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    return parse_dynamic_local_listener_candidates(result.stdout)
+
+
 def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
     raw_candidates = []
     env_candidates = os.environ.get("WBP_PROXY_REPROBE_CANDIDATES", "")
     raw_candidates.extend(item.strip() for item in env_candidates.split(","))
     raw_candidates.append(str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or ""))
     raw_candidates.append(str(state.get("current_proxy_url") or ""))
+    if os.environ.get("WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES") != "1":
+        raw_candidates.extend(LEGACY_PROXY_REPROBE_DEFAULT_CANDIDATES)
+        raw_candidates.extend(discover_dynamic_local_proxy_candidates())
 
     candidates: list[str] = []
     seen: set[str] = set()
@@ -4799,6 +6422,17 @@ def managed_pid_path(paths: RuntimePaths) -> Path:
     return paths.managed_dir / "managed-proxy.pid"
 
 
+def clear_stale_managed_pid_if_needed(paths: RuntimePaths) -> bool:
+    pid_path = managed_pid_path(paths)
+    if not pid_path.exists():
+        return False
+    pid_text = read_text(pid_path)
+    if not pid_text or process_is_alive(pid_text):
+        return False
+    pid_path.unlink(missing_ok=True)
+    return True
+
+
 def reconcile_stable_fallback(
     paths: RuntimePaths,
     state: dict[str, Any],
@@ -4852,8 +6486,12 @@ def reconcile_stable_recovery_success(
 
 
 @contextmanager
-def serialized_lock(paths: RuntimePaths):
-    lock_key = str(paths.lock_file.expanduser().resolve())
+def lock_file_owner_path(
+    lock_file: Path,
+    *,
+    human_label: str = "Mutation lock",
+):
+    lock_key = str(lock_file.expanduser().resolve())
     owner_pid = os.getpid()
     owner_thread_id = threading.get_ident()
     created_lock_file = False
@@ -4889,22 +6527,22 @@ def serialized_lock(paths: RuntimePaths):
                         SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
         return
 
-    paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
     while True:
         try:
-            fd = os.open(paths.lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             created_lock_file = True
             break
         except FileExistsError:
-            holder = read_text(paths.lock_file)
+            holder = read_text(lock_file)
             if holder and process_is_alive(holder):
                 raise RuntimeErrorInfo(
-                    f"Mutation lock is held by pid {holder}.",
+                    f"{human_label} is held by pid {holder}.",
                     machine_error_code="LOCK_HELD",
                     severity="recoverable",
                     operator_action="retry",
                 )
-            paths.lock_file.unlink(missing_ok=True)
+            lock_file.unlink(missing_ok=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(f"{os.getpid()}\n")
@@ -4931,7 +6569,21 @@ def serialized_lock(paths: RuntimePaths):
             elif created_lock_file:
                 release_lock_file = True
         if release_lock_file:
-            paths.lock_file.unlink(missing_ok=True)
+            lock_file.unlink(missing_ok=True)
+
+
+@contextmanager
+def serialized_lock(paths: RuntimePaths):
+    with lock_file_owner_path(paths.lock_file):
+        yield
+
+
+@contextmanager
+def launcher_procedure_lock(paths: RuntimePaths):
+    with lock_file_owner_path(
+        paths.launcher_lock_file, human_label="Launcher procedure lock"
+    ):
+        yield
 
 
 def build_command_payload(
@@ -4960,6 +6612,484 @@ def build_command_payload(
     if extra:
         payload.update(extra)
     return payload
+
+
+INVARIANT_CHECK_REQUIRED_FIELDS = [
+    "status",
+    "exit_code",
+    "human_message",
+    "machine_error_code",
+    "changed_files",
+    "next_action",
+    "invariant_result",
+    "recovery_hints",
+]
+
+RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS = [
+    "status",
+    "exit_code",
+    "human_message",
+    "machine_error_code",
+    "changed_files",
+    "next_action",
+]
+
+RECOVERY_HINT_SPECS: dict[str, dict[str, Any]] = {
+    "LISTENER_DOWN": {
+        "impact": 5,
+        "urgency": 5,
+        "recoverability": 4,
+        "risk": "high",
+        "diagnosis": "Runtime listener is not reachable from the declared endpoint.",
+        "operator_action": "Check the managed/stable listener process and rerun runtime proof.",
+        "allowed_next_commands": ["healthcheck --json", "status --json"],
+    },
+    "LISTENER_TIMEOUT": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Runtime listener probe timed out before returning a usable packet.",
+        "operator_action": "Check listener load and retry a bounded healthcheck.",
+        "allowed_next_commands": ["healthcheck --json", "status --json"],
+    },
+    "MODE_MISMATCH": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 4,
+        "risk": "medium",
+        "diagnosis": "Desired and effective runtime modes do not agree.",
+        "operator_action": "Inspect mode state and run the appropriate sync or mode command.",
+        "allowed_next_commands": ["mode get --json", "status --json"],
+    },
+    "MANAGED_PATH_UNBOUND": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Managed runtime paths are missing or not bound to readable local files.",
+        "operator_action": "Verify WBP managed/profile path environment and rerun invariant-check.",
+        "allowed_next_commands": ["status --json"],
+    },
+    "ACCOUNTS_POOL_INVALID": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Account registry pool data is structurally invalid or ambiguous.",
+        "operator_action": "Inspect accounts registry before attempting account lifecycle actions.",
+        "allowed_next_commands": ["accounts list --json"],
+    },
+    "ACTIVE_ROUTING_AMBIGUOUS": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Active routing consequence is missing or ambiguous in evidence.",
+        "operator_action": "Require explicit routing proof before claiming success.",
+        "allowed_next_commands": ["status --json", "accounts list --json"],
+    },
+    "ONBOARDING_NOT_RESERVE_FIRST": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 4,
+        "risk": "high",
+        "diagnosis": "Onboarding/import evidence does not prove reserve-first placement.",
+        "operator_action": "Stop claiming onboarding success until reserve placement is proven.",
+        "allowed_next_commands": ["accounts list --json", "status --json"],
+    },
+    "COMMAND_PACKET_MALFORMED": {
+        "impact": 4,
+        "urgency": 3,
+        "recoverability": 4,
+        "risk": "medium",
+        "diagnosis": "A command or evidence packet is missing required strict JSON fields.",
+        "operator_action": "Fix the packet producer before downstream automation relies on it.",
+        "allowed_next_commands": ["status --json"],
+    },
+    "UNKNOWN_RUNTIME_FAILURE": {
+        "impact": 3,
+        "urgency": 3,
+        "recoverability": 2,
+        "risk": "medium",
+        "diagnosis": "Runtime evidence contains a failure code without a specific hint.",
+        "operator_action": "Preserve the packet and diagnose the producer-specific failure.",
+        "allowed_next_commands": ["status --json", "healthcheck --json"],
+    },
+}
+
+
+def recovery_priority_score(spec: dict[str, Any]) -> int:
+    return int(spec["impact"]) * int(spec["urgency"]) * int(spec["recoverability"])
+
+
+def build_recovery_hint(machine_error_code: str) -> dict[str, Any]:
+    code = machine_error_code if machine_error_code in RECOVERY_HINT_SPECS else "UNKNOWN_RUNTIME_FAILURE"
+    spec = RECOVERY_HINT_SPECS[code]
+    return {
+        "machine_error_code": machine_error_code,
+        "priority_score": recovery_priority_score(spec),
+        "impact": int(spec["impact"]),
+        "urgency": int(spec["urgency"]),
+        "recoverability": int(spec["recoverability"]),
+        "risk": str(spec["risk"]),
+        "diagnosis": str(spec["diagnosis"]),
+        "operator_action": str(spec["operator_action"]),
+        "allowed_next_commands": list(spec["allowed_next_commands"]),
+    }
+
+
+def build_invariant_check(
+    check_id: str,
+    *,
+    passed: bool,
+    severity: str,
+    evidence_source: str,
+    human_message: str,
+    machine_error_code: str = "OK",
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "status": "pass" if passed else "fail",
+        "severity": severity,
+        "evidence_source": evidence_source,
+        "human_message": human_message,
+        "machine_error_code": "OK" if passed else machine_error_code,
+    }
+
+
+def missing_packet_fields(packet: dict[str, Any], required_fields: list[str]) -> list[str]:
+    return [field for field in required_fields if field not in packet]
+
+
+def registry_pool_integrity_failure(registry: dict[str, Any]) -> str:
+    backends = registry.get("backends")
+    if not isinstance(backends, list):
+        return "registry_backends_not_list"
+    seen_backend_pools: dict[str, set[str]] = {}
+    for index, backend in enumerate(backends):
+        if not isinstance(backend, dict):
+            return f"backend_{index}_not_object"
+        backend_id = str(backend.get("id") or "").strip()
+        if not backend_id:
+            return f"backend_{index}_missing_id"
+        pool = str(backend.get("pool") or "").strip()
+        if pool not in VALID_BACKEND_REGISTRY_POOLS:
+            return f"{backend_id}:invalid_pool:{pool or '<missing>'}"
+        seen_backend_pools.setdefault(backend_id, set()).add(pool)
+    conflicted = sorted(
+        backend_id for backend_id, pools in seen_backend_pools.items() if len(pools) > 1
+    )
+    if conflicted:
+        return f"conflicting_backend_pool:{','.join(conflicted)}"
+    return ""
+
+
+def managed_paths_bound_failure(paths: RuntimePaths, desired_mode: str, effective_mode: str) -> str:
+    if desired_mode != "managed" and effective_mode != "managed":
+        return ""
+    required_paths = [
+        paths.profile_dir,
+        paths.managed_dir,
+        paths.registry_file,
+        paths.state_file,
+        paths.managed_config_file,
+        paths.config_toml,
+    ]
+    missing = [str(path) for path in required_paths if not path.exists()]
+    if missing:
+        return "missing:" + ",".join(missing)
+    non_absolute = [str(path) for path in required_paths if not path.is_absolute()]
+    if non_absolute:
+        return "non_absolute:" + ",".join(non_absolute)
+    return ""
+
+
+def reserve_first_failure(onboarding_evidence: dict[str, Any] | None) -> str:
+    if not onboarding_evidence:
+        return ""
+    final_outcome = str(onboarding_evidence.get("final_outcome") or "")
+    evidence_status = str(onboarding_evidence.get("status") or "")
+    success_claimed = final_outcome in {
+        "reserve_only_success",
+        "explicit_auth_imported_to_reserve",
+    } or evidence_status in {"ok", "success"}
+    if not success_claimed:
+        return ""
+    selected_backend_id = str(onboarding_evidence.get("selected_backend_id") or "")
+    new_backend_ids = onboarding_evidence.get("new_backend_ids")
+    has_identity = bool(selected_backend_id) or bool(
+        isinstance(new_backend_ids, list) and new_backend_ids
+    )
+    pool_after = str(onboarding_evidence.get("pool_after_onboarding") or "")
+    active_routing_changed = onboarding_evidence.get("active_routing_changed")
+    if not has_identity:
+        return "missing_backend_identity"
+    if pool_after != "reserve":
+        return "pool_after_onboarding_not_reserve"
+    if active_routing_changed is not False:
+        return "active_routing_changed_not_false"
+    return ""
+
+
+def active_routing_failure(onboarding_evidence: dict[str, Any] | None) -> str:
+    if not onboarding_evidence:
+        return ""
+    if "active_routing_changed" not in onboarding_evidence:
+        return "active_routing_changed_missing"
+    if onboarding_evidence.get("active_routing_changed") not in {False, True}:
+        return "active_routing_changed_ambiguous"
+    return ""
+
+
+def build_invariant_check_packet(
+    paths: RuntimePaths,
+    *,
+    status_evidence: dict[str, Any] | None = None,
+    onboarding_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    state = read_json(paths.state_file, required=False)
+    registry = read_json(paths.registry_file)
+    desired_mode = get_desired_mode(paths)
+    effective_mode = get_effective_mode(paths, state)
+    host, port, endpoint = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    status_packet = status_evidence or {
+        "status": "ok" if listener_ok else "error",
+        "exit_code": 0 if listener_ok else 1,
+        "human_message": (
+            "Runtime listener is reachable."
+            if listener_ok
+            else f"Runtime listener is not reachable at {endpoint}."
+        ),
+        "machine_error_code": "OK" if listener_ok else "LISTENER_DOWN",
+        "changed_files": [],
+        "next_action": "none" if listener_ok else "operator_action",
+        "liveness": "healthy" if listener_ok else "down",
+        "desired_mode": desired_mode,
+        "effective_mode": effective_mode,
+        "endpoint": endpoint,
+    }
+
+    checks: list[dict[str, Any]] = []
+    failure_codes: list[str] = []
+
+    shape_missing = missing_packet_fields(
+        status_packet, RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS
+    )
+    if shape_missing:
+        failure_codes.append("COMMAND_PACKET_MALFORMED")
+    checks.append(
+        build_invariant_check(
+            "command_packet_shape",
+            passed=not shape_missing,
+            severity="critical",
+            evidence_source="status_evidence_packet",
+            human_message=(
+                "Runtime evidence packet has required strict JSON fields."
+                if not shape_missing
+                else "Runtime evidence packet is missing fields: " + ", ".join(shape_missing)
+            ),
+            machine_error_code="COMMAND_PACKET_MALFORMED",
+        )
+    )
+
+    status_green = (
+        str(status_packet.get("status") or "") == "ok"
+        and str(status_packet.get("machine_error_code") or "") == "OK"
+    )
+    false_green = status_green and not listener_ok
+    if false_green:
+        failure_codes.append("LISTENER_DOWN")
+    checks.append(
+        build_invariant_check(
+            "no_false_green",
+            passed=not false_green,
+            severity="critical",
+            evidence_source="listener_socket_truth,status_evidence_packet",
+            human_message=(
+                "No false-green status was observed."
+                if not false_green
+                else "Status evidence claims OK while listener truth is down."
+            ),
+            machine_error_code="LISTENER_DOWN",
+        )
+    )
+
+    listener_packet_code = str(status_packet.get("machine_error_code") or "")
+    listener_passed = listener_ok and listener_packet_code == "OK"
+    if not listener_passed:
+        failure_codes.append(listener_packet_code or "LISTENER_DOWN")
+    checks.append(
+        build_invariant_check(
+            "listener_truth",
+            passed=listener_passed,
+            severity="critical",
+            evidence_source="listener_socket_truth,status_evidence_packet",
+            human_message=(
+                "Declared runtime endpoint is reachable and evidence agrees."
+                if listener_passed
+                else f"Declared runtime endpoint is not proven reachable at {endpoint}."
+            ),
+            machine_error_code=listener_packet_code or "LISTENER_DOWN",
+        )
+    )
+
+    mode_passed = desired_mode == effective_mode
+    if not mode_passed:
+        failure_codes.append("MODE_MISMATCH")
+    checks.append(
+        build_invariant_check(
+            "mode_truth",
+            passed=mode_passed,
+            severity="critical",
+            evidence_source="runtime_mode_files",
+            human_message=(
+                "Desired and effective runtime modes agree."
+                if mode_passed
+                else f"Desired mode {desired_mode} differs from effective mode {effective_mode}."
+            ),
+            machine_error_code="MODE_MISMATCH",
+        )
+    )
+
+    pool_failure = registry_pool_integrity_failure(registry)
+    if pool_failure:
+        failure_codes.append("ACCOUNTS_POOL_INVALID")
+    checks.append(
+        build_invariant_check(
+            "accounts_pool_integrity",
+            passed=not pool_failure,
+            severity="critical",
+            evidence_source="backend_registry",
+            human_message=(
+                "Account registry pool data is structurally valid."
+                if not pool_failure
+                else f"Account registry pool data is invalid: {pool_failure}."
+            ),
+            machine_error_code="ACCOUNTS_POOL_INVALID",
+        )
+    )
+
+    reserve_failure = reserve_first_failure(onboarding_evidence)
+    if reserve_failure:
+        failure_codes.append("ONBOARDING_NOT_RESERVE_FIRST")
+    checks.append(
+        build_invariant_check(
+            "reserve_first_policy",
+            passed=not reserve_failure,
+            severity="critical",
+            evidence_source="onboarding_evidence_packet",
+            human_message=(
+                "No onboarding evidence violates reserve-first policy."
+                if not reserve_failure
+                else f"Onboarding evidence violates reserve-first policy: {reserve_failure}."
+            ),
+            machine_error_code="ONBOARDING_NOT_RESERVE_FIRST",
+        )
+    )
+
+    routing_failure = active_routing_failure(onboarding_evidence)
+    if routing_failure:
+        failure_codes.append("ACTIVE_ROUTING_AMBIGUOUS")
+    checks.append(
+        build_invariant_check(
+            "active_routing_explicit",
+            passed=not routing_failure,
+            severity="critical",
+            evidence_source="onboarding_evidence_packet",
+            human_message=(
+                "No active routing evidence is ambiguous."
+                if not routing_failure
+                else f"Active routing evidence is ambiguous: {routing_failure}."
+            ),
+            machine_error_code="ACTIVE_ROUTING_AMBIGUOUS",
+        )
+    )
+
+    paths_failure = managed_paths_bound_failure(paths, desired_mode, effective_mode)
+    if paths_failure:
+        failure_codes.append("MANAGED_PATH_UNBOUND")
+    checks.append(
+        build_invariant_check(
+            "managed_paths_bound",
+            passed=not paths_failure,
+            severity="critical",
+            evidence_source="runtime_path_contract",
+            human_message=(
+                "Managed runtime paths are bound to existing local files."
+                if not paths_failure
+                else f"Managed runtime paths are not fully bound: {paths_failure}."
+            ),
+            machine_error_code="MANAGED_PATH_UNBOUND",
+        )
+    )
+
+    failed_checks = [check for check in checks if check["status"] == "fail"]
+    unique_failure_codes = sorted(
+        {
+            code
+            for code in failure_codes
+            if code and code != "OK"
+        }
+    )
+    recovery_hints = sorted(
+        (build_recovery_hint(code) for code in unique_failure_codes),
+        key=lambda item: int(item["priority_score"]),
+        reverse=True,
+    )
+    invariant_result = {
+        "status": "failed" if failed_checks else "passed",
+        "passed": len(checks) - len(failed_checks),
+        "failed": len(failed_checks),
+        "checks": checks,
+    }
+    payload = build_command_payload(
+        ok=not failed_checks,
+        human_message=(
+            "Runtime invariant check passed."
+            if not failed_checks
+            else "Runtime invariant check failed."
+        ),
+        machine_error_code="OK" if not failed_checks else "RUNTIME_INVARIANT_FAILED",
+        liveness="healthy" if not failed_checks else "degraded",
+        severity="recoverable" if not failed_checks else "fatal",
+        operator_action="none" if not failed_checks else "required_repair",
+        changed_files=[],
+        extra={
+            "invariant_result": invariant_result,
+            "recovery_hints": recovery_hints,
+            "runtime_evidence": {
+                "desired_mode": desired_mode,
+                "effective_mode": effective_mode,
+                "endpoint": endpoint,
+                "listener_ok": listener_ok,
+            },
+        },
+    )
+    own_missing = missing_packet_fields(payload, INVARIANT_CHECK_REQUIRED_FIELDS)
+    if own_missing and invariant_result["checks"]:
+        invariant_result["status"] = "failed"
+        invariant_result["failed"] += 1
+        invariant_result["checks"][0] = build_invariant_check(
+            "command_packet_shape",
+            passed=False,
+            severity="critical",
+            evidence_source="invariant_check_packet",
+            human_message="Invariant-check packet is missing fields: " + ", ".join(own_missing),
+            machine_error_code="COMMAND_PACKET_MALFORMED",
+        )
+        payload["status"] = "error"
+        payload["exit_code"] = 1
+        payload["machine_error_code"] = "RUNTIME_INVARIANT_FAILED"
+        payload["next_action"] = "required_repair"
+        payload["operator_action"] = "required_repair"
+        payload["recovery_hints"] = [build_recovery_hint("COMMAND_PACKET_MALFORMED")]
+    return payload
+
+
+def run_invariant_check(paths: RuntimePaths) -> dict[str, Any]:
+    return build_invariant_check_packet(paths)
 
 
 def summarize_status(
@@ -4997,6 +7127,14 @@ def summarize_status(
             **recovery_result,
             "delegated_from_status": True,
         }
+    delegated_machine_error_code = str(health_payload["machine_error_code"])
+    if (
+        isinstance(recovery_result, dict)
+        and delegated_machine_error_code == "LISTENER_DOWN"
+        and str(recovery_result.get("entry_lane", "")) == "stable_service_disabled"
+        and str(health_payload.get("liveness", "")) == "down"
+    ):
+        delegated_machine_error_code = "STABLE_SERVICE_DISABLED"
     registry_identity = get_registry_identity(registry)
     current_proxy_url = str(
         health_payload.get("current_proxy_url", state.get("current_proxy_url", ""))
@@ -5040,6 +7178,18 @@ def summarize_status(
             **launch_readiness,
             "delegated_from_status": True,
         }
+    native_auth_recovery_hint = health_payload.get("native_auth_recovery_hint")
+    if isinstance(native_auth_recovery_hint, dict):
+        native_auth_recovery_hint = {
+            **native_auth_recovery_hint,
+            "delegated_from_status": True,
+        }
+    else:
+        native_auth_recovery_hint = build_native_auth_recovery_hint(
+            machine_error_code=delegated_machine_error_code,
+            auth_pool_hygiene=auth_pool_hygiene,
+        )
+        native_auth_recovery_hint["delegated_from_status"] = False
     runtime_guardrails = health_payload.get("runtime_guardrails")
     if isinstance(runtime_guardrails, dict):
         runtime_guardrails = {
@@ -5064,10 +7214,15 @@ def summarize_status(
             if health_payload["status"] == "ok"
             else "Runtime status summary reflects live attestation failure."
         ),
-        machine_error_code=str(health_payload["machine_error_code"]),
+        machine_error_code=delegated_machine_error_code,
         liveness=str(health_payload["liveness"]),
         severity=str(health_payload["severity"]),
-        operator_action=str(health_payload["operator_action"]),
+        operator_action=(
+            "user_action"
+            if native_auth_recovery_hint.get("owner_action_required") is True
+            and str(health_payload["operator_action"]) == "retry"
+            else str(health_payload["operator_action"])
+        ),
         changed_files=list(health_payload.get("changed_files") or []),
         exit_code=int(health_payload["exit_code"]),
         extra={
@@ -5090,6 +7245,7 @@ def summarize_status(
             ),
             "pool_summary": pool_summary,
             "auth_pool_hygiene": auth_pool_hygiene,
+            "native_auth_recovery_hint": native_auth_recovery_hint,
             "policy_drift": policy_drift,
             "policy_drift_observed": policy_drift_observed,
             "stable_runtime_consumer": stable_runtime_consumer,
@@ -5319,6 +7475,7 @@ def run_healthcheck(
     allow_stable_fallback_write: bool = True,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
+    clear_stale_managed_pid_if_needed(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -5403,6 +7560,16 @@ def run_healthcheck(
             host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
             configured_base_url = read_toml_string(paths.config_toml, "base_url")
             listener_ok = socket_is_listening(host, port)
+            if reported_effective_mode == "stable" and not listener_ok:
+                # The launcher may exit before a background stable listener is
+                # fully reachable. Give the bounded recovery lane a short live
+                # observation window before classifying it as failed.
+                deadline = time.monotonic() + 1.25
+                while time.monotonic() < deadline:
+                    time.sleep(0.05)
+                    listener_ok = socket_is_listening(host, port)
+                    if listener_ok:
+                        break
             reported_effective_mode = reconcile_effective_mode_for_reporting(
                 effective_mode, listener_ok=listener_ok
             )
@@ -5879,6 +8046,15 @@ def run_healthcheck(
         ),
         auth_pool_hygiene=auth_pool_hygiene,
     )
+    native_auth_recovery_hint = build_native_auth_recovery_hint(
+        machine_error_code=machine_error_code,
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+    if (
+        operator_action == "retry"
+        and native_auth_recovery_hint.get("owner_action_required") is True
+    ):
+        operator_action = "user_action"
     runtime_guardrails = build_runtime_guardrail_surface(
         paths,
         launch_readiness=launch_readiness,
@@ -5910,6 +8086,7 @@ def run_healthcheck(
         "auth_pool_hygiene": auth_pool_hygiene,
         "attestation": attestation,
         "launch_readiness": launch_readiness,
+        "native_auth_recovery_hint": native_auth_recovery_hint,
         "runtime_guardrails": runtime_guardrails,
         "last_error": reported_last_error,
     }
@@ -6003,6 +8180,8 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
         managed_pid_path(paths),
+        sandbox_login_sessions_dir(paths),
+        sandbox_login_auth_artifacts_dir(paths),
     ]
     result: dict[Path, tuple[int, int]] = {}
     for candidate in candidates:
@@ -6311,6 +8490,8 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
         "dispatch_attempted": False,
         "dispatch_observed": False,
         "dispatch_exit_code": None,
+        "process_observed_running": False,
+        "real_codex_app_launched": False,
         "launch_claim_scope": "os_dispatch_only",
         "final_outcome": "runtime_precondition_failed",
     }
@@ -6380,6 +8561,8 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "dispatch_attempted": not unsupported_shape,
                 "dispatch_observed": False,
                 "dispatch_exit_code": None,
+                "process_observed_running": False,
+                "real_codex_app_launched": False,
                 "final_outcome": final_outcome,
             }
         )
@@ -6436,10 +8619,25 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             "dispatch_attempted": True,
             "dispatch_observed": bool(dispatch_result["dispatch_observed"]),
             "dispatch_exit_code": dispatch_result["dispatch_exit_code"],
+            "process_observed_running": bool(
+                dispatch_result.get("process_observed_running", False)
+            ),
+            "real_codex_app_launched": bool(
+                dispatch_result.get("process_observed_running", False)
+            ),
+            "launch_claim_scope": (
+                "bounded_executable_launch_with_process_observation"
+                if dispatch_result.get("process_observed_running", False)
+                else "os_dispatch_only"
+            ),
             "final_outcome": (
-                "dispatch_requested"
-                if dispatch_result["dispatch_observed"]
-                else "dispatch_failed"
+                "app_process_observed"
+                if dispatch_result.get("process_observed_running", False)
+                else (
+                    "dispatch_requested"
+                    if dispatch_result["dispatch_observed"]
+                    else "dispatch_failed"
+                )
             ),
         }
     )
@@ -6520,6 +8718,7 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
 
 
 def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
+    ensure_repo_owned_default_sync_helper(paths)
     if not paths.sync_script.exists():
         raise RuntimeErrorInfo(
             f"Missing sync script: {paths.sync_script}",
@@ -6529,13 +8728,35 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     command = [str(paths.sync_script), model or get_model(paths)]
     with serialized_lock(paths):
+        pre_sync_state = read_json(paths.state_file, required=False)
+        pre_sync_effective_mode = get_effective_mode(paths, pre_sync_state)
+        pre_sync_has_stable_activation_evidence = (
+            pre_sync_effective_mode == "stable"
+            and snapshot_confirms_approved_target_activation(paths, pre_sync_state)
+        )
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
+        state = read_json(paths.state_file, required=False)
+        if pre_sync_has_stable_activation_evidence:
+            stable_endpoint = get_endpoint(paths, "stable")[2]
+            state_effective_mode = str(state.get("effective_mode", ""))
+            artifact_effective_mode = read_effective_mode_artifact(paths)
+            configured_base_url = read_toml_string(paths.config_toml, "base_url")
+            if (
+                state_effective_mode != "stable"
+                or artifact_effective_mode != "stable"
+                or configured_base_url != stable_endpoint
+            ):
+                state["effective_mode"] = "stable"
+                write_json_atomic(paths.state_file, state)
+                write_text_atomic(paths.runtime_effective_mode_file, "stable")
+                write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
+                state = read_json(paths.state_file, required=False)
     if result.stderr:
         sys.stderr.write(result.stderr)
     if result.stdout:
@@ -6549,7 +8770,6 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         paths.runtime_effective_mode_file,
         managed_pid_path(paths),
     ]
-    state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
     host, port, endpoint = get_endpoint(paths, effective_mode)
@@ -9553,7 +11773,7 @@ def run_accounts_command(
             [str(paths.accounts_bin), *arguments],
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
     if result.stderr:
@@ -9579,11 +11799,709 @@ def run_accounts_command(
     )
 
 
+def build_codex_login_start_payload(
+    session: dict[str, Any], *, changed_files: list[str], reused: bool
+) -> dict[str, Any]:
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Codex device login session is already waiting for operator completion."
+            if reused
+            else "Codex device login session started."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "next_action": "wait_for_login",
+            "provider": "codex",
+            "mode": "device",
+            "session_id": str(session.get("login_session_id", "")),
+            "login_session_id": str(session.get("login_session_id", "")),
+            "device_url": str(session.get("device_url", "")),
+            "device_code": str(session.get("device_code", "")),
+            "device_code_present": bool(session.get("device_code_present", False)),
+            "login_result": codex_login_session_payload(session),
+        },
+    )
+
+
+def run_accounts_login_start(
+    paths: RuntimePaths, provider: str, *, mode: str | None = None
+) -> dict[str, Any]:
+    if provider == "codex":
+        if mode != "device":
+            return build_command_payload(
+                ok=False,
+                human_message="Only Codex device mode is supported for owner-lane login start.",
+                machine_error_code="LOGIN_MODE_UNSUPPORTED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+                extra={
+                    "provider": provider,
+                    "mode": mode or "",
+                    "supported_modes": ["device"],
+                },
+            )
+
+        session_dir = sandbox_login_sessions_dir(paths)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        for session_path in sorted(session_dir.glob("codex-*.json")):
+            try:
+                session = read_json(session_path)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(session, dict):
+                continue
+            if str(session.get("provider", "")) != "codex":
+                continue
+            login_session_id = str(session.get("login_session_id", ""))
+            if not login_session_id:
+                continue
+            refreshed, changed_files = refresh_codex_login_session(paths, login_session_id)
+            if str(refreshed.get("state", "")) in {"waiting_for_user", "auth_materialized"}:
+                return build_codex_login_start_payload(
+                    refreshed,
+                    changed_files=changed_files,
+                    reused=True,
+                )
+
+        auth_dir, auth_inventory_source = login_session_auth_inventory_dir(paths)
+        if not path_is_admitted_owner_login_inventory_path(paths, auth_dir):
+            return build_command_payload(
+                ok=False,
+                human_message=(
+                    "Configured auth-dir is outside admitted profile/managed/stable inventory paths."
+                ),
+                machine_error_code="LOGIN_SANDBOX_SCOPE_UNPROVEN",
+                liveness="unknown",
+                severity="fatal",
+                operator_action="stop",
+                changed_files=[],
+                extra={
+                    "provider": "codex",
+                    "mode": "device",
+                    "auth_inventory_dir": str(auth_dir),
+                    "admitted_owner_login_inventory_roots": [
+                        str(paths.profile_dir.expanduser().resolve(strict=False)),
+                        str(paths.managed_dir.expanduser().resolve(strict=False)),
+                        str(paths.stable_config.parent.expanduser().resolve(strict=False)),
+                    ],
+                    "stable_auth_inventory_source": auth_inventory_source,
+                },
+            )
+        auth_dir.mkdir(parents=True, exist_ok=True)
+
+        cli_proxy_bin = resolve_cli_proxy_bin()
+        if not cli_proxy_bin.exists():
+            return build_command_payload(
+                ok=False,
+                human_message=f"Missing cli-proxy-api binary: {cli_proxy_bin}",
+                machine_error_code="LOGIN_CLI_PROXY_BIN_MISSING",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if not paths.stable_config.exists():
+            return build_command_payload(
+                ok=False,
+                human_message=f"Missing CLIProxyAPI config: {paths.stable_config}",
+                machine_error_code="LOGIN_STABLE_CONFIG_MISSING",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+
+        login_session_id = f"codex-{uuid.uuid4().hex}"
+        created_at = now_iso()
+        ttl_seconds = login_session_ttl_seconds()
+        expires_at = datetime.fromtimestamp(
+            datetime.now(timezone.utc).timestamp() + ttl_seconds,
+            tz=timezone.utc,
+        ).isoformat()
+        stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+        stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+        session_path = sandbox_login_session_path(paths, login_session_id)
+        before = snapshot_path_states([session_dir, session_path, stdout_path, stderr_path])
+        command = [
+            str(cli_proxy_bin),
+            "-config",
+            str(paths.stable_config),
+            "-codex-device-login",
+            "-no-browser",
+        ]
+        before_entries = [
+            str(path.expanduser().resolve(strict=False))
+            for path in list_login_auth_inventory_entries(paths)
+        ]
+        before_metadata = snapshot_login_auth_inventory_metadata(paths)
+        session: dict[str, Any] = {
+            "schema_version": 1,
+            "login_session_id": login_session_id,
+            "provider": "codex",
+            "mode": "device",
+            "pid": 0,
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "state": "started",
+            "device_url": "",
+            "device_code": "",
+            "device_code_present": False,
+            "auth_materialized": False,
+            "auth_ref": "",
+            "auth_inventory_before": before_entries,
+            "auth_inventory_before_metadata": before_metadata,
+            "auth_inventory_before_digest": login_session_entries_digest(before_entries),
+            "auth_inventory_source": auth_inventory_source,
+            "sandbox_scope": True,
+            "inventory_scope": "admitted_owner_login",
+            "used": False,
+        }
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        stdout_path.touch()
+        stderr_path.touch()
+        env = sanitized_env()
+        env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
+        env.setdefault("no_proxy", env["NO_PROXY"])
+        with stdout_path.open("a", encoding="utf-8") as stdout_handle, stderr_path.open(
+            "a", encoding="utf-8"
+        ) as stderr_handle:
+            process = subprocess.Popen(  # noqa: S603
+                command,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                text=True,
+                env=env,
+                start_new_session=True,
+            )
+        session["pid"] = int(process.pid)
+        write_json_atomic(session_path, session)
+
+        deadline = time.time() + codex_device_login_handoff_timeout_seconds()
+        changed_files = detect_changed_files_by_state(
+            before, [session_dir, session_path, stdout_path, stderr_path]
+        )
+        while time.time() < deadline:
+            refreshed, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+            changed_files = sorted(set(changed_files + refresh_changed))
+            if (
+                str(refreshed.get("device_url", ""))
+                and bool(refreshed.get("device_code_present", False))
+            ):
+                return build_codex_login_start_payload(
+                    refreshed,
+                    changed_files=changed_files,
+                    reused=False,
+                )
+            if str(refreshed.get("state", "")) in {"failed", "expired", "cancelled"}:
+                break
+            time.sleep(0.1)
+
+        refreshed, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+        changed_files = sorted(set(changed_files + refresh_changed))
+        if str(refreshed.get("device_url", "")) and bool(
+            refreshed.get("device_code_present", False)
+        ):
+            return build_codex_login_start_payload(
+                refreshed,
+                changed_files=changed_files,
+                reused=False,
+            )
+        terminate_login_session_pid(int(refreshed.get("pid", 0) or 0))
+        refreshed["state"] = "failed"
+        refreshed["failure_reason"] = "device_handoff_missing"
+        write_json_atomic(session_path, refreshed)
+        changed_files = sorted(
+            set(
+                changed_files
+                + detect_changed_files_by_state(
+                    before, [session_dir, session_path, stdout_path, stderr_path]
+                )
+            )
+        )
+        return build_command_payload(
+            ok=False,
+            human_message="Codex login flow did not emit a device URL/code handoff.",
+            machine_error_code="LOGIN_DEVICE_HANDOFF_MISSING",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=changed_files,
+            extra={
+                "provider": "codex",
+                "mode": "device",
+                "session_id": login_session_id,
+                "login_session_id": login_session_id,
+                "login_result": codex_login_session_payload(refreshed),
+            },
+        )
+
+    if provider != "sandbox":
+        return build_command_payload(
+            ok=False,
+            human_message="Only sandbox provider is supported for owner-lane login start.",
+            machine_error_code="LOGIN_PROVIDER_UNSUPPORTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "provider": provider,
+                "supported_providers": ["sandbox", "codex"],
+            },
+        )
+
+    login_session_id = f"sandbox-{uuid.uuid4().hex}"
+    state = f"sandbox-state-{uuid.uuid4().hex}"
+    nonce = f"sandbox-nonce-{uuid.uuid4().hex}"
+    created_at = now_iso()
+    ttl_seconds = sandbox_login_session_ttl_seconds()
+    expires_at = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() + ttl_seconds,
+        tz=timezone.utc,
+    ).isoformat()
+    login_url = build_sandbox_login_url(
+        login_session_id=login_session_id,
+        state=state,
+        nonce=nonce,
+    )
+    session = {
+        "login_session_id": login_session_id,
+        "provider": provider,
+        "state": state,
+        "nonce": nonce,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "used": False,
+    }
+    session_dir = sandbox_login_sessions_dir(paths)
+    session_path = sandbox_login_session_path(paths, login_session_id)
+    before = snapshot_path_states([session_dir, session_path])
+    with serialized_lock(paths):
+        session_dir.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(session_path, session)
+    return build_command_payload(
+        ok=True,
+        human_message="Sandbox login session started.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before, [session_dir, session_path]),
+        extra={
+            "next_action": "login_complete",
+            "provider": provider,
+            "login_session_id": login_session_id,
+            "state": state,
+            "nonce": nonce,
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "session_ttl_seconds": ttl_seconds,
+            "login_url": login_url,
+            "login_result": {
+                "status": "started",
+                "provider": provider,
+                "login_session_id": login_session_id,
+                "state": state,
+                "nonce": nonce,
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "login_url": login_url,
+                "auth_materialized": False,
+                "used": False,
+            },
+        },
+    )
+
+
+def run_accounts_login_status(paths: RuntimePaths, login_session_id: str) -> dict[str, Any]:
+    try:
+        _, session = load_login_session(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    provider = str(session.get("provider", ""))
+    changed_files: list[str] = []
+    if provider == "codex":
+        session, changed_files = refresh_codex_login_session(paths, login_session_id)
+    elif provider == "sandbox" and sandbox_login_session_expired(session):
+        session["state"] = "expired"
+    else:
+        session.setdefault("state", "started")
+
+    current_state = str(session.get("state", ""))
+    ok = current_state not in {"failed", "expired", "cancelled"}
+    machine_error_code = "OK"
+    next_action = "wait_for_login"
+    operator_action = "none"
+    human_message = "Login session is waiting for operator completion."
+    if current_state == "auth_materialized":
+        next_action = "accounts_onboard"
+        human_message = "Login session materialized sandbox auth and is ready for onboarding."
+    elif current_state == "completed":
+        next_action = "none"
+        human_message = "Login session has already completed onboarding."
+    elif current_state == "failed":
+        failure_reason = str(session.get("failure_reason", ""))
+        machine_error_code = (
+            "LOGIN_HANDOFF_PROCESS_EXITED"
+            if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+            else "LOGIN_SESSION_FAILED"
+        )
+        next_action = "retry"
+        operator_action = "retry"
+        human_message = (
+            "Login session emitted a device handoff but the local process exited before auth materialized."
+            if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+            else "Login session failed before auth materialized."
+        )
+    elif current_state == "expired":
+        machine_error_code = "LOGIN_SESSION_EXPIRED"
+        next_action = "user_action"
+        operator_action = "user_action"
+        human_message = "Login session expired before auth materialized."
+    elif current_state == "cancelled":
+        machine_error_code = "LOGIN_SESSION_CANCELLED"
+        next_action = "none"
+        human_message = "Login session was cancelled."
+
+    return build_command_payload(
+        ok=ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action=operator_action,
+        changed_files=changed_files,
+        extra={
+            "next_action": next_action,
+            "provider": provider,
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+        },
+    )
+
+
+def run_accounts_login_complete(
+    paths: RuntimePaths,
+    *,
+    login_session_id: str,
+    state: str | None,
+    proof: str | None,
+) -> dict[str, Any]:
+    try:
+        session_path, session = load_login_session(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    if str(session.get("provider", "")) == "codex":
+        stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+        stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+        before = snapshot_path_states([session_path, stdout_path, stderr_path])
+        session, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+        current_state = str(session.get("state", ""))
+        if current_state == "completed" or bool(session.get("used")):
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has already been used.",
+                machine_error_code="LOGIN_SESSION_REPLAY_BLOCKED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state == "cancelled":
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session was cancelled.",
+                machine_error_code="LOGIN_SESSION_CANCELLED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state == "expired":
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has expired.",
+                machine_error_code="LOGIN_SESSION_EXPIRED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state == "failed":
+            failure_reason = str(session.get("failure_reason", ""))
+            return build_command_payload(
+                ok=False,
+                human_message=(
+                    "Codex login session emitted a device handoff but the local process exited before auth materialized."
+                    if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+                    else "Codex login session failed before auth materialized."
+                ),
+                machine_error_code=(
+                    "LOGIN_HANDOFF_PROCESS_EXITED"
+                    if failure_reason == "device_handoff_process_exited_before_auth_materialized"
+                    else "LOGIN_SESSION_FAILED"
+                ),
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=refresh_changed,
+                extra={
+                    "provider": "codex",
+                    "session_id": login_session_id,
+                    "login_session_id": login_session_id,
+                    "login_result": codex_login_session_payload(session),
+                },
+            )
+        if current_state != "auth_materialized" or not str(session.get("auth_ref", "")):
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has not materialized auth yet.",
+                machine_error_code="LOGIN_AUTH_NOT_MATERIALIZED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=refresh_changed,
+                extra={
+                    "provider": "codex",
+                    "session_id": login_session_id,
+                    "login_session_id": login_session_id,
+                    "login_result": codex_login_session_payload(session),
+                },
+            )
+
+        onboard_payload = run_onboard(
+            paths,
+            auth_ref=str(session.get("auth_ref", "")),
+            loop=False,
+            skip_login=True,
+            no_sync=False,
+            non_interactive=True,
+        )
+        if onboard_payload.get("status") == "ok":
+            session["state"] = "completed"
+            session["used"] = True
+            write_json_atomic(session_path, session)
+        changed_files = sorted(
+            set(
+                refresh_changed
+                + detect_changed_files_by_state(before, [session_path, stdout_path, stderr_path])
+                + [str(item) for item in onboard_payload.get("changed_files", []) or []]
+            )
+        )
+        extra = {
+            "next_action": "accounts_refresh"
+            if onboard_payload.get("status") == "ok"
+            else str(onboard_payload.get("next_action", "retry")),
+            "provider": "codex",
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+            "onboarding_result": onboard_payload.get("onboarding_result"),
+        }
+        if onboard_payload.get("validate_result") is not None:
+            extra["validate_result"] = onboard_payload.get("validate_result")
+        if onboard_payload.get("sync_result") is not None:
+            extra["sync_result"] = onboard_payload.get("sync_result")
+        return build_command_payload(
+            ok=bool(onboard_payload.get("status") == "ok"),
+            human_message=str(onboard_payload.get("human_message", "")),
+            machine_error_code=str(
+                onboard_payload.get("machine_error_code", "LOGIN_COMPLETE_FAILED")
+            ),
+            liveness=str(onboard_payload.get("liveness", "unknown")),
+            severity=str(onboard_payload.get("severity", "recoverable")),
+            operator_action=str(onboard_payload.get("operator_action", "retry")),
+            changed_files=changed_files,
+            extra=extra,
+            exit_code=int(onboard_payload.get("exit_code", 1) or 1)
+            if onboard_payload.get("status") != "ok"
+            else None,
+        )
+
+    session_dir = sandbox_login_sessions_dir(paths)
+    auth_dir = sandbox_login_auth_artifacts_dir(paths)
+    auth_path = auth_dir / f"codex-sandbox-synthetic-{login_session_id}.json"
+    before = snapshot_path_states([session_dir, session_path, auth_dir, auth_path, paths.auth_file])
+
+    with serialized_lock(paths):
+        if str(session.get("provider", "")) != "sandbox":
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session provider is invalid.",
+                machine_error_code="LOGIN_SESSION_INVALID",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if sandbox_login_session_expired(session):
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session has expired.",
+                machine_error_code="LOGIN_SESSION_EXPIRED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if bool(session.get("used")):
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session has already been used.",
+                machine_error_code="LOGIN_SESSION_REPLAY_BLOCKED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if str(session.get("state", "")) != (state or ""):
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session state did not match.",
+                machine_error_code="LOGIN_STATE_MISMATCH",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if proof != "sandbox-ok":
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login proof is invalid.",
+                machine_error_code="LOGIN_PROOF_INVALID",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+
+        auth_dir.mkdir(parents=True, exist_ok=True)
+        auth_payload = build_sandbox_login_auth_payload(login_session_id)
+        write_json_atomic(auth_path, auth_payload)
+        write_json_atomic(paths.auth_file, auth_payload)
+        _ = read_api_key(auth_path)
+        session["used"] = True
+        write_json_atomic(session_path, session)
+
+    return build_command_payload(
+        ok=True,
+        human_message="Sandbox login completed and synthetic auth was materialized.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(
+            before, [session_dir, session_path, auth_dir, auth_path, paths.auth_file]
+        ),
+        extra={
+            "next_action": "accounts_onboard",
+            "provider": "sandbox",
+            "login_session_id": login_session_id,
+            "auth_ref_scope": "sandbox",
+            "auth_ref": str(auth_path),
+            "login_result": {
+                "status": "completed",
+                "provider": "sandbox",
+                "login_session_id": login_session_id,
+                "auth_materialized": True,
+                "auth_ref": str(auth_path),
+                "auth_ref_scope": "sandbox",
+                "used": True,
+            },
+        },
+    )
+
+
+def run_accounts_login_cancel(paths: RuntimePaths, login_session_id: str) -> dict[str, Any]:
+    try:
+        session_path, session = load_login_session(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    if str(session.get("provider", "")) != "codex":
+        return build_command_payload(
+            ok=False,
+            human_message="Only Codex owner sessions support cancel.",
+            machine_error_code="LOGIN_CANCEL_UNSUPPORTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+        )
+
+    stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+    stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+    before = snapshot_path_states([session_path, stdout_path, stderr_path])
+    pid = int(session.get("pid", 0) or 0)
+    terminated = terminate_login_session_pid(pid)
+    session["state"] = "cancelled"
+    session["cancelled_process_owned_by_session"] = terminated
+    write_json_atomic(session_path, session)
+    ok = terminated or not login_session_pid_is_running(pid)
+    return build_command_payload(
+        ok=ok,
+        human_message="Codex login session was cancelled.",
+        machine_error_code="OK" if ok else "LOGIN_CANCEL_FAILED",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none" if ok else "retry",
+        changed_files=detect_changed_files_by_state(
+            before, [session_path, stdout_path, stderr_path]
+        ),
+        extra={
+            "next_action": "none",
+            "provider": "codex",
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+        },
+        exit_code=None if ok else 1,
+    )
+
+
 def selected_backend_ids_from_state(state: dict[str, Any]) -> list[str]:
     return sorted(str(item) for item in state.get("selected_backend_ids", []) or [])
 
 
 def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
+    ensure_repo_owned_default_sync_helper(paths)
     if not paths.sync_script.exists():
         raise RuntimeErrorInfo(
             f"Missing sync script: {paths.sync_script}",
@@ -9594,7 +12512,7 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         [str(paths.sync_script), get_model(paths)],
         capture_output=True,
         text=True,
-        env=sanitized_env(),
+        env=build_launcher_subprocess_env(paths),
         check=False,
     )
     emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
@@ -11384,6 +14302,7 @@ def run_promote(
 
         promotion_result["sync_attempted"] = True
         try:
+            ensure_repo_owned_default_sync_helper(paths)
             if not paths.sync_script.exists():
                 raise RuntimeErrorInfo(
                     f"Missing sync script: {paths.sync_script}",
@@ -11491,7 +14410,8 @@ def run_promote(
                 promotion_policy_verified = bool(
                     active_pool_count_after == active_pool_count_before + 1
                     and active_pool_count_after <= active_target
-                    and reserve_count_after == reserve_target
+                    and reserve_count_after == reserve_count_before - 1
+                    and reserve_count_after >= reserve_target
                 )
                 promotion_result["policy_verification_status"] = (
                     "passed" if promotion_policy_verified else "failed"
@@ -11586,6 +14506,78 @@ def summarize_owner_path_status_observation(status_payload: dict[str, Any]) -> d
 
 def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
     return summarize_owner_path_status_observation(status_payload)
+
+
+def summarize_onboarding_lifecycle_admission(
+    *,
+    selected_backend_id: str,
+    reserve_first_enforced: bool,
+    active_routing_changed: bool,
+    after_registry: dict[str, Any],
+    status_payload: dict[str, Any],
+) -> dict[str, Any]:
+    observed = summarize_owner_path_status_observation(status_payload)
+    auth_pool_hygiene = status_payload.get("auth_pool_hygiene")
+    if not isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene = {}
+    launch_readiness = status_payload.get("launch_readiness")
+    if not isinstance(launch_readiness, dict):
+        launch_readiness = {}
+    pool_summary = status_payload.get("pool_summary")
+    if not isinstance(pool_summary, dict):
+        pool_summary = {}
+    backend_matches = (
+        get_registry_backends_by_id(after_registry, selected_backend_id)
+        if selected_backend_id
+        else []
+    )
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    selected_backend_pool = (
+        str(selected_backend.get("pool", "")) if isinstance(selected_backend, dict) else ""
+    )
+    launch_failed_checks = [
+        str(item) for item in launch_readiness.get("failed_checks", []) or []
+    ]
+    reserve_only_launch_gap_failed_checks = {
+        "usable_auth_pool_empty",
+        "models_surface_unavailable_or_invalid",
+        "responses_probe_failed",
+    }
+    lifecycle_status = "blocked"
+    lifecycle_reason = "status_proof_failed"
+    if observed["command_status"] == "ok":
+        lifecycle_status = "ready"
+        lifecycle_reason = "post_onboard_status_ok"
+    elif (
+        reserve_first_enforced
+        and not active_routing_changed
+        and selected_backend_pool == "reserve"
+        and observed["machine_error_code"] == "ATTESTATION_FAILED"
+        and str(status_payload.get("liveness", "unknown")) == "degraded"
+        and str(auth_pool_hygiene.get("status", "")) == "launch_capable_empty"
+        and str(auth_pool_hygiene.get("blocking_reason", ""))
+        == "no_live_capable_active_backends"
+        and int(pool_summary.get("active", 0) or 0) == 0
+        and launch_failed_checks
+        and set(launch_failed_checks).issubset(reserve_only_launch_gap_failed_checks)
+    ):
+        lifecycle_status = "ready"
+        lifecycle_reason = "reserve_only_launch_gap"
+    return {
+        "status": lifecycle_status,
+        "reason": lifecycle_reason,
+        "selected_backend_id": selected_backend_id,
+        "selected_backend_pool": selected_backend_pool,
+        "status_observed_command_status": observed["command_status"],
+        "status_observed_machine_error_code": observed["machine_error_code"],
+        "status_observed_liveness": observed["liveness"],
+        "launch_blocking_reason": str(launch_readiness.get("blocking_reason", "")),
+        "launch_failed_checks": launch_failed_checks,
+        "auth_pool_hygiene_status": str(auth_pool_hygiene.get("status", "")),
+        "auth_pool_hygiene_blocking_reason": str(
+            auth_pool_hygiene.get("blocking_reason", "")
+        ),
+    }
 
 
 def summarize_registry_pool_counts(registry: dict[str, Any]) -> dict[str, int]:
@@ -11699,6 +14691,37 @@ def classify_onboarded_backend_selection(
     ]
     added_backend_ids = sorted(str(item.get("id")) for item in added_backends)
     if explicit_auth_ref:
+        before_matching_backends = [
+            item
+            for item in before_registry.get("backends", [])
+            if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
+        ]
+        after_matching_backends = [
+            item
+            for item in after_registry.get("backends", [])
+            if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
+        ]
+        if len(before_matching_backends) == 1 and len(after_matching_backends) == 1:
+            return added_backend_ids, after_matching_backends[0], "selected_existing_backend"
+        if len(before_matching_backends) > 1 and len(after_matching_backends) > 1:
+            return added_backend_ids, None, "ambiguous_existing_backend_selection"
+        if not before_matching_backends and len(after_matching_backends) == 1:
+            selected_backend = after_matching_backends[0]
+            selected_backend_id = str(selected_backend.get("id"))
+            if selected_backend_id and selected_backend_id not in added_backend_ids:
+                added_backend_ids = sorted(added_backend_ids + [selected_backend_id])
+            return added_backend_ids, selected_backend, "selected_unique_backend"
+        if not before_matching_backends and len(after_matching_backends) > 1:
+            selected_ids = sorted(
+                str(item.get("id"))
+                for item in after_matching_backends
+                if item.get("id") is not None
+            )
+            if selected_ids:
+                added_backend_ids = sorted(
+                    set(added_backend_ids).union(selected_ids)
+                )
+            return added_backend_ids, None, "ambiguous_new_backend_selection"
         matching_backends = [
             item
             for item in added_backends
@@ -11753,7 +14776,7 @@ def run_onboard(
             command,
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
     if result.stderr:
@@ -11778,21 +14801,9 @@ def run_onboard(
     )
     before_active_backend_ids = routing_eligible_active_backend_ids(before_registry)
     after_active_backend_ids = routing_eligible_active_backend_ids(after_registry)
-    before_selected_backend_ids = sorted(
-        str(item) for item in before_state.get("selected_backend_ids", []) or []
-    )
-    after_selected_backend_ids = sorted(
-        str(item) for item in after_state.get("selected_backend_ids", []) or []
-    )
     active_routing_changed = (
         before_active_backend_ids != after_active_backend_ids
         or selected_backend_pool == "active"
-        or before_selected_backend_ids != after_selected_backend_ids
-        or (
-            selected_backend_id
-            and selected_backend_id in set(after_selected_backend_ids)
-            and selected_backend_id not in set(before_selected_backend_ids)
-        )
     )
     reserve_first_enforced = bool(selected_backend) and selected_backend_pool == "reserve"
     onboarding_result: dict[str, Any] = {
@@ -11822,6 +14833,7 @@ def run_onboard(
         "sync_attempted": False,
         "sync_outcome": "not_attempted",
         "status_observed": None,
+        "lifecycle_admission": None,
         "external_command_exit_code": int(result.returncode),
         "external_command_status": "ok" if result.returncode == 0 else "nonzero",
         "active_routing_changed": active_routing_changed,
@@ -11878,7 +14890,7 @@ def run_onboard(
             exit_code=result.returncode if result.returncode != 0 else None,
         )
 
-    if selection_status != "selected_unique_backend":
+    if selection_status not in {"selected_unique_backend", "selected_existing_backend"}:
         onboarding_result["final_outcome"] = "ambiguous_new_auth_detection"
         return build_onboard_payload(
             ok=False,
@@ -11973,6 +14985,15 @@ def run_onboard(
         onboarding_result["status_observed"] = summarize_onboarding_status_observation(
             status_payload
         )
+        onboarding_result["lifecycle_admission"] = (
+            summarize_onboarding_lifecycle_admission(
+                selected_backend_id=selected_backend_id,
+                reserve_first_enforced=reserve_first_enforced,
+                active_routing_changed=active_routing_changed,
+                after_registry=after_registry,
+                status_payload=status_payload,
+            )
+        )
     except RuntimeErrorInfo as exc:
         onboarding_result["final_outcome"] = "status_failed"
         return build_onboard_payload(
@@ -11984,7 +15005,11 @@ def run_onboard(
         )
 
     onboarding_result["final_outcome"] = (
-        "explicit_auth_imported_to_reserve"
+        (
+            "explicit_existing_auth_adopted_to_reserve"
+            if selection_status == "selected_existing_backend"
+            else "explicit_auth_imported_to_reserve"
+        )
         if auth_ref
         else "reserve_only_success"
     )
@@ -12100,6 +15125,10 @@ def build_installer_default_state_payload() -> dict[str, Any]:
 
 
 def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
+    from .external_models.integration import ensure_installed_layout, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
+    external_paths = ExternalModelsPaths.from_env()
     before_state = snapshot_path_states(
         [
             paths.profile_dir,
@@ -12110,6 +15139,9 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             paths.config_toml,
             paths.runtime_mode_file,
             paths.runtime_effective_mode_file,
+            *installer_owner_helper_paths(paths),
+            *installer_operator_wrapper_paths(paths),
+            *installer_managed_paths(external_paths),
         ]
     )
     with serialized_lock(paths):
@@ -12126,6 +15158,9 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             write_json_atomic(paths.state_file, build_installer_default_state_payload())
         if not paths.config_toml.exists():
             write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
+        ensure_repo_owned_owner_helper_chain(paths)
+        ensure_repo_owned_operator_wrapper_chain(paths)
+        ensure_installed_layout(external_paths)
     changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
     return build_command_payload(
         ok=True,
@@ -12139,19 +15174,34 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             "installer_result": {
                 "status": "owner_path_emitted",
                 "final_outcome": "baseline_initialized",
-            }
+                "owner_helper_paths": [str(path) for path in installer_owner_helper_paths(paths)],
+                "operator_wrapper_paths": [
+                    str(path) for path in installer_operator_wrapper_paths(paths)
+                ],
+            },
+            "external_models_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "layout_initialized",
+                "root_dir": str(external_paths.root_dir),
+                "secrets_mode": oct(external_paths.secrets_file.stat().st_mode & 0o777),
+            },
         },
     )
 
 
 def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
+    from .external_models.integration import import_legacy_layout, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
     source_dir = Path(source_dir_raw).expanduser()
+    external_paths = ExternalModelsPaths.from_env()
     write_targets = [
         paths.registry_file,
         paths.state_file,
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
+        *installer_managed_paths(external_paths),
     ]
     before_state = snapshot_path_states(write_targets)
     legacy_result: dict[str, Any] = {
@@ -12161,6 +15211,11 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
         "rollback_attempted": False,
         "rollback_outcome": "not_needed",
         "final_outcome": "pending",
+    }
+    external_models_result: dict[str, Any] = {
+        "status": "pending",
+        "final_outcome": "pending",
+        "imported_files": [],
     }
     if not source_dir.exists() or not source_dir.is_dir():
         legacy_result["final_outcome"] = "source_missing"
@@ -12172,7 +15227,10 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
             severity="recoverable",
             operator_action="user_action",
             changed_files=[],
-            extra={"legacy_import_result": legacy_result},
+            extra={
+                "legacy_import_result": legacy_result,
+                "external_models_result": external_models_result,
+            },
         )
     try:
         with serialized_lock(paths):
@@ -12206,6 +15264,7 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
                 write_text_atomic(paths.config_toml, staged_config)
             write_text_atomic(paths.runtime_mode_file, staged_mode or "stable")
             write_text_atomic(paths.runtime_effective_mode_file, staged_effective or "stable")
+            external_models_result = import_legacy_layout(source_dir, external_paths)
     except RuntimeErrorInfo as exc:
         legacy_result["rollback_attempted"] = True
         legacy_result["transaction_phase"] = "rollback"
@@ -12221,7 +15280,10 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
             severity=exc.severity,
             operator_action=exc.operator_action,
             changed_files=detect_changed_files_by_state(before_state, write_targets),
-            extra={"legacy_import_result": legacy_result},
+            extra={
+                "legacy_import_result": legacy_result,
+                "external_models_result": external_models_result,
+            },
             exit_code=exc.exit_code,
         )
     legacy_result["final_outcome"] = "import_completed"
@@ -12233,11 +15295,18 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(before_state, write_targets),
-        extra={"legacy_import_result": legacy_result},
+        extra={
+            "legacy_import_result": legacy_result,
+            "external_models_result": external_models_result,
+        },
     )
 
 
 def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict[str, Any]:
+    from .external_models.integration import clear_managed_state, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
+    external_paths = ExternalModelsPaths.from_env()
     targets = [
         paths.managed_dir,
         paths.registry_file,
@@ -12248,6 +15317,7 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
         paths.runtime_effective_mode_file,
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
+        *installer_managed_paths(external_paths),
     ]
     before_state = snapshot_path_states(targets)
     reset_result: dict[str, Any] = {
@@ -12260,6 +15330,7 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
     with serialized_lock(paths):
         if paths.managed_dir.exists():
             shutil.rmtree(paths.managed_dir)
+        clear_managed_state(external_paths, preserve_secrets=True)
         for file_path in (
             paths.config_toml,
             paths.runtime_mode_file,
@@ -12288,5 +15359,12 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(before_state, targets),
-        extra={"reset_result": reset_result},
+        extra={
+            "reset_result": reset_result,
+            "external_models_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "managed_state_cleared_secrets_preserved",
+                "secrets_preserved": external_paths.secrets_file.exists(),
+            },
+        },
     )

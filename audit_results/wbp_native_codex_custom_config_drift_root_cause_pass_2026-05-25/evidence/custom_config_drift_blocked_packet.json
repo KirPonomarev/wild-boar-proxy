@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:46:30.983289Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_CONFIG_DRIFT_ROOT_CAUSE_PASS_R2",
+  "packet_kind": "custom_config_drift_blocked",
+  "status": "blocked",
+  "machine_error_code": "CODEX_CONFIG_DRIFT_NOT_REPRODUCED",
+  "responsible_writer_unknown": true,
+  "repair_attempted": false,
+  "repair_blocked_reason": "machine_backed_writer_required_before_repair",
+  "current_config_repaired_or_rewritten": false,
+  "protected_surface_changed": true,
+  "touched_surface_labels": [
+    "default_app_support_codex"
+  ],
+  "protected_surface_comparisons": {
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": false,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    }
+  }
+}

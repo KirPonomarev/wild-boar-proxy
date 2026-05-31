@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_OBSERVER_AND_LIVE_PROMPT_PASS",
+  "status": "not_executed",
+  "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+  "authorization_status": "blocked_by_operator_authorization",
+  "live_prompt_admitted": false,
+  "live_prompt_executed": false,
+  "prompt_runner_called": false,
+  "model_response_present": false,
+  "inference_proven": false,
+  "network_calls_made": false,
+  "provider_called": false,
+  "token_burn": 0,
+  "wbp_path_configured": false,
+  "wbp_path_observed": false,
+  "wbp_path_proven": false,
+  "cli_proxy_api_path_proven": false,
+  "browser_fake_server_proof": {
+    "status": "blocked",
+    "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+    "authorization_status": "blocked_by_operator_authorization",
+    "owner_authorization_phrase_present": false,
+    "prompt_runner_called": false,
+    "network_calls_made": false,
+    "provider_called": false,
+    "token_burn": 0,
+    "raw_dom_leak": false,
+    "screenshot": "audit_results/codex_custom_wbp_trace_observer_and_live_prompt_pass_2026-05-24/evidence/browser_authorization_blocked_panel.png"
+  }
+}

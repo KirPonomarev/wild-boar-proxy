@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-29T06:11:38.737215Z",
+  "coding_configured_provider": "external_route",
+  "coding_route_server_issued": true,
+  "coding_selected_source_provenance": "route_proven",
+  "packet_kind": "role_slot_post_relaunch_provenance",
+  "primary_configured_provider": "cliproxy",
+  "primary_route_server_issued": false,
+  "primary_selected_source_provenance": "backend_proven",
+  "provenance_ambiguous": false,
+  "session_id": "ccs-5c1121e9db454008a2e4",
+  "status": "ok"
+}

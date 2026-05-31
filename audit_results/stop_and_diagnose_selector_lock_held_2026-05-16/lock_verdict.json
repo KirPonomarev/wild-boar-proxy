@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE_SELECTOR_LOCK_HELD",
+  "status": "completed",
+  "blocker_class": "true_concurrent_lock_with_post_packet_release",
+  "code_contradiction_found": false,
+  "packet_ambiguity_found": false,
+  "stale_lock_classification": false,
+  "guard_added": true,
+  "guard_tests_status": "passed",
+  "admissible_next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS_RETRY_ONCE",
+  "admissibility_basis": [
+    "anti-loop diagnosis requirement has been satisfied",
+    "sync-specific held-lock behavior is now directly tested",
+    "sync-specific stale-lock progression is now directly tested",
+    "runtime truth remained green during the failed selector attempt"
+  ],
+  "retry_boundary": "single bounded retry only; if sync returns LOCK_HELD again without selector progress, stop and diagnose rather than loop"
+}

@@ -1,0 +1,32 @@
+{
+  "contour": "EXECUTION_CORE_ACCOUNT_RANKING_AND_API_PULL_PASS",
+  "date": "2026-05-22",
+  "status": "closed_success",
+  "changes": {
+    "account_ranking_policy": true,
+    "auth_pool_hygiene_ranking_policy_surface": true,
+    "api_disabled_route_network_guard": true,
+    "command_api_documented": true
+  },
+  "verification": {
+    "targeted_regressions": {
+      "ranking_policy": "pass",
+      "disabled_route_check": "pass",
+      "disabled_route_validate": "pass",
+      "tests": 3
+    },
+    "runtime_api_suite": {
+      "status": "pass",
+      "tests": 447,
+      "duration_seconds": 180.706
+    },
+    "node_check": "pass",
+    "git_diff_check": "pass",
+    "full_unittest_gate": {
+      "status": "pass",
+      "tests": 595,
+      "duration_seconds": 200.157
+    },
+    "closeout_resilience": "pass"
+  }
+}

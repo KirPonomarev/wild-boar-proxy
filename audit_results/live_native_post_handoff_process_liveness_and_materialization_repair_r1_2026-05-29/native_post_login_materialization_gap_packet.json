@@ -1,0 +1,41 @@
+{
+  "auth_inventory_added_count": 0,
+  "auth_inventory_before_count": 27,
+  "auth_inventory_current_count": 27,
+  "auth_materialized": false,
+  "auth_ref_present": false,
+  "captured_at_utc": "2026-05-29T04:14:58.202589Z",
+  "classification": "existing_auth_ref_stale_and_unchanged_after_session_expiry",
+  "existing_auth_ref_present_but_unmaterialized_gap_detected": true,
+  "expired_token_observed_in_recent_logs": false,
+  "failure_reason": "",
+  "handoff_observed": true,
+  "inventory_source": {
+    "exists": true,
+    "path": "~/.cli-proxy-api",
+    "path_resolution": "expanduser",
+    "source": "auth-dir"
+  },
+  "login_status": "expired",
+  "matching_auth_entries": [
+    {
+      "account_id": "fca7a069-ad2c-4fda-921f-e8c971365b31",
+      "basename": "codex-21c5ac82-kir.test.gpt26@gmail.com-team.json",
+      "changed_since_session_created": false,
+      "disabled": false,
+      "expired": "2026-06-07T12:13:49+03:00",
+      "last_refresh": "2026-05-28T12:13:49+03:00",
+      "mtime_epoch": 1779959629.7402492
+    }
+  ],
+  "matching_auth_entries_changed_since_session_created_count": 0,
+  "matching_auth_entry_count": 1,
+  "owner_email": "kir.test.gpt26@gmail.com",
+  "process_alive_without_materialization_write": false,
+  "refresh_token_reused_observed_in_recent_logs": true,
+  "session_created_at": "2026-05-29T04:07:12.839739+00:00",
+  "session_expires_at": "2026-05-29T04:12:12.839749+00:00",
+  "session_id": "codex-a6774fadc45044b989d88b9fda341035",
+  "session_pid": 54591,
+  "session_pid_alive": false
+}

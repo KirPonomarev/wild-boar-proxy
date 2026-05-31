@@ -1,0 +1,1429 @@
+{
+  "captured_at_utc": "2026-05-27T04:18:17.622273Z",
+  "database_count": 4,
+  "databases": [
+    {
+      "durable_restoration_proven": false,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex__sqlx_migrations_1",
+          "table_name": "_sqlx_migrations"
+        },
+        {
+          "name": "sqlite_autoindex_thread_goals_1",
+          "table_name": "thread_goals"
+        }
+      ],
+      "mtime_ns": 1779855489128810330,
+      "opened_readonly": true,
+      "raw_content_recorded": false,
+      "relative_path": "goals_1.sqlite",
+      "row_values_recorded": false,
+      "schema_observed": true,
+      "semantic_content_classified": false,
+      "size": 24576,
+      "tables": [
+        {
+          "columns": [
+            {
+              "name": "version",
+              "notnull": false,
+              "pk": true,
+              "type": "BIGINT"
+            },
+            {
+              "name": "description",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "installed_on",
+              "notnull": true,
+              "pk": false,
+              "type": "TIMESTAMP"
+            },
+            {
+              "name": "success",
+              "notnull": true,
+              "pk": false,
+              "type": "BOOLEAN"
+            },
+            {
+              "name": "checksum",
+              "notnull": true,
+              "pk": false,
+              "type": "BLOB"
+            },
+            {
+              "name": "execution_time",
+              "notnull": true,
+              "pk": false,
+              "type": "BIGINT"
+            }
+          ],
+          "name": "_sqlx_migrations",
+          "row_count": 1,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "thread_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "goal_id",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "objective",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "token_budget",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "tokens_used",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "time_used_seconds",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "created_at_ms",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at_ms",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "thread_goals",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        }
+      ],
+      "triggers": [],
+      "views": []
+    },
+    {
+      "durable_restoration_proven": false,
+      "indexes": [
+        {
+          "name": "idx_logs_process_uuid_threadless_ts",
+          "table_name": "logs"
+        },
+        {
+          "name": "idx_logs_thread_id",
+          "table_name": "logs"
+        },
+        {
+          "name": "idx_logs_thread_id_ts",
+          "table_name": "logs"
+        },
+        {
+          "name": "idx_logs_ts",
+          "table_name": "logs"
+        },
+        {
+          "name": "sqlite_autoindex__sqlx_migrations_1",
+          "table_name": "_sqlx_migrations"
+        }
+      ],
+      "mtime_ns": 1779854574821919925,
+      "opened_readonly": true,
+      "raw_content_recorded": false,
+      "relative_path": "logs_2.sqlite",
+      "row_values_recorded": false,
+      "schema_observed": true,
+      "semantic_content_classified": false,
+      "size": 4763648,
+      "tables": [
+        {
+          "columns": [
+            {
+              "name": "version",
+              "notnull": false,
+              "pk": true,
+              "type": "BIGINT"
+            },
+            {
+              "name": "description",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "installed_on",
+              "notnull": true,
+              "pk": false,
+              "type": "TIMESTAMP"
+            },
+            {
+              "name": "success",
+              "notnull": true,
+              "pk": false,
+              "type": "BOOLEAN"
+            },
+            {
+              "name": "checksum",
+              "notnull": true,
+              "pk": false,
+              "type": "BLOB"
+            },
+            {
+              "name": "execution_time",
+              "notnull": true,
+              "pk": false,
+              "type": "BIGINT"
+            }
+          ],
+          "name": "_sqlx_migrations",
+          "row_count": 2,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "INTEGER"
+            },
+            {
+              "name": "ts",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "ts_nanos",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "level",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "target",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "feedback_log_body",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "module_path",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "file",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "line",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "thread_id",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "process_uuid",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "estimated_bytes",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "logs",
+          "row_count": 4352,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        }
+      ],
+      "triggers": [],
+      "views": []
+    },
+    {
+      "durable_restoration_proven": false,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_automation_runs_1",
+          "table_name": "automation_runs"
+        },
+        {
+          "name": "sqlite_autoindex_automations_1",
+          "table_name": "automations"
+        },
+        {
+          "name": "sqlite_autoindex_inbox_items_1",
+          "table_name": "inbox_items"
+        },
+        {
+          "name": "sqlite_autoindex_local_app_server_feature_enablement_1",
+          "table_name": "local_app_server_feature_enablement"
+        }
+      ],
+      "mtime_ns": 1779851183035409051,
+      "opened_readonly": true,
+      "raw_content_recorded": false,
+      "relative_path": "sqlite/codex-dev.db",
+      "row_values_recorded": false,
+      "schema_observed": true,
+      "semantic_content_classified": false,
+      "size": 36864,
+      "tables": [
+        {
+          "columns": [
+            {
+              "name": "thread_id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "automation_id",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "read_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "thread_title",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "source_cwd",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "inbox_title",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "inbox_summary",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "created_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "archived_user_message",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "archived_assistant_message",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "archived_reason",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            }
+          ],
+          "name": "automation_runs",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "name",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "prompt",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "next_run_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "last_run_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "cwds",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "rrule",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "model",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "reasoning_effort",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "created_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "automations",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "title",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "description",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "thread_id",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "read_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "created_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "inbox_items",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "feature_name",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "enabled",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "local_app_server_feature_enablement",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        }
+      ],
+      "triggers": [],
+      "views": []
+    },
+    {
+      "durable_restoration_proven": false,
+      "indexes": [
+        {
+          "name": "idx_agent_job_items_status",
+          "table_name": "agent_job_items"
+        },
+        {
+          "name": "idx_agent_jobs_status",
+          "table_name": "agent_jobs"
+        },
+        {
+          "name": "idx_jobs_kind_status_retry_lease",
+          "table_name": "jobs"
+        },
+        {
+          "name": "idx_stage1_outputs_source_updated_at",
+          "table_name": "stage1_outputs"
+        },
+        {
+          "name": "idx_thread_dynamic_tools_thread",
+          "table_name": "thread_dynamic_tools"
+        },
+        {
+          "name": "idx_thread_spawn_edges_parent_status",
+          "table_name": "thread_spawn_edges"
+        },
+        {
+          "name": "idx_threads_archived",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_archived_cwd_created_at_ms",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_archived_cwd_updated_at_ms",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_created_at",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_created_at_ms",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_provider",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_source",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_updated_at",
+          "table_name": "threads"
+        },
+        {
+          "name": "idx_threads_updated_at_ms",
+          "table_name": "threads"
+        },
+        {
+          "name": "sqlite_autoindex__sqlx_migrations_1",
+          "table_name": "_sqlx_migrations"
+        },
+        {
+          "name": "sqlite_autoindex_agent_job_items_1",
+          "table_name": "agent_job_items"
+        },
+        {
+          "name": "sqlite_autoindex_agent_jobs_1",
+          "table_name": "agent_jobs"
+        },
+        {
+          "name": "sqlite_autoindex_jobs_1",
+          "table_name": "jobs"
+        },
+        {
+          "name": "sqlite_autoindex_remote_control_enrollments_1",
+          "table_name": "remote_control_enrollments"
+        },
+        {
+          "name": "sqlite_autoindex_stage1_outputs_1",
+          "table_name": "stage1_outputs"
+        },
+        {
+          "name": "sqlite_autoindex_thread_dynamic_tools_1",
+          "table_name": "thread_dynamic_tools"
+        },
+        {
+          "name": "sqlite_autoindex_thread_spawn_edges_1",
+          "table_name": "thread_spawn_edges"
+        },
+        {
+          "name": "sqlite_autoindex_threads_1",
+          "table_name": "threads"
+        }
+      ],
+      "mtime_ns": 1779855489115475180,
+      "opened_readonly": true,
+      "raw_content_recorded": false,
+      "relative_path": "state_5.sqlite",
+      "row_values_recorded": false,
+      "schema_observed": true,
+      "semantic_content_classified": false,
+      "size": 188416,
+      "tables": [
+        {
+          "columns": [
+            {
+              "name": "version",
+              "notnull": false,
+              "pk": true,
+              "type": "BIGINT"
+            },
+            {
+              "name": "description",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "installed_on",
+              "notnull": true,
+              "pk": false,
+              "type": "TIMESTAMP"
+            },
+            {
+              "name": "success",
+              "notnull": true,
+              "pk": false,
+              "type": "BOOLEAN"
+            },
+            {
+              "name": "checksum",
+              "notnull": true,
+              "pk": false,
+              "type": "BLOB"
+            },
+            {
+              "name": "execution_time",
+              "notnull": true,
+              "pk": false,
+              "type": "BIGINT"
+            }
+          ],
+          "name": "_sqlx_migrations",
+          "row_count": 34,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "job_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "item_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "row_index",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "source_id",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "row_json",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "assigned_thread_id",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "attempt_count",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "result_json",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "last_error",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "created_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "completed_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "reported_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "agent_job_items",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "name",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "instruction",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "output_schema_json",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "input_headers_json",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "input_csv_path",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "output_csv_path",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "auto_export",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "created_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "started_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "completed_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "last_error",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "max_runtime_seconds",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "agent_jobs",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "INTEGER"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "last_watermark",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "last_success_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "backfill_state",
+          "row_count": 1,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "kind",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "job_key",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "worker_id",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "ownership_token",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "started_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "finished_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "lease_until",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "retry_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "retry_remaining",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "last_error",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "input_watermark",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "last_success_watermark",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "jobs",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "websocket_url",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "account_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "app_server_client_name",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "server_id",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "environment_id",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "server_name",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "remote_control_enrollments",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "thread_id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "source_updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "raw_memory",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "rollout_summary",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "generated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "rollout_slug",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "usage_count",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "last_usage",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "selected_for_phase2",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "selected_for_phase2_source_updated_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            }
+          ],
+          "name": "stage1_outputs",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "thread_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "position",
+              "notnull": true,
+              "pk": true,
+              "type": "INTEGER"
+            },
+            {
+              "name": "name",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "description",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "input_schema",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "defer_loading",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "namespace",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            }
+          ],
+          "name": "thread_dynamic_tools",
+          "row_count": 12,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "parent_thread_id",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "child_thread_id",
+              "notnull": true,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "status",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            }
+          ],
+          "name": "thread_spawn_edges",
+          "row_count": 0,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        },
+        {
+          "columns": [
+            {
+              "name": "id",
+              "notnull": false,
+              "pk": true,
+              "type": "TEXT"
+            },
+            {
+              "name": "rollout_path",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "created_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "source",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "model_provider",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "cwd",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "title",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "sandbox_policy",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "approval_mode",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "tokens_used",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "has_user_event",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "archived",
+              "notnull": true,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "archived_at",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "git_sha",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "git_branch",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "git_origin_url",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "cli_version",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "first_user_message",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "agent_nickname",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "agent_role",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "memory_mode",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "model",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "reasoning_effort",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "agent_path",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "created_at_ms",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "updated_at_ms",
+              "notnull": false,
+              "pk": false,
+              "type": "INTEGER"
+            },
+            {
+              "name": "thread_source",
+              "notnull": false,
+              "pk": false,
+              "type": "TEXT"
+            },
+            {
+              "name": "preview",
+              "notnull": true,
+              "pk": false,
+              "type": "TEXT"
+            }
+          ],
+          "name": "threads",
+          "row_count": 4,
+          "row_count_counts_as_thread_count": false,
+          "row_values_recorded": false
+        }
+      ],
+      "triggers": [
+        "threads_created_at_ms_after_insert",
+        "threads_created_at_ms_after_update",
+        "threads_updated_at_ms_after_insert",
+        "threads_updated_at_ms_after_update"
+      ],
+      "views": []
+    }
+  ],
+  "durable_restoration_proven": false,
+  "packet_kind": "persistent_storage_sqlite_schema",
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "row_count_counts_as_thread_count": false,
+  "row_count_counts_as_thread_history_preservation": false,
+  "row_values_recorded": false,
+  "schema_observed_count": 4,
+  "sqlite_open_mode": "uri_mode_ro_immutable",
+  "status": "ok"
+}

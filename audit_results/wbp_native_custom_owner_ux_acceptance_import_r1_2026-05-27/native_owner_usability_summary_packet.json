@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-27T10:17:13.601907Z",
+  "current_owner_action_collected": false,
+  "final_e2e_claimed": false,
+  "final_status": "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+  "general_day_to_day_usability_claimed": false,
+  "machine_ui_proof_claimed": false,
+  "original_codex_via_wbp_claimed": false,
+  "owner_confirmation_imported": true,
+  "packet_kind": "native_owner_usability_summary",
+  "route_reference_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/detached_native_custom_egress_import_summary_packet.json",
+  "route_reference_status": "ok",
+  "source_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26",
+  "status": "ok"
+}

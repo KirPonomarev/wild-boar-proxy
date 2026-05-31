@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T02:52:07.285525Z",
+  "evidence": [
+    "persistent_custom_profile_contract_packet.json",
+    "persistent_custom_profile_identity_packet.json",
+    "persistent_profile_state_diff_packet.json",
+    "thread_history_preservation_packet.json",
+    "persistent_profile_false_green_audit.json"
+  ],
+  "facts": {
+    "false_green_status": "ok",
+    "history_preservation_status": "blocked",
+    "native_launch_attempted": false,
+    "profile_id": "wbp-custom-main",
+    "profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main"
+  },
+  "packet_kind": "independent_persistent_profile_audit",
+  "status": "ok",
+  "text_only_audit_counted_as_pass": false
+}

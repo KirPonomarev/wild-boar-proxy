@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "verdict": "accepted_temporary_local_proxy_key_path",
+  "verdict_scope": "classification only; no live launch or provider proof",
+  "rationale": [
+    "The key is read from server-owned local CLIProxy config, not browser input.",
+    "The key is a local CLIProxy API key, not a raw upstream OpenAI account token.",
+    "The generated config is secret-bearing and must be redacted from evidence/logs.",
+    "This path is practical for the current native probe but does not satisfy the cleaner auth.command contract."
+  ],
+  "constraints": {
+    "raw_key_may_not_enter_packets": true,
+    "generated_config_toml_must_be_treated_as_secret_bearing": true,
+    "native_routing_claim_allowed_by_this_contour": false,
+    "provider_availability_claim_allowed_by_this_contour": false,
+    "auth_command_contract_satisfied_by_this_path": false,
+    "replacement_or_refactor_claimed_by_this_contour": false
+  },
+  "blocked_secret_leak": false
+}

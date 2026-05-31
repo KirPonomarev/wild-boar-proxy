@@ -1,0 +1,235 @@
+{
+  "contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "captured_at": "2026-05-15T15:15:36.194165+00:00",
+  "sandbox_env_overrides": {
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models"
+  },
+  "auth_file_payload_keys": [
+    "OPENAI_API_KEY",
+    "auth_mode"
+  ],
+  "auth_file_payload": {
+    "auth_mode": "apikey",
+    "OPENAI_API_KEY": "sk-959211fed28c4991ac493818616dddda"
+  },
+  "helper_inventory": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 531,
+      "mtime_ns": 1778857409234726361,
+      "sha256": "9c1dcce3e55d0623d972ea4979b56d362ffb2da0c952eaab874d9ffa2dcb8bd6",
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 533,
+      "mtime_ns": 1778857409234494566,
+      "sha256": "a04eb6c38e848c5de9f877b6ff98474c1cc45cbcdf07ad40f58b455cd3f69da5",
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 529,
+      "mtime_ns": 1778857409234927365,
+      "sha256": "8f22ee6f4bf8877d42027e37d7782102fa15b3c8f97a8ae3fcd6c67454f5ce07",
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 525,
+      "mtime_ns": 1778857409235160077,
+      "sha256": "a02d83f44d03f19e516a66860e02f01eb19248dfea3cb689cc79635b3bb29c63",
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    }
+  ],
+  "pre_accounts_packet": {
+    "argv": [
+      "accounts",
+      "list",
+      "--json"
+    ],
+    "returncode": 0,
+    "stdout": "{\"status\": \"ok\", \"exit_code\": 0, \"human_message\": \"Account registry snapshot is available.\", \"machine_error_code\": \"OK\", \"changed_files\": [], \"next_action\": \"none\", \"liveness\": \"unknown\", \"severity\": \"recoverable\", \"operator_action\": \"none\", \"accounts\": [], \"registry_identity\": {\"status\": \"clear\", \"machine_error_code\": \"OK\", \"duplicate_backend_ids\": [], \"duplicate_auth_basenames\": [], \"missing_auth_refs\": [], \"empty_auth_ref_backends\": [], \"invalid_auth_basenames\": [], \"invalid_backend_pools\": [], \"registry_schema_version\": 2, \"unsupported_schema_versions\": [], \"claim_blockers\": [], \"next_action\": \"none\"}, \"pool_policy\": {\"active_min\": 0, \"active_target\": 0, \"reserve_target\": 0}, \"stable_default_backend_id\": \"\"}\n",
+    "stderr": "",
+    "parsed_json": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Account registry snapshot is available.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "unknown",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "accounts": [],
+      "registry_identity": {
+        "status": "clear",
+        "machine_error_code": "OK",
+        "duplicate_backend_ids": [],
+        "duplicate_auth_basenames": [],
+        "missing_auth_refs": [],
+        "empty_auth_ref_backends": [],
+        "invalid_auth_basenames": [],
+        "invalid_backend_pools": [],
+        "registry_schema_version": 2,
+        "unsupported_schema_versions": [],
+        "claim_blockers": [],
+        "next_action": "none"
+      },
+      "pool_policy": {
+        "active_min": 0,
+        "active_target": 0,
+        "reserve_target": 0
+      },
+      "stable_default_backend_id": ""
+    }
+  },
+  "pre_registry": {
+    "schema_version": 2,
+    "version": 2,
+    "updated_at": "2026-05-15T14:16:36.347684+00:00",
+    "stable_default_backend_id": "",
+    "pool_policy": {
+      "active_min": 0,
+      "active_target": 0,
+      "reserve_target": 0
+    },
+    "backends": []
+  },
+  "pre_state": {
+    "schema_version": 2,
+    "version": 2,
+    "status": "failed",
+    "effective_mode": "stable",
+    "last_sync_at": "2026-05-15T14:26:25.145798+00:00",
+    "last_error": "",
+    "selected_backend_ids": [],
+    "managed_port": 8320,
+    "current_proxy_url": "",
+    "stable_default_backend_id": "",
+    "active_count": 0,
+    "reserve_count": 0,
+    "retired_count": 0,
+    "healthy_count": 1,
+    "degraded_count": 0,
+    "down_count": 1
+  },
+  "forbidden_paths": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 112,
+      "mtime_ns": 1777974351418541438,
+      "sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o600",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229,
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778411256548853944,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778852637475404781,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 29277,
+      "mtime_ns": 1778512853646445643,
+      "sha256": "7481fec19ea89891ac20c8747a416210cfda1f9d109eb0db59ade2ac0bdbfe91"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592,
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o600",
+      "size": 622,
+      "mtime_ns": 1778512853762031295,
+      "sha256": "94c2bdef0386ec20f4f8772ea581fc9b974cb164fe5fc74d6435927d925c31fd"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 3178,
+      "mtime_ns": 1778445681313227595,
+      "sha256": "6ad97417027a79fddbc49cb2af5dc4716b89429239875575501ce5c9422c9ac9"
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 577,
+      "mtime_ns": 1778332551870097299,
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2"
+    }
+  ]
+}

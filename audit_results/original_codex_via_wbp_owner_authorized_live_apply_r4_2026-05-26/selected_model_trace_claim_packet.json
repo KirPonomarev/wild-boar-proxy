@@ -1,0 +1,13 @@
+{
+  "allowed_claim": "",
+  "captured_at_utc": "2026-05-26T14:56:15.579039Z",
+  "catalog_availability_claimed": false,
+  "gpt_5_5_availability_claimed": false,
+  "model_availability_claimed": false,
+  "model_family_availability_claimed": false,
+  "packet_kind": "selected_model_trace_claim",
+  "reason_class": "SELECTED_MODEL_TRACE_NOT_PROVEN",
+  "route_trace_confirmed": false,
+  "selected_model": "",
+  "status": "blocked"
+}

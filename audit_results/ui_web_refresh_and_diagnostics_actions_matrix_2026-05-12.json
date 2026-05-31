@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_REFRESH_AND_DIAGNOSTICS_ACTIONS",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "allowed_ui_actions": {
+    "refresh_health_detail": {
+      "adapter_command_id": "healthcheck",
+      "action_role": "runtime_detail",
+      "mutates_runtime": false,
+      "affects_primary_truth": false
+    },
+    "export_diagnostics": {
+      "adapter_command_id": "diagnostics_export",
+      "action_role": "support_artifact",
+      "mutates_runtime": false,
+      "affects_primary_truth": false
+    },
+    "stable_repair_plan": {
+      "adapter_command_id": "stable_repair_dry_run",
+      "action_role": "recovery_planning",
+      "mutates_runtime": false,
+      "affects_primary_truth": false
+    }
+  },
+  "blocked_inputs": [
+    "command_id payload",
+    "sync",
+    "stable_repair_apply",
+    "launch_client",
+    "unknown ui_action"
+  ],
+  "real_smoke_observation": {
+    "export_diagnostics": "ok",
+    "stable_repair_plan": "ok",
+    "refresh_health_detail": "ok",
+    "command_id_payload": "blocked",
+    "sync": "blocked"
+  },
+  "guardrails": {
+    "browser_command_id_submission": "blocked",
+    "action_overwrites_primary_truth": "blocked",
+    "diagnostics_as_runtime_truth": "blocked",
+    "dry_run_as_repair_success": "blocked",
+    "desktop_transfer": "forbidden_without_operator_approval"
+  }
+}

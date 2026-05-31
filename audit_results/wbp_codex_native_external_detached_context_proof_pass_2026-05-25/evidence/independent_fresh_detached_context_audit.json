@@ -1,0 +1,64 @@
+{
+  "auditor": "orchestrator:self_packet_audit",
+  "captured_at_utc": "2026-05-25T15:09:50.229152Z",
+  "final_verdict": "external_detached_context_proof_block_supported",
+  "findings": [
+    {
+      "facts": {
+        "hosted_by_protected_codex_session": true,
+        "protected_codex_ancestry_disproven": false,
+        "reason_class": "PROTECTED_CODEX_SESSION_DETECTED",
+        "status": "blocked"
+      },
+      "id": "protected_host_negative",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json"
+    },
+    {
+      "facts": {
+        "operator_action_performed": false,
+        "phase7_retry_admissible": false,
+        "reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED",
+        "status": "blocked"
+      },
+      "id": "fresh_context_acquisition",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json"
+    },
+    {
+      "facts": {
+        "quiescent_current_codex_precondition_satisfied": false,
+        "reason_class": "CURRENT_CODEX_NOT_QUIESCENT",
+        "status": "blocked"
+      },
+      "id": "quiescent_gate",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json"
+    },
+    {
+      "facts": {
+        "ambient_openai_api_key_present": false,
+        "reason_class": "",
+        "status": "ok",
+        "unexplained_authority_present": false
+      },
+      "id": "ambient_env_classification",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence/ambient_env_context_packet.json"
+    },
+    {
+      "facts": {
+        "consumer_launch_performed": false,
+        "filesystem_retry_attempted": false,
+        "forbidden_claims_present": false,
+        "native_launch_performed": false
+      },
+      "id": "no_forbidden_claims",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_external_detached_context_proof_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json"
+    }
+  ],
+  "overclaim_check": {
+    "consumer_launch_claim_present": false,
+    "native_filesystem_isolation_claim_present": false,
+    "native_window_claim_present": false,
+    "provider_reproof_claim_present": false
+  },
+  "status": "ok",
+  "supported_reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED"
+}

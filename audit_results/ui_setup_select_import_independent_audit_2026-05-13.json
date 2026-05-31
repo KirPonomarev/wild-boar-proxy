@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_SETUP_CLIENT_SELECT_IMPORT_DECISION",
+  "created_at": "2026-05-13",
+  "artifact_type": "independent_audit",
+  "auditor": {
+    "agent": "Poincare",
+    "mode": "read_only",
+    "model_class": "low_cost_scanner"
+  },
+  "scope": [
+    "audit_results/ui_setup_select_import_decision_matrix_2026-05-13.json",
+    "audit_results/ui_setup_select_import_screen_passports_2026-05-13.json",
+    "audit_results/ui_setup_select_import_closeout_2026-05-13.md",
+    "UI_READINESS_SPEC.md",
+    "COMMAND_API.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py"
+  ],
+  "findings": [
+    {
+      "severity": "medium",
+      "status": "fixed",
+      "file": "audit_results/ui_setup_select_import_closeout_2026-05-13.md",
+      "issue": "Closeout listed this independent audit artifact before the file existed.",
+      "resolution": "Created the independent audit artifact and updated closeout status."
+    }
+  ],
+  "checks": [
+    {
+      "name": "browser_origin_arbitrary_paths",
+      "status": "passed",
+      "evidence": "Decision matrix explicitly forbids arbitrary browser path/source-dir/app path submission and limits future path handling to server-owned locations, command-owned ids, or future desktop/native picker after approval."
+    },
+    {
+      "name": "direct_state_log_config_reads",
+      "status": "passed",
+      "evidence": "Artifacts do not admit direct state/log/config/runtime parsing as UI truth and align with UI_READINESS_SPEC.md primary truth restrictions."
+    },
+    {
+      "name": "new_command_surfaces",
+      "status": "passed",
+      "evidence": "Artifacts classify missing setup/select/import operations as needs_command_api_contour or deferred rather than inventing UI command surfaces."
+    },
+    {
+      "name": "desktop_native_picker_boundary",
+      "status": "passed",
+      "evidence": "Artifacts defer native picker behavior to a future desktop phase after owner approval."
+    },
+    {
+      "name": "runtime_py_scope",
+      "status": "passed",
+      "evidence": "Artifacts do not require or admit runtime.py edits."
+    },
+    {
+      "name": "external_reference_trace_scan",
+      "status": "passed",
+      "evidence": "Auditor found no external reference service traces or token-ish strings in the three contour artifacts."
+    }
+  ],
+  "residual_risks": [
+    {
+      "risk": "The source package path is recorded as local provenance in the decision matrix.",
+      "disposition": "Accepted. It is not browser-origin payload and is needed to identify the owner-provided render baseline."
+    },
+    {
+      "risk": "Future implementation may be tempted to reuse launch client as path verification.",
+      "disposition": "Blocked by decision matrix and screen passports; future contour must preserve launch-client dispatch-only semantics."
+    }
+  ],
+  "verdict": "pass_after_fix"
+}

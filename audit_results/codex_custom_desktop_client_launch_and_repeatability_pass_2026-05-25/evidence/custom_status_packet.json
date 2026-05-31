@@ -1,0 +1,34 @@
+{
+  "availability_reason": "",
+  "captured_at_utc": "2026-05-25T01:40:13.870721Z",
+  "claim_gate_status": "blocked",
+  "current_codex_home_allowed": false,
+  "current_codex_touch_risk": "blocked_by_contract",
+  "custom_session_available": true,
+  "isolation_plan": {
+    "cleanup_required": true,
+    "current_codex_home_allowed": false,
+    "current_codex_mutation_allowed": false,
+    "isolated_state_required": true,
+    "separate_process_required": true,
+    "temp_codex_home_required": true
+  },
+  "last_process_isolation_proof": {
+    "artifact_present": true,
+    "final_message_present": true,
+    "fresh_truth": false,
+    "protected_surfaces_unchanged": true,
+    "source": "previous_contour_artifact",
+    "status": "passed",
+    "tmp_root_removed": true
+  },
+  "launch_claim_scope": "isolated_session_workbench_launch_ready",
+  "machine_error_code": "CLAIM_GATE_BLOCKED",
+  "mode_id": "codex_custom",
+  "next_contour": "",
+  "operator_surface_ready": true,
+  "schema_version": 1,
+  "server_issued_models_visible": true,
+  "status": "degraded",
+  "wbp_endpoint_configured": "http://127.0.0.1:8318/v1"
+}

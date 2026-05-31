@@ -1,0 +1,15 @@
+{
+  "api_lane_callable": true,
+  "captured_at_utc": "2026-05-29T04:37:24.945959Z",
+  "chatgpt_lane_callable": true,
+  "concurrent_execution_observed": false,
+  "current_execution_path_source_after_second_call": "session_bound_slot_runtime",
+  "current_execution_slot_id_after_second_call": "coding_agent_model_slot",
+  "packet_kind": "same_session_dual_lane_runtime",
+  "runner_call_count": 2,
+  "same_session_callability_proven": true,
+  "same_session_identity_proven": true,
+  "session_id": "ccs-4c4860dcbbd84542a726",
+  "simultaneous_dispatch_proven": false,
+  "status": "ok"
+}

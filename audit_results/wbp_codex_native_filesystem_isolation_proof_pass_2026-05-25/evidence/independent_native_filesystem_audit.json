@@ -1,0 +1,73 @@
+{
+  "auditor": "subagent:019e5f7b-a144-7f12-99cf-269b080b9276",
+  "captured_at_utc": "2026-05-25T14:12:40.273219Z",
+  "final_verdict": "blocked_correct_but_original_reason_overstated",
+  "findings": [
+    {
+      "facts": {
+        "cleanup_reversibility_packet.termination.custom_processes_gone": true,
+        "launch_result.custom_process_observed": true,
+        "launch_result.launcher_pid": 88140,
+        "launch_result.startup_inventory.custom_process_count": 1
+      },
+      "id": "live_custom_launch_observed",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_filesystem_isolation_proof_pass_2026-05-25/evidence/live_native_filesystem_probe_packet.json"
+    },
+    {
+      "facts": {
+        "codex_dir.changed_count": 4,
+        "codex_dir.changed_relative_paths": [
+          "logs_2.sqlite",
+          "logs_2.sqlite-shm",
+          "logs_2.sqlite-wal",
+          "sessions/2026/05/24/rollout-2026-05-24T20-20-04-019e5b00-42d8-73b0-8966-3caad69ef9a0.jsonl"
+        ],
+        "default_app_support_codex.changed_count": 0,
+        "default_cache_codex.changed_count": 0,
+        "default_httpstorage_codex.changed_count": 0
+      },
+      "id": "live_protected_surface_changes",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_filesystem_isolation_proof_pass_2026-05-25/evidence/live_protected_surface_changed_paths_summary.json"
+    },
+    {
+      "facts": {
+        "current_codex_delta.after_root_app_pids": [
+          41266
+        ],
+        "current_codex_delta.before_root_app_pids": [
+          41266
+        ],
+        "current_codex_delta.current_codex_touched": false,
+        "current_codex_delta.delta_classification": "baseline_preserved"
+      },
+      "id": "current_codex_baseline_preserved",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_filesystem_isolation_proof_pass_2026-05-25/evidence/live_native_filesystem_probe_packet.json"
+    },
+    {
+      "facts": {
+        "codex_dir.changed_count": 6,
+        "default_app_support_codex.changed_count": 3,
+        "protected_surface_recursive_diff.all_protected_surfaces_unchanged": false,
+        "reason_class": "ACTIVE_CURRENT_CODEX_BASELINE_DRIFT_OBSERVED"
+      },
+      "id": "idle_baseline_drift_without_custom_launch",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_filesystem_isolation_proof_pass_2026-05-25/evidence/current_codex_idle_baseline_drift_packet.json"
+    },
+    {
+      "facts": {
+        "clear_app_created_files_captured": false,
+        "entry_count": 14
+      },
+      "id": "attribution_ambiguous",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_filesystem_isolation_proof_pass_2026-05-25/evidence/custom_profile_write_inventory.json"
+    }
+  ],
+  "recommended_reason_class": "WRITE_ATTRIBUTION_AMBIGUOUS_WITH_ACTIVE_CURRENT_CODEX_BASELINE_DRIFT",
+  "required_corrections_applied": [
+    "summary reason_class downgraded from default-surface-change-first wording to attribution-ambiguous wording",
+    "summary owned_write_entries_count corrected to 14",
+    "idle baseline drift packet given top-level status/reason_class",
+    "extracted user_data_dir_respected_packet downgraded to ambiguity wording"
+  ],
+  "status": "ok"
+}

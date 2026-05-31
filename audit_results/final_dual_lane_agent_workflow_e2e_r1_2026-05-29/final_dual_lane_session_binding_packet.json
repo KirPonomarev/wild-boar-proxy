@@ -1,0 +1,12 @@
+{
+  "binding_is_chat_folklore": false,
+  "captured_at_utc": "2026-05-29T12:04:50.582518Z",
+  "coding_agent_slot_model_id": "wbp-web-primary-openrouter",
+  "packet_kind": "final_dual_lane_session_binding",
+  "primary_slot_model_id": "gpt-5.3-codex",
+  "role_slot_binding_count": 2,
+  "role_slot_binding_proven": true,
+  "session_id": "ccs-d0095a9359cb4eabab89",
+  "slot_catalog_revalidated": true,
+  "status": "ok"
+}

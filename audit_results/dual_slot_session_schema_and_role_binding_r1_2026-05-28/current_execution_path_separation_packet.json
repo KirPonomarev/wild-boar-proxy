@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-28T11:59:27.499049Z",
+  "coding_agent_bound_not_dispatched": true,
+  "current_execution_path_model_id": "gpt-5.3-codex",
+  "current_execution_path_source": "session_primary_model_slot",
+  "current_execution_slot_id": "primary_model_slot",
+  "packet_kind": "current_execution_path_separation",
+  "slot_binding_implies_runtime_dispatch": false,
+  "status": "ok"
+}

@@ -1,0 +1,55 @@
+[
+  {
+    "name": "setup",
+    "screen": "setup",
+    "desktopBox": {
+      "width": 1600,
+      "height": 1000
+    },
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "scrollHeight": 1000,
+    "clientHeight": 1000,
+    "visibleText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nНастройка\nВизуальный перенос каркаса настройки,"
+  },
+  {
+    "name": "select_client",
+    "screen": "select-client",
+    "desktopBox": {
+      "width": 1600,
+      "height": 1000
+    },
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "scrollHeight": 1000,
+    "clientHeight": 1000,
+    "visibleText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nВыбор клиента\nВизуальный перенос каркаса настро"
+  },
+  {
+    "name": "import_existing",
+    "screen": "import-existing",
+    "desktopBox": {
+      "width": 1600,
+      "height": 1000
+    },
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "scrollHeight": 1000,
+    "clientHeight": 1000,
+    "visibleText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nИмпорт\nВизуальный перенос каркаса настройки, вы"
+  },
+  {
+    "name": "onboard_modal",
+    "overlayHidden": false,
+    "modalText": "ДОБАВЛЕНИЕ АККАУНТА\nДобавить аккаунт в резерв\n\nПодключение выполняется через onboard_account. Браузер не передаёт секретные значения, исходные расположения или идентификаторы бекенда.\n\ncommand request\nрезерв сначала\nрезу",
+    "scrollWidth": 1600,
+    "clientWidth": 1600
+  },
+  {
+    "name": "route_remove_confirm",
+    "overlayHidden": false,
+    "modalText": "ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ\nУдалить отключённый маршрут\n\nУдалить только отключённую route registry запись после server preflight.\n\ncommand request\nне runtime truth\nнужен JSON refresh\nui_action\napi_route_remove\nАккаунт\nwbp-dis",
+    "scrollWidth": 1600,
+    "clientWidth": 1600
+  }
+]

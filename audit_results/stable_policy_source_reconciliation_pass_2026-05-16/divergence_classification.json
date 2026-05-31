@@ -1,0 +1,39 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "classifications": [
+    {
+      "pair": [
+        "approved_repair_target_inventory",
+        "selected_backend_snapshot_family"
+      ],
+      "classification": "expected_current_state_alignment",
+      "why": [
+        "selected-backend participation evidence currently tracks the approved target family exactly",
+        "both surfaces describe the same bounded approved-target family rather than current policy eligibility"
+      ]
+    },
+    {
+      "pair": [
+        "approved_repair_target_inventory",
+        "stable_repair_dry_run.registry_source_inputs"
+      ],
+      "classification": "actionable_drift",
+      "why": [
+        "owner-path dry run emits an exact target delta with 3 adds and 1 prune",
+        "approved target family is behind the current policy/source-copy family"
+      ]
+    },
+    {
+      "pair": [
+        "approved_repair_target_inventory",
+        "status.stable_runtime_consumer"
+      ],
+      "classification": "expected_current_state_separation",
+      "why": [
+        "runtime consumer truth explicitly prefers observed stable inventory source",
+        "selection reason is approved_target_not_ready_for_runtime_consumption"
+      ]
+    }
+  ],
+  "dominant_divergence_type": "actionable_stable_policy_source_family_drift"
+}

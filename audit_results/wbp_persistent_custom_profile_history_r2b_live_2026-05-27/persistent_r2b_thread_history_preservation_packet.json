@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-27T03:42:11.545741Z",
+  "forbidden_thread_without_profile_state": false,
+  "history_or_session_state_observed": true,
+  "owner_visible_prior_thread_context_recorded": false,
+  "owner_visible_thread_counted_as_storage_proof": false,
+  "packet_kind": "persistent_thread_history_preservation_r2",
+  "profile_state_preserved": false,
+  "raw_prompt_recorded": false,
+  "raw_thread_content_recorded": false,
+  "reason_class": "THREAD_HISTORY_PRESERVATION_UNPROVEN",
+  "status": "blocked",
+  "thread_history_preserved": false,
+  "visible_thread_context_only": true
+}

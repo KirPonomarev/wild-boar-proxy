@@ -1,0 +1,135 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
+  "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+  "changed_files": [],
+  "next_action": "user_action",
+  "liveness": "unknown",
+  "severity": "recoverable",
+  "operator_action": "user_action",
+  "rotation_evidence_result": {
+    "schema_version": 1,
+    "status": "owner_path_emitted",
+    "attempted": true,
+    "requested_scope": "expanded-active-pool",
+    "observed_at_utc": "2026-05-11T07:52:10.916285+00:00",
+    "evidence_status": "participation_evidence_contradicted",
+    "evidence_strength": "none",
+    "evidence_reason": "policy_drift_detected",
+    "evidence_source": "runtime_state.selected_backend_snapshot",
+    "evidence_source_layer": "supervisor_owner_observed",
+    "evidence_source_class": "supervisor_owner_observed",
+    "evidence_source_name": "sync --json",
+    "evidence_source_run_id": "sync:2026-05-11T07:52:10.916285+00:00",
+    "evidence_producer_version": "2",
+    "evidence_freshness": "stale",
+    "selected_backend_snapshot_validation_status": "valid",
+    "selected_backend_snapshot_validation_error": "",
+    "selected_backend_snapshot_compatibility": "nested_snapshot",
+    "selected_backend_snapshot_present": true,
+    "selected_backend_ids": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "selected_backends_digest": "f8500b955663a372f7760bb405001c29e2dae7aaf0a8b7ae4e52cad0f95b2b33",
+    "expected_selected_backends_digest": "f8500b955663a372f7760bb405001c29e2dae7aaf0a8b7ae4e52cad0f95b2b33",
+    "selected_backend_ids_observed": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "active_pool_count_observed": 17,
+    "runtime_active_pool_count_observed": 17,
+    "registry_active_pool_count_observed": 17,
+    "active_routing_candidate_ids_observed": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro",
+      "k-gpt-pro-2",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "kp8750410-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "new-new55555",
+      "pig-outlook-team"
+    ],
+    "active_pool_count_agreement_status": "matched",
+    "stable_inventory_status": "available",
+    "policy_drift_status": "detected",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_claim_surface_source": "auth-dir",
+    "registry_identity_status": "clear",
+    "evidence_sources": [
+      "runtime_state.selected_backend_snapshot",
+      "runtime_state.selected_backend_ids",
+      "runtime_state.active_count",
+      "backend_registry.active_pool",
+      "backend_registry.routing_candidate_backends",
+      "stable_policy_drift",
+      "registry_identity"
+    ],
+    "participation_status": "contradicted",
+    "participation_summary": {
+      "status": "contradicted",
+      "final_outcome": "participation_evidence_contradicted",
+      "selected_backend_count": 9,
+      "active_routing_candidate_count": 11,
+      "registry_active_pool_count": 17,
+      "runtime_active_pool_count": 17,
+      "active_pool_count_agreement_status": "matched"
+    },
+    "blocker_type": "contradicted_state",
+    "claim_scope": "bounded_local_participation_evidence_only",
+    "final_outcome": "participation_evidence_contradicted"
+  },
+  "delegated_evidence": {
+    "pool_summary": {
+      "active": 17,
+      "runtime_active_count": 17,
+      "selected_backend_ids": [
+        "beep-outlook-team",
+        "gpt2026bis-team",
+        "k-gpt-pro-2",
+        "k-gpt-pro-3k",
+        "k-ponomarev-photo",
+        "kip85905-team",
+        "new-gpt-bis",
+        "new-new22222",
+        "pig-outlook-team"
+      ],
+      "backend_count": 25
+    },
+    "policy_drift_summary": {
+      "status": "detected",
+      "machine_error_code": "STABLE_POLICY_DRIFT",
+      "configured_active_count": 17,
+      "allowed_stable_auth_count": 11,
+      "stable_auth_inventory_count": 25,
+      "stable_auth_inventory_source": {
+        "source": "auth-dir",
+        "path": "~/.cli-proxy-api",
+        "path_resolution": "expanduser",
+        "exists": true
+      }
+    },
+    "registry_identity_summary": {
+      "status": "clear",
+      "machine_error_code": "OK"
+    }
+  }
+}

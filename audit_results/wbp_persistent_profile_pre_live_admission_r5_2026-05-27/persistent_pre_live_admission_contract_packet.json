@@ -1,0 +1,20 @@
+{
+  "admission_counts_as_backup_created": false,
+  "admission_counts_as_egress_proof": false,
+  "admission_counts_as_final_e2e": false,
+  "admission_counts_as_live_launch_safe": false,
+  "admission_counts_as_model_availability": false,
+  "admission_counts_as_native_ux_acceptance": false,
+  "admission_counts_as_original_reversibility": false,
+  "admission_counts_as_restore_verified": false,
+  "admission_counts_as_route_proof": false,
+  "admission_counts_as_runtime_permission": false,
+  "admission_counts_as_thread_history_proof": false,
+  "admission_is_required_planning_prerequisite": true,
+  "captured_at_utc": "2026-05-27T06:30:39.437498Z",
+  "contour_scope": "pre_live_admission_only",
+  "packet_kind": "persistent_pre_live_admission_contract",
+  "parent_target": "WBP_CUSTOM_CODEX_PERSISTENT_PROFILE_HISTORY_CLASSIFIED",
+  "status": "ok",
+  "target_status": "WBP_CUSTOM_PERSISTENT_PROFILE_PRE_LIVE_ADMISSION_R5_CLASSIFIED"
+}

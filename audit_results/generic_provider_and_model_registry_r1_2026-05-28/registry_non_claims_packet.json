@@ -1,0 +1,10 @@
+{
+  "auth_admitted_provider_means_runtime_provider": false,
+  "captured_at_utc": "2026-05-28T10:49:59.054429Z",
+  "packet_kind": "registry_non_claims",
+  "registry_export_implies_consumer_integration_complete": false,
+  "registry_presence_means_provider_compatible": false,
+  "registry_presence_means_runtime_usable": false,
+  "seed_only_entries_are_current_runtime_candidates": false,
+  "status": "ok"
+}

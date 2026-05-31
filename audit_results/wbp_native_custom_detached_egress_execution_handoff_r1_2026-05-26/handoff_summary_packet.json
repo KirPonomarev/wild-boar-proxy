@@ -1,0 +1,16 @@
+{
+  "api_openai_com_absence_claimed": false,
+  "captured_at_utc": "2026-05-26T20:13:15.318985Z",
+  "direct_egress_absence_claimed": false,
+  "external_command_sha256": "ea5bc957437788dc3ba2fa8f2a980618bb27f8e11b284f0af23cb82cbf7c668b",
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_2026-05-26",
+  "external_result_imported": false,
+  "external_shell_command": "cd /Volumes/Work/wild-boar-proxy && python3 /Volumes/Work/wild-boar-proxy/tools/native_custom_direct_egress_classification_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_detached_egress_execution_EXTERNAL_2026-05-26 --mode live --model gpt-5.4-mini --wait-seconds 90",
+  "final_status": "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+  "live_network_capture_attempted": false,
+  "native_launch_attempted": false,
+  "next_phase": "owner_detached_run_then_phase_b_import",
+  "owner_action_required": true,
+  "packet_kind": "detached_egress_execution_handoff_summary",
+  "status": "ok"
+}

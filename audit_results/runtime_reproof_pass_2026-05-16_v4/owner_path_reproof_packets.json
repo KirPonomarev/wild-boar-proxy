@@ -1,0 +1,47 @@
+{
+  "healthcheck_packet": {
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "launch_readiness": "ready",
+    "attestation_source": "healthcheck --json",
+    "deterministic_stable_recovery_result_status": "not_invoked",
+    "claim_gate_settled_runtime_gap": false
+  },
+  "launch_smoke_packet": {
+    "machine_error_code": "OK",
+    "launcher_exit_code": 0,
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "effective_stable_runtime_consumer_source": "approved_target_active_by_activation_evidence",
+    "consumer_activation_readiness": "aligned",
+    "activation_snapshot_freshness": "fresh",
+    "activation_snapshot_observed_at_utc": "2026-05-15T23:51:17.705624+00:00",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+    ]
+  },
+  "post_smoke_status_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate": "clear",
+    "policy_drift": "clear",
+    "effective_stable_runtime_consumer_source": "approved_target_active_by_activation_evidence",
+    "consumer_activation_readiness": "aligned",
+    "policy_drift_observed_status": "detected"
+  },
+  "post_smoke_rotation_packet": {
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_status": "participation_evidence_stale",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "evidence_freshness": "stale",
+    "selected_backend_count": 15,
+    "policy_drift_status": "clear",
+    "policy_drift_claim_surface_source": "approved_repair_target"
+  }
+}

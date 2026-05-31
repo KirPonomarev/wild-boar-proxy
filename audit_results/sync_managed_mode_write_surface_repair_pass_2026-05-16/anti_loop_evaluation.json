@@ -1,0 +1,26 @@
+{
+  "status": "partial_progress_but_narrower_blocker",
+  "measured_against_post_diagnose_state": {
+    "effective_mode": {
+      "before": "managed",
+      "after": "stable",
+      "improved": true
+    },
+    "claim_gate": {
+      "before": "blocked",
+      "after": "blocked",
+      "improved": false
+    },
+    "policy_drift_surface_used_by_status": {
+      "before": "observed_auth_dir_detected",
+      "after": "observed_auth_dir_detected",
+      "improved": false
+    },
+    "effective_stable_runtime_source": {
+      "before": "observed_source_active",
+      "after": "observed_source_active",
+      "improved": false
+    }
+  },
+  "exception_reason": "the contour's bounded repair target was the managed truth reassertion seam itself; that seam is now repaired and the remaining blocker is narrower runtime activation evidence, not another sync write-surface ambiguity"
+}

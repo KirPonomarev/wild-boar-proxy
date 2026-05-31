@@ -1,0 +1,10 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-27T05:10:09.731081Z",
+  "cli_runner_readiness_schema_version": 1,
+  "codex_cli_version_status": "not_invoked_by_this_contour",
+  "packet_kind": "version_pinning",
+  "python_version": "3.14.5",
+  "status": "ok",
+  "wbp_git_commit": "01bdfb759160fced975bb4002da9a0b51aad2c59"
+}

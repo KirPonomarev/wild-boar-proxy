@@ -1,0 +1,71 @@
+{
+  "contour_id": "UI_WEB_CONFIRMATION_SYSTEM_HARDENING",
+  "date": "2026-05-13",
+  "scope": "frontend confirmation UX hardening only",
+  "server_authority_rule": {
+    "status": "preserved",
+    "evidence": [
+      "wild_boar_proxy/web_design_ui/scripts/overview.js keeps action availability and command meaning sourced from server metadata",
+      "wild_boar_proxy/web_design_live_server.py remains unchanged in this contour",
+      "wild_boar_proxy/web_design_command_adapter.py remains unchanged in this contour"
+    ]
+  },
+  "confirmation_policy": {
+    "status": "implemented",
+    "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "lines": "73-135",
+    "covered_actions": [
+      "sync_runtime",
+      "set_mode_stable",
+      "set_mode_managed",
+      "launch_client_dispatch",
+      "onboard_account",
+      "validate_account",
+      "promote_account",
+      "demote_account",
+      "hold_account",
+      "release_account",
+      "retire_account"
+    ],
+    "fallback": "CONSERVATIVE_CONFIRMATION_POLICY for incomplete or inconsistent metadata"
+  },
+  "modal_fields": {
+    "status": "implemented",
+    "file": "wild_boar_proxy/web_design_ui/index.html",
+    "lines": "824-846",
+    "fields": [
+      "ui_action",
+      "account_id",
+      "severity",
+      "policy",
+      "mutation",
+      "refresh",
+      "scope",
+      "dispatch_state",
+      "truth_warning"
+    ]
+  },
+  "duplicate_submit_guard": {
+    "status": "implemented",
+    "file": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "lines": "679-708",
+    "guard": "confirmationInFlight blocks repeated confirm; pendingConfirmedAction is cleared before runUiAction dispatch; confirm/cancel buttons are disabled during dispatch"
+  },
+  "forbidden_surface_check": {
+    "status": "preserved",
+    "new_actions_added": [],
+    "forbidden_actions_exposed": [],
+    "notes": "No stable repair apply, setup/select/import, legacy import, installer, raw command, shell, raw argv, path, config, state, or log surface was added."
+  },
+  "tests_added_or_updated": [
+    {
+      "file": "tests/test_web_design_ui.py",
+      "lines": "403-457",
+      "coverage": "confirmation modal fields, policy table, conservative fallback, in-flight guard, risky action coverage, and no newly exposed action ids"
+    }
+  ],
+  "privacy_check": {
+    "external_reference_service_traces": "none intended",
+    "repo_artifacts_from_external_service": "none"
+  }
+}

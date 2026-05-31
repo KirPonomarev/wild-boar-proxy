@@ -1,0 +1,26 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "authoritative_family_for_next_step": {
+    "surface": "stable_repair_dry_run.registry_source_inputs",
+    "why": [
+      "it is the strongest current owner-path policy/source-copy truth surface",
+      "it emits the exact family delta needed to reconcile the approved target inventory",
+      "exact-source admission remains premature until this family drift is reconciled"
+    ]
+  },
+  "non_authoritative_for_now": [
+    {
+      "surface": "approved_repair_target_inventory",
+      "why": "it is a lagging approved target family, not the current eligible source-copy family"
+    },
+    {
+      "surface": "selected_backend_snapshot_family",
+      "why": "it is stale bounded participation evidence aligned to the lagging approved target family"
+    }
+  ],
+  "runtime_truth_note": {
+    "surface": "status.stable_runtime_consumer",
+    "current_runtime_ready_family": "observed_stable_inventory_source",
+    "why": "approved target is not yet ready for runtime consumption"
+  }
+}

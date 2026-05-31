@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "contour": "CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES",
+  "run_label": "v1",
+  "basis": {
+    "runtime_reproof_closeout": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/closeout.md",
+    "runtime_reproof_decision_packet": "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/decision_packet.json",
+    "diagnostic_closeout": "/Volumes/Work/wild-boar-proxy/audit_results/stop_and_diagnose_config_toml_write_2026-05-16/closeout.md",
+    "diagnostic_contract_verdict": "/Volumes/Work/wild-boar-proxy/audit_results/stop_and_diagnose_config_toml_write_2026-05-16/contract_verdict.json",
+    "runtime_truth_code_basis": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "test_basis": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py"
+  },
+  "governing_artifacts_updated": [
+    "/Volumes/Work/wild-boar-proxy/MASTER_PLAN.md"
+  ],
+  "historical_artifacts_preserved": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/runtime_reproof_pass_2026-05-16_v5/contour.md"
+  ],
+  "historical_preservation_reason": "preserve historical declaration state and fix alignment through a new contour plus active master-plan correction"
+}

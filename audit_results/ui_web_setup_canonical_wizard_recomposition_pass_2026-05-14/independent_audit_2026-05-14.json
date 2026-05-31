@@ -1,0 +1,44 @@
+{
+  "contour": "UI_WEB_SETUP_CANONICAL_WIZARD_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "auditor_agent": "019e27b5-031e-7263-8195-ba1ab5926dbf",
+  "scope": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "audit_results/ui_web_setup_canonical_wizard_recomposition_pass_2026-05-14/after_metrics.json",
+    "audit_results/ui_web_setup_canonical_wizard_recomposition_pass_2026-05-14/screenshots/after/"
+  ],
+  "facts": {
+    "main_title": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "step_count": 5,
+    "document_scroll_width": 1600,
+    "document_scroll_height": 1000,
+    "main_scroll_height": 942,
+    "main_client_height": 942,
+    "setup_bottom": 915,
+    "visible_svg_icons": 0,
+    "visible_img_icons": 10,
+    "inputs": 0,
+    "file_inputs": 0,
+    "data_ui_actions": 0,
+    "live_actions": 0,
+    "active_primary_buttons": [],
+    "active_buttons": [
+      "Закрыть"
+    ],
+    "overflows": []
+  },
+  "findings": [
+    "Setup reads visually as an admission wizard with a five-step rail.",
+    "No filesystem scan, path input, file picker, config write, installer init, desktop bridge, runtime change, adapter change, or allowlist change was found.",
+    "The setup section has no inputs, selects, file inputs, data-ui-action, or live-action.",
+    "No active primary button is present on the setup surface.",
+    "Only the local UI button Закрыть remains active.",
+    "Visible setup icons are PNG images and visibleSvgIcons is zero.",
+    "All after screenshots and metrics pass the 1600x1000 fit criteria."
+  ],
+  "verdict": "PASS"
+}

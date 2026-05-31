@@ -1,0 +1,24 @@
+{
+  "contour": "SYNC_MANAGED_MODE_WRITE_SURFACE_REPAIR_PASS",
+  "pre_repair_basis": {
+    "managed_truth_reassertion": {
+      "runtime_effective_mode_file": "managed",
+      "config_toml_base_url": "http://127.0.0.1:8320/v1",
+      "supervisor_state_effective_mode": "managed"
+    },
+    "pre_repair_status": {
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "effective_stable_runtime_consumer_source_status": "observed_source_active",
+      "consumer_activation_readiness_status": "activation_pending"
+    },
+    "pre_repair_rotation": {
+      "machine_error_code": "OK",
+      "evidence_status": "participation_evidence_present",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear"
+    }
+  }
+}

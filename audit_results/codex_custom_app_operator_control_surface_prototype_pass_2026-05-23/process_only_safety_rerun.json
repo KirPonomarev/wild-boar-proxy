@@ -1,0 +1,196 @@
+{
+  "captured_at_utc": "2026-05-23T15:53:13.042212Z",
+  "comparisons": {
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    }
+  },
+  "current_codex_auth_config_unchanged": true,
+  "default_storage_full_mtime_unchanged": true,
+  "followup_cleanup_errors": [],
+  "followup_cleanup_removed_roots": [
+    "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-custom-operator-rerun-jqw0thqn",
+    "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-custom-operator-rerun-h5sd0v51"
+  ],
+  "note": "Authoritative isolation rerun avoided Browser instrumentation; browser screenshot proof is visual evidence only because Browser writes current Codex app browser storage.",
+  "prompt_one": {
+    "exact_match": true,
+    "exit_code": 0,
+    "expected_exact": "UI_ONE",
+    "final_message": "UI_ONE",
+    "machine_error_code": "OK",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "prompt_two": {
+    "exact_match": true,
+    "exit_code": 0,
+    "expected_exact": "UI_TWO",
+    "final_message": "UI_TWO",
+    "machine_error_code": "OK",
+    "status": "ok",
+    "warning_classes": []
+  },
+  "protected_post_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779545624067618182,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "d470b8daa0b62b526474bfcd6c6aa87b46436a717d113c7ea8a9703eb0ba07a6",
+      "size": 4871
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779551437337006594,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_pre_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779545624067618182,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "d470b8daa0b62b526474bfcd6c6aa87b46436a717d113c7ea8a9703eb0ba07a6",
+      "size": 4871
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779551437337006594,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "secret_value_recorded": false,
+  "status": {
+    "captured_at_utc": "2026-05-23T15:53:05.677436Z",
+    "claim_gate": {
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "next_action": "inspect_claim_gate",
+      "sources": [
+        "policy_drift"
+      ],
+      "status": "blocked"
+    },
+    "control_surface": {
+      "browser_secret_fields": false,
+      "localhost_only": true
+    },
+    "health": {
+      "liveness": "healthy",
+      "status": "ok"
+    },
+    "models": {
+      "chosen_model_visible": true,
+      "model": "gpt-5.3-codex"
+    },
+    "status": {
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "liveness": "healthy",
+      "status": "ok"
+    }
+  },
+  "tmp_removed": true,
+  "tmp_removed_after_followup_cleanup": true,
+  "transcript": {
+    "captured_at_utc": "2026-05-23T15:53:12.332669Z",
+    "entries": [
+      {
+        "exact_match": true,
+        "exit_code": 0,
+        "expected_exact": "UI_ONE",
+        "final_message": "UI_ONE",
+        "prompt_id": "rerun_prompt_1"
+      },
+      {
+        "exact_match": true,
+        "exit_code": 0,
+        "expected_exact": "UI_TWO",
+        "final_message": "UI_TWO",
+        "prompt_id": "rerun_prompt_2"
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "url": "http://127.0.0.1:64927"
+}

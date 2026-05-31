@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "The repo already admits a bounded stable_repair_plan dry-run summary action, but the richer Recovery Center screen would overrun the current browser-safe contract if it rendered transaction_plan internals directly."
+    },
+    {
+      "agent": "Rawls",
+      "role": "independent repo fact checker",
+      "finding": "The correct contour-level verdict is summary-only admitted: stable repair dry-run is already an admitted bounded planning surface, while the dedicated Recovery Center screen remains admission-required and apply-like recovery actions remain deferred."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "UI_READINESS_SPEC.md:75-76",
+      "fact": "Stable Repair Dry Run and Stable Repair Apply are already distinguished, with dry-run marked non-mutating and apply marked mutating."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:231-232",
+      "fact": "Stable repair apply requires explicit confirmation and stable repair dry run is preferred before stable repair apply."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_command_adapter.py:151-159",
+      "fact": "The web design command adapter already allowlists stable_repair_dry_run and keeps stable_repair_apply separate with confirmation required."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_live_server.py:100-109",
+      "fact": "stable_repair_plan is already exposed as a non-mutating recovery_planning action with claim scope limited to dry-run planning."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_live_server.py:1096-1118",
+      "fact": "Browser-facing action results are reduced to bounded summary fields plus optional packet.data, which keeps the current dry-run UI surface summary-only."
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:783-804",
+      "fact": "The web design UI action endpoint accepts stable_repair_plan, marks it recovery_planning, and does not treat it as a primary-truth mutation."
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:1638-1688",
+      "fact": "stable_repair_apply is blocked from the web design UI action surface as UI_ACTION_NOT_ALLOWED."
+    },
+    {
+      "source": "tests/test_web_design_ui.py:226-240",
+      "fact": "The static UI includes stable_repair_plan and excludes stable_repair_apply."
+    },
+    {
+      "source": "wild_boar_proxy/runtime.py:3615-3630",
+      "fact": "Dry-run support structures include target references and registry source input items with auth_ref paths."
+    },
+    {
+      "source": "wild_boar_proxy/runtime.py:4244-4249,4320-4345,4684-4713",
+      "fact": "The dry-run command packet exposes source_copy_missing_auth_refs, basename-collision auth_refs, and full transaction_plan detail with next_action review_transaction_plan."
+    },
+    {
+      "source": "tests/test_cli.py:4018-4069,4601-4608",
+      "fact": "CLI tests confirm dry-run exposes transaction_plan and does not leak it into unrelated JSON surfaces."
+    },
+    {
+      "source": "audit_results/ui_final_screen_passports_2026-05-14.json:1038-1069",
+      "fact": "The final screen passport already marks 27_recovery_center admission-required and states that dry-run planning exists while apply-like recovery-center actions remain deferred."
+    }
+  ],
+  "checks": [
+    {
+      "check": "bounded_summary_surface_exists_today",
+      "verdict": "PASS",
+      "reason": "The current repo already exposes stable_repair_plan as a bounded, non-mutating dry-run summary action."
+    },
+    {
+      "check": "detailed_recovery_center_ready_today",
+      "verdict": "BLOCK",
+      "reason": "Current dry-run packet detail is too path-rich and authority-rich to be treated as a browser-owned Recovery Center model."
+    },
+    {
+      "check": "apply_separation_preserved",
+      "verdict": "PASS",
+      "reason": "Apply remains separately mutating, confirmation-gated, and blocked from the current web design UI action surface."
+    },
+    {
+      "check": "browser_payload_boundary_preserved",
+      "verdict": "PASS",
+      "reason": "The current admitted action shape remains ui_action-only and does not admit recovery target, strategy, policy, path, or raw argv payloads."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_SUMMARY_ONLY_ADMISSION"
+}

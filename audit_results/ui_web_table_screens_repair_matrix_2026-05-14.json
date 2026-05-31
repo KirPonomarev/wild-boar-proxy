@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_TABLE_SCREENS_REPAIR",
+  "date": "2026-05-14",
+  "mode": "implementation_visual_repair_ui_only",
+  "baseline": {
+    "accounts_source_model": "04_accounts",
+    "api_connections_source_model": "derived_from_accounts_table_geometry",
+    "target_shell": "left_sidebar_source_shell",
+    "working_viewport": "1600x1000",
+    "table_card_padding": "18px 20px 14px",
+    "table_header_height_px": 42,
+    "table_row_height_target_px": 58,
+    "pagination_height_px": 34
+  },
+  "changes": [
+    {
+      "surface": "accounts_table_card",
+      "change": "bounded table-card internal scroll for long live account lists",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "account_actions",
+      "change": "compact two-column action button geometry",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "api_connections_table",
+      "change": "derived table column widths and compact route action grouping",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "api_route_action_labels",
+      "change": "shorter visible labels with full meaning retained in title text",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "api_route_copy",
+      "change": "removed route resilience wording from fixture copy and readiness wording from route action warnings",
+      "semantic_effect": "copy_boundary_tightening",
+      "action_payload_effect": "unchanged"
+    }
+  ],
+  "preserved_ui_actions": [
+    "validate_account",
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account",
+    "onboard_account",
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_validate",
+    "api_route_check",
+    "api_route_profile",
+    "api_route_evidence_capture",
+    "api_route_remove"
+  ],
+  "forbidden_changes_observed": {
+    "new_ui_actions": false,
+    "command_id_browser_payload": false,
+    "raw_argv_browser_payload": false,
+    "arbitrary_path_browser_payload": false,
+    "token_browser_payload": false,
+    "action_availability_semantic_change": false,
+    "confirmation_requirement_change": false,
+    "route_account_eligibility_change": false,
+    "server_preflight_change": false,
+    "runtime_file_change": false,
+    "live_server_semantic_change": false,
+    "command_adapter_semantic_change": false,
+    "desktop_file_change": false,
+    "fabricated_runtime_truth": false
+  },
+  "acceptance": {
+    "accounts_live_body_horizontal_scroll": false,
+    "accounts_fixture_body_horizontal_scroll": false,
+    "api_connections_live_body_horizontal_scroll": false,
+    "api_connections_fixture_body_horizontal_scroll": false,
+    "vertical_letter_headers": false,
+    "action_button_overflow": false,
+    "accounts_live_table_internal_scroll": true,
+    "api_connections_fixture_table_internal_scroll": true,
+    "api_connections_derived_surface": true,
+    "route_editor_affordance_added": false
+  },
+  "resume_from_here": "Run independent audit, closeout, final scans, commit, and push."
+}

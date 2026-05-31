@@ -1,0 +1,16 @@
+{
+  "blocked_handoff_expands_fallback_policy": false,
+  "captured_at_utc": "2026-05-28T13:37:16.764428Z",
+  "completed_chain_implies_workflow_usefulness": false,
+  "deep_reasoning_slot_runtime_honor_proven": false,
+  "implicit_primary_defaulting_is_handoff_proof": false,
+  "operator_mediated_equals_runtime_native": false,
+  "packet_kind": "orchestration_non_claims",
+  "reviewer_slot_runtime_honor_proven": false,
+  "same_model_multi_role_disambiguation_proven": false,
+  "scanner_slot_runtime_honor_proven": false,
+  "sequential_handoff_implies_concurrent_execution": false,
+  "single_handoff_proves_generalized_workflow": false,
+  "status": "ok",
+  "stored_slots_imply_autonomous_orchestration": false
+}

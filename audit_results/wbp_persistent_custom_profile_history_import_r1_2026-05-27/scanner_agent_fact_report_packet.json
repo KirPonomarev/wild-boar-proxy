@@ -1,0 +1,51 @@
+{
+  "captured_at_utc": "2026-05-27T11:17:30Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agent_nickname": "Pauli",
+  "agent_role": "explorer",
+  "agent_model_class": "gpt-5.4-mini",
+  "read_only_audit": true,
+  "edited_files": [],
+  "facts": [
+    {
+      "name": "strongest_positive_continuity_packet",
+      "value": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_custom_profile_r2c_owner_visible_thread_continuity_2026-05-27/r2c_thread_continuity_classification_packet.json"
+    },
+    {
+      "name": "owner_visible_thread_continuity_classified",
+      "value": true
+    },
+    {
+      "name": "same_nonce_thread_visible",
+      "value": true
+    },
+    {
+      "name": "same_persistent_profile_identity",
+      "value": true
+    },
+    {
+      "name": "profile_state_preserved_in_r2b",
+      "value": false
+    },
+    {
+      "name": "thread_history_preserved_in_r2b",
+      "value": false
+    },
+    {
+      "name": "relaunch_restoration_source_proven_in_r3",
+      "value": false
+    },
+    {
+      "name": "identity_mapping_repeatable",
+      "value": true
+    },
+    {
+      "name": "ownership_boundary_and_execution_policy_covered",
+      "value": true
+    }
+  ],
+  "final_read": "bounded_continuity_supports_with_limits_only",
+  "route_proof_claimed": false,
+  "final_e2e_claimed": false
+}

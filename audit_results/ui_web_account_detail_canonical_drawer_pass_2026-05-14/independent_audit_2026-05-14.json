@@ -1,0 +1,32 @@
+{
+  "contour": "UI_WEB_ACCOUNT_DETAIL_CANONICAL_DRAWER_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent explorer",
+  "scope_ok": true,
+  "forbidden_files_touched": [],
+  "runtime_adapter_allowlist_touched": false,
+  "raw_log_state_auth_reads": false,
+  "browser_path_or_file_input": false,
+  "row_open_dispatches_command": false,
+  "action_payload_only_ui_action_account_id": true,
+  "disabled_actions_dispatch_possible": false,
+  "retire_is_danger_and_confirmed": true,
+  "last_command_truth_boundary_visible": true,
+  "metrics_pass": true,
+  "screenshots_present": true,
+  "screenshot_files": [
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/active_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/reserve_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/held_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/problem_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/missing_account.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/disabled_action_reasons.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/last_command_success.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/last_command_failed.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-14/screenshots/after/retire_confirmation.png"
+  ],
+  "remaining_risks": [
+    "tests/test_web_design_ui.py contains synthetic /tmp and /private/tmp literals used for redaction assertions; no external reference service strings were found in changed tracked artifacts.",
+    "The worktree contains unrelated old untracked external_lab artifacts outside this contour; they were not staged."
+  ]
+}

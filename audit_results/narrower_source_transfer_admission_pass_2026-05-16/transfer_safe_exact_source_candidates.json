@@ -1,0 +1,34 @@
+{
+  "contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "policy_shaped_candidate_family": {
+    "registry_file": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "forbidden_source_root_family": "/Users/kirillponomarev/.cli-proxy-api",
+    "allowed_exact_auth_ref_count": 12,
+    "allowed_exact_auth_refs": [
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-gpt2026bis@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-kip85905@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-pig.gpt@outlook.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-beep.gpt@outlook.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.ponomarev.photo@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro.3k@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro.2@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new22222@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new55555@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.gpt.bis@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-e5c048fc-kp8750410@gmail.com-team.json"
+    ]
+  },
+  "selector_truth": {
+    "selected_backend_ids": [],
+    "selected_backend_ids_owner_strength": "insufficient_for_narrowing",
+    "stable_default_backend_id": "gpt2026bis-team",
+    "stable_default_backend_id_owner_strength": "registry_policy_only_not_transfer_selector"
+  },
+  "why_one_exact_source_is_not_admitted_now": [
+    "multiple exact candidates remain policy-allowed",
+    "selected_backend_ids are empty and STATE_SCHEMA forbids synthesizing selection from registry ids or counts",
+    "stable_default_backend_id is present but is not canonically sufficient by itself to select one transfer source for this contour",
+    "all currently observed exact candidates live under forbidden live/working roots"
+  ]
+}

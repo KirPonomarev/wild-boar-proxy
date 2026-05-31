@@ -1,0 +1,67 @@
+{
+  "contour": "DESKTOP_APP_PACKAGE_PASS_REENTRY_RECONCILIATION",
+  "slot_8_equivalence_verdict": "materially_satisfied_for_admitted_package_slice",
+  "closure_drift_verdict": "closure_pass_needed",
+  "requirements": [
+    {
+      "requirement": "no_tokens_or_auth_files",
+      "status": "supported",
+      "evidence": [
+        "MASTER_PLAN.md:248-249",
+        "audit_results/desktop_app_package_pass_2026-05-21/evidence/package_contents_scan.json",
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:63-64"
+      ],
+      "notes": "Package contents scan recorded zero forbidden residue hits and the closeout states the private-data boundary scan passed."
+    },
+    {
+      "requirement": "no_runtime_state_or_logs",
+      "status": "supported",
+      "evidence": [
+        "MASTER_PLAN.md:250-251",
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:37-38",
+        "audit_results/desktop_app_package_pass_2026-05-21/evidence/package_contents_scan.json"
+      ],
+      "notes": "Package verify and package contents scan report a clean boundary without runtime residue."
+    },
+    {
+      "requirement": "application_launches",
+      "status": "supported",
+      "evidence": [
+        "MASTER_PLAN.md:252",
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:39-40",
+        "wild_boar_proxy/ui_shell.py:3265-3417",
+        "tests/test_ui_shell.py:2724-3077"
+      ],
+      "notes": "Packaged launcher smoke is represented by the admitted `--smoke-packaged-continuity-json` path and the targeted CLI test remains green on the current branch."
+    },
+    {
+      "requirement": "baseline_scenario_passes",
+      "status": "supported",
+      "evidence": [
+        "MASTER_PLAN.md:253",
+        "audit_results/desktop_app_package_pass_2026-05-21/evidence/desktop_packaged_continuity_smoke.json",
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:41-44"
+      ],
+      "notes": "Packaged smoke packet records `packaged_launch=true`, `bundle_verdict=ready`, and preserved bounded Quick Start continuity."
+    }
+  ],
+  "closure_drift": [
+    {
+      "surface": "desktop_app_package_pass closeout",
+      "kind": "git_push_mismatch",
+      "evidence": [
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:57-59"
+      ],
+      "notes": "Closeout records `pushed: no`, but current branch and origin are both at `c1e151c`, well beyond the package proof chain."
+    },
+    {
+      "surface": "desktop_app_package_pass closeout",
+      "kind": "artifact_only",
+      "evidence": [
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:22-24",
+        "audit_results/desktop_app_package_pass_2026-05-21/closeout.md:57-59"
+      ],
+      "notes": "Recorded head `f11bcd1...` remains contained on the current branch, but recorded commit `d6166fb` is stale relative to the current pushed branch truth."
+    }
+  ]
+}

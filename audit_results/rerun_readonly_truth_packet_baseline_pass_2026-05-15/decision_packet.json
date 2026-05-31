@@ -1,0 +1,12 @@
+{
+  "contour": "RERUN_READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "status": "completed",
+  "decision": "GO_TO_SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
+  "reason": "Canonical readonly command truth, live GET truth, and core UI live claims align on quick-start, overview, accounts, and api-connections after the overview pending-source repair.",
+  "blocking_mismatches": [],
+  "notes": [
+    "Overview now has an honest pending live phase before converging to final live truth.",
+    "Broad browser probes still see hidden shared shell placeholders on some non-overview screens; those hidden nodes were excluded from truth verdicts."
+  ],
+  "next_contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS"
+}

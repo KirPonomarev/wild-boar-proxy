@@ -1,0 +1,318 @@
+{
+  "contour_id": "UI_DONE_WORK_SCREEN_AND_ACTION_PASSPORT_BACKFILL",
+  "generated_on": "2026-05-12",
+  "repo_root": "/Volumes/Work/wild-boar-proxy",
+  "source_head": "0159955",
+  "work_type": "artifact_backfill_only",
+  "behavior_changes": false,
+  "global_payload_contract": {
+    "browser_may_send": [
+      "ui_action",
+      "structured action payload fields explicitly admitted by the server"
+    ],
+    "browser_must_not_send": [
+      "command_id",
+      "raw argv",
+      "shell",
+      "arbitrary path",
+      "config mutation"
+    ],
+    "server_refs": [
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:300",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:311"
+    ],
+    "test_refs": [
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:576",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:615",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:179"
+    ]
+  },
+  "metadata_boundary": {
+    "browser_metadata_endpoint": "/api/actions",
+    "adapter_command_ids_exposed_to_browser": false,
+    "server_refs": [
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:356",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:393"
+    ],
+    "test_refs": [
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:335",
+      "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:615"
+    ]
+  },
+  "readonly_surfaces": [
+    {
+      "adapter_command_id": "status",
+      "argv": ["status", "--json"],
+      "ui_surface": "overview live readonly",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:47"
+      ]
+    },
+    {
+      "adapter_command_id": "healthcheck",
+      "argv": ["healthcheck", "--json"],
+      "ui_surface": "overview live detail and refresh detail action",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:52"
+      ]
+    },
+    {
+      "adapter_command_id": "mode_get",
+      "argv": ["mode", "get", "--json"],
+      "ui_surface": "overview mode truth",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:57"
+      ]
+    },
+    {
+      "adapter_command_id": "accounts_list",
+      "argv": ["accounts", "list", "--json"],
+      "ui_surface": "overview account summary, accounts screen truth, and account-action preflight",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:511",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:63"
+      ]
+    },
+    {
+      "adapter_command_id": "rollout_rotation_inspect",
+      "argv": ["rollout", "rotation", "inspect", "--json"],
+      "ui_surface": "overview supporting detail",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:28",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:135"
+      ]
+    }
+  ],
+  "implemented_ui_actions": [
+    {
+      "ui_action": "refresh_health_detail",
+      "adapter_command_id": "healthcheck",
+      "argv": ["healthcheck", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": false,
+      "post_action_refresh_required": false,
+      "claim_scope": "health detail refresh only",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:45",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "export_diagnostics",
+      "adapter_command_id": "diagnostics_export",
+      "argv": ["diagnostics", "export", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": false,
+      "post_action_refresh_required": false,
+      "claim_scope": "support artifact export only; not runtime health truth",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:56",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "stable_repair_plan",
+      "adapter_command_id": "stable_repair_dry_run",
+      "argv": ["stable", "repair", "--dry-run", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": false,
+      "post_action_refresh_required": false,
+      "claim_scope": "dry-run recovery planning only",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:67",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "sync_runtime",
+      "adapter_command_id": "sync",
+      "argv": ["sync", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "sync request only; refreshed readonly packets remain truth",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:112",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "set_mode_stable",
+      "adapter_command_id": "mode_stable",
+      "argv": ["mode", "set", "stable", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "mode set request only; refreshed readonly packets remain truth",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:123",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "set_mode_managed",
+      "adapter_command_id": "mode_managed",
+      "argv": ["mode", "set", "managed", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "mode set request only; refreshed readonly packets remain truth",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:134",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "launch_smoke",
+      "adapter_command_id": "smoke",
+      "argv": ["launch", "smoke", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": false,
+      "post_action_refresh_required": true,
+      "claim_scope": "runtime smoke check only; not host-client launch success",
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:145",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:375"
+      ]
+    },
+    {
+      "ui_action": "launch_client_dispatch",
+      "adapter_command_id": "launch_client",
+      "argv": ["launch", "client", "--client-path", "{client_path}", "--json"],
+      "payload_fields": ["ui_action"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "bounded OS dispatch request only; not host-client session success",
+      "server_side_args": ["client_path"],
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:156",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:318",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:541"
+      ]
+    },
+    {
+      "ui_action": "validate_account",
+      "adapter_command_id": "accounts_validate",
+      "argv": ["accounts", "validate", "{account_id}", "--json"],
+      "payload_fields": ["ui_action", "account_id"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "account verification request only; refreshed accounts list remains truth",
+      "preflight": [
+        "payload must be an object",
+        "command_id is rejected",
+        "ui_action must be allowlisted",
+        "no unsupported fields",
+        "account_id must be a safe string with max length 96 and no dot segments",
+        "accounts list --json must succeed",
+        "accounts packet must be valid",
+        "target account must exist"
+      ],
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:79",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:511",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:68",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:413"
+      ]
+    },
+    {
+      "ui_action": "hold_account",
+      "adapter_command_id": "accounts_hold",
+      "argv": ["accounts", "hold", "{account_id}", "--json"],
+      "payload_fields": ["ui_action", "account_id"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "account hold request only; refreshed accounts list remains truth",
+      "preflight": [
+        "same account_id/list/target checks as validate_account",
+        "target pool must not be retired",
+        "target must not already be manual_hold"
+      ],
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:90",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:562",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:568",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:76",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:465"
+      ]
+    },
+    {
+      "ui_action": "release_account",
+      "adapter_command_id": "accounts_release",
+      "argv": ["accounts", "release", "{account_id}", "--json"],
+      "payload_fields": ["ui_action", "account_id"],
+      "confirmation_required": true,
+      "post_action_refresh_required": true,
+      "claim_scope": "account release request only; refreshed accounts list remains truth",
+      "preflight": [
+        "same account_id/list/target checks as validate_account",
+        "target pool must not be retired",
+        "target must be manual_hold"
+      ],
+      "refs": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:101",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:562",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:574",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_command_adapter.py:84",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:465"
+      ]
+    }
+  ],
+  "blocked_or_deferred_actions": [
+    {
+      "action": "accounts_promote",
+      "status": "blocked_or_absent",
+      "reason": "Future promote/demote action-gate contour.",
+      "test_refs": [
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:212"
+      ]
+    },
+    {
+      "action": "accounts_demote",
+      "status": "blocked_or_absent",
+      "reason": "Future promote/demote action-gate contour.",
+      "test_refs": [
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:212"
+      ]
+    },
+    {
+      "action": "accounts_retire",
+      "status": "blocked_or_absent",
+      "reason": "Future retire action-gate contour.",
+      "test_refs": [
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:212"
+      ]
+    },
+    {
+      "action": "accounts_onboard",
+      "status": "blocked_or_absent",
+      "reason": "Future onboarding modal action-gate contour.",
+      "test_refs": [
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_ui.py:212"
+      ]
+    },
+    {
+      "action": "stable_repair_apply",
+      "status": "adapter_spec_only_not_ui_action",
+      "reason": "Requires separate confirmed recovery gate before UI exposure.",
+      "test_refs": [
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:580"
+      ]
+    }
+  ],
+  "refresh_contract": {
+    "no_optimistic_success": true,
+    "account_action_refresh": "After successful action packet handling, the client calls setLiveReadonly(false); when current screen is accounts, that fetches /api/accounts-readonly.",
+    "refs": [
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:258",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:847"
+    ]
+  }
+}

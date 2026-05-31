@@ -1,0 +1,12 @@
+{
+  "blocked_reference_keys": [],
+  "captured_at_utc": "2026-05-27T06:30:39.437683Z",
+  "original_codex_profile_dependency": false,
+  "original_codex_profile_mutated": false,
+  "original_codex_profile_runtime_dependency": false,
+  "original_codex_reversibility_proven": false,
+  "original_codex_used_as_source": false,
+  "original_codex_used_as_target": false,
+  "packet_kind": "persistent_pre_live_original_codex_boundary",
+  "status": "ok"
+}

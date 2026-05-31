@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "not_executed",
+  "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+  "model_response_present": false,
+  "inference_proven": false,
+  "wbp_path_configured": false,
+  "wbp_path_proven": false,
+  "cli_proxy_api_path_proven": false,
+  "independent_wbp_trace_observed": false,
+  "live_prompt_executed": false,
+  "token_burn": 0
+}

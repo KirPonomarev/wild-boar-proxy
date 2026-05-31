@@ -1,0 +1,15 @@
+{
+  "duplicate_account_ids": {
+    "fca7a069-ad2c-4fda-921f-e8c971365b31": [
+      "gpt2026bis-team",
+      "kip85905-team",
+      "kir-test-gpt26-team"
+    ],
+    "eabb9614-e701-451c-8a05-1792f278efc2": [
+      "pig-outlook-team",
+      "beep-outlook-team"
+    ]
+  },
+  "duplicate_auth_refs": {},
+  "duplicate_group_count": 2
+}

@@ -1,0 +1,33 @@
+{
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "paths": {
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json": {
+      "exists": false,
+      "class": "default_owner_candidate"
+    },
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable": {
+      "exists": true,
+      "class": "inventory_root"
+    },
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable/config.yaml": {
+      "exists": true,
+      "class": "stable_config",
+      "contains_auth_dir": false
+    },
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable/codex-*.json": {
+      "exists": false,
+      "class": "inventory_candidates"
+    },
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-account-onboard": {
+      "exists": true,
+      "class": "owner_helper"
+    }
+  },
+  "forbidden_roots_considered": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.cli-proxy-api",
+    "/Users/kirillponomarev/.wild-boar-proxy/external-models",
+    "/Users/kirillponomarev/.codex-custom-test"
+  ],
+  "forbidden_root_reuse_observed": false
+}

@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-24T07:54:00Z",
+  "status": "passed",
+  "raw_prompt_stored": false,
+  "raw_backend_id_exposed": false,
+  "raw_auth_ref_exposed": false,
+  "secret_value_recorded": false,
+  "browser_forbidden_fields_guarded": true,
+  "trace_observer_packet_whitelisted": true,
+  "checked_artifacts": [
+    "proof.json",
+    "browser_proof.json",
+    "test_results.json",
+    "independent_audit.json",
+    "closeout.md"
+  ],
+  "notes": [
+    "Response previews are bounded.",
+    "Session ids are treated as operational evidence; no auth values are present.",
+    "Screenshots may show UI state but no raw secret fields."
+  ]
+}

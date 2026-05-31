@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-29T04:28:55.513532Z",
+  "session_id": "codex-f43e4142d69e4e728fd666f18e8d8868",
+  "classification": "selected_backend_state_drift_no_longer_blocks_reserve_first_onboarding",
+  "pre_fix_failure_machine_error_code": "ONBOARD_ACTIVE_ROUTING_CHANGED",
+  "post_fix_complete_machine_error_code": "OK",
+  "selected_backend_id": "kir-test-gpt26",
+  "selected_backend_pool": "reserve",
+  "active_routing_changed": false,
+  "lifecycle_admission_status": "ready",
+  "lifecycle_admission_reason": "post_onboard_status_ok"
+}

@@ -1,0 +1,25 @@
+{
+  "url": "http://127.0.0.1:8788/?screen=quick-start&source=live",
+  "action_status": "command_error",
+  "action_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "next_action": "owner_action",
+  "credential_phase": "credential_missing",
+  "credential_present": false,
+  "credential_supported_sources": [
+    "owner-env"
+  ],
+  "credential_expected_refs": [
+    "OPENROUTER_API_KEY",
+    "WBP_OPENROUTER_API_KEY",
+    "WBP_PROVIDER_OPENROUTER_API_KEY"
+  ],
+  "credential_provider_dashboard_url": "https://openrouter.ai/settings/keys",
+  "browser_api_key_intake": false,
+  "browser_secret_intake": false,
+  "browser_path_intake": false,
+  "secret_value_exposed": false,
+  "api_key_input_count": 0,
+  "ledger_contains_credential_missing": true,
+  "refresh_status": "canonical refresh complete",
+  "screenshot": "audit_results/api_provider_owner_setup_handoff_pass_2026-05-22/evidence/browser-missing-state.png"
+}

@@ -1,0 +1,97 @@
+{
+  "captured_at": "2026-05-15T16:07:39.834828+00:00",
+  "git_head": "01be4f8fde495333124bc54bfd19b5572736107c",
+  "git_head_short": "01be4f8",
+  "sandbox_env_map": {
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+  },
+  "initial_registry": {
+    "schema_version": 2,
+    "version": 2,
+    "updated_at": "2026-05-15T16:02:18.734858+00:00",
+    "stable_default_backend_id": "",
+    "pool_policy": {
+      "active_min": 10,
+      "active_target": 10,
+      "reserve_target": 0
+    },
+    "backends": [
+      {
+        "id": "auth",
+        "type": "cliproxy-auth-file",
+        "label": "auth.json",
+        "enabled": true,
+        "priority": 100,
+        "pool": "reserve",
+        "status": "unknown",
+        "fail_count": 0,
+        "success_count": 0,
+        "last_success": null,
+        "last_error": "",
+        "last_error_class": "",
+        "cooldown_until": null,
+        "proxy_mode": "auto-detect",
+        "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+        "added_at": "2026-05-15T15:26:42.498471+00:00",
+        "disabled_reason": "",
+        "drain_until": null,
+        "last_probe_level": null,
+        "last_probe_at": null,
+        "last_deep_probe_at": null,
+        "last_transition_at": null,
+        "manual_hold": false,
+        "half_open_since": null,
+        "notes": "Onboarded automatically at 2026-05-15T15:26:42.498291+00:00"
+      }
+    ]
+  },
+  "initial_state": {
+    "schema_version": 2,
+    "version": 2,
+    "status": "unknown",
+    "effective_mode": "stable",
+    "last_sync_at": "2026-05-15T15:26:43.663289+00:00",
+    "last_error": "",
+    "selected_backend_ids": [],
+    "managed_port": 8320,
+    "current_proxy_url": "",
+    "stable_default_backend_id": "",
+    "active_count": 0,
+    "reserve_count": 1,
+    "retired_count": 0,
+    "healthy_count": 0,
+    "degraded_count": 0,
+    "down_count": 1
+  },
+  "forbidden_before": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2",
+      "size": 577,
+      "mtime_ns": 1778332551870097299
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+OWNER_LEGACY_RUNTIME_SURFACES_ADMISSION_PASS verification summary
+
+Required gates
+- python3 -m unittest tests.test_cli -q
+  Result: Ran 387 tests in 194.813s OK
+- /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q
+  Result: Ran 191 tests in 8.689s OK
+- node --check wild_boar_proxy/web_design_ui/scripts/overview.js
+  Result: pass
+- git diff --check
+  Result: pass
+
+Supporting regression runs
+- targeted wrapper/proxy/reprobe/login/header tests
+  Result: 13 tests passed
+- deterministic failure-path regression tests
+  Result: 4 tests passed

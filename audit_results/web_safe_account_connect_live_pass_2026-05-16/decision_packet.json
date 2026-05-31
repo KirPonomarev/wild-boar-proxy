@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+  "date": "2026-05-16",
+  "status": "verified_pending_git_close",
+  "final_verdict": "SERVER_OWNED_LIVE_ACCOUNT_CONNECT_PATH_WIRED_WITH_RESERVE_FIRST_GATE",
+  "write_surface": "account_registry_auth_mutation_only",
+  "browser_payload_bounded": true,
+  "browser_payload_forbidden_fields": [
+    "path",
+    "auth_file",
+    "token",
+    "secret",
+    "source_dir",
+    "backend_id",
+    "argv",
+    "upload"
+  ],
+  "existing_refresh_only": true,
+  "refresh_surface": "accounts-readonly",
+  "new_onboarding_engine_added": false,
+  "current_working_codex_touched": false,
+  "operator_flow": {
+    "live_connect_ran": true,
+    "live_connect_was_fake_runner_only": true,
+    "reserve_first_success_proven": true,
+    "selected_backend_id": "acct-new",
+    "post_action_refresh_state": "complete"
+  },
+  "tests": [
+    "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui"
+  ],
+  "browser_check": {
+    "url": "http://127.0.0.1:8765/?screen=accounts&source=live",
+    "result_banner": "Аккаунт добавлен в резерв. Активная маршрутизация не изменялась.",
+    "display_state": "ok_refresh_complete",
+    "reserve_chip": "доказано"
+  },
+  "next_contour": "WEB_DESIGN_FINISH_PASS"
+}

@@ -1,0 +1,28 @@
+{
+  "contour": "UI_WEB_SIDEBAR_BRAND_LOCKUP_RATIO_FIX_PASS",
+  "date": "2026-05-20",
+  "auditor": {
+    "agent_id": "019e469c-ce90-7b31-89a0-a7b2e1e6d824",
+    "nickname": "Fermat",
+    "role": "independent explorer audit",
+    "model": "gpt-5.4-mini"
+  },
+  "findings": [],
+  "scope_ok": true,
+  "canon_ok": true,
+  "tests_or_evidence_seen": [
+    "git diff -- wild_boar_proxy/web_design_ui/styles/overview.css wild_boar_proxy/web_design_ui/scripts/overview.js tests/test_web_design_ui.py audit_results/ui_web_sidebar_brand_lockup_ratio_fix_pass_2026-05-20/metrics.json",
+    "audit_results/ui_web_sidebar_brand_lockup_ratio_fix_pass_2026-05-20/metrics.json",
+    "audit_results/ui_web_sidebar_brand_lockup_ratio_fix_pass_2026-05-20/screenshots/quick-start-sidebar-brand-lockup-ratio.png",
+    "tests/test_web_design_ui.py:341-351",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js:1214-1238",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js:3842-3846",
+    "wild_boar_proxy/web_design_ui/styles/overview.css:6446-6466"
+  ],
+  "risks": [
+    "The change is visually large but mechanically narrow: brand lockup only. The main residual risk is sidebar density at other viewport widths, since the logo width jumps from 72px to 180px.",
+    "Caption removal intentionally changes the sidebar information hierarchy; downstream text assertions must stay aligned with the new empty Quick Start caption.",
+    "The Quick Start grid itself was not touched and metrics report quickStartGridUnchanged=true; viewport-specific fit remains the only practical residual risk."
+  ],
+  "verdict": "pass"
+}

@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-27T05:10:09.731712Z",
+  "codex_runner_smoke_allowed_in_this_contour": false,
+  "live_execution_allowed_in_this_contour": false,
+  "native_launch_allowed": false,
+  "owner_live_authorization_present": false,
+  "packet_kind": "cli_runner_live_promotion_gate",
+  "provider_model_request_allowed": false,
+  "readiness_counts_as_cli_runner_works": false,
+  "readiness_counts_as_live_pass": false,
+  "required_before_future_smoke": [
+    "explicit_operator_live_authorization",
+    "fresh_auth_boundary_packet",
+    "fresh_model_selection_boundary_packet",
+    "declared_temp_write_surfaces",
+    "secret_scan_clean",
+    "rollback_or_cleanup_policy"
+  ],
+  "status": "ok"
+}

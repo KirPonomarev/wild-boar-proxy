@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T08:10:11.928664Z",
+  "correlation_classification": "correlated_with_limits",
+  "durable_restoration_proven": false,
+  "local_only_restoration_source_proven": false,
+  "packet_kind": "persistent_restore_r5_storage_correlation_result",
+  "remote_sync_cache_or_mixed_remains_possible": true,
+  "selected_targets_changed_after_action": 2,
+  "selected_targets_retained_after_relaunch": 2,
+  "status": "ok",
+  "storage_correlation_classified": true,
+  "storage_level_thread_history_proven": false,
+  "target_delta_counts_as_participation_proof": false,
+  "target_delta_status": "ok",
+  "visibility_result_status": "ok"
+}

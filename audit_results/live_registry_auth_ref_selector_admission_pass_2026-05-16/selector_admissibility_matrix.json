@@ -1,0 +1,30 @@
+{
+  "contour": "LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+      "admissible": false,
+      "why": [
+        "no canon-supported selector surface narrows the current owner-eligible family to one exact auth_ref source",
+        "the strongest selector candidate is contradicted participation evidence and still narrows only to eight exact sources"
+      ]
+    },
+    {
+      "outcome": "GO_TO_SANDBOX_AUTH_JSON_MATERIALIZATION_PASS",
+      "admissible": false,
+      "why": [
+        "exact source admission is not earned",
+        "direct materialization would still guess inside a multi-source family"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": true,
+      "why": [
+        "available selector surfaces remain family-level or contradicted and do not yield one exact source",
+        "owner-path stable repair and runtime consumer evidence do not collapse the family to a singleton"
+      ]
+    }
+  ],
+  "recommended_follow_up_contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS"
+}

@@ -1,0 +1,20 @@
+{
+  "architecture_approved": false,
+  "captured_at_utc": "2026-05-27T12:27:31.870339Z",
+  "concept_count": 4,
+  "final_status": "WBP_APP_SERVER_BRIDGE_RESEARCH_CLASSIFIED_WITH_LIMITS",
+  "historical_codex_child_control_socket_proven": false,
+  "implementation_admitted": false,
+  "network_auth_middleware_proven": false,
+  "packet_kind": "app_server_bridge_summary",
+  "remote_control_implemented": false,
+  "research_only": true,
+  "status": "ok",
+  "with_limits_reasons": [
+    "NO_NETWORK_AUTH_MIDDLEWARE_PROVEN",
+    "REMOTE_CONTROL_NOT_ADMITTED",
+    "HISTORICAL_CODEX_CHILD_CONTROL_SOCKET_NOT_PROVEN",
+    "BRIDGE_RESEARCH_DOES_NOT_APPROVE_IMPLEMENTATION"
+  ],
+  "with_limits_required": true
+}

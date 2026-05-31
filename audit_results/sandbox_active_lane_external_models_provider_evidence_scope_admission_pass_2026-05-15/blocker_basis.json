@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-15T17:23:38.948814Z",
+  "source_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_PASS",
+  "route_add_stop_truth": {
+    "routes_count_after_add": 1,
+    "models_count_after_add": 1,
+    "owner_machine_error_code_after_add": "ATTESTATION_FAILED",
+    "owner_last_error_after_add": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+    "failed_checks_after_add": [
+      "usable_auth_pool_empty",
+      "responses_probe_failed"
+    ],
+    "rollback_restored_routes_count": 0,
+    "rollback_restored_models_count": 0
+  },
+  "current_route_shape_basis": {
+    "route_id": "wbp-claude-sonnet-4-6-thinking",
+    "upstream_model": "claude-sonnet-4-6-thinking",
+    "auth_type": "none",
+    "secret_scope_widened": false
+  }
+}

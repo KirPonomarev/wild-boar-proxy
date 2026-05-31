@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-24T01:46:43.093659Z",
+  "close_token": "CODEX_CUSTOM_SINGLE_TRACED_PROMPT_LIVE_OK",
+  "exact_response_observed": true,
+  "live_ok_claim_allowed": true,
+  "machine_error_code": "OK",
+  "next_contour": "CODEX_CUSTOM_SESSION_MANAGER_PRODUCT_PASS",
+  "prompt_count": 1,
+  "retry_count": 0,
+  "status": "ok",
+  "upstream_status": 200
+}

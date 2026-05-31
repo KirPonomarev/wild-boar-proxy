@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-26T10:03:32.714374Z",
+  "egress_claim_allowed": false,
+  "failed_checks": [
+    "host_context_required",
+    "quiescent_current_codex_required",
+    "idle_stability_required"
+  ],
+  "host_context": "protected_codex_hosted",
+  "idle_stability_final_verdict": "PRELAUNCH_GATE_BLOCKED_BEFORE_IDLE_STABILITY",
+  "native_launch_admitted": false,
+  "native_launch_attempted": false,
+  "packet_kind": "quiescent_retry_launch_admission",
+  "quiescent_precondition_satisfied": false,
+  "reason_class": "PRELAUNCH_GATE_BLOCKED",
+  "route_claim_allowed": false,
+  "status": "blocked",
+  "ux_claim_allowed": false
+}

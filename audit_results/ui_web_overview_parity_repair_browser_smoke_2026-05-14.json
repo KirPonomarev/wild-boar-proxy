@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_OVERVIEW_PARITY_REPAIR",
+  "date": "2026-05-14",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "screenshots": [
+    {
+      "label": "overview_live_1600x1000",
+      "path": "audit_results/ui_web_overview_parity_repair_screenshots_2026-05-14/overview_live_1600x1000.png"
+    },
+    {
+      "label": "overview_fixture_1600x1000",
+      "path": "audit_results/ui_web_overview_parity_repair_screenshots_2026-05-14/overview_fixture_1600x1000.png"
+    }
+  ],
+  "live": {
+    "body_scroll_width": 1600,
+    "body_client_width": 1600,
+    "main_scroll_height": 962,
+    "main_client_height": 942,
+    "header_rect": {
+      "top": 77,
+      "right": 1531,
+      "bottom": 161,
+      "left": 373,
+      "width": 1158,
+      "height": 84
+    },
+    "overview_top_rect": {
+      "top": 263,
+      "right": 1531,
+      "bottom": 511,
+      "left": 373,
+      "width": 1158,
+      "height": 248
+    },
+    "kpis_rect": {
+      "top": 535,
+      "right": 1531,
+      "bottom": 647,
+      "left": 373,
+      "width": 1158,
+      "height": 112
+    },
+    "log_card_rect": {
+      "top": 671,
+      "right": 1531,
+      "bottom": 849,
+      "left": 373,
+      "width": 1158,
+      "height": 178
+    },
+    "action_panel_rect": {
+      "top": 867,
+      "right": 1531,
+      "bottom": 955,
+      "left": 373,
+      "width": 1158,
+      "height": 88
+    },
+    "window_rect": {
+      "top": 28,
+      "right": 1572,
+      "bottom": 972,
+      "left": 28,
+      "width": 1544,
+      "height": 944
+    },
+    "header_visible_controls": 4,
+    "utility_buttons": 4,
+    "log_rows": 2,
+    "log_empty": 0,
+    "action_panel_visible_fields": 5,
+    "body_has_horizontal_scroll": false,
+    "action_panel_fits_window": true
+  },
+  "fixture": {
+    "body_scroll_width": 1600,
+    "body_client_width": 1600,
+    "main_scroll_height": 944,
+    "main_client_height": 942,
+    "header_rect": {
+      "top": 77,
+      "right": 1531,
+      "bottom": 161,
+      "left": 373,
+      "width": 1158,
+      "height": 84
+    },
+    "overview_top_rect": {
+      "top": 245,
+      "right": 1531,
+      "bottom": 493,
+      "left": 373,
+      "width": 1158,
+      "height": 248
+    },
+    "kpis_rect": {
+      "top": 517,
+      "right": 1531,
+      "bottom": 629,
+      "left": 373,
+      "width": 1158,
+      "height": 112
+    },
+    "log_card_rect": {
+      "top": 653,
+      "right": 1531,
+      "bottom": 831,
+      "left": 373,
+      "width": 1158,
+      "height": 178
+    },
+    "action_panel_rect": {
+      "top": 849,
+      "right": 1531,
+      "bottom": 937,
+      "left": 373,
+      "width": 1158,
+      "height": 88
+    },
+    "window_rect": {
+      "top": 28,
+      "right": 1572,
+      "bottom": 972,
+      "left": 28,
+      "width": 1544,
+      "height": 944
+    },
+    "header_visible_controls": 4,
+    "utility_buttons": 4,
+    "log_rows": 2,
+    "log_empty": 0,
+    "action_panel_visible_fields": 5,
+    "body_has_horizontal_scroll": false,
+    "action_panel_fits_window": true
+  },
+  "result": "PASS",
+  "resume_from_here": "Use these metrics for independent audit and closeout."
+}

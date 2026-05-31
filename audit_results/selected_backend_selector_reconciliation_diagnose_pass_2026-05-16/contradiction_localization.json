@@ -1,0 +1,26 @@
+{
+  "contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS",
+  "localized_findings": {
+    "selected_snapshot_matches_approved_target_exactly": true,
+    "approved_target_matches_current_policy_eligible_family": false,
+    "approved_target_missing_currently_eligible_backend_ids": [
+      "k-gpt-pro",
+      "new-new55555",
+      "kp8750410-team"
+    ],
+    "approved_target_contains_currently_ineligible_backend_ids": [
+      "k-gpt-pro-3k"
+    ],
+    "status_desired_source_is_observed_source": true,
+    "status_effective_source_is_observed_source": true,
+    "approved_target_runtime_ready_now": false,
+    "family_singleton_available_now": false
+  },
+  "authoritative_surface_for_next_step": {
+    "surface": "stable_repair_dry_run.registry_source_inputs plus status.stable_runtime_consumer",
+    "why": [
+      "current owner-path policy/source-copy truth is stronger than stale participation evidence for the next auth-source-family decision",
+      "status currently routes desired/effective stable runtime consumption through the observed source family, not the approved target family"
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-05-26T10:36:25.705460Z",
+  "checks": [
+    {
+      "name": "current_thread_did_not_execute_external_command",
+      "passed": true
+    },
+    {
+      "name": "current_thread_did_not_launch_native_app",
+      "passed": true
+    },
+    {
+      "name": "external_command_integrity_verified_or_blocked",
+      "passed": true
+    },
+    {
+      "name": "external_evidence_json_validated_or_missing_blocked",
+      "passed": true
+    },
+    {
+      "name": "secret_scan_clean_or_blocked",
+      "passed": true
+    },
+    {
+      "name": "route_ux_egress_auth_model_claims_forbidden",
+      "passed": true
+    },
+    {
+      "name": "layer_separation_respected",
+      "passed": true
+    },
+    {
+      "name": "keychain_not_auth_proof",
+      "passed": true
+    },
+    {
+      "name": "blocked_result_not_counted_as_pass",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "native_safety_import_false_green_audit",
+  "status": "ok"
+}

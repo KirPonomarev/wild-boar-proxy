@@ -1,0 +1,10 @@
+{
+  "auth_strategy_reproved_in_this_contour": false,
+  "captured_at_utc": "2026-05-27T05:32:12.497435Z",
+  "expected_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "packet_kind": "auth_strategy_reference_digest",
+  "path": "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27/provider_auth_strategy_packet.json",
+  "reference_only": true,
+  "sha256": "6d94778cdb66c053fee4689d672e2e0fed7b9daa7adb77cb0ec75d3ac6b9b204",
+  "status": "ok"
+}

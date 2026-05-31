@@ -1,0 +1,30 @@
+{
+  "lane": "sandbox_auth_json",
+  "owner_input_kind": "default owner path when --auth-ref is absent",
+  "reference_surface": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "destination_surface_inside_sandbox": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "owner_semantics": {
+    "cmd_onboard_source": "paths.auth_file",
+    "env_binding_surface": "WBP_AUTH_FILE",
+    "current_file_present": false,
+    "current_missing_file_is_known_blocker": true
+  },
+  "boundary_effect": {
+    "within_declared_sandbox_root_by_default": true,
+    "declared_writable_surface": true,
+    "widens_secret_or_reference_scope_beyond_declared_sandbox_boundary": false,
+    "rollback_confined_to_declared_sandbox_root": true
+  },
+  "admissibility_for_next_primary_lane": {
+    "selected": true,
+    "status": "earned",
+    "reason": "the lane is the default owner input already bound to the fresh sandbox root and its write and rollback surfaces are already root-local and explicit"
+  },
+  "evidence": [
+    "wild_boar_proxy/sandbox_owner_helpers.py:396-403",
+    "wild_boar_proxy/runtime.py:347",
+    "audit_results/sandbox_live_server_binding_pass_2026-05-15/sandbox_env_binding.json",
+    "audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/write_surface_declaration.md",
+    "audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/rollback_runbook.md"
+  ]
+}

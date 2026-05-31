@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-28T09:31:06.914982Z",
+  "icon_path_inert_display_only": true,
+  "icon_shipped": false,
+  "no_fake_icon_shipping_claim": true,
+  "no_separate_icon_action_surface": true,
+  "owner_authorization_required_surface": true,
+  "packet_kind": "failure_mode_boundary",
+  "status": "ok",
+  "truthful_outcome": "NO_ICON_SHIPPED_YET",
+  "ui_redesign_performed": false
+}

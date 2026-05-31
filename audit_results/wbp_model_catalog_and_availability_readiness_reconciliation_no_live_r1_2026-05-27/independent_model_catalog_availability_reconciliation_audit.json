@@ -1,0 +1,17 @@
+{
+  "availability_overclaim_model_ids": [],
+  "captured_at_utc": "2026-05-27T09:06:05.234081Z",
+  "catalog_registry_runtime_binding_mixed": false,
+  "credential_ref_promoted_to_provider_reachability": false,
+  "display_metadata_catalog_registry_mixed": false,
+  "display_metadata_runtime_truth_mixed": false,
+  "false_green_status": "ok",
+  "live_request_found": false,
+  "native_launch_found": false,
+  "packet_kind": "independent_model_catalog_availability_reconciliation_audit",
+  "parent_status_closed": false,
+  "runtime_binding_capability_proof_mixed": false,
+  "runtime_truth_capability_proof_mixed": false,
+  "status": "ok",
+  "summary_status": "ok"
+}

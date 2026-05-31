@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-05-15T17:16:30.881732Z",
+  "before_meta": {
+    "path": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_active_lane_external_models_route_add_repair_pass_2026-05-15/routes.json.before",
+    "exists": true,
+    "sha256": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4",
+    "size_bytes": 42
+  },
+  "before_payload": {
+    "schema_version": 1,
+    "routes": []
+  },
+  "after_add_meta": {
+    "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "exists": true,
+    "sha256": "c9c43694115d349cb4bf690697ebb8e4f952de07916b9a64418bdeac549cb0d1",
+    "size_bytes": 598
+  },
+  "after_add_routes_payload": [
+    {
+      "auth": {
+        "type": "none"
+      },
+      "base_url": "https://openrouter.ai/api/v1",
+      "compatibility": "openai_chat_completions",
+      "cost_class": "paid_or_free_limited",
+      "display_name": "Claude Sonnet 4.6 Thinking",
+      "enabled": true,
+      "endpoint_path": "/chat/completions",
+      "fallback_eligible": false,
+      "lane_role": "candidate",
+      "provider": "openrouter",
+      "route_id": "wbp-claude-sonnet-4-6-thinking",
+      "schema_version": 1,
+      "upstream_model": "claude-sonnet-4-6-thinking"
+    }
+  ],
+  "restored_current_meta": {
+    "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "exists": true,
+    "sha256": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4",
+    "size_bytes": 42
+  }
+}

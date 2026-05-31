@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-05-27T16:17:17.277088Z",
+  "current_profile_mode_revalidated_live": false,
+  "historical_contract_imported": true,
+  "original_codex_profile_dependency": false,
+  "original_codex_profile_mutated": false,
+  "packet_kind": "custom_profile_mode",
+  "persistent_mode_is_contract_only": true,
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_mode": "persistent_custom",
+  "profile_storage_persistence_claimed": false,
+  "same_profile_id_as_expected": true,
+  "same_profile_root_as_expected": true,
+  "silent_profile_switching_detected": false,
+  "source_launcher_contract_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_contract_packet.json",
+  "source_original_non_dependency_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/original_codex_profile_non_dependency_packet.json",
+  "source_profile_identity_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_profile_identity_contract_packet.json",
+  "source_readiness_summary_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_persistent_profile_launcher_contract_readiness_r1_2026-05-27/persistent_launcher_readiness_summary_packet.json",
+  "status": "ok",
+  "thread_history_preservation_claimed": false
+}

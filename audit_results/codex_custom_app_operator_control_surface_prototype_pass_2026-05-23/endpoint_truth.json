@@ -1,0 +1,23 @@
+{
+  "deepseek_only_success_path": false,
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "model": "gpt-5.3-codex",
+  "models_probe": {
+    "chosen_model_visible": true,
+    "error": "",
+    "model_ids": [
+      "gpt-image-2",
+      "gpt-5.3-codex-spark",
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.5",
+      "codex-auto-review"
+    ],
+    "ok": true,
+    "status_code": 200
+  },
+  "provider_route_claim": false,
+  "proxy_handler_disabled_for_localhost_probe": true
+}

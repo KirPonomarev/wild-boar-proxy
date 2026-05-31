@@ -1,0 +1,1604 @@
+{
+  "adapter_specs": {
+    "accounts_demote": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_demote",
+      "argv_template": [
+        "accounts",
+        "demote",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "command_id": "accounts_demote",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:190"
+    },
+    "accounts_hold": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_hold",
+      "argv_template": [
+        "accounts",
+        "hold",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "command_id": "accounts_hold",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:206"
+    },
+    "accounts_list": {
+      "allowlist_key": "accounts_list",
+      "argv_template": [
+        "accounts",
+        "list",
+        "--json"
+      ],
+      "category": "truth",
+      "command_id": "accounts_list",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:63"
+    },
+    "accounts_login_cancel": {
+      "allowed_args": [
+        "session_id"
+      ],
+      "allowlist_key": "accounts_login_cancel",
+      "argv_template": [
+        "accounts",
+        "login",
+        "cancel",
+        "--session",
+        "{session_id}",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_cancel",
+      "confirmation_required": false,
+      "required_args": [
+        "session_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:158",
+      "ui_enabled": false
+    },
+    "accounts_login_complete_codex": {
+      "allowed_args": [
+        "session_id"
+      ],
+      "allowlist_key": "accounts_login_complete_codex",
+      "argv_template": [
+        "accounts",
+        "login",
+        "complete",
+        "--session",
+        "{session_id}",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_complete_codex",
+      "confirmation_required": true,
+      "required_args": [
+        "session_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:142",
+      "ui_enabled": false
+    },
+    "accounts_login_complete_sandbox": {
+      "allowed_args": [
+        "login_session_id",
+        "state"
+      ],
+      "allowlist_key": "accounts_login_complete_sandbox",
+      "argv_template": [
+        "accounts",
+        "login",
+        "complete",
+        "--session",
+        "{login_session_id}",
+        "--state",
+        "{state}",
+        "--proof",
+        "sandbox-ok",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_complete_sandbox",
+      "confirmation_required": true,
+      "required_args": [
+        "login_session_id",
+        "state"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:90",
+      "ui_enabled": false
+    },
+    "accounts_login_start_codex_device": {
+      "allowlist_key": "accounts_login_start_codex_device",
+      "argv_template": [
+        "accounts",
+        "login",
+        "start",
+        "--provider",
+        "codex",
+        "--mode",
+        "device",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_start_codex_device",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:110",
+      "ui_enabled": false
+    },
+    "accounts_login_start_sandbox": {
+      "allowlist_key": "accounts_login_start_sandbox",
+      "argv_template": [
+        "accounts",
+        "login",
+        "start",
+        "--provider",
+        "sandbox",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_start_sandbox",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:83",
+      "ui_enabled": false
+    },
+    "accounts_login_status": {
+      "allowed_args": [
+        "session_id"
+      ],
+      "allowlist_key": "accounts_login_status",
+      "argv_template": [
+        "accounts",
+        "login",
+        "status",
+        "--session",
+        "{session_id}",
+        "--json"
+      ],
+      "category": "onboarding_login",
+      "command_id": "accounts_login_status",
+      "confirmation_required": false,
+      "required_args": [
+        "session_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:126",
+      "ui_enabled": false
+    },
+    "accounts_onboard": {
+      "allowlist_key": "accounts_onboard",
+      "argv_template": [
+        "accounts",
+        "onboard",
+        "--json"
+      ],
+      "category": "onboarding",
+      "command_id": "accounts_onboard",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:68"
+    },
+    "accounts_onboard_auth_ref": {
+      "allowed_args": [
+        "auth_ref"
+      ],
+      "allowlist_key": "accounts_onboard_auth_ref",
+      "argv_template": [
+        "accounts",
+        "onboard",
+        "--json",
+        "--auth-ref",
+        "{auth_ref}"
+      ],
+      "category": "onboarding",
+      "command_id": "accounts_onboard_auth_ref",
+      "confirmation_required": true,
+      "required_args": [
+        "auth_ref"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:74",
+      "ui_enabled": false
+    },
+    "accounts_promote": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_promote",
+      "argv_template": [
+        "accounts",
+        "promote",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "command_id": "accounts_promote",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:182"
+    },
+    "accounts_release": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_release",
+      "argv_template": [
+        "accounts",
+        "release",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "command_id": "accounts_release",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:214"
+    },
+    "accounts_retire": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_retire",
+      "argv_template": [
+        "accounts",
+        "retire",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "lifecycle",
+      "command_id": "accounts_retire",
+      "confirmation_required": true,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:198"
+    },
+    "accounts_validate": {
+      "allowed_args": [
+        "account_id"
+      ],
+      "allowlist_key": "accounts_validate",
+      "argv_template": [
+        "accounts",
+        "validate",
+        "{account_id}",
+        "--json"
+      ],
+      "category": "verification",
+      "command_id": "accounts_validate",
+      "confirmation_required": false,
+      "required_args": [
+        "account_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:174"
+    },
+    "diagnostics_export": {
+      "allowlist_key": "diagnostics_export",
+      "argv_template": [
+        "diagnostics",
+        "export",
+        "--json"
+      ],
+      "category": "support",
+      "command_id": "diagnostics_export",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:262"
+    },
+    "external_models_check": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_check",
+      "argv_template": [
+        "external-models",
+        "check",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_verification",
+      "command_id": "external_models_check",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:356"
+    },
+    "external_models_credentials_admit_openrouter_owner_env": {
+      "allowlist_key": "external_models_credentials_admit_openrouter_owner_env",
+      "argv_template": [
+        "external-models",
+        "credentials",
+        "admit",
+        "--provider",
+        "openrouter",
+        "--source",
+        "owner-env",
+        "--json"
+      ],
+      "category": "external_models_credential_admission",
+      "command_id": "external_models_credentials_admit_openrouter_owner_env",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:316",
+      "ui_enabled": false
+    },
+    "external_models_credentials_admit_provider_owner_env": {
+      "allowed_args": [
+        "provider"
+      ],
+      "allowlist_key": "external_models_credentials_admit_provider_owner_env",
+      "argv_template": [
+        "external-models",
+        "credentials",
+        "admit",
+        "--provider",
+        "{provider}",
+        "--source",
+        "owner-env",
+        "--json"
+      ],
+      "category": "external_models_credential_admission",
+      "command_id": "external_models_credentials_admit_provider_owner_env",
+      "confirmation_required": true,
+      "required_args": [
+        "provider"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:298",
+      "ui_enabled": false
+    },
+    "external_models_credentials_status_openrouter": {
+      "allowlist_key": "external_models_credentials_status_openrouter",
+      "argv_template": [
+        "external-models",
+        "credentials",
+        "status",
+        "--provider",
+        "openrouter",
+        "--json"
+      ],
+      "category": "external_models_credential_admission",
+      "command_id": "external_models_credentials_status_openrouter",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:292",
+      "ui_enabled": false
+    },
+    "external_models_credentials_status_provider": {
+      "allowed_args": [
+        "provider"
+      ],
+      "allowlist_key": "external_models_credentials_status_provider",
+      "argv_template": [
+        "external-models",
+        "credentials",
+        "status",
+        "--provider",
+        "{provider}",
+        "--json"
+      ],
+      "category": "external_models_credential_admission",
+      "command_id": "external_models_credentials_status_provider",
+      "required_args": [
+        "provider"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:284",
+      "ui_enabled": false
+    },
+    "external_models_evidence_capture": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_evidence_capture",
+      "argv_template": [
+        "external-models",
+        "evidence",
+        "capture",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_support",
+      "command_id": "external_models_evidence_capture",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:372"
+    },
+    "external_models_profile_codex_desktop": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_profile_codex_desktop",
+      "argv_template": [
+        "external-models",
+        "profile",
+        "codex-desktop",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_support",
+      "command_id": "external_models_profile_codex_desktop",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:364"
+    },
+    "external_models_routes_add_server_owned": {
+      "allowed_args": [
+        "route_spec_ref"
+      ],
+      "allowlist_key": "external_models_routes_add_server_owned",
+      "argv_template": [
+        "external-models",
+        "routes",
+        "add",
+        "--file",
+        "{route_spec_ref}",
+        "--json"
+      ],
+      "category": "external_models_registry_admission",
+      "command_id": "external_models_routes_add_server_owned",
+      "confirmation_required": true,
+      "required_args": [
+        "route_spec_ref"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:275",
+      "ui_enabled": false
+    },
+    "external_models_routes_disable": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_routes_disable",
+      "argv_template": [
+        "external-models",
+        "routes",
+        "disable",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_lifecycle",
+      "command_id": "external_models_routes_disable",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:340"
+    },
+    "external_models_routes_enable": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_routes_enable",
+      "argv_template": [
+        "external-models",
+        "routes",
+        "enable",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_lifecycle",
+      "command_id": "external_models_routes_enable",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:332"
+    },
+    "external_models_routes_remove": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_routes_remove",
+      "argv_template": [
+        "external-models",
+        "routes",
+        "remove",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_registry_cleanup",
+      "command_id": "external_models_routes_remove",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:348"
+    },
+    "external_models_routes_validate": {
+      "allowed_args": [
+        "route_id"
+      ],
+      "allowlist_key": "external_models_routes_validate",
+      "argv_template": [
+        "external-models",
+        "routes",
+        "validate",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "category": "external_models_verification",
+      "command_id": "external_models_routes_validate",
+      "confirmation_required": true,
+      "required_args": [
+        "route_id"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:267"
+    },
+    "healthcheck": {
+      "allowlist_key": "healthcheck",
+      "argv_template": [
+        "healthcheck",
+        "--json"
+      ],
+      "category": "truth",
+      "command_id": "healthcheck",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:53"
+    },
+    "launch_client": {
+      "allowed_args": [
+        "client_path"
+      ],
+      "allowlist_key": "launch_client",
+      "argv_template": [
+        "launch",
+        "client",
+        "--client-path",
+        "{client_path}",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "launch_client",
+      "confirmation_required": true,
+      "required_args": [
+        "client_path"
+      ],
+      "source": "wild_boar_proxy/web_design_command_adapter.py:380",
+      "ui_enabled": false
+    },
+    "mode_get": {
+      "allowlist_key": "mode_get",
+      "argv_template": [
+        "mode",
+        "get",
+        "--json"
+      ],
+      "category": "truth",
+      "command_id": "mode_get",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:58"
+    },
+    "mode_managed": {
+      "allowlist_key": "mode_managed",
+      "argv_template": [
+        "mode",
+        "set",
+        "managed",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "mode_managed",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:233"
+    },
+    "mode_stable": {
+      "allowlist_key": "mode_stable",
+      "argv_template": [
+        "mode",
+        "set",
+        "stable",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "mode_stable",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:227"
+    },
+    "rollout_rotation_inspect": {
+      "allowlist_key": "rollout_rotation_inspect",
+      "argv_template": [
+        "rollout",
+        "rotation",
+        "inspect",
+        "--json"
+      ],
+      "category": "truth",
+      "command_id": "rollout_rotation_inspect",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:222"
+    },
+    "smoke": {
+      "allowlist_key": "smoke",
+      "argv_template": [
+        "launch",
+        "smoke",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "smoke",
+      "confirmation_required": false,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:245"
+    },
+    "stable_repair_apply": {
+      "allowlist_key": "stable_repair_apply",
+      "argv_template": [
+        "stable",
+        "repair",
+        "--apply",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "stable_repair_apply",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:256"
+    },
+    "stable_repair_dry_run": {
+      "allowlist_key": "stable_repair_dry_run",
+      "argv_template": [
+        "stable",
+        "repair",
+        "--dry-run",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "stable_repair_dry_run",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:251"
+    },
+    "status": {
+      "allowlist_key": "status",
+      "argv_template": [
+        "status",
+        "--json"
+      ],
+      "category": "truth",
+      "command_id": "status",
+      "source": "wild_boar_proxy/web_design_command_adapter.py:48"
+    },
+    "sync": {
+      "allowlist_key": "sync",
+      "argv_template": [
+        "sync",
+        "--json"
+      ],
+      "category": "action",
+      "command_id": "sync",
+      "confirmation_required": true,
+      "source": "wild_boar_proxy/web_design_command_adapter.py:239"
+    }
+  },
+  "agent_orchestration": {
+    "attempted": [
+      {
+        "model": "gpt-5.4-mini",
+        "reason": "agent thread limit reached",
+        "role": "explorer",
+        "status": "failed"
+      }
+    ],
+    "fallback": "local static/live replay audit; no fabricated agent report",
+    "requested": true,
+    "spawn_limit": 2
+  },
+  "branch": "codex/external-agent-lab-isolated",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md",
+    "README.md",
+    "WORKFLOW_OS_V1_2.md",
+    "AGENTS.md"
+  ],
+  "command_api_required": [
+    {
+      "command": "status --json",
+      "source": "COMMAND_API.md:18"
+    },
+    {
+      "command": "invariant-check --json",
+      "source": "COMMAND_API.md:19"
+    },
+    {
+      "command": "sync --json",
+      "source": "COMMAND_API.md:20"
+    },
+    {
+      "command": "launch client --json",
+      "source": "COMMAND_API.md:21"
+    },
+    {
+      "command": "healthcheck --json",
+      "source": "COMMAND_API.md:22"
+    },
+    {
+      "command": "mode get --json",
+      "source": "COMMAND_API.md:23"
+    },
+    {
+      "command": "mode set stable --json",
+      "source": "COMMAND_API.md:24"
+    },
+    {
+      "command": "mode set managed --json",
+      "source": "COMMAND_API.md:25"
+    },
+    {
+      "command": "policy stage set <10|15|20> --json",
+      "source": "COMMAND_API.md:26"
+    },
+    {
+      "command": "rollout rotation inspect --json",
+      "source": "COMMAND_API.md:27"
+    },
+    {
+      "command": "rollout posture inspect <15|20> --json",
+      "source": "COMMAND_API.md:28"
+    },
+    {
+      "command": "rollout evidence capture 16 --json",
+      "source": "COMMAND_API.md:29"
+    },
+    {
+      "command": "rollout stage prove 10 --json",
+      "source": "COMMAND_API.md:30"
+    },
+    {
+      "command": "rollout stage prove 15 --json",
+      "source": "COMMAND_API.md:31"
+    },
+    {
+      "command": "rollout stage advance 15 <id> --json",
+      "source": "COMMAND_API.md:32"
+    },
+    {
+      "command": "rollout stage advance 20 <id> --json",
+      "source": "COMMAND_API.md:33"
+    },
+    {
+      "command": "accounts list --json",
+      "source": "COMMAND_API.md:34"
+    },
+    {
+      "command": "accounts validate <id> --json",
+      "source": "COMMAND_API.md:35"
+    },
+    {
+      "command": "accounts promote <id> --json",
+      "source": "COMMAND_API.md:36"
+    },
+    {
+      "command": "accounts demote <id> --json",
+      "source": "COMMAND_API.md:37"
+    },
+    {
+      "command": "accounts hold <id> --json",
+      "source": "COMMAND_API.md:38"
+    },
+    {
+      "command": "accounts release <id> --json",
+      "source": "COMMAND_API.md:39"
+    },
+    {
+      "command": "accounts retire <id> --json",
+      "source": "COMMAND_API.md:40"
+    },
+    {
+      "command": "accounts onboard --json",
+      "source": "COMMAND_API.md:41"
+    },
+    {
+      "command": "accounts login start --provider sandbox --json",
+      "source": "COMMAND_API.md:42"
+    },
+    {
+      "command": "accounts login start --provider codex --mode device --json",
+      "source": "COMMAND_API.md:43"
+    },
+    {
+      "command": "accounts login status --session <id> --json",
+      "source": "COMMAND_API.md:44"
+    },
+    {
+      "command": "accounts login complete --session <id> --state <state> --proof <proof> --json",
+      "source": "COMMAND_API.md:45"
+    },
+    {
+      "command": "accounts login complete --session <id> --json",
+      "source": "COMMAND_API.md:46"
+    },
+    {
+      "command": "accounts login cancel --session <id> --json",
+      "source": "COMMAND_API.md:47"
+    },
+    {
+      "command": "external-models credentials admit --provider <provider> --source owner-env --json",
+      "source": "COMMAND_API.md:48"
+    },
+    {
+      "command": "external-models credentials status --provider <provider> --json",
+      "source": "COMMAND_API.md:49"
+    },
+    {
+      "command": "diagnostics export --json",
+      "source": "COMMAND_API.md:50"
+    },
+    {
+      "command": "installer init --json",
+      "source": "COMMAND_API.md:51"
+    },
+    {
+      "command": "legacy import --source-dir <path> --json",
+      "source": "COMMAND_API.md:52"
+    },
+    {
+      "command": "companion reset --json",
+      "source": "COMMAND_API.md:53"
+    },
+    {
+      "command": "companion uninstall --json",
+      "source": "COMMAND_API.md:54"
+    },
+    {
+      "command": "package experimental build --output-dir <path> --json",
+      "source": "COMMAND_API.md:55"
+    },
+    {
+      "command": "package experimental verify --manifest <path> --json",
+      "source": "COMMAND_API.md:56"
+    },
+    {
+      "command": "package launchable build --output-dir <path> [--runtime-executable <path>] --json",
+      "source": "COMMAND_API.md:57"
+    },
+    {
+      "command": "package launchable verify --manifest <path> --json",
+      "source": "COMMAND_API.md:58"
+    },
+    {
+      "command": "external-models routes validate --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models routes add/adopt --file <path> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models routes enable --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models routes disable --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models routes remove --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models check --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models profile codex-desktop --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    },
+    {
+      "command": "external-models evidence capture --route <id> --json",
+      "source": "COMMAND_API.md:449"
+    }
+  ],
+  "contour": "WEB_FUNCTIONAL_SURFACE_INVENTORY_AND_ADMISSION_MATRIX_PASS",
+  "frontend_action_refs": {
+    "account_login_cancel": [
+      {
+        "kind": "runUiAction",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1073"
+      }
+    ],
+    "account_login_complete": [
+      {
+        "kind": "runUiAction",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1067"
+      }
+    ],
+    "account_login_status": [
+      {
+        "kind": "runUiAction",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1061"
+      }
+    ],
+    "api_route_allow": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5664"
+      }
+    ],
+    "api_route_check": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:230"
+      },
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5662"
+      }
+    ],
+    "api_route_connect": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:226"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:260"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:785"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:811"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6633"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6639"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6642"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6648"
+      }
+    ],
+    "api_route_credential_check": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:259"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:810"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6636"
+      },
+      {
+        "kind": "maybeConfirmAndRun",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6645"
+      }
+    ],
+    "api_route_disable": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5666"
+      }
+    ],
+    "api_route_evidence_capture": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5669"
+      }
+    ],
+    "api_route_profile": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5668"
+      }
+    ],
+    "api_route_remove": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5675"
+      }
+    ],
+    "api_route_validate": [
+      {
+        "kind": "routeActionButton",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5661"
+      }
+    ],
+    "demote_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6289"
+      }
+    ],
+    "export_diagnostics": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:115"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:305"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1538"
+      }
+    ],
+    "hold_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6287"
+      }
+    ],
+    "launch_client_dispatch": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:107"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1436"
+      }
+    ],
+    "launch_smoke": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:323"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1440"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1737"
+      }
+    ],
+    "onboard_account_dry_run": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:111"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:161"
+      }
+    ],
+    "promote_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6288"
+      }
+    ],
+    "quick_start_check_all": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:123"
+      }
+    ],
+    "recheck_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6285"
+      }
+    ],
+    "refresh_health_detail": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:301"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1741"
+      }
+    ],
+    "release_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6286"
+      }
+    ],
+    "retire_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6290"
+      }
+    ],
+    "set_mode_managed": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:313"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1711"
+      }
+    ],
+    "set_mode_stable": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:331"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1715"
+      }
+    ],
+    "stable_repair_plan": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:309"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1758"
+      }
+    ],
+    "sync_runtime": [
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:319"
+      },
+      {
+        "kind": "data-ui-action",
+        "source": "wild_boar_proxy/web_design_ui/index.html:1733"
+      }
+    ],
+    "validate_account": [
+      {
+        "kind": "uiAction literal",
+        "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6284"
+      }
+    ]
+  },
+  "generated_at_utc": "2026-05-23T11:21:02.118380+00:00",
+  "generator_corrections": [
+    {
+      "correction": "removed label rows and inserted exact route action refs from overview.js lines 5661-5675",
+      "issue": "greedy routeActionButton regex captured button labels as actions",
+      "status": "corrected"
+    }
+  ],
+  "head": "fcf0a54",
+  "live_endpoints": {
+    "api/accounts-readonly": {
+      "error": "HTTPError",
+      "message": "HTTP Error 503: Service Unavailable",
+      "status": "live_unavailable"
+    },
+    "api/actions": {
+      "error": "HTTPError",
+      "message": "HTTP Error 503: Service Unavailable",
+      "status": "live_unavailable"
+    },
+    "api/api-connections-readonly": {
+      "error": "HTTPError",
+      "message": "HTTP Error 503: Service Unavailable",
+      "status": "live_unavailable"
+    },
+    "api/live-readonly": {
+      "error": "HTTPError",
+      "message": "HTTP Error 503: Service Unavailable",
+      "status": "live_unavailable"
+    }
+  },
+  "payload_policy_evidence": {
+    "account_id_server_issued_check": {
+      "evidence": "account_id syntax checked then verified against accounts_list packet",
+      "source": "wild_boar_proxy/web_design_live_server.py:2028"
+    },
+    "allowed_payload_keys_base": {
+      "evidence": "base allowed payload keys = {ui_action}; account_id/route_id/session_id only for listed action groups",
+      "source": "wild_boar_proxy/web_design_live_server.py:1484"
+    },
+    "browser_rejects_command_id": {
+      "evidence": "run_ui_action blocks payload containing command_id",
+      "source": "wild_boar_proxy/web_design_live_server.py:1425"
+    },
+    "frontend_posts_ui_action": {
+      "evidence": "POST api/action sends ui_action with optional server-issued ids/session_id",
+      "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:918"
+    },
+    "route_id_server_issued_check": {
+      "evidence": "route_id syntax checked then verified against external-models routes list packet",
+      "source": "wild_boar_proxy/web_design_live_server.py:2162"
+    }
+  },
+  "schema_version": 1,
+  "ui_action_allowlist": {
+    "account_login_cancel": {
+      "action_claim_scope": "owner login session cancel only; browser sends only owner-created session_id",
+      "action_role": "account_login_cancel",
+      "adapter_command_id": "accounts_login_cancel",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Отменить вход",
+      "human_meaning": "Отменить только текущую owner login session без browser secrets или auth paths.",
+      "mutates_runtime": false,
+      "mutation_class": "account_admission",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:185"
+    },
+    "account_login_complete": {
+      "action_claim_scope": "owner login session complete -> reserve-first onboarding -> accounts refresh",
+      "action_role": "account_login_complete",
+      "adapter_command_id": "accounts_login_complete_codex",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Завершить вход",
+      "human_meaning": "Завершить owner login session и выполнить reserve-first onboarding после materialized auth.",
+      "mutates_runtime": false,
+      "mutation_class": "account_admission",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:173"
+    },
+    "account_login_status": {
+      "action_claim_scope": "owner login session status only; browser sends only owner-created session_id",
+      "action_role": "account_login_status",
+      "adapter_command_id": "accounts_login_status",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Статус входа",
+      "human_meaning": "Проверить состояние owner login session без browser secrets или auth paths.",
+      "mutates_runtime": false,
+      "mutation_class": "account_admission",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:161"
+    },
+    "api_route_allow": {
+      "action_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness",
+      "action_role": "api_route_lifecycle_allow",
+      "adapter_command_id": "external_models_routes_enable",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Разрешить маршрут",
+      "human_meaning": "Запросить разрешение выбранного маршрута и обновить список маршрутов из канонического JSON.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_lifecycle",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:322"
+    },
+    "api_route_check": {
+      "action_claim_scope": "только проверочный запрос маршрута у провайдера; это не утверждение runtime readiness",
+      "action_role": "api_route_smoke_check",
+      "adapter_command_id": "external_models_check",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Проверить запросом",
+      "human_meaning": "Выполнить проверочный запрос через маршрут и обновить список маршрутов из канонического JSON.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_verification",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:310"
+    },
+    "api_route_connect": {
+      "action_claim_scope": "owner credential status/admit -> owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser api_key/route_id/secret/path запрещены",
+      "action_role": "api_route_admission",
+      "adapter_command_id": "external_models_routes_add_server_owned",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Подключить API",
+      "human_meaning": "Проверить или принять owner credential, затем добавить или принять server-owned API route без browser api_key, secrets, paths или route_id и обновить подтверждённый список API-подключений.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_registry_admission",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:286"
+    },
+    "api_route_credential_check": {
+      "action_claim_scope": "только owner credential presence proof; browser api_key/secret/path/auth не принимает и route не меняет",
+      "action_role": "api_route_credential_status",
+      "adapter_command_id": "external_models_credentials_status_provider",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Проверить credential",
+      "human_meaning": "Проверить видимость owner credential для текущего server-owned provider без передачи секрета через браузер и без мутации route.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_credential_handoff",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:298"
+    },
+    "api_route_disable": {
+      "action_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness",
+      "action_role": "api_route_lifecycle_disable",
+      "adapter_command_id": "external_models_routes_disable",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Отключить маршрут",
+      "human_meaning": "Запросить отключение выбранного маршрута и обновить список маршрутов из канонического JSON.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_lifecycle",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:334"
+    },
+    "api_route_evidence_capture": {
+      "action_claim_scope": "только локальный support artifact; это не runtime proof и не чтение evidence file из UI",
+      "action_role": "api_route_local_evidence_capture",
+      "adapter_command_id": "external_models_evidence_capture",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Собрать локальное свидетельство",
+      "human_meaning": "Создать локальный support artifact по выбранному маршруту и показать только метаданные command packet.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_support_artifact",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:370"
+    },
+    "api_route_profile": {
+      "action_claim_scope": "только профильный пакет поддержки; это не Codex config mutation, не listener readiness и не runtime readiness",
+      "action_role": "api_route_profile_packet",
+      "adapter_command_id": "external_models_profile_codex_desktop",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Показать пакет профиля",
+      "human_meaning": "Показать non-mutating профильный пакет для выбранного маршрута без записи Codex config и без утверждения готовности.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_support",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:358"
+    },
+    "api_route_remove": {
+      "action_claim_scope": "только удаление отключённой registry-записи; область действия не шире command packet",
+      "action_role": "api_route_registry_cleanup",
+      "adapter_command_id": "external_models_routes_remove",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Удалить отключённый маршрут",
+      "human_meaning": "Удалить уже отключённую registry-запись маршрута после server preflight и обновить список маршрутов из канонического JSON.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_registry_cleanup",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:346"
+    },
+    "api_route_validate": {
+      "action_claim_scope": "только проверка маршрута у провайдера; это не утверждение runtime readiness",
+      "action_role": "api_route_validation",
+      "adapter_command_id": "external_models_routes_validate",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Проверить маршрут",
+      "human_meaning": "Проверить доступность маршрута на стороне провайдера и обновить список маршрутов из канонического JSON.",
+      "mutates_runtime": false,
+      "mutation_class": "api_route_verification",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:274"
+    },
+    "demote_account": {
+      "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаются обновлённый список аккаунтов и status truth",
+      "action_role": "account_lifecycle_demotion",
+      "adapter_command_id": "accounts_demote",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Вернуть аккаунт в reserve",
+      "human_meaning": "Запросить перевод выбранного аккаунта из active в reserve, затем обновить подтверждённый список аккаунтов и status truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:230"
+    },
+    "export_diagnostics": {
+      "action_claim_scope": "только диагностический пакет поддержки",
+      "action_role": "support_artifact",
+      "adapter_command_id": "diagnostics_export",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Экспорт диагностики",
+      "human_meaning": "Создать диагностический пакет поддержки, не превращая его в runtime truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:115"
+    },
+    "hold_account": {
+      "action_claim_scope": "только запрос ручной паузы; подтверждением остаются обновлённый список аккаунтов и status truth",
+      "action_role": "account_lifecycle_hold",
+      "adapter_command_id": "accounts_hold",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Поставить аккаунт на паузу",
+      "human_meaning": "Поставить выбранный аккаунт на manual hold, затем обновить подтверждённый список аккаунтов и status truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:252"
+    },
+    "launch_client_dispatch": {
+      "action_claim_scope": "только bounded OS dispatch request; это не успех сессии внешнего клиента",
+      "action_role": "host_client_dispatch",
+      "adapter_command_id": "launch_client",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Запустить внешний клиент",
+      "human_meaning": "Запросить bounded запуск внешнего клиента, затем обновить live overview truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:438"
+    },
+    "launch_smoke": {
+      "action_claim_scope": "только smoke-проверка runtime; это не успех запуска внешнего клиента",
+      "action_role": "runtime_smoke_check",
+      "adapter_command_id": "smoke",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Smoke-проверка запуска",
+      "human_meaning": "Запустить runtime smoke check без заявления об успешном запуске внешнего клиента.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:427"
+    },
+    "onboard_account": {
+      "action_claim_scope": "owner login session start only; browser receives device handoff status but not secrets, paths, or auth refs",
+      "action_role": "account_onboarding",
+      "adapter_command_id": "accounts_onboard",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Подключить аккаунт",
+      "human_meaning": "Запустить owner login session без browser paths или credentials и вернуть device handoff для дальнейшего owner-controlled completion.",
+      "mutates_runtime": false,
+      "mutation_class": "account_admission",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:149"
+    },
+    "onboard_account_dry_run": {
+      "action_claim_scope": "только dry-run preview подключения аккаунта; реальный import auth и registry mutation не выполняются",
+      "action_role": "account_onboarding_preview",
+      "adapter_command_id": "server_owned_account_connect_dry_run",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Проверить подключение аккаунта",
+      "human_meaning": "Показать server-owned dry-run preview подключения аккаунта без browser secrets, file paths, auth import или registry mutation.",
+      "mutates_runtime": false,
+      "mutation_class": "account_admission_preview",
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:137"
+    },
+    "promote_account": {
+      "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаются обновлённый список аккаунтов и status truth",
+      "action_role": "account_lifecycle_promotion",
+      "adapter_command_id": "accounts_promote",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Перевести аккаунт в active",
+      "human_meaning": "Запросить перевод выбранного аккаунта из reserve в active, затем обновить подтверждённый список аккаунтов и status truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:219"
+    },
+    "quick_start_check_all": {
+      "action_claim_scope": "только server-owned verify bundle из admitted checks и sandbox-owned readonly refresh surfaces; hidden mutations запрещены",
+      "action_role": "quick_start_verify_bundle",
+      "adapter_command_id": "server_owned_quick_start_check_all",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Проверить всё",
+      "human_meaning": "Последовательно проверить bounded account truth, основной API route и bounded runtime status без скрытых мутаций, затем обновить подтверждённые readonly карточки.",
+      "mutates_runtime": false,
+      "mutation_class": "quick_start_verify_bundle",
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:382"
+    },
+    "recheck_account": {
+      "action_claim_scope": "alias для account validate; подтверждением остаётся обновлённый список аккаунтов",
+      "action_role": "account_verification",
+      "adapter_command_id": "accounts_validate",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Перепроверить аккаунт",
+      "human_meaning": "Повторно запустить проверку выбранного аккаунта и обновить подтверждённый список аккаунтов.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:208"
+    },
+    "refresh_health_detail": {
+      "action_claim_scope": "только обновление деталей runtime; состояние runtime не меняется",
+      "action_role": "runtime_detail",
+      "adapter_command_id": "healthcheck",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Проверка здоровья",
+      "human_meaning": "Обновить детали здоровья runtime без изменения runtime state.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:104"
+    },
+    "release_account": {
+      "action_claim_scope": "только запрос снятия ручной паузы; подтверждением остаются обновлённый список аккаунтов и status truth",
+      "action_role": "account_lifecycle_release",
+      "adapter_command_id": "accounts_release",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Снять аккаунт с паузы",
+      "human_meaning": "Снять выбранный аккаунт с manual hold, затем обновить подтверждённый список аккаунтов и status truth.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:263"
+    },
+    "retire_account": {
+      "action_claim_scope": "только терминальный lifecycle-запрос; подтверждением остаётся обновлённый список аккаунтов",
+      "action_role": "account_lifecycle_retirement",
+      "adapter_command_id": "accounts_retire",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Вывести аккаунт",
+      "human_meaning": "Запросить терминальный вывод выбранного аккаунта из lifecycle, затем обновить подтверждённый список аккаунтов.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:241"
+    },
+    "set_mode_managed": {
+      "action_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview",
+      "action_role": "controlled_mode_mutation",
+      "adapter_command_id": "mode_managed",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Запросить managed mode",
+      "human_meaning": "Запросить managed mode, затем обновить desired/effective mode из live JSON truth.",
+      "mutates_runtime": true,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:416"
+    },
+    "set_mode_stable": {
+      "action_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview",
+      "action_role": "controlled_mode_mutation",
+      "adapter_command_id": "mode_stable",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Запросить stable mode",
+      "human_meaning": "Запросить stable mode, затем обновить desired/effective mode из live JSON truth.",
+      "mutates_runtime": true,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:405"
+    },
+    "stable_repair_plan": {
+      "action_claim_scope": "только dry-run план восстановления",
+      "action_role": "recovery_planning",
+      "adapter_command_id": "stable_repair_dry_run",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "План ремонта stable",
+      "human_meaning": "Показать план stable repair без применения изменений.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": false,
+      "source": "wild_boar_proxy/web_design_live_server.py:126"
+    },
+    "sync_runtime": {
+      "action_claim_scope": "только запрос sync; подтверждением остаётся обновлённый live overview",
+      "action_role": "controlled_runtime_mutation",
+      "adapter_command_id": "sync",
+      "affects_primary_truth": false,
+      "confirmation_required": true,
+      "display_name": "Синхронизировать runtime",
+      "human_meaning": "Запустить managed sync, затем обновить overview из live JSON truth.",
+      "mutates_runtime": true,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:394"
+    },
+    "validate_account": {
+      "action_claim_scope": "только запрос проверки аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+      "action_role": "account_verification",
+      "adapter_command_id": "accounts_validate",
+      "affects_primary_truth": false,
+      "confirmation_required": false,
+      "display_name": "Проверить аккаунт",
+      "human_meaning": "Запустить проверку выбранного аккаунта, затем обновить подтверждённый список аккаунтов.",
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "source": "wild_boar_proxy/web_design_live_server.py:197"
+    }
+  }
+}

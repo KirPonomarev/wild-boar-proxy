@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+  "generated_at_local_date": "2026-05-13",
+  "audit_mode": "independent_inspector_plus_local_verification",
+  "auditor": {
+    "kind": "subagent",
+    "role": "inspector",
+    "model_class": "economy scanner",
+    "agent_name": "Locke",
+    "edited_files": false
+  },
+  "second_auditor": {
+    "kind": "subagent",
+    "role": "independent final diff auditor",
+    "model_class": "economy scanner",
+    "agent_name": "Pasteur",
+    "edited_files": false,
+    "initial_verdict": "BLOCK_FULL_WORKTREE_SCOPE_CAVEAT",
+    "initial_blocker": "pre-existing untracked external_agent_lab/legacy/eval_results content is outside audit_results",
+    "resolution": "do not delete or stage unrelated dirty tail; stage exact contour files only and re-audit staged diff",
+    "staged_diff_verdict": "BLOCK_CLOSEOUT_PREMATURE_PUSHED_CLOSED_WORDING",
+    "staged_diff_blocker": "closeout claimed complete/pushed/CLOSED before commit and push orchestration",
+    "staged_diff_blocker_resolution": "closeout now states verification complete with commit and push pending",
+    "final_staged_reaudit_verdict": "PASS",
+    "final_staged_reaudit_summary": "staged paths remain audit_results-only; previous closeout overclaim is resolved; route admission, payload boundary, next-contour, trace, and overclaim checks remain consistent"
+  },
+  "inspector_findings": [
+    {
+      "finding": "ui_screen_passports global browser payload boundary omitted route-specific forbidden payload fields.",
+      "evidence_file": "audit_results/ui_screen_passports_2026-05-13.json",
+      "resolution": "boundary now excludes raw route JSON, provider config, base_url, endpoint_path, token, secret_ref, and secret value",
+      "status": "FIXED"
+    },
+    {
+      "finding": "ui_screen_passports next_allowed_contour remained UI_WEB_VISUAL_STABILIZATION_PASS.",
+      "evidence_file": "audit_results/ui_screen_passports_2026-05-13.json",
+      "resolution": "all passports now point to UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+      "status": "FIXED"
+    },
+    {
+      "finding": "ui_render_surface_registry implementation evidence omitted tests/test_cli_external_models.py.",
+      "evidence_file": "audit_results/ui_render_surface_registry_2026-05-13.json",
+      "resolution": "CLI external models test file added to implementation_evidence.tests",
+      "status": "FIXED"
+    },
+    {
+      "finding": "api_connections_surface_registry still bundled route add/update/remove as one deferred command surface.",
+      "evidence_file": "audit_results/api_connections_surface_registry_2026-05-13.json",
+      "resolution": "registry now separates admitted api_route_remove from NOT_ADMITTED create/update/draft",
+      "status": "FIXED"
+    },
+    {
+      "finding": "api_connections_surface_registry still listed route remove as deferred UI control.",
+      "evidence_file": "audit_results/api_connections_surface_registry_2026-05-13.json",
+      "resolution": "remove moved into first_pass_actions as disabled route cleanup; create/update/draft moved to not_admitted_controls",
+      "status": "FIXED"
+    }
+  ],
+  "local_audit_checks": [
+    {
+      "check": "scope remains audit_results-only",
+      "expected": true,
+      "status": "PASS_FOR_TRACKED_AND_STAGED_CONTOUR_DIFF_WITH_PRE_EXISTING_UNTRACKED_TAIL_EXCLUDED"
+    },
+    {
+      "check": "JSON artifacts parse with python3 -m json.tool",
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "closeout resilience fields exist",
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "private external reference service traces absent from changed files",
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "changed lines do not add selected-route/runtime/failover overclaim",
+      "expected": true,
+      "status": "PASS_WITH_REVIEWED_NEGATIVE_SCOPE_FALSE_POSITIVES"
+    }
+  ],
+  "verification_commands": [
+    "python3 -m json.tool audit_results/ui_render_package_manifest_2026-05-13.json",
+    "python3 -m json.tool audit_results/ui_screen_passports_2026-05-13.json",
+    "python3 -m json.tool audit_results/ui_render_surface_registry_2026-05-13.json",
+    "python3 -m json.tool audit_results/api_connections_surface_registry_2026-05-13.json",
+    "python3 -m json.tool audit_results/ui_render_package_and_screen_passports_final_backfill_matrix_2026-05-13.json",
+    "python3 -m json.tool audit_results/ui_render_package_and_screen_passports_final_backfill_independent_audit_2026-05-13.json",
+    "python3 tools/check_closeout_resilience.py audit_results/ui_render_package_and_screen_passports_final_backfill_closeout_2026-05-13.md",
+    "git diff --check",
+    "git diff --name-only | rg -v '^audit_results/'",
+    "rg forbidden private external reference service traces in changed artifacts",
+    "git diff -U0 changed artifacts | rg overclaim terms, reviewed as negative/deferred scope only"
+  ],
+  "verdict": "PASS",
+  "blocking_findings": []
+}

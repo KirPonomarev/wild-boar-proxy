@@ -1,0 +1,52 @@
+{
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW",
+  "date": "2026-05-13",
+  "tool": "Codex in-app browser",
+  "target": "http://127.0.0.1:8788",
+  "server": {
+    "type": "local fake-runner server",
+    "runner": "MappingRunner(live_payloads())",
+    "real_runtime_commands": false
+  },
+  "steps": [
+    {
+      "step": "open_accounts_live",
+      "url": "http://127.0.0.1:8788/?source=live&screen=accounts",
+      "observed_title": "Wild Boar Proxy - Overview Design Preview",
+      "observed_copy": "Accounts live mode. Truth comes only from the canonical accounts JSON packet; lifecycle controls are bounded action requests."
+    },
+    {
+      "step": "click_validate_account",
+      "selector": "[data-ui-action=\"validate_account\"][data-account-id=\"acct-active\"]",
+      "confirmation": "accepted once"
+    },
+    {
+      "step": "read_validate_ledger",
+      "ledger": {
+        "ui_action": "validate_account",
+        "account": "acct-active",
+        "status": "ok",
+        "display_state": "ok",
+        "refresh": "live refresh ok",
+        "truth_note": "Action packet reported ok; canonical runtime truth requires refreshed JSON."
+      }
+    },
+    {
+      "step": "click_diagnostics_export",
+      "selector": "#diagnosticsAction",
+      "ledger": {
+        "ui_action": "export_diagnostics",
+        "status": "ok",
+        "display_state": "ok",
+        "refresh": "not required",
+        "truth_note": "Action packet reported ok. This ledger is not a separate runtime truth source."
+      }
+    }
+  ],
+  "boundary": {
+    "browser_sent_command_id": false,
+    "browser_sent_raw_argv": false,
+    "browser_sent_arbitrary_path": false,
+    "browser_sent_config_mutation": false
+  }
+}

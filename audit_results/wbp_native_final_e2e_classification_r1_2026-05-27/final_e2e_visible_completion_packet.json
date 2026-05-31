@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T10:53:06.819624Z",
+  "machine_observed_response_text_proven": false,
+  "machine_ui_input_field_proven": false,
+  "manual_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/owner_manual_ux_check_packet.json",
+  "owner_reported_agent_answered": true,
+  "owner_saw_response": true,
+  "owner_saw_window": true,
+  "owner_typed_prompt": true,
+  "packet_kind": "final_e2e_visible_completion",
+  "status": "ok",
+  "visible_source_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/owner_visible_response_confirmation_packet.json"
+}

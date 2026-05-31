@@ -1,0 +1,46 @@
+{
+  "allowed_status": "WBP_MODEL_CATALOG_CONTRACT_CLASSIFIED_AND_GUARDED",
+  "audit_basis": "Agent Ptolemy read-only audit report with file, packet, and test references; no blocking findings.",
+  "audited_references": [
+    "wild_boar_proxy/codex_model_registry.py",
+    "tests/test_wbp_model_catalog_contract.py",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/model_catalog_generated_packet.json",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/model_catalog_allowed_claims_matrix.json",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/model_catalog_codex_auth_dependency_negative_packet.json",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/verification_packet.json",
+    "audit_results/wbp_model_catalog_contract_2026-05-26/closeout.md"
+  ],
+  "auditor": {
+    "agent_id": "019e635a-2c77-7551-bace-0894e79f8ba4",
+    "mode": "read_only_independent_audit",
+    "model": "gpt-5.4-mini",
+    "nickname": "Ptolemy"
+  },
+  "captured_at_utc": "2026-05-26T08:18:38.981592Z",
+  "contour": "WBP_MODEL_CATALOG_CONTRACT_CONTOUR_R1",
+  "findings": [],
+  "forbidden_claims_remain_forbidden": [
+    "live_model_availability_proven",
+    "gpt_5_5_works",
+    "all_models_work",
+    "account_health_proven",
+    "native_codex_proven",
+    "cli_runner_proven",
+    "direct_egress_absent",
+    "final_e2e_proven"
+  ],
+  "schema_version": 1,
+  "scope_limits_confirmed": {
+    "account_health_not_claimed": true,
+    "browser_authority_blocked": true,
+    "capability_overclaims_blocked": true,
+    "catalog_source_server_owned_or_limited": true,
+    "codex_auth_dependency_scope_limited_to_catalog_contract": true,
+    "egress_not_claimed": true,
+    "future_roadmap_content_findings": false,
+    "live_availability_not_claimed": true,
+    "native_not_claimed": true,
+    "raw_secret_findings": false
+  },
+  "verdict": "PASS"
+}

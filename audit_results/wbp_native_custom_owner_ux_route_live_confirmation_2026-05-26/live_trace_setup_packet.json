@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-26T12:11:52.238487Z",
+  "direct_egress_claimed": false,
+  "downstream_wbp_endpoint": "http://127.0.0.1:8318/v1",
+  "exact_prompt_to_type": "WBP owner UX route check WBP_OWNER_UX_ROUTE_R1_20260526T120907Z_6FD52F5E. Reply with OK and the nonce only.",
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "materialized_paths": {
+    "auth_path": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/auth.json",
+    "config_path": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/config.toml",
+    "custom_home_dir": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/home",
+    "custom_tmp_dir": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/tmp",
+    "custom_user_data_dir": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/electron-user-data",
+    "launcher_path": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile/codex-custom-launch.sh",
+    "profile_dir": "/tmp/wbp-native-owner-ux-route-b53j8tr2/profile"
+  },
+  "model": "gpt-5.4-mini",
+  "native_app_launch_attempted": true,
+  "nonce": "WBP_OWNER_UX_ROUTE_R1_20260526T120907Z_6FD52F5E",
+  "packet_kind": "owner_ux_route_live_trace_setup",
+  "raw_config_recorded": false,
+  "raw_token_recorded": false,
+  "status": "ok",
+  "tmp_root": "/tmp/wbp-native-owner-ux-route-b53j8tr2",
+  "trace_listen_endpoint": "http://127.0.0.1:51271/v1"
+}

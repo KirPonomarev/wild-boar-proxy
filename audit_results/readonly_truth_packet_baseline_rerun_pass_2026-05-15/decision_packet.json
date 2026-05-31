@@ -1,0 +1,12 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_RERUN_PASS",
+  "decision": "GO_TO_SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
+  "reasons": [
+    "owner packet was captured before delegated packet",
+    "owner and delegated runtime surfaces were semantically coherent in the rerun",
+    "mode/accounts/supporting readonly packets were captured as valid JSON",
+    "rollout remained supporting warning evidence only",
+    "external-models remained supporting readonly evidence only"
+  ],
+  "blocking_reasons": []
+}

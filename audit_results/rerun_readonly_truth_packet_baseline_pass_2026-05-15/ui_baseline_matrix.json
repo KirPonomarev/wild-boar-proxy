@@ -1,0 +1,66 @@
+[
+  {
+    "screen": "quick-start",
+    "source_mode": "live",
+    "phase": "final",
+    "truth_topics_checked": [
+      "accounts_summary"
+    ],
+    "matches_live_packet": true,
+    "false_green_detected": false,
+    "fixture_truth_detected": false,
+    "notes": "Visible quick-start counters 25 / 11 / 14 match canonical and live account summaries."
+  },
+  {
+    "screen": "overview",
+    "source_mode": "live",
+    "phase": "pending",
+    "truth_topics_checked": [
+      "pending_honesty"
+    ],
+    "matches_live_packet": true,
+    "false_green_detected": false,
+    "fixture_truth_detected": false,
+    "notes": "Pending state uses live source, loading chip, and explicit no-fixture-truth copy."
+  },
+  {
+    "screen": "overview",
+    "source_mode": "live",
+    "phase": "final",
+    "truth_topics_checked": [
+      "runtime_mode",
+      "endpoint",
+      "pool_summary",
+      "warning_propagation"
+    ],
+    "matches_live_packet": true,
+    "false_green_detected": false,
+    "fixture_truth_detected": false,
+    "notes": "Final overview state converges to stable/stable, endpoint 127.0.0.1:8318/v1, pool 17 / 0 / 0 / 14, and carries the rollout warning honestly."
+  },
+  {
+    "screen": "accounts",
+    "source_mode": "live",
+    "phase": "final",
+    "truth_topics_checked": [
+      "registry_identity",
+      "pool_summary"
+    ],
+    "matches_live_packet": true,
+    "false_green_detected": false,
+    "fixture_truth_detected": false,
+    "notes": "Accounts summary and registry identity match canonical and live packets."
+  },
+  {
+    "screen": "api-connections",
+    "source_mode": "live",
+    "phase": "final",
+    "truth_topics_checked": [
+      "routes_summary"
+    ],
+    "matches_live_packet": true,
+    "false_green_detected": false,
+    "fixture_truth_detected": false,
+    "notes": "Visible API route counts and latest check match canonical external-model packets and live readonly summary."
+  }
+]

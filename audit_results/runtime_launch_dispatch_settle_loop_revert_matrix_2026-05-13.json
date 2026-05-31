@@ -1,0 +1,70 @@
+{
+  "contour_id": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_REVERT",
+  "created_at": "2026-05-13",
+  "head_before_revert": "38a4331",
+  "mode": "fail_closed_revert",
+  "final_state": "TRACKED_RUNTIME_TAIL_CLEAN_FOR_UI_RESUME_REVIEW",
+  "basis": {
+    "previous_proof_gate": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_PROOF_GATE",
+    "previous_recommendation": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+    "canon_reason": "The settle loop observed quick detached-process exit through process.poll() but did not carry that observation in the launch-client packet. launch client must remain bounded OS dispatch truth only."
+  },
+  "scope": {
+    "runtime_file_clean_after_revert": "wild_boar_proxy/runtime.py",
+    "runtime_files_staged_for_commit": [],
+    "artifact_files_added": [
+      "audit_results/runtime_launch_dispatch_settle_loop_revert_matrix_2026-05-13.json",
+      "audit_results/runtime_launch_dispatch_settle_loop_revert_closeout_2026-05-13.md"
+    ],
+    "tests_edited": false,
+    "ui_files_touched": false,
+    "desktop_files_touched": false,
+    "generated_evidence_tail_staged": false,
+    "live_runtime_mutation_performed": false
+  },
+  "reverted_hunk": {
+    "file": "wild_boar_proxy/runtime.py",
+    "function": "dispatch_external_client",
+    "pre_revert_line_refs": [
+      "wild_boar_proxy/runtime.py:436-442"
+    ],
+    "removed_items": [
+      "comment about detached launch semantics and short-lived probe scripts",
+      "settle_deadline = time.monotonic() + 1.25",
+      "while time.monotonic() < settle_deadline loop",
+      "process.poll() check",
+      "time.sleep(0.01)"
+    ],
+    "restored_behavior": "Detached executable dispatch returns immediately after successful subprocess.Popen with the existing os_dispatch_only packet semantics."
+  },
+  "post_revert_runtime_state": {
+    "command": "git diff -- wild_boar_proxy/runtime.py",
+    "result": "empty",
+    "tracked_runtime_tail_clean": true,
+    "full_worktree_clean_claimed": false,
+    "note": "Untracked/generated evidence tail remains out of scope."
+  },
+  "tests": [
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_launch_client_treats_detached_executable_as_bounded_dispatch_only tests.test_cli.CliTests.test_launch_client_dispatches_bounded_executable_with_sanitized_env tests.test_cli.CliTests.test_launch_client_reports_exec_format_failure_as_json_packet tests.test_cli.CliTests.test_launch_client_blocks_dispatch_when_runtime_precondition_is_unhealthy tests.test_cli.CliTests.test_launch_smoke_reports_nonzero_launcher_even_if_runtime_is_healthy",
+      "result": "PASS",
+      "tests_ran": 5,
+      "duration_seconds": 3.151
+    }
+  ],
+  "inspector_pre_edit": {
+    "performed": true,
+    "result": "PASS",
+    "summary": "Read-only inspector confirmed exactly one tracked runtime.py hunk before edit, identified the 7-line settle-loop boundaries, and confirmed expected post-revert runtime diff is empty."
+  },
+  "acceptance": {
+    "settle_loop_removed": true,
+    "git_diff_runtime_empty": true,
+    "tracked_runtime_tail_clean": true,
+    "targeted_tests_passed": true,
+    "no_tests_edited": true,
+    "no_ui_or_desktop_files_touched": true,
+    "generated_evidence_tail_not_staged": true
+  },
+  "recommended_next_contour": "TRACKED_RUNTIME_TAIL_CLEAN_UI_RESUME_REVIEW"
+}

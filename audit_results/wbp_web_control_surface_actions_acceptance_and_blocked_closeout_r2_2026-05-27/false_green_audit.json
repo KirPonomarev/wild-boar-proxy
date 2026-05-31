@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T15:21:25.603501Z",
+  "packet_kind": "web_control_surface_false_green_audit",
+  "status": "ok",
+  "findings": [],
+  "missing_required_packets": [],
+  "blocked_packets": [],
+  "target_status": "WBP_WEB_CONTROL_SURFACE_ACTIONS_WIRED_AND_GUARDED_R2",
+  "ui_polish_claimed": false,
+  "runtime_redesign_claimed": false
+}

@@ -1,0 +1,11 @@
+{
+  "server_process_terminated": true,
+  "sandbox_root_preserved": true,
+  "reason": "next contour ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS needs the same fresh sandbox baseline layout",
+  "teardown_applied": [
+    "terminated live server process on port 8791"
+  ],
+  "teardown_deferred": [
+    "preserve /Users/kirillponomarev/.codex-custom-sandbox-20260515 for next contour"
+  ]
+}

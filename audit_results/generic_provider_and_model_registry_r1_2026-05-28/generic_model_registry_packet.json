@@ -1,0 +1,496 @@
+{
+  "allowed_browser_fields": [
+    "model_id"
+  ],
+  "browser_authority_widened": false,
+  "captured_at_utc": "2026-05-28T10:49:59.054414Z",
+  "classification_scope": "model_registry_only",
+  "current_catalog_is_runtime_proof": false,
+  "current_catalog_model_count": 3,
+  "current_catalog_models": [
+    {
+      "availability_state": "listed_not_live_proven",
+      "capability_tags": [],
+      "cost_class": "unknown_unclassified",
+      "current_status": "current_catalog",
+      "display_metadata_only": false,
+      "display_name": "gpt-5.3-codex",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "codex_native",
+      "model_availability_claimed": false,
+      "model_id": "gpt-5.3-codex",
+      "proof_level": "classified",
+      "provider": "",
+      "provider_label": "Codex native",
+      "provider_model_id": "",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "current_runtime_catalog",
+      "selection_enabled": true,
+      "server_issued_for_runtime_selection": true,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "listed_not_live_proven",
+      "capability_tags": [],
+      "cost_class": "unknown_unclassified",
+      "current_status": "current_catalog",
+      "display_metadata_only": false,
+      "display_name": "gpt-5.4",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "codex_native",
+      "model_availability_claimed": false,
+      "model_id": "gpt-5.4",
+      "proof_level": "classified",
+      "provider": "",
+      "provider_label": "Codex native",
+      "provider_model_id": "",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "current_runtime_catalog",
+      "selection_enabled": true,
+      "server_issued_for_runtime_selection": true,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "listed_not_live_proven",
+      "capability_tags": [],
+      "cost_class": "unknown_unclassified",
+      "current_status": "current_catalog",
+      "display_metadata_only": false,
+      "display_name": "WBP openrouter/upstream",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "wbp_api",
+      "model_availability_claimed": false,
+      "model_id": "wbp-web-primary-openrouter",
+      "proof_level": "classified",
+      "provider": "",
+      "provider_label": "openrouter via WBP",
+      "provider_model_id": "openrouter/upstream",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "current_runtime_catalog",
+      "selection_enabled": true,
+      "server_issued_for_runtime_selection": true,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    }
+  ],
+  "packet_kind": "generic_model_registry",
+  "registry_export_implies_consumer_integration_complete": false,
+  "schema_version": 1,
+  "seed_only_is_current_runtime_catalog": false,
+  "seed_only_model_count": 12,
+  "seed_only_models": [
+    {
+      "availability_state": "externally_blocked",
+      "capability_tags": [
+        "blocked_target",
+        "strategic_target"
+      ],
+      "cost_class": "paid_direct",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-cerebras-gpt-oss-120b",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-cerebras-gpt-oss-120b",
+      "proof_level": "declared",
+      "provider": "cerebras",
+      "provider_label": "cerebras",
+      "provider_model_id": "direct-cerebras-gpt-oss-120b",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "unstable",
+      "capability_tags": [
+        "cheap_helper",
+        "baseline_executor_candidate",
+        "current_practical_pool"
+      ],
+      "cost_class": "entitled_direct_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-cerebras-llama3.1-8b",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-cerebras-llama3.1-8b",
+      "proof_level": "declared",
+      "provider": "cerebras",
+      "provider_label": "cerebras",
+      "provider_model_id": "direct-cerebras-llama3.1-8b",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "provider_visible_but_unverified",
+      "capability_tags": [
+        "reasoning_lane",
+        "selective_use",
+        "secondary_reasoning_lane"
+      ],
+      "cost_class": "entitled_direct_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+      "proof_level": "declared",
+      "provider": "cerebras",
+      "provider_label": "cerebras",
+      "provider_model_id": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "unstable",
+      "capability_tags": [
+        "comparison_lane",
+        "fast_generalist"
+      ],
+      "cost_class": "paid_direct",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-gemini-2.5-flash",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-gemini-2.5-flash",
+      "proof_level": "declared",
+      "provider": "gemini",
+      "provider_label": "gemini",
+      "provider_model_id": "direct-gemini-2.5-flash",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "comparison_lane",
+        "openai_compatible"
+      ],
+      "cost_class": "paid_direct",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-groq-openai-gpt-oss-20b",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-groq-openai-gpt-oss-20b",
+      "proof_level": "declared",
+      "provider": "groq",
+      "provider_label": "groq",
+      "provider_model_id": "direct-groq-openai-gpt-oss-20b",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "verified_accessible",
+      "capability_tags": [
+        "reasoning_lane",
+        "selective_use",
+        "devstral_candidate"
+      ],
+      "cost_class": "paid_direct",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-mistral-devstral-2512",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-mistral-devstral-2512",
+      "proof_level": "declared",
+      "provider": "mistral",
+      "provider_label": "mistral",
+      "provider_model_id": "direct-mistral-devstral-2512",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "verified_accessible",
+      "capability_tags": [
+        "comparison_lane",
+        "generalist"
+      ],
+      "cost_class": "paid_direct",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "direct-mistral-small-latest",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "direct-mistral-small-latest",
+      "proof_level": "declared",
+      "provider": "mistral",
+      "provider_label": "mistral",
+      "provider_model_id": "direct-mistral-small-latest",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "comparison_lane",
+        "free_route_candidate"
+      ],
+      "cost_class": "free_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "glm-4.7-flash",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "glm-4.7-flash",
+      "proof_level": "declared",
+      "provider": "zai",
+      "provider_label": "zai",
+      "provider_model_id": "glm-4.7-flash",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free"
+      ],
+      "cost_class": "free_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "or-gpt-oss-120b",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "or-gpt-oss-120b",
+      "proof_level": "declared",
+      "provider": "openrouter",
+      "provider_label": "openrouter",
+      "provider_model_id": "or-gpt-oss-120b",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free"
+      ],
+      "cost_class": "free_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "or-gpt-oss-20b",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "or-gpt-oss-20b",
+      "proof_level": "declared",
+      "provider": "openrouter",
+      "provider_label": "openrouter",
+      "provider_model_id": "or-gpt-oss-20b",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free",
+        "coding_candidate"
+      ],
+      "cost_class": "free_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "or-qwen3-coder",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "or-qwen3-coder",
+      "proof_level": "declared",
+      "provider": "openrouter",
+      "provider_label": "openrouter",
+      "provider_model_id": "or-qwen3-coder",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    },
+    {
+      "availability_state": "auth_unconfirmed",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free",
+        "reasoning_candidate"
+      ],
+      "cost_class": "free_limited",
+      "current_status": "seed_only",
+      "display_metadata_only": true,
+      "display_name": "or-qwen3-next",
+      "intelligence_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      },
+      "lane_kind": "seed_only",
+      "model_availability_claimed": false,
+      "model_id": "or-qwen3-next",
+      "proof_level": "declared",
+      "provider": "openrouter",
+      "provider_label": "openrouter",
+      "provider_model_id": "or-qwen3-next",
+      "runtime_compatibility_claimed": false,
+      "seed_source": "historical_external_agent_lab",
+      "selection_enabled": false,
+      "server_issued_for_runtime_selection": false,
+      "speed_tier": {
+        "label": "unavailable_unknown",
+        "proof_level": "unproven",
+        "source": "unavailable_unknown"
+      }
+    }
+  ],
+  "status": "ok"
+}

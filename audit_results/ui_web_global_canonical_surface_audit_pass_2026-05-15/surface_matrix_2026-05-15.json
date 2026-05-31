@@ -1,0 +1,74 @@
+{
+  "contour": "UI_WEB_GLOBAL_CANONICAL_SURFACE_AUDIT_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "0b618f77c92b4d8a87e7cb212e1e049fa2405fef",
+  "planned_surfaces": [
+    "overview",
+    "accounts",
+    "api-connections",
+    "diagnostics",
+    "settings",
+    "setup",
+    "select-client",
+    "account-onboarding",
+    "account-detail-drawer",
+    "action-ledger",
+    "diagnostics-export-result",
+    "about-license-version"
+  ],
+  "static_routes_present": [
+    "overview",
+    "accounts",
+    "api-connections",
+    "diagnostics",
+    "settings",
+    "setup",
+    "select-client",
+    "import-existing"
+  ],
+  "bounded_ui_actions_present": [
+    "export_diagnostics",
+    "launch_client_dispatch",
+    "launch_smoke",
+    "onboard_account",
+    "refresh_health_detail",
+    "set_mode_managed",
+    "set_mode_stable",
+    "stable_repair_plan",
+    "sync_runtime"
+  ],
+  "scope_touched": {
+    "runtime": false,
+    "command_adapter": false,
+    "allowlist": false,
+    "live_server": false,
+    "desktop_native": false,
+    "production_ui_code": false,
+    "audit_artifacts_only": true
+  },
+  "visual_summary": {
+    "viewport": "1600x1000",
+    "planned_routes_fit_without_page_scroll": true,
+    "visible_inline_svg_icons": 0,
+    "visible_browser_inputs_on_planned_routes": 0,
+    "visible_primary_actions_max_per_route": 1
+  },
+  "documented_followups": [
+    {
+      "id": "FOLLOWUP_IMPORT_EXISTING_STATIC_ROUTE_FIT",
+      "severity": "medium",
+      "surface": "import-existing",
+      "finding": "The non-navigation static import-existing route has mainScrollHeight 1150 against mainClientHeight 942 and activeBottom 1147 at 1600x1000.",
+      "decision": "Documented follow-up. Not fixed in this audit contour because Import Existing is not in the current main navigation and needs its own safe import/admission contour before enablement."
+    },
+    {
+      "id": "FOLLOWUP_SELECT_CLIENT_PATH_TRUNCATION",
+      "severity": "low",
+      "surface": "select-client",
+      "finding": "Candidate path text intentionally overflows its visible cell as a truncated path: clientWidth 143, scrollWidth 198.",
+      "decision": "Acceptable as bounded path display with full value kept out of editable browser inputs; polish later if designer wants a different middle-truncation treatment."
+    }
+  ],
+  "verdict": "PASS_WITH_DOCUMENTED_FOLLOWUPS"
+}

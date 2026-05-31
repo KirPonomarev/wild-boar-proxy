@@ -1,0 +1,85 @@
+{
+  "cases": [
+    {
+      "allowed_claim": "non-stream text Responses shape is fixture-compatible",
+      "case_id": "non_stream_text",
+      "expected_status": 200,
+      "fixture": "non_stream_text_request.json",
+      "forbidden_claims": ["live Codex consumer accepted", "native app works", "all models work"],
+      "redaction_expectation": "request body and auth header are not written to evidence"
+    },
+    {
+      "allowed_claim": "stream text SSE sequence is fixture-compatible",
+      "case_id": "stream_text",
+      "expected_status": 200,
+      "fixture": "stream_text_request.json",
+      "forbidden_claims": ["full streaming compatibility", "native app works"],
+      "redaction_expectation": "stream event assertions use event names and response text only"
+    },
+    {
+      "allowed_claim": "upstream 4xx is surfaced without green status",
+      "case_id": "upstream_4xx_error",
+      "expected_status": 401,
+      "fixture": "upstream_4xx_error.json",
+      "forbidden_claims": ["provider pass", "auth works"],
+      "redaction_expectation": "auth header is not recorded"
+    },
+    {
+      "allowed_claim": "upstream 5xx is surfaced without green status",
+      "case_id": "upstream_5xx_error",
+      "expected_status": 503,
+      "fixture": "upstream_5xx_error.json",
+      "forbidden_claims": ["provider pass", "route healthy"],
+      "redaction_expectation": "prompt body is not recorded"
+    },
+    {
+      "allowed_claim": "unknown model is rejected by route-bound adapter",
+      "case_id": "unknown_model_error",
+      "expected_status": 404,
+      "fixture": "unknown_model_request.json",
+      "forbidden_claims": ["model availability", "catalog proves route"],
+      "redaction_expectation": "model id may be recorded; secret values may not"
+    },
+    {
+      "allowed_claim": "tool call input can be translated to chat-completions tool_calls",
+      "case_id": "tool_call_request",
+      "expected_status": 200,
+      "fixture": "tool_call_request.json",
+      "forbidden_claims": ["complete tool loop compatibility", "hosted tool compatibility"],
+      "redaction_expectation": "tool names may be summarized"
+    },
+    {
+      "allowed_claim": "tool call output follow-up can be translated to chat-completions tool message",
+      "case_id": "tool_call_output_followup",
+      "expected_status": 200,
+      "fixture": "tool_call_output_followup.json",
+      "forbidden_claims": ["complete tool loop compatibility", "native tool UX works"],
+      "redaction_expectation": "tool output fixture contains no secrets"
+    },
+    {
+      "allowed_claim": "reasoning input is classified and ignored without raw reasoning leakage",
+      "case_id": "reasoning_item_input",
+      "expected_status": 200,
+      "fixture": "reasoning_item_input.json",
+      "forbidden_claims": ["reasoning passthrough compatibility", "reasoning summaries supported"],
+      "redaction_expectation": "reasoning summary is not sent upstream"
+    },
+    {
+      "allowed_claim": "large prompt privacy boundary is fixture-tested",
+      "case_id": "large_prompt_redaction",
+      "expected_status": 200,
+      "fixture": "large_prompt_redaction_case.json",
+      "forbidden_claims": ["wire compatibility pass", "native app works"],
+      "redaction_expectation": "large prompt body must not appear in compatibility packet"
+    },
+    {
+      "allowed_claim": "image tool unsupported behavior is classified",
+      "case_id": "image_tool_unsupported",
+      "expected_status": 400,
+      "fixture": "image_tool_unsupported_case.json",
+      "forbidden_claims": ["image tool support", "all tool support"],
+      "redaction_expectation": "tool name only may be summarized"
+    }
+  ],
+  "schema_version": 1
+}

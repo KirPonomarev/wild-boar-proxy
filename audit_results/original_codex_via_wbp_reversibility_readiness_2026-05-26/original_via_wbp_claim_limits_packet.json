@@ -1,0 +1,30 @@
+{
+  "allowed_claims": [
+    "Original protected surface read classified",
+    "Original profile inventory classified",
+    "Original auth boundary classified",
+    "temporary route strategy readiness classified",
+    "rollback feasibility classified",
+    "future live admissibility classified with owner authorization"
+  ],
+  "captured_at_utc": "2026-05-26T14:06:26.738673Z",
+  "direct_egress_absence_proven": false,
+  "final_e2e_proven": false,
+  "forbidden_claims": [
+    "Original Codex via WBP proven",
+    "fresh Original native launch performed",
+    "fresh Original WBP route proven",
+    "Original native UX proven",
+    "direct egress absence proven",
+    "model availability proven",
+    "auth strategy proven",
+    "rollback executed",
+    "normal Original post-cleanup proven",
+    "final E2E proven"
+  ],
+  "native_original_launch_attempted": false,
+  "original_route_proven": false,
+  "packet_kind": "original_via_wbp_claim_limits",
+  "rollback_executed": false,
+  "status": "ok"
+}

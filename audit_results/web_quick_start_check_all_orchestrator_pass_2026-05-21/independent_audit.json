@@ -1,0 +1,35 @@
+{
+  "findings": [],
+  "overall_verdict": "pass",
+  "residual_risks": [
+    {
+      "note": "Quick Start Check All remains a verify-only bundle; route lifecycle/support actions are still admitted elsewhere in sandbox metadata, but the bundle itself does not dispatch them and the browser evidence shows hidden mutations absent.",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:293",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:991",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/check-all-packet.json:1",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/ui-run-summary.json:1"
+      ]
+    },
+    {
+      "note": "Runtime contributes only a bounded readonly status inside the bundle; the contour does not claim broader production or session-launch readiness beyond the owner packet and refresh surfaces it inspected.",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:960",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/live-readonly-after.json:1",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/check-all-packet-summary.json:1"
+      ]
+    }
+  ],
+  "auditor_summary": "No medium+ findings. The quick-start bundle is wired consistently across server, client, tests, and evidence.",
+  "evidence_files_inspected": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/accounts-readonly-after.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/actions-metadata.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/api-connections-readonly-after.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/check-all-packet-summary.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/check-all-packet.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/live-readonly-after.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/server-meta.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/ui-run-network.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/web_quick_start_check_all_orchestrator_pass_2026-05-21/evidence/ui-run-summary.json"
+  ]
+}

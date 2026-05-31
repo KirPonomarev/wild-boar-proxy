@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "blocked_by_operator_authorization",
+  "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+  "required_phrase": "разрешаю тебе любые законные действия в рамках разработки проекта",
+  "generic_start_is_sufficient": false,
+  "live_prompt_executed": false,
+  "live_runtime_commands_executed": false,
+  "token_burn": 0,
+  "next_exact_action": "owner must provide the exact standing approval phrase before any live runtime/account/API prompt execution"
+}

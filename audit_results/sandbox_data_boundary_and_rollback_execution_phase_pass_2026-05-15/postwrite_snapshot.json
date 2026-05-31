@@ -1,0 +1,261 @@
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_EXECUTION_PHASE_PASS",
+  "timestamp_utc": "2026-05-15T14:16:58Z",
+  "sandbox_root": {
+    "path": "/Users/kirillponomarev/.codex-custom-test",
+    "exists": true,
+    "kind": "dir",
+    "mode": "0o755",
+    "size": 800,
+    "mtime_ns": 1778854596348505615,
+    "entries": [
+      ".tmp",
+      "auth.json",
+      "codex-custom-launch.sh",
+      "codex-vibe-test.sh",
+      "config.toml",
+      "external-models",
+      "installation_id",
+      "launch-logs",
+      "logs_2.sqlite",
+      "logs_2.sqlite-shm",
+      "logs_2.sqlite-wal",
+      "managed",
+      "memories",
+      "runtime-effective-mode.txt",
+      "runtime-mode.txt",
+      "sessions",
+      "shell_snapshots",
+      "skills",
+      "stable",
+      "state_5.sqlite",
+      "state_5.sqlite-shm",
+      "state_5.sqlite-wal",
+      "tmp"
+    ]
+  },
+  "target_paths": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed",
+      "exists": true,
+      "kind": "dir",
+      "mode": "0o755",
+      "size": 160,
+      "mtime_ns": 1778854596348665326,
+      "entries": [
+        "backend-registry.json",
+        "managed-config.yaml",
+        "supervisor-state.json"
+      ]
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 240,
+      "mtime_ns": 1778854596348615908,
+      "sha256": "4477a790f80db1b9c5afa5dae17b132a6209074614c4d6a7aeb88a6f6bd6d7a0"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 382,
+      "mtime_ns": 1778854596348699369,
+      "sha256": "2918a6626c442c91a807ae8b2b39dfb57f36190067fd68298f1db6ae471c3ffb"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 27,
+      "mtime_ns": 1778854596348466364,
+      "sha256": "a389328e3bc9afdf439ce8f52ef0a7a27aeb5c0d1aeeb151c672a47760bfa44f"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778854596348185067,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778854596348291569,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/stable",
+      "exists": true,
+      "kind": "dir",
+      "mode": "0o755",
+      "size": 96,
+      "mtime_ns": 1778854596348341570,
+      "entries": [
+        "config.yaml"
+      ]
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 27,
+      "mtime_ns": 1778854596348385987,
+      "sha256": "0129c009bf301e11a0e84d0ef04d433f0048980c0cf160b0eafaa83fa8f10d11"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 72,
+      "mtime_ns": 1778854596348539157,
+      "sha256": "018e0ca2b8224adb441d1ba2b56a4ee42bdd48694d61149ef21e69be2d546302"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models",
+      "exists": true,
+      "kind": "dir",
+      "mode": "0o755",
+      "size": 192,
+      "mtime_ns": 1778854596348906622,
+      "entries": [
+        "evidence",
+        "routes.json",
+        "secrets.env",
+        "state.json"
+      ]
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 42,
+      "mtime_ns": 1778854596348786162,
+      "sha256": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 554,
+      "mtime_ns": 1778854596348867538,
+      "sha256": "f11ebe5d4aea7a9cd7ff5e54887502bcf3ea1f64f32e832996c79d32c4f84fc5"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o600",
+      "size": 0,
+      "mtime_ns": 1778854596348904206,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/evidence",
+      "exists": true,
+      "kind": "dir",
+      "mode": "0o755",
+      "size": 64,
+      "mtime_ns": 1778854596347637014,
+      "entries": []
+    }
+  ],
+  "forbidden_reference_paths": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 112,
+      "mtime_ns": 1777974351418541438,
+      "sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o600",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229,
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778411256548853944,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 7,
+      "mtime_ns": 1778852637475404781,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 29277,
+      "mtime_ns": 1778512853646445643,
+      "sha256": "7481fec19ea89891ac20c8747a416210cfda1f9d109eb0db59ade2ac0bdbfe91"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592,
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o600",
+      "size": 622,
+      "mtime_ns": 1778512853762031295,
+      "sha256": "94c2bdef0386ec20f4f8772ea581fc9b974cb164fe5fc74d6435927d925c31fd"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o755",
+      "size": 3178,
+      "mtime_ns": 1778445681313227595,
+      "sha256": "6ad97417027a79fddbc49cb2af5dc4716b89429239875575501ce5c9422c9ac9"
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "exists": true,
+      "kind": "file",
+      "mode": "0o644",
+      "size": 577,
+      "mtime_ns": 1778332551870097299,
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2"
+    }
+  ],
+  "forbidden_drift_detected": false,
+  "forbidden_drift": []
+}

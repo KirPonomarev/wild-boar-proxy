@@ -1,0 +1,30 @@
+{
+  "contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_SANDBOX_AUTH_JSON_MATERIALIZATION_PASS",
+      "admissible": false,
+      "why": [
+        "one exact transfer-safe source surface is still not admitted",
+        "direct materialization would still guess among 12 policy-allowed candidates"
+      ]
+    },
+    {
+      "outcome": "GO_TO_LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+      "admissible": true,
+      "why": [
+        "the candidate family is already localized",
+        "the remaining blocker is selector truth rather than broad source discovery",
+        "a narrower selector contour can choose one exact source surface without payload inspection or write actions"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": false,
+      "why": [
+        "the ambiguity is localized enough to name the next narrower contour",
+        "this is no longer a broad truth failure"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "ui_action_count": 22,
+  "available_without_launch_client_path": 21,
+  "read_only_support_actions": [
+    "refresh_health_detail",
+    "stable_repair_plan"
+  ],
+  "support_artifact_actions": [
+    "export_diagnostics"
+  ],
+  "account_actions": [
+    "onboard_account",
+    "validate_account",
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account"
+  ],
+  "runtime_actions": [
+    "set_mode_stable",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke"
+  ],
+  "route_actions": [
+    "api_route_validate",
+    "api_route_check",
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_remove",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "bounded_dispatch_actions": [
+    "launch_client_dispatch"
+  ],
+  "deferred_in_readonly_registry_ui": [
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_check",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "still_available_in_metadata_despite_current_plan_parking": [
+    "onboard_account",
+    "validate_account",
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account",
+    "set_mode_stable",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke",
+    "export_diagnostics",
+    "api_route_validate",
+    "api_route_check",
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_remove",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "special_case_unavailable_without_server_owned_context": [
+    "launch_client_dispatch"
+  ],
+  "payload_contract": {
+    "browser_object_key": "ui_action",
+    "additional_bounded_keys": [
+      "account_id",
+      "route_id"
+    ],
+    "blocked_browser_keys": [
+      "command_id",
+      "raw_command",
+      "argv",
+      "shell",
+      "path",
+      "token",
+      "secret",
+      "config_path",
+      "state_path",
+      "log_path",
+      "route_json",
+      "bundle_path",
+      "client_path"
+    ]
+  }
+}

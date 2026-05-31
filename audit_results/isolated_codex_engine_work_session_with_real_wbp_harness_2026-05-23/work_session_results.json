@@ -1,0 +1,22 @@
+{
+  "all_required_exact": false,
+  "required_prompt_count": 3,
+  "results": [],
+  "schema_version": 1,
+  "setup": {
+    "config": {
+      "approval_policy": "never",
+      "model": "gpt-5.3-codex",
+      "openai_base_url": "http://127.0.0.1:8318/v1",
+      "sandbox_mode": "danger-full-access"
+    },
+    "current_auth_copied": false,
+    "provider_native_model_used_as_codex_model": false,
+    "sandbox_auth_copied_to_temp": true,
+    "schema_version": 1,
+    "temporary_codex_home": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-work-session-mdz1_k2p/CODEX_HOME",
+    "temporary_home": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-work-session-mdz1_k2p/HOME",
+    "temporary_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-codex-work-session-mdz1_k2p"
+  },
+  "status": "blocked_by_wbp_preflight"
+}

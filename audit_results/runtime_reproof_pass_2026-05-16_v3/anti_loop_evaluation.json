@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "measured_against_post_repair_state": {
+    "claim_gate": {
+      "before": "blocked",
+      "after": "clear",
+      "improved": true
+    },
+    "policy_drift_used_by_status": {
+      "before": "detected",
+      "after": "clear",
+      "improved": true
+    },
+    "effective_stable_runtime_consumer_source": {
+      "before": "observed_source_active",
+      "after": "approved_target_active_by_activation_evidence",
+      "improved": true
+    },
+    "consumer_activation_readiness": {
+      "before": "activation_pending",
+      "after": "aligned",
+      "improved": true
+    }
+  }
+}

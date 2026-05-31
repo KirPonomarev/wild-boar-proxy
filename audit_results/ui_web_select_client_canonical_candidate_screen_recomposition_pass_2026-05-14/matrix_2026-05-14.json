@@ -1,0 +1,57 @@
+{
+  "contour": "UI_WEB_SELECT_CLIENT_CANONICAL_CANDIDATE_SCREEN_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "states": [
+    "fixture_healthy",
+    "fixture_degraded",
+    "fixture_down",
+    "fixture_stale",
+    "live_integration_failure"
+  ],
+  "acceptance": {
+    "candidate_preview_mode": "pass",
+    "no_screen_inputs": "pass",
+    "no_file_picker": "pass",
+    "no_screen_selects": "pass",
+    "no_data_ui_action": "pass",
+    "no_live_action": "pass",
+    "save_disabled_without_candidate_proof": "pass",
+    "check_disabled_without_command_surface": "pass",
+    "manual_picker_deferred_native_only": "pass",
+    "path_values_display_only": "pass",
+    "visible_svg_icons_zero": "pass",
+    "visible_image_icons_present": "pass",
+    "layout_1600x1000": "pass",
+    "runtime_adapter_allowlist_desktop_untouched": "pass"
+  },
+  "after_metrics_summary": {
+    "viewport": "1600x1000",
+    "document_scroll_height": 1000,
+    "document_scroll_width": 1600,
+    "main_scroll_height": 942,
+    "main_client_height": 942,
+    "screen_bottom": 934,
+    "visible_svg_icons": 0,
+    "visible_img_icons": 7,
+    "screen_inputs": 0,
+    "file_inputs": 0,
+    "data_ui_actions": 0,
+    "live_actions": 0,
+    "candidate_rows": 3,
+    "active_buttons": [
+      "Закрыть"
+    ],
+    "active_primary_buttons": [],
+    "overflows": []
+  },
+  "screenshots": {
+    "baseline_dir": "audit_results/ui_web_select_client_canonical_candidate_screen_recomposition_pass_2026-05-14/screenshots/baseline",
+    "after_dir": "audit_results/ui_web_select_client_canonical_candidate_screen_recomposition_pass_2026-05-14/screenshots/after"
+  },
+  "verification_commands": [
+    "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "python3 -m unittest tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_screens_are_inert_skeletons tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_routes_are_static_only -q",
+    "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q"
+  ]
+}

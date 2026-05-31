@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-27T12:18:29.358091Z",
+  "declared_prohibition_counts_as_enforcement": false,
+  "default_loopback_host_present_for_live_server": true,
+  "default_loopback_host_present_for_web_ui": true,
+  "fixed_loopback_harness_present": true,
+  "packet_kind": "remote_control_public_exposure_prohibition",
+  "public_exposure_currently_admitted": false,
+  "public_host_override_possible_for_live_server": true,
+  "public_host_override_possible_for_web_ui": true,
+  "separate_public_exposure_admission_found": false,
+  "status": "ok"
+}

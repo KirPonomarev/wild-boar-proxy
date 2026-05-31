@@ -1,0 +1,39 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "timestamp_utc": "2026-05-16T00:00:00Z",
+  "current_live_status": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "effective_stable_runtime_consumer_source": {
+      "status": "observed_source_active",
+      "source_kind": "observed_stable_inventory_source",
+      "matches_desired": false
+    },
+    "consumer_activation_readiness": "activation_pending"
+  },
+  "current_live_rotation": {
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_status": "participation_evidence_stale",
+    "evidence_freshness": "stale",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "selected_backend_count": 15,
+    "policy_drift_status": "clear"
+  },
+  "current_stable_repair_dry_run": {
+    "machine_error_code": "STABLE_REPAIR_NOT_NEEDED",
+    "would_change": false,
+    "eligible_registry_auth_ref_count": 15,
+    "source_copy_missing_auth_refs": [],
+    "source_copy_basename_collisions": []
+  },
+  "precondition_regression": true,
+  "precondition_regression_reason": [
+    "claim_gate blocked again",
+    "policy_drift detected again in status",
+    "effective stable runtime source no longer matches desired source",
+    "selector participation evidence is stale again"
+  ]
+}

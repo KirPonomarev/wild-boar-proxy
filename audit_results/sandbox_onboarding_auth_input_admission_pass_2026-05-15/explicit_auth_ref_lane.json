@@ -1,0 +1,30 @@
+{
+  "lane": "explicit_auth_ref",
+  "owner_input_kind": "explicit CLI argument forwarded as --auth-ref",
+  "reference_surface": "arbitrary path supplied to accounts onboard --json --auth-ref PATH",
+  "destination_surface_inside_sandbox": "none required before owner execution",
+  "owner_semantics": {
+    "cmd_onboard_source": "args.auth_ref",
+    "selection_mode": "exact path match against added backend auth_ref",
+    "registry_persists_literal_auth_ref": true
+  },
+  "boundary_effect": {
+    "within_declared_sandbox_root_by_default": false,
+    "can_reference_outside_root": true,
+    "widens_secret_or_reference_scope_beyond_declared_sandbox_boundary": true,
+    "rollback_confined_to_declared_sandbox_root": false
+  },
+  "admissibility_for_next_primary_lane": {
+    "selected": false,
+    "status": "deferred",
+    "reason": "the lane accepts and persists an exact external path, so it is broader than the default sandbox-local input and does not preserve root-scoped rollback by default"
+  },
+  "evidence": [
+    "wild_boar_proxy/sandbox_owner_helpers.py:394-406",
+    "wild_boar_proxy/sandbox_owner_helpers.py:151-157",
+    "wild_boar_proxy/runtime.py:12014-12018",
+    "wild_boar_proxy/runtime.py:11957-11985",
+    "tests/test_cli.py:7219-7241",
+    "tests/test_cli.py:7601-7654"
+  ]
+}

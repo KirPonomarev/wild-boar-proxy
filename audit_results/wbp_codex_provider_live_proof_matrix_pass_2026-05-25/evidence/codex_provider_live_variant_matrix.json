@@ -1,0 +1,35 @@
+{
+  "captured_at_utc": "2026-05-25T12:32:46.368059Z",
+  "packet_kind": "codex_provider_live_variant_matrix",
+  "status": "ok",
+  "schema_version": 1,
+  "machine_error_code": "OK",
+  "classification_scope": "codex_cli_live_provider_request_only",
+  "variant_a": {
+    "auth_shape": "env_key",
+    "requires_openai_auth": false,
+    "request_attempted": true,
+    "request_arrived_at_wbp_trace_surface": true,
+    "upstream_status": 200,
+    "exit_code": 0,
+    "final_message": "WBP_PROVIDER_LIVE_OK",
+    "result": "pass"
+  },
+  "variant_b": {
+    "auth_shape": "auth.command",
+    "requires_openai_auth": false,
+    "request_attempted": true,
+    "request_arrived_at_wbp_trace_surface": true,
+    "upstream_status": 200,
+    "exit_code": 0,
+    "final_message": "WBP_PROVIDER_LIVE_OK",
+    "auth_command_invoked": true,
+    "result": "pass"
+  },
+  "variant_c": {
+    "run": false,
+    "fallback_required": false,
+    "reason": "variants_a_and_b_succeeded"
+  },
+  "secret_value_recorded": false
+}

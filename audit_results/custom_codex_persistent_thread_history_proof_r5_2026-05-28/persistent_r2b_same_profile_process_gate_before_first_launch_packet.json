@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-28T08:03:26.754631Z",
+  "custom_process_count": 0,
+  "custom_process_lines": [],
+  "custom_user_data_dir": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data",
+  "inventory_usable": true,
+  "packet_kind": "r2b_same_profile_process_gate",
+  "phase": "before_first_launch",
+  "reason_class": "",
+  "root_app_pid_count": 1,
+  "same_profile_process_present": false,
+  "single_writer_only_counts_as_lock_acquired": false,
+  "status": "ok"
+}

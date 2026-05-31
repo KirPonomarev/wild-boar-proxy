@@ -1,0 +1,143 @@
+{
+  "none": {
+    "schema_version": 1,
+    "status": "ok",
+    "source": "ui_action",
+    "ui_action": "legacy_import_discovery",
+    "action_role": "legacy_import_source_discovery",
+    "mutates_runtime": false,
+    "affects_primary_truth": false,
+    "confirmation_required": false,
+    "post_action_refresh_required": false,
+    "action_claim_scope": "только bounded server-owned discovery truth для importable legacy source; browser paths, selection persistence и import execution не включены",
+    "mutation_class": "setup_import_admission",
+    "account_id": "",
+    "route_id": "",
+    "session_id": "",
+    "result": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "human_message": "Legacy import discovery found no bounded server-owned import source candidate. No write performed.",
+      "next_action": "none",
+      "changed_files": [],
+      "data": {
+        "discovery_state": "none",
+        "source_kind": "known_owned_legacy_import_source",
+        "browser_path_intake": false,
+        "selection_persisted": false,
+        "filesystem_mutation_performed": false,
+        "import_execution_claimed": false,
+        "candidate_marker_count": 0,
+        "current_runtime_layout_reused": false
+      }
+    }
+  },
+  "discovered": {
+    "schema_version": 1,
+    "status": "ok",
+    "source": "ui_action",
+    "ui_action": "legacy_import_discovery",
+    "action_role": "legacy_import_source_discovery",
+    "mutates_runtime": false,
+    "affects_primary_truth": false,
+    "confirmation_required": false,
+    "post_action_refresh_required": false,
+    "action_claim_scope": "только bounded server-owned discovery truth для importable legacy source; browser paths, selection persistence и import execution не включены",
+    "mutation_class": "setup_import_admission",
+    "account_id": "",
+    "route_id": "",
+    "session_id": "",
+    "result": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "human_message": "Legacy import discovery found one bounded server-owned import source candidate. No write performed.",
+      "next_action": "none",
+      "changed_files": [],
+      "data": {
+        "discovery_state": "discovered",
+        "source_kind": "known_owned_legacy_import_source",
+        "browser_path_intake": false,
+        "selection_persisted": false,
+        "filesystem_mutation_performed": false,
+        "import_execution_claimed": false,
+        "candidate_marker_count": 4,
+        "current_runtime_layout_reused": false
+      }
+    }
+  },
+  "blocked": {
+    "schema_version": 1,
+    "status": "command_error",
+    "source": "ui_action",
+    "ui_action": "legacy_import_discovery",
+    "action_role": "legacy_import_source_discovery",
+    "mutates_runtime": false,
+    "affects_primary_truth": false,
+    "confirmation_required": false,
+    "post_action_refresh_required": false,
+    "action_claim_scope": "только bounded server-owned discovery truth для importable legacy source; browser paths, selection persistence и import execution не включены",
+    "mutation_class": "setup_import_admission",
+    "account_id": "",
+    "route_id": "",
+    "session_id": "",
+    "result": {
+      "status": "error",
+      "machine_error_code": "UI_LEGACY_IMPORT_DISCOVERY_SOURCE_UNSAFE",
+      "human_message": "Legacy import discovery rejected the current runtime layout as an import source candidate. Browser path intake remains forbidden.",
+      "next_action": "user_action",
+      "changed_files": [],
+      "data": {
+        "discovery_state": "blocked",
+        "source_kind": "known_owned_legacy_import_source",
+        "browser_path_intake": false,
+        "selection_persisted": false,
+        "filesystem_mutation_performed": false,
+        "import_execution_claimed": false,
+        "candidate_marker_count": 0,
+        "current_runtime_layout_reused": true
+      }
+    }
+  },
+  "browser_payload_rejected": {
+    "schema_version": 1,
+    "status": "integration_failure",
+    "source": "ui_action",
+    "ui_action": "legacy_import_discovery",
+    "action_role": "blocked",
+    "availability_state": "server_owned_import_source_discovery_only",
+    "disabled_reason_code": "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+    "disabled_reasons": [
+      "browser_path_forbidden"
+    ],
+    "mutates_runtime": false,
+    "affects_primary_truth": false,
+    "confirmation_required": false,
+    "post_action_refresh_required": false,
+    "action_claim_scope": "unavailable",
+    "result": {
+      "status": "integration_failure",
+      "machine_error_code": "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+      "human_message": "Legacy import discovery does not accept browser-owned path or source fields.",
+      "next_action": "user_action",
+      "changed_files": [],
+      "data": {}
+    }
+  },
+  "metadata": {
+    "ui_action": "legacy_import_discovery",
+    "display_name": "Найти import source",
+    "human_meaning": "Показать bounded server-owned discovery truth для importable legacy source без browser path intake и без import execution.",
+    "action_role": "legacy_import_source_discovery",
+    "mutates_runtime": false,
+    "affects_primary_truth": false,
+    "mutation_class": "setup_import_admission",
+    "confirmation_required": false,
+    "post_action_refresh_required": false,
+    "action_claim_scope": "только bounded server-owned discovery truth для importable legacy source; browser paths, selection persistence и import execution не включены",
+    "available": true,
+    "availability_state": "server_owned_import_source_discovery_only",
+    "disabled_reason_code": "",
+    "disabled_reasons": [],
+    "unavailable_reason": ""
+  }
+}

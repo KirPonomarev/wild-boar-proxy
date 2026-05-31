@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "packet_kind": "native_current_codex_protection",
+  "captured_at_utc": "2026-05-25T09:51:24.650857Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_runtime_surface": "bounded_dispatch_only",
+  "ui_mutation_performed": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "native_launch_complete": false,
+  "product_status_upgraded": false,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "before_snapshot_captured": false,
+  "after_snapshot_captured": false,
+  "current_codex_touched": false,
+  "current_codex_protected": true,
+  "protection_basis": "no_live_dispatch_attempted",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_PROCESS_WINDOW_USABILITY_PASS_R4",
+  "snapshot_blocked_reason_class": "owner_authorization_missing_no_live_dispatch"
+}

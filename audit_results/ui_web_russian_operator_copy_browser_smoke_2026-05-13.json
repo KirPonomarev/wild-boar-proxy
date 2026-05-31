@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_RUSSIAN_OPERATOR_COPY_LOCALIZATION",
+  "created_at": "2026-05-13",
+  "server": "http://127.0.0.1:8788/?source=live",
+  "browser": "system Google Chrome via Playwright",
+  "viewport": "1600x1000",
+  "runner": "MappingRunner with test live payloads",
+  "passed": true,
+  "checks": [
+    {
+      "name": "overview Russian title and source footer",
+      "status": "ok"
+    },
+    {
+      "name": "diagnostics Russian support artifact copy",
+      "status": "ok"
+    },
+    {
+      "name": "settings Russian deferred controls",
+      "status": "ok"
+    },
+    {
+      "name": "setup/select/import Russian inert skeletons",
+      "status": "ok"
+    },
+    {
+      "name": "accounts and onboard modal Russian copy",
+      "status": "ok"
+    }
+  ],
+  "limitations": [
+    "Smoke verifies key visible copy and navigation, not pixel parity.",
+    "Smoke uses fake command payloads from existing tests, not live runtime mutation."
+  ]
+}

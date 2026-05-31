@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-27T13:56:39Z",
+  "packet_kind": "dirty_worktree_and_test_baseline",
+  "status": "ok",
+  "git_branch": "codex/external-agent-lab-isolated",
+  "git_head": "76f4bba38bdee2406802043d8c2530a62e8bc3eb",
+  "dirty_worktree_present": true,
+  "dirty_entry_count": 24,
+  "historical_dirty_residue_quarantined": true,
+  "current_contour_stages_quarantined_paths": false,
+  "current_contour_relies_on_quarantined_paths": false,
+  "current_contour_mutates_quarantined_paths": false,
+  "canonical_web_ui_runtime": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+  "canonical_web_ui_command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_web_ui tests.test_web_design_live_server",
+  "canonical_core_pytest_command": "python3 -m pytest -q tests/test_codex_recovery_contract.py tests/test_wbp_model_catalog_contract.py tests/test_provider_auth_strategy.py tests/test_responses_live_non_native_probe.py tests/test_cli_runner.py",
+  "system_pytest_web_ui_lane_is_not_canonical": true,
+  "system_pytest_web_ui_import_error_expected": "_tkinter unavailable in system python web/UI lane",
+  "source_dirty_quarantine_packet": "audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/historical_dirt_quarantine_packet.json"
+}

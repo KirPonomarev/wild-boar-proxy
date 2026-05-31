@@ -1,0 +1,27 @@
+{
+  "packet_kind": "external_auditor_adjudication",
+  "status": "ok",
+  "auditor_status": "PASS",
+  "source_agent_id": "019e6dd7-8c72-7d70-9e9c-2da28c2547e4",
+  "findings": [],
+  "checks_run": [
+    "Inspected /Volumes/Work/wild-boar-proxy/tools/custom_codex_server_issued_model_grid_bound_authority_r1_probe.py (packet builders and false-green audit logic).",
+    "Inspected /Volumes/Work/wild-boar-proxy/tests/test_custom_codex_server_issued_model_grid_bound_authority_r1_probe.py (contour assertions and negative-claim checks).",
+    "Inspected /Volumes/Work/wild-boar-proxy/tests/test_custom_codex_model_grid_bound_authority_r1_probe.py (browser authority, disabled-row visibility, and session rejection coverage).",
+    "Inspected /Volumes/Work/wild-boar-proxy/wild_boar_proxy/codex_model_registry.py (browser authority limits, selectable vs disabled rows, and no-live-proof claims).",
+    "Inspected /Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py (custom native launch packet bounds and no route/provider reachability claims).",
+    "Inspected /Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html (model grid surface and disabled control presentation).",
+    "Inspected /Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js (model catalog rendering, model_id-only POST body, and disabled route gating).",
+    "Inspected /Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css (visible disabled catalog row styling).",
+    "Inspected /Volumes/Work/wild-boar-proxy/audit_results/custom_codex_server_issued_model_grid_bound_authority_r1_2026-05-28/*.json (recorded evidence packets)."
+  ],
+  "claim_boundary": [
+    "/Volumes/Work/wild-boar-proxy/tools/custom_codex_server_issued_model_grid_bound_authority_r1_probe.py:271-317, 322-435, 438-517",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/codex_model_registry.py:18-49, 75-84, 197-236, 499-548, 964-1045, 1112-1269",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:1391-1464, 1252-1271, 9626-9890",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:432-450",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:2286-2311",
+    "/Volumes/Work/wild-boar-proxy/audit_results/custom_codex_server_issued_model_grid_bound_authority_r1_2026-05-28/*.json"
+  ],
+  "false_green_risk": "Low but nonzero: this is a static audit of source and recorded packets, so a future runtime drift between the live handlers and the checked-in evidence could still create a false-green scenario without changing these files."
+}

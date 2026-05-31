@@ -1,0 +1,14 @@
+{
+  "allowed_claim_without_domain_attribution": "no observed direct non-WBP model peer during bounded attributed window",
+  "api_openai_com_absence_claim_allowed": false,
+  "api_openai_com_absence_proven": false,
+  "captured_at_utc": "2026-05-27T02:25:31.104229Z",
+  "domain_attribution_available": false,
+  "forbidden_claim_without_domain_attribution": "api.openai.com absent",
+  "ip_or_socket_attribution_available": true,
+  "no_observed_api_openai_equals_absence": false,
+  "observer_strategy": "process_socket_sampling",
+  "packet_kind": "domain_attribution_limit",
+  "peer_endpoint_count": 5,
+  "status": "ok"
+}

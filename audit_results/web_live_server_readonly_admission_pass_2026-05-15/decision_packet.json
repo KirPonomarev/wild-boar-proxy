@@ -1,0 +1,17 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "decision": "GO_TO_READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "reasons": [
+    "design live server starts cleanly in live_readonly phase",
+    "/api/actions reports only readonly support actions as available",
+    "/api/live-readonly returns a valid live packet and surfaces warnings without false-green",
+    "accounts/api-connections readonly endpoints respond coherently",
+    "parked POST actions stay blocked and malformed JSON does not widen scope",
+    "live UI failure states remain live-labeled and do not reuse fixture truth"
+  ],
+  "next_preconditions": [
+    "keep the next contour packet-first and readonly",
+    "treat refresh_health_detail and stable_repair_plan as readonly support only",
+    "do not reopen parked actions before sandbox admission evidence"
+  ]
+}

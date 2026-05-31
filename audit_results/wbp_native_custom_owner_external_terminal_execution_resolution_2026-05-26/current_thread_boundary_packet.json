@@ -1,0 +1,17 @@
+{
+  "auth_strategy_reproof_allowed": false,
+  "captured_at_utc": "2026-05-26T11:33:07.927138Z",
+  "current_thread_classified_filesystem_safety": false,
+  "current_thread_executed_external_command": false,
+  "current_thread_imported_safety_pass": false,
+  "current_thread_launched_native_app": false,
+  "current_thread_may_check_evidence_presence": true,
+  "current_thread_may_verify_handoff": true,
+  "current_thread_typed_into_custom_window": false,
+  "egress_claim_allowed": false,
+  "model_availability_reproof_allowed": false,
+  "packet_kind": "owner_external_current_thread_boundary",
+  "route_claim_allowed": false,
+  "status": "ok",
+  "ux_claim_allowed": false
+}

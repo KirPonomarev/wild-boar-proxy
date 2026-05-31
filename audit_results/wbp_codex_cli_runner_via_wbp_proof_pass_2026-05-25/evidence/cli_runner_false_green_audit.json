@@ -1,0 +1,17 @@
+{
+  "blocked_reason_preserved": true,
+  "captured_at_utc": "2026-05-25T13:20:26.420744Z",
+  "full_pass_claim_present": false,
+  "machine_error_code": "OK",
+  "native_claim_present": false,
+  "notes": [
+    "runner packet remains explicitly non-native",
+    "final contour verdict blocked due direct egress unproven",
+    "no Original-via-WBP claim included in runner packet"
+  ],
+  "original_mode_claim_present": false,
+  "packet_kind": "cli_runner_false_green_audit",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok"
+}

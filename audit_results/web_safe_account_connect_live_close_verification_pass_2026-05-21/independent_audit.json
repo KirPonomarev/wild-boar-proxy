@@ -1,0 +1,81 @@
+{
+  "auditor": "Mendel",
+  "mode": "independent_factual_audit",
+  "status": "completed",
+  "verdict": {
+    "blocker_refresh_mismatch_closed": true,
+    "medium_plus_problems_evidenced": false
+  },
+  "findings": [
+    {
+      "item": "blocker_refresh_mismatch",
+      "status": "closed",
+      "support": [
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py",
+          "lines": "573-645",
+          "fact": "Live account-connect preflight requires accounts-readonly proof and therefore the refresh surface must resolve to sandbox truth for the lane to close honestly."
+        },
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py",
+          "lines": "1126-1160",
+          "fact": "The repaired handler now routes sandbox-phase accounts/api readonly GETs through the sandbox-owned runner instead of the generic readonly runner."
+        },
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py",
+          "lines": "886-962",
+          "fact": "The new HTTP integration test proves sandbox /api/accounts-readonly starts empty, live onboard succeeds, and the same endpoint refreshes to auth in reserve."
+        },
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-summary.json",
+          "keys": [
+            "actionPanel",
+            "quickStart"
+          ],
+          "fact": "The browser-run summary contains 'Refresh: canonical refresh complete', 'selected_backend_id auth', and Quick Start counts showing one connected reserve backend."
+        },
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-network.json",
+          "keys": [
+            "result.onboarding.final_outcome",
+            "result.onboarding.selected_backend_id",
+            "result.onboarding.reserve_first_proven",
+            "result.onboarding.validate_outcome",
+            "result.onboarding.sync_outcome"
+          ],
+          "fact": "The browser-run network trace shows POST /api/action onboard_account returning reserve_only_success with selected_backend_id auth, reserve_first_proven true, validate_outcome ok, and sync_outcome ok."
+        },
+        {
+          "file": "/Volumes/Work/wild-boar-proxy/audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-readonly-after.json",
+          "keys": [
+            "status",
+            "source",
+            "primary_truth_ok",
+            "accounts[0].id",
+            "accounts[0].pool"
+          ],
+          "fact": "The sandbox refresh endpoint now returns accounts_readonly status ok with backend auth in reserve."
+        }
+      ]
+    }
+  ],
+  "residual_risks": [
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/status-canonical-after.json",
+      "keys": [
+        "claim_gate.status",
+        "runtime_guardrails.status",
+        "auth_pool_hygiene.status",
+        "auth_pool_hygiene.blocking_reason"
+      ],
+      "fact": "Post-onboarding runtime status still reports blocked claim-gate and launch-capable-empty guardrails; this does not invalidate reserve-first onboarding proof but it means the broader runtime lane remains outside this contour."
+    }
+  ],
+  "evidence": [
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-network.json",
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-summary.json",
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-readonly-after.json",
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-list-canonical-after.json",
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/status-canonical-after.json"
+  ]
+}

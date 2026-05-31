@@ -1,0 +1,15 @@
+{
+  "contour_id": "external_models_c10_sandbox_and_tool_execution_admission_boundary",
+  "date_utc": "2026-05-12T00:00:00Z",
+  "auditor": "Rawls",
+  "mode": "independent_admission_audit",
+  "verdict": "NOT_ADMISSIBLE",
+  "findings": [],
+  "summary": "NOT_ADMISSIBLE — the canon keeps external-models bounded and non-executing, and no canon-approved admission for sandbox/tool execution exists.",
+  "supporting_references": [
+    "EXTERNAL_MODELS_C1_FOUNDATION_SPEC.md:34-41",
+    "wild_boar_proxy/external_models/__init__.py:90-130",
+    "ADR-0002-external-models-bounded-compatibility-adapter.md:26-35",
+    "MASTER_PLAN.md:225-273"
+  ]
+}

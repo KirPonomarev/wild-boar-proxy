@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "selector_followup_status": "not_reached",
+  "reason": "launch_smoke reported changed_files outside declared live write surfaces; contour stop condition triggered before rollout rotation inspect --json",
+  "rollout_rotation_inspect_executed": false,
+  "eligible_next_selector_contour_claimed": false
+}

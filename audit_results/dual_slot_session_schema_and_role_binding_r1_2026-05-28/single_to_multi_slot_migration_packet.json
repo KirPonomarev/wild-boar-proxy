@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T11:59:27.499046Z",
+  "coding_agent_slot_fabricated": false,
+  "history_loss_claimed": false,
+  "legacy_single_model_migrated": true,
+  "migration_status": "legacy_single_model_migrated",
+  "packet_kind": "single_to_multi_slot_migration",
+  "primary_slot_model_id": "gpt-5.3-codex",
+  "slot_catalog_revalidated": false,
+  "status": "ok"
+}

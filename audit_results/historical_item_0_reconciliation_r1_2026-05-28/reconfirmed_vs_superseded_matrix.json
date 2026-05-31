@@ -1,0 +1,103 @@
+{
+  "captured_at_utc": "2026-05-28T15:22:49.058366Z",
+  "current_seed_only_count": 12,
+  "current_seed_only_selectable": false,
+  "historical_item_0_pre_reconciliation_open": true,
+  "packet_kind": "reconfirmed_vs_superseded_matrix",
+  "rows": [
+    {
+      "classification": "superseded_by_current_packets",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [
+        "audit_results/generic_provider_and_model_registry_r1_2026-05-28/generic_model_registry_packet.json",
+        "audit_results/generic_provider_and_model_registry_r1_2026-05-28/current_vs_seed_model_matrix.json"
+      ],
+      "historical_claim": "external-agent-lab seed inventory acts as active runtime catalog",
+      "historical_source_ids": [
+        "external_lab_model_registry_seed"
+      ],
+      "id": "historical_model_seed_inventory_is_active_runtime_catalog",
+      "reason": "current packet truth says seed-only models are not current catalog and are not server-issued runtime choices"
+    },
+    {
+      "classification": "superseded_by_current_packets",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [
+        "audit_results/custom_codex_dual_lane_model_selection_ui_r1_2026-05-28/selector_current_vs_seed_visibility_packet.json",
+        "audit_results/generic_provider_and_model_registry_r1_2026-05-28/current_vs_seed_model_matrix.json"
+      ],
+      "historical_claim": "seed-only external-lab models remain selectable current runtime choices",
+      "historical_source_ids": [
+        "external_lab_model_registry_seed",
+        "external_lab_readme"
+      ],
+      "id": "historical_seed_models_are_selectable_current_runtime_choices",
+      "reason": "current packet truth says seed_only_selectable=false and seed_only_server_issued_for_runtime_selection=false"
+    },
+    {
+      "classification": "historical_only_non_counted",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [],
+      "historical_claim": "external-agent-lab is an isolated non-integrated lane",
+      "historical_source_ids": [
+        "external_lab_readme",
+        "external_lab_audit"
+      ],
+      "id": "isolated_external_lab_non_integrated_lane_claim",
+      "reason": "this is historical lineage/boundary context rather than current runtime proof requirement"
+    },
+    {
+      "classification": "historical_only_non_counted",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [],
+      "historical_claim": "external-agent-lab acceptance is unittest-first and provider-live-free",
+      "historical_source_ids": [
+        "external_lab_acceptance_verification",
+        "external_lab_audit"
+      ],
+      "id": "provider_live_free_unittest_first_external_lab_acceptance",
+      "reason": "isolated-lab acceptance procedure does not count as current runtime proof"
+    },
+    {
+      "classification": "reconfirmed_by_current_packets",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/final_dual_lane_acceptance_matrix.json",
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/independent_audit_packet.json"
+      ],
+      "historical_claim": "historical artifacts and filenames are metadata only and not active runtime proof",
+      "historical_source_ids": [
+        "external_lab_readme"
+      ],
+      "id": "historical_artifacts_are_not_canonical_runtime_proof",
+      "reason": "current packet truth keeps historical item 0 open/non-counted and does not count historical material as closed runtime proof"
+    },
+    {
+      "classification": "historical_only_non_counted",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [],
+      "historical_claim": "external-agent-lab tests and acceptance prove import hygiene and JSON preflight contract, not current runtime integration",
+      "historical_source_ids": [
+        "external_lab_tests",
+        "external_lab_acceptance_verification"
+      ],
+      "id": "external_lab_tests_prove_import_hygiene_not_runtime_integration",
+      "reason": "isolated-lab tests and verification are meaningful historical evidence but do not count as current runtime satisfaction"
+    },
+    {
+      "classification": "reconfirmed_by_current_packets",
+      "counting_status": "non_counted",
+      "current_replacement_packets": [
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/final_dual_lane_acceptance_matrix.json",
+        "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/independent_audit_packet.json"
+      ],
+      "historical_claim": "historical item 0 remained open and non-counted before reconciliation",
+      "historical_source_ids": [
+        "external_lab_readme"
+      ],
+      "id": "historical_item0_open_non_counted_before_reconciliation",
+      "reason": "current packet truth explicitly records historical_item_0_counted_as_closed=false and item_0 open/non-counted"
+    }
+  ],
+  "status": "ok"
+}

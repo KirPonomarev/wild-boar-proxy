@@ -1,0 +1,31 @@
+{
+  "captured_at_utc": "2026-05-24T07:51:00Z",
+  "commands": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "passed"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "status": "passed",
+      "tests": 168,
+      "note": "Pillow deprecation warning only"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_operator_surface -q",
+      "status": "passed",
+      "tests": 10
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "failed_attempts": [
+    {
+      "command": "python3 -B -m unittest tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "status": "environment_failed",
+      "reason": "Homebrew Python 3.14 lacks _tkinter and PIL; rerun on bundled runtime passed"
+    }
+  ]
+}

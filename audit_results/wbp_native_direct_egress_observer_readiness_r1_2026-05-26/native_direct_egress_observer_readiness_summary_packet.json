@@ -1,0 +1,15 @@
+{
+  "api_openai_com_absence_proven": false,
+  "captured_at_utc": "2026-05-26T19:52:02.720006Z",
+  "current_background_codex_noise_detected": true,
+  "direct_egress_absence_proven": false,
+  "final_e2e_claimed": false,
+  "final_status": "NATIVE_DIRECT_EGRESS_OBSERVER_BLOCKED_BY_HOST_ENVIRONMENT_WITH_HANDOFF",
+  "live_network_capture_attempted": false,
+  "native_launch_attempted": false,
+  "observer_capability_ok": true,
+  "owner_or_detached_handoff_required": true,
+  "packet_kind": "native_direct_egress_observer_readiness_summary",
+  "reason_class": "BACKGROUND_CODEX_NOISE_PRESENT",
+  "status": "ok"
+}

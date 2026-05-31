@@ -1,0 +1,50 @@
+{
+  "artifact_payload_sha256": "53bb35a87062f061f745c4baac046d3f276c2e90806ec85791d0492fe1ec9434",
+  "commands": [
+    {
+      "cmd": "python3 -m wild_boar_proxy status --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "python3 -m wild_boar_proxy healthcheck --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "python3 -m wild_boar_proxy invariant-check --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "python3 -m py_compile codex_launch_modes.py web_design_live_server.py",
+      "result": "ok"
+    },
+    {
+      "cmd": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "ok"
+    },
+    {
+      "cmd": "bundled python unittest launch/live/UI/operator gate",
+      "result": "189 tests OK"
+    },
+    {
+      "cmd": "Browser dry-run click proof",
+      "result": "passed"
+    },
+    {
+      "cmd": "git diff --check",
+      "result": "ok"
+    }
+  ],
+  "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+  "live_launch_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+  "non_claims": [
+    "WEB_SAFE_APP_COPY_LAUNCH_READY",
+    "ACCOUNT_CONNECT_READY",
+    "ROTATION_READY",
+    "LOAD_READY",
+    "DESKTOP_READY",
+    "PRODUCTION_READY",
+    "DESIGN_GATE_READY"
+  ],
+  "schema_version": 1,
+  "status": "passed"
+}

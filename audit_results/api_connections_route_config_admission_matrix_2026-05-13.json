@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_CONFIG_ADMISSION",
+  "mode": "exploration/admission/spec-only",
+  "date": "2026-05-13",
+  "final_verdict": "ROUTE_CONFIG_UI_REMOVE_ONLY_ADMITTED",
+  "actions": [
+    {
+      "action": "api_route_create",
+      "backend_command": "external-models routes add --json --file/--stdin",
+      "admission": "DEFERRED_PENDING_BOUNDED_BUILDER_AND_SECRET_REFERENCE_CONTRACT",
+      "browser_payload_if_future_admitted": "not_admitted",
+      "blocking_reasons": [
+        "backend requires a full route object",
+        "browser must not submit raw route objects",
+        "browser must not submit file paths or stdin contents",
+        "authenticated routes require secret reference policy",
+        "provider and transform options need bounded server-side choices"
+      ],
+      "required_future_contract": [
+        "server-side route builder",
+        "bounded provider option set",
+        "bounded compatibility option set",
+        "bounded cost class option set",
+        "bounded lane role option set",
+        "explicit base URL policy",
+        "secret reference selector policy",
+        "schema validation before execution"
+      ]
+    },
+    {
+      "action": "api_route_update",
+      "backend_command": "external-models routes update --json --route <route_id> --file/--stdin",
+      "admission": "DEFERRED_PENDING_BOUNDED_BUILDER_AND_SECRET_REFERENCE_CONTRACT",
+      "browser_payload_if_future_admitted": "not_admitted",
+      "blocking_reasons": [
+        "backend requires a full replacement route object",
+        "payload route_id must match --route",
+        "browser must not submit raw route objects",
+        "browser must not submit file paths or stdin contents",
+        "changing provider or transform settings from UI would duplicate adapter behavior"
+      ],
+      "required_future_contract": [
+        "server-side route builder",
+        "bounded editable fields",
+        "server-owned schema validation",
+        "secret reference selector policy",
+        "clear copy limiting mutation meaning to registry update"
+      ]
+    },
+    {
+      "action": "api_route_remove",
+      "backend_command": "external-models routes remove --json --route <route_id>",
+      "admission": "ADMITTED_FOR_FUTURE_IMPLEMENTATION",
+      "browser_payload_if_future_admitted": {
+        "ui_action": "api_route_remove",
+        "route_id": "<safe route id>"
+      },
+      "server_preflight": [
+        "validate route_id shape",
+        "external-models routes list --json",
+        "route exists",
+        "route enabled is false",
+        "no direct file reads from UI code"
+      ],
+      "confirmation": "strong_confirmation_required",
+      "copy_limits": [
+        "say disabled registry entry removal",
+        "do not claim provider health changes",
+        "do not claim system state changes",
+        "do not claim route selection changes",
+        "do not claim secret cleanup"
+      ],
+      "risk_controls": [
+        "post-action refresh from canonical command surfaces",
+        "command error never displays as success",
+        "changed_files remain evidence only",
+        "no optimistic success"
+      ]
+    }
+  ],
+  "global_forbidden_browser_fields": [
+    "command_id",
+    "argv",
+    "shell",
+    "file_path",
+    "raw_route_json",
+    "provider_config",
+    "base_url",
+    "endpoint_path",
+    "compatibility_profile",
+    "transform_profile",
+    "credential",
+    "secret_ref",
+    "secret_value"
+  ],
+  "secret_reference_policy": {
+    "this_contour": "classification_only",
+    "browser_credential_entry": "forbidden",
+    "secret_file_write_from_ui": "forbidden",
+    "secret_value_display": "forbidden",
+    "future_create_update_requirement": "bounded selector or server-owned policy"
+  },
+  "identity_preservation_check": {
+    "external_references": "interaction_patterns_only",
+    "visual_language": "must_remain_aligned_with_original_wild_boar_design_baseline",
+    "layout_hierarchy": "must_remain_aligned_with_original_wild_boar_design_baseline",
+    "copy_tone": "must_remain_aligned_with_original_wild_boar_design_baseline",
+    "logo_treatment": "must_remain_aligned_with_original_wild_boar_design_baseline"
+  },
+  "implementation_allowed_in_this_contour": false,
+  "next_allowed_implementation_contour": "API_CONNECTIONS_ROUTE_REMOVE_ACTION_GATE"
+}

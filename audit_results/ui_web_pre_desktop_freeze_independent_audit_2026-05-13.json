@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT",
+  "generated_at_local_date": "2026-05-13",
+  "audit_mode": "consistency_inspector_plus_final_staged_audit_pending",
+  "consistency_inspector": {
+    "kind": "subagent",
+    "role": "pre-freeze consistency inspector",
+    "model_class": "economy scanner",
+    "agent_name": "Fermat",
+    "edited_files": false,
+    "status": "PASS",
+    "summary": "No factual mismatches found across live server UI_ACTION_ALLOWLIST, command adapter ALLOWLIST, tests, screen passports, render surface registry, API Connections registry, and final E2E matrix. Browser payload rejection, disabled adapter-only launch_client, route create/update/draft not-admitted state, and non-mutating API profile/evidence surfaces are consistent."
+  },
+  "local_audit": {
+    "registry_passport_code_test_consistency": "PASS",
+    "payload_boundary": "PASS",
+    "direct_file_truth": "PASS_ABSENT",
+    "positive_overclaim": "PASS_ABSENT",
+    "desktop_boundary": "PASS",
+    "dirty_tail_isolation": "PASS_PENDING_STAGED_DIFF_CHECK"
+  },
+  "local_verification": {
+    "tests": "PASS",
+    "test_commands": [
+      "python3 -m unittest tests.test_web_design_command_adapter",
+      "python3 -m unittest tests.test_web_design_live_server",
+      "python3 -m unittest tests.test_web_design_ui",
+      "python3 -m unittest tests.test_cli_external_models"
+    ],
+    "test_count": 97,
+    "json_artifacts": "PASS",
+    "closeout_resilience": "PASS",
+    "diff_check": "PASS",
+    "private_reference_trace_scan": "PASS",
+    "overclaim_scan": "PASS_REVIEWED_NEGATIVE_BOUNDARY_TERMS_ONLY"
+  },
+  "final_staged_audit": {
+    "status": "PASS",
+    "auditor": {
+      "kind": "subagent",
+      "role": "final staged-diff auditor",
+      "model_class": "economy scanner",
+      "agent_name": "Laplace",
+      "edited_files": false
+    },
+    "blocker": "readiness packet left recommendation as PENDING_INDEPENDENT_STAGED_AUDIT instead of emitting the limited owner-review recommendation",
+    "resolution": "readiness packet now recommends only WEB_UI_READY_FOR_DESKTOP_ADMISSION_REVIEW and STOP_FOR_OWNER_APPROVAL, with owner approval still required before desktop",
+    "final_reaudit_summary": "Staged paths are limited to audit_results/ui_web_pre_desktop_freeze_*; readiness packet recommends only owner-review readiness and stop-for-owner-approval; non-claims remain listed only under does_not_claim; closeout includes Contour Capsule and resume from here.",
+    "required_checks": [
+      "staged diff only",
+      "no staged files outside audit_results/ui_web_pre_desktop_freeze_* unless a justified XS test assertion is needed",
+      "no unrelated external_lab tail staged",
+      "no runtime.py change",
+      "no external_models engine change",
+      "no desktop files changed",
+      "no new UI action or backend command surface",
+      "action registry, passports, live server, adapter, and tests agree",
+      "API route remove remains disabled-only registry cleanup",
+      "route create/update/draft remain NOT_ADMITTED",
+      "browser payload boundaries remain strict",
+      "no direct file truth",
+      "no positive readiness/failover/traffic/desktop approval overclaim",
+      "closeout contains Contour Capsule and resume from here"
+    ]
+  },
+  "blocking_findings": []
+}

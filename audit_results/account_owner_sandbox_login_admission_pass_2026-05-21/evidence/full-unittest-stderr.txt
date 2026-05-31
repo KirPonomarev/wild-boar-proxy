@@ -1,0 +1,22 @@
+validate-ok
+promote-ran
+sync-advance-inline-auth
+validate-ok
+promote-ran
+sync-advance-interleaving
+validate-ok
+promote-ran
+sync-advance-contradicted
+validate-ok
+promote-ran
+sync-advance-stage20-inline-auth
+validate-ok
+promote-ran
+sync-advance-stage20-contradicted
+validate-ok
+promote-ran
+sync-advance-stage20-stable-auth-failure
+----------------------------------------------------------------------
+Ran 569 tests in 223.229s
+
+OK

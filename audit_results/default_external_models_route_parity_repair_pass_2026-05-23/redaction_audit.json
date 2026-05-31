@@ -1,0 +1,9 @@
+{
+  "findings": [],
+  "notes": [
+    "field names and secret_ref labels may appear; raw secret values must not",
+    "web readonly proof stores status labels only"
+  ],
+  "schema_version": 1,
+  "status": "pass"
+}

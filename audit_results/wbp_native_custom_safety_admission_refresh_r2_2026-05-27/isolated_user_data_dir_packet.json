@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.692527Z",
+  "current_codex_auth_json_runtime_dependency": false,
+  "execution_mode": "inspection_only",
+  "filesystem_write_performed": false,
+  "intended_path": "/private/tmp/wbp-native-custom-safety-admission-r2/profile/electron-user-data",
+  "original_codex_profile_write_allowed": false,
+  "packet_kind": "isolated_user_data_dir",
+  "path_materialized": false,
+  "path_role": "electron_user_data_dir",
+  "path_under_tmp_root": true,
+  "protected_surface_overlap": false,
+  "reason_class": "",
+  "status": "ok",
+  "tmp_root": "/private/tmp/wbp-native-custom-safety-admission-r2"
+}

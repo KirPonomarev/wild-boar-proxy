@@ -1,0 +1,61 @@
+{
+  "contour_id": "KEYCHAIN_PREFLIGHT_QUIET_DIAGNOSTICS_AND_GUARDS_R3_IMPLEMENTATION",
+  "status": "ok",
+  "supportability_already_sufficient": true,
+  "product_code_change_required": false,
+  "visible_ui_change_required": false,
+  "diagnostics_surface_summary": {
+    "packet_truth_source": {
+      "file": "wild_boar_proxy/native_window_probe.py",
+      "line_start": 407,
+      "line_end": 463,
+      "fields": [
+        "keychain_preflight_attempted",
+        "keychain_preflight_status",
+        "keychain_preflight_reason_code",
+        "isolated_default_keychain_verified",
+        "isolated_search_list_verified",
+        "real_user_keychain_modified",
+        "keychain_item_read",
+        "keychain_reset_performed",
+        "prompt_avoidance_claim_scope"
+      ]
+    },
+    "producer_truth_source": {
+      "file": "wild_boar_proxy/keychain_preflight.py",
+      "line_start": 24,
+      "line_end": 46,
+      "fields": [
+        "prompt_avoidance_claim_scope",
+        "real_user_keychain_modified",
+        "keychain_item_read",
+        "keychain_reset_performed",
+        "keychain_created",
+        "keychain_deleted",
+        "hidden_owner_action_performed"
+      ]
+    },
+    "existing_support_artifacts": [
+      {
+        "file": "audit_results/custom_codex_keychain_preflight_product_integration_phase1_r2_2026-05-28/native_launch_keychain_boundary_packet.json",
+        "evidence_kind": "packet_field_inventory"
+      },
+      {
+        "file": "audit_results/custom_codex_keychain_preflight_live_validation_r2_2026-05-28/launch_packet_alignment_packet.json",
+        "evidence_kind": "product_path_alignment"
+      },
+      {
+        "file": "audit_results/custom_codex_keychain_preflight_live_validation_r2_2026-05-28/product_path_keychain_preflight_validation_packet.json",
+        "evidence_kind": "product_path_live_packet"
+      }
+    ]
+  },
+  "independent_scanner_agreement": true,
+  "independent_scanner_note": "Existing packet/support surfaces already expose enough preflight truth without product-code changes.",
+  "non_claims_preserved": [
+    "auth fixed",
+    "keychain fully proven",
+    "all users guaranteed fixed",
+    "prompt absence equals auth success"
+  ]
+}

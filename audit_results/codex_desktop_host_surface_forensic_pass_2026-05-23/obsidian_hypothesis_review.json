@@ -1,0 +1,43 @@
+{
+  "vault": "/Volumes/Work/Pushkin/Pushkin",
+  "authority": "non_authoritative_hints_only",
+  "notes_read": [
+    "/Volumes/Work/Pushkin/Pushkin/конфиги.md",
+    "/Volumes/Work/Pushkin/Pushkin/план расширение кастома.md",
+    "/Volumes/Work/Pushkin/Pushkin/кабан приложение.md"
+  ],
+  "useful_hypotheses": [
+    {
+      "source": "конфиги.md",
+      "hypothesis": "Codex Custom.app -> launcher -> separate CODEX_HOME -> CLIProxy localhost /v1",
+      "canon_alignment": "aligned with no official patch and separate profile requirement"
+    },
+    {
+      "source": "конфиги.md",
+      "hypothesis": "official Codex.app is not patched; keys, endpoint, model, logs live separately",
+      "canon_alignment": "aligned"
+    },
+    {
+      "source": "план расширение кастома.md",
+      "hypothesis": "stable/managed split with rollback and separate managed port",
+      "canon_alignment": "aligned with staged rollout and fallback"
+    },
+    {
+      "source": "кабан приложение.md",
+      "hypothesis": "WBP is companion control app, CLIProxyAPI remains engine, no host-client fork",
+      "canon_alignment": "aligned"
+    }
+  ],
+  "rejected_or_deferred_hypotheses": [
+    {
+      "hypothesis": "Direct official app wrapper is enough if CODEX_HOME is set",
+      "status": "rejected_by_prior_evidence",
+      "reason": "Prior GUI E2E still touched shared bundle-id storage and lacked isolated GUI socket."
+    },
+    {
+      "hypothesis": "Full managed supervisor/failover should be built now",
+      "status": "deferred",
+      "reason": "This contour is host-surface forensic only; managed supervisor is a later runtime contour."
+    }
+  ]
+}

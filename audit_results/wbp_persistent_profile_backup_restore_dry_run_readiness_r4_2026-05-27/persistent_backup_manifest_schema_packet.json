@@ -1,0 +1,68 @@
+{
+  "backup_created": false,
+  "backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfileBackups/wbp-custom-main",
+  "captured_at_utc": "2026-05-27T06:21:14.406140Z",
+  "content_recorded": false,
+  "entry_count": 4,
+  "manifest_digest": "d0db98b3a1a0392d7011436317c3e0269a7db21c6fbb72354b3f608c467a882f",
+  "manifest_materialized_from_real_profile": false,
+  "manifest_records_hashes_only": true,
+  "packet_kind": "persistent_backup_manifest_schema",
+  "path_hash_inventory_is_restorable_backup": false,
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "planned_entries": [
+    {
+      "content_recorded": false,
+      "kind": "file",
+      "raw_prompt_recorded": false,
+      "raw_secret_recorded": false,
+      "relative_path": "settings/config.toml",
+      "sha256": "356809aec6f71edbc80345997534fc39e2d431e2608bba18386ec424669d1e1f",
+      "size": 72,
+      "state_class": "user_settings"
+    },
+    {
+      "content_recorded": false,
+      "kind": "file",
+      "raw_prompt_recorded": false,
+      "raw_secret_recorded": false,
+      "relative_path": "Local Storage/state.vscdb",
+      "sha256": "38f37e3f47b36f01047ab7328c7c21fbb78bd4c60fe481755bc3051f34f63534",
+      "size": 280,
+      "state_class": "session_state"
+    },
+    {
+      "content_recorded": false,
+      "kind": "file",
+      "raw_prompt_recorded": false,
+      "raw_secret_recorded": false,
+      "relative_path": "conversations/thread-redacted.json",
+      "sha256": "768af624d02700e97b2aa0ffb25ace2657fb45dfadb5f4f55639e51c10fb5b61",
+      "size": 512,
+      "state_class": "thread_history"
+    },
+    {
+      "content_recorded": false,
+      "kind": "file",
+      "raw_prompt_recorded": false,
+      "raw_secret_recorded": false,
+      "relative_path": "integrations/connector-state.json",
+      "sha256": "65bc04c75e6bd17d527c31d28537e6b080b5aa4b9ddc1d76aef7215c70fe538d",
+      "size": 96,
+      "state_class": "integration_state"
+    }
+  ],
+  "raw_prompt_recorded": false,
+  "raw_secret_recorded": false,
+  "required_entry_fields": [
+    "relative_path",
+    "kind",
+    "size",
+    "sha256",
+    "state_class"
+  ],
+  "schema_version": "persistent_backup_manifest_dry_run_v1",
+  "status": "ok",
+  "synthetic_fixture": true
+}

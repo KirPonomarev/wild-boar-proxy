@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-27T12:18:29.358097Z",
+  "checks": [
+    {
+      "name": "browser_remote_authority_forbidden",
+      "passed": true
+    },
+    {
+      "name": "no_public_exposure_enforcement_overclaim",
+      "passed": true
+    },
+    {
+      "name": "loopback_not_promoted_to_safety",
+      "passed": true
+    },
+    {
+      "name": "no_implementation_or_product_ready_claim",
+      "passed": true
+    },
+    {
+      "name": "source_false_green_audits_ok",
+      "passed": true
+    }
+  ],
+  "forbidden_claims_present": false,
+  "packet_kind": "remote_control_false_green_audit",
+  "status": "ok"
+}

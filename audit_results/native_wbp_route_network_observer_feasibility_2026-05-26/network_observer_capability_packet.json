@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T13:54:59.401420Z",
+  "full_network_absence_proven": false,
+  "lsof_available": true,
+  "lsof_path": "/usr/sbin/lsof",
+  "nettop_path": "/usr/bin/nettop",
+  "observer_strategy": "lsof_process_tree_sampling",
+  "observer_usable_for_bounded_native_classification": true,
+  "packet_capture_used": false,
+  "packet_kind": "native_direct_egress_observer_capability",
+  "process_tree_observer_available": true,
+  "status": "ok",
+  "tcpdump_path": "/usr/sbin/tcpdump",
+  "unsafe_packet_capture_tools_present": true
+}

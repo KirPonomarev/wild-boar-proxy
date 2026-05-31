@@ -1,0 +1,50 @@
+{
+  "candidates": {
+    "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_COMBINED_PASS": {
+      "admissible": false,
+      "why_not": [
+        "combines routes.json and secret-bearing state/secrets writes without current necessity",
+        "current packets do not prove route add must be fused with token/materialization work"
+      ]
+    },
+    "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_LOCAL_TOKEN_REPAIR_PASS": {
+      "admissible": false,
+      "why_not": [
+        "local token creation exists only in external-models start --json",
+        "with zero routes and zero models, token-only cannot resolve unknown provider for configured model",
+        "would widen into secret-bearing state mutation earlier than necessary"
+      ]
+    },
+    "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_PROVIDER_PROFILE_REPAIR_PASS": {
+      "admissible": false,
+      "why_not": [
+        "no standalone provider/profile mutation command surface exists",
+        "profile codex-desktop is read-only",
+        "provider mapping is embedded in route payload and therefore route-add/update owned"
+      ]
+    },
+    "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_PASS": {
+      "admissible": true,
+      "declared_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ],
+      "rollback_expectations": [
+        "snapshot routes.json before mutation",
+        "restore routes.json byte-for-byte if post-add proof remains blocked or contradictory"
+      ],
+      "why": [
+        "maps directly to canonical mutation surface external-models routes add --json --file|--stdin",
+        "narrowest write domain is routes.json only",
+        "addresses the earliest machine-carried gap: routes_count=0 and models_count=0 from local_routes_registry",
+        "does not require secret-bearing token materialization or launcher work"
+      ]
+    }
+  },
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "schema_version": 1,
+  "ui_boundary": {
+    "browser_route_builder_admission_required": true,
+    "cli_route_add_surface_still_exists": true,
+    "why_not_blocking_here": "this contour adjudicates runtime repair scope over canonical CLI owner surfaces, not browser UI admission"
+  }
+}

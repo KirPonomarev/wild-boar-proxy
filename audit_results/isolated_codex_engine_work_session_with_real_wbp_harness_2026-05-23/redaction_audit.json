@@ -1,0 +1,9 @@
+{
+  "findings": [],
+  "notes": [
+    "sandbox auth contents were copied only to temp CODEX_HOME and not intentionally serialized",
+    "Authorization/Bearer/raw key patterns scanned; field names may appear as labels"
+  ],
+  "schema_version": 1,
+  "status": "pass"
+}

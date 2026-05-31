@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-27T12:18:29.358101Z",
+  "final_product_readiness_claimed": false,
+  "final_status": "WBP_REMOTE_CONTROL_READINESS_GATE_CLASSIFIED_WITH_LIMITS",
+  "network_auth_middleware_proven": false,
+  "packet_kind": "remote_control_readiness_summary",
+  "public_exposure_fully_enforced_for_all_surfaces": false,
+  "remote_control_implemented": false,
+  "semantic_alias_coverage_proven": false,
+  "status": "ok",
+  "surface_count": 3,
+  "with_limits_reasons": [
+    "NO_NETWORK_AUTH_MIDDLEWARE_PROVEN",
+    "LIVE_SERVER_AND_WEB_UI_HOST_OVERRIDE_POSSIBLE",
+    "PUBLIC_EXPOSURE_NOT_ENFORCED_FOR_ALL_SURFACES",
+    "SEMANTIC_ALIAS_AUTHORITY_COVERAGE_UNPROVEN"
+  ],
+  "with_limits_required": true
+}

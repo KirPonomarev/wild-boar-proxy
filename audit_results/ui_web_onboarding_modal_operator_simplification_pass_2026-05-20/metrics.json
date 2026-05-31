@@ -1,0 +1,57 @@
+{
+  "collapsed": {
+    "brokenImages": [],
+    "detailsOpen": false,
+    "editablePathInputs": 0,
+    "fileInputs": 0,
+    "horizontalOverflow": false,
+    "modalBottom": 769,
+    "modalHeight": 537,
+    "modalTop": 232,
+    "modalWidth": 600,
+    "overlayHidden": false,
+    "primaryVisible": true,
+    "text": "ДОБАВЛЕНИЕ АККАУНТА\nПодключить аккаунт\n\nАккаунт будет добавлен в резервный пул. Активная маршрутизация не изменится.\n\nИСТОЧНИК\nserver-owned onboarding\nПУЛ\nРезерв\nПОСЛЕ КОМАНДЫ\nОбновить accounts JSON\nУСПЕХ\nreserve-first proof\n\nWeb не принимает токены, файлы и локальные пути.\n\nПоказать технические границы\nОтмена\nПодключить в резерв",
+    "verticalClip": false,
+    "viewportHeight": 1000,
+    "viewportWidth": 1600,
+    "visibleSvgIcons": 0
+  },
+  "expanded": {
+    "detailsOpen": true,
+    "horizontalOverflow": false,
+    "modalHeight": 686,
+    "text": "ДОБАВЛЕНИЕ АККАУНТА\nПодключить аккаунт\n\nАккаунт будет добавлен в резервный пул. Активная маршрутизация не изменится.\n\nИСТОЧНИК\nserver-owned onboarding\nПУЛ\nРезерв\nПОСЛЕ КОМАНДЫ\nОбновить accounts JSON\nУСПЕХ\nreserve-first proof\n\nWeb не принимает токены, файлы и локальные пути.\n\nСкрыть технические границы\nBrowser не передаёт secrets, auth files или local paths.\nКоманда запускается только как onboard_account.\nNo-new-auth не считается успехом.\nAmbiguous identity требует действия оператора.\nАккаунт не переводится в active автоматически.\nОтмена\nПодключить в резерв",
+    "verticalClip": false
+  },
+  "collapsedAgain": {
+    "detailsOpen": false
+  },
+  "afterCancel": {
+    "fileInputs": 0,
+    "overlayHidden": true
+  },
+  "commandCalls": [
+    [
+      "accounts",
+      "list",
+      "--json"
+    ],
+    [
+      "external-models",
+      "status",
+      "--json"
+    ],
+    [
+      "external-models",
+      "models",
+      "--json"
+    ],
+    [
+      "external-models",
+      "routes",
+      "list",
+      "--json"
+    ]
+  ]
+}

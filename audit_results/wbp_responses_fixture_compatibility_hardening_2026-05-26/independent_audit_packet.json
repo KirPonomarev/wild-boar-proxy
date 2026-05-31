@@ -1,0 +1,46 @@
+{
+  "auditor": "multi_agent Carver read-only audit",
+  "auditor_verdict": "PASS only for the contour exactly as fenced by wire_compatibility_claims_matrix.json",
+  "captured_at_utc": "2026-05-26T07:57:02.827879Z",
+  "forbidden_claims_confirmed": [
+    "native Codex.app works",
+    "Codex CLI consumer works",
+    "Original Codex via WBP works",
+    "direct egress absent",
+    "all models work",
+    "GPT-5.5 works",
+    "full provider compatibility",
+    "full final E2E",
+    "complete hosted tool compatibility",
+    "reasoning passthrough compatibility"
+  ],
+  "leakage_review": {
+    "auth_header_recorded": false,
+    "intentional_test_sentinels_present_only_in_tests_or_fixtures": true,
+    "prompt_body_recorded": false,
+    "raw_prompt_or_auth_or_secret_leakage_in_new_evidence": false,
+    "secret_value_recorded": false
+  },
+  "machine_error_code": "INDEPENDENT_AUDIT_PASS_FIXTURE_COMPATIBILITY_ONLY",
+  "scope_creep_review": {
+    "account_mutation_performed": false,
+    "direct_egress_claimed": false,
+    "model_catalog_in_scope": false,
+    "native_launch_performed": false
+  },
+  "status": "pass_with_claim_limits",
+  "supported_claim_status": "WBP_RESPONSES_FIXTURE_COMPATIBILITY_HARDENED",
+  "verification_status": "ok",
+  "verified_packets": [
+    "responses_non_stream_compat_packet.json",
+    "responses_stream_compat_packet.json",
+    "responses_error_shape_packet.json",
+    "responses_tool_call_shape_packet.json",
+    "responses_tool_call_output_followup_packet.json",
+    "responses_reasoning_handling_packet.json",
+    "privacy_redaction_boundary_packet.json",
+    "auth_header_boundary_packet.json",
+    "wire_compatibility_claims_matrix.json",
+    "verification_packet.json"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "contour": "ISOLATED_CODEX_APP_E2E_PASS",
+  "program": "EXECUTION_CORE_FULL_SYSTEM_TO_ISOLATED_CODEX_APP_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "3c81122",
+  "captured_at_utc": "2026-05-23T03:21:20Z",
+  "sandbox_launch_copy_runtime": {
+    "profile_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile",
+    "managed_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+    "copy_port": 9347,
+    "status": "ok",
+    "healthcheck": "ok",
+    "launch_readiness": "ready",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "configured_model": "gpt-5.3-codex",
+    "current_proxy_url": "http://127.0.0.1:10808",
+    "external_models_route": "wbp-deepseek-v3",
+    "external_models_check": "verified"
+  },
+  "isolated_app_target": {
+    "wrapper_kind": "bounded_executable",
+    "wrapped_binary": "/Applications/Codex.app/Contents/MacOS/Codex",
+    "isolated_codex_home": "/tmp/wbp-codex-e2e.G9FQ7g/codex-home",
+    "isolated_user_data_dir": "/tmp/wbp-codex-e2e.G9FQ7g/user-data",
+    "workspace_arg": "/Volumes/Work/wild-boar-proxy"
+  },
+  "classification": {
+    "launch_dispatch": "passed",
+    "process_isolation": "partially_proven",
+    "through_app_smoke": "blocked_pending_gui_owned_control_surface",
+    "overall": "blocked_by_current_codex_protection_boundary"
+  }
+}

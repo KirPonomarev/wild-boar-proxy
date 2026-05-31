@@ -1,0 +1,41 @@
+{
+  "contour": "UI_WEB_SETTINGS_HUB_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent read-only subagent",
+  "verdict": "no_findings",
+  "scope": {
+    "modified_runtime_files": false,
+    "modified_command_adapter_files": false,
+    "modified_live_server_files": false,
+    "modified_desktop_files": false,
+    "modified_ui_files": true,
+    "modified_tests": true
+  },
+  "settings_contract": {
+    "hub_only": true,
+    "settings_card_count": 8,
+    "active_settings_actions": 0,
+    "visible_settings_svg": 0,
+    "file_path_secret_config_write_surfaces_absent": true
+  },
+  "metrics_review": {
+    "states_reviewed": [
+      "fixture_healthy",
+      "fixture_degraded",
+      "fixture_down",
+      "fixture_stale",
+      "live_integration_failure"
+    ],
+    "document_scroll_width_px": 1600,
+    "document_scroll_height_px": 1000,
+    "main_scroll_height_px": 942,
+    "settings_screen_bottom_px": 864,
+    "button_text_clipped": false,
+    "fact_overflow": false
+  },
+  "evidence": {
+    "after_metrics": "audit_results/ui_web_settings_hub_stabilization_pass_2026-05-14/after_metrics.json",
+    "after_screenshots": "audit_results/ui_web_settings_hub_stabilization_pass_2026-05-14/screenshots/after/",
+    "ui_test_boundary": "tests/test_web_design_ui.py:755-860"
+  }
+}

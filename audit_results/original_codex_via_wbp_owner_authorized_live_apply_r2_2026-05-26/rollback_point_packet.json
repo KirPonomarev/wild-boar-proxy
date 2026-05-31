@@ -1,0 +1,31 @@
+{
+  "before_hash_or_absent_state_recorded": true,
+  "before_state": {
+    "exists": true,
+    "hash_recorded": true,
+    "kind": "file",
+    "mtime_ns": 1779800415294217852,
+    "path": "/Users/kirillponomarev/.codex/config.toml",
+    "sha256": "0a07967352c3242aefb2da992153b24c1334ac2cd421fdb4c2e07080daa04fc6",
+    "sha256_size_limit": 5000000,
+    "size": 5548,
+    "state": "present"
+  },
+  "captured_at_utc": "2026-05-26T14:28:06.622849Z",
+  "failed_checks": [
+    "owner_authorization_required_before_rollback_point",
+    "rollback_point_created_required_before_apply",
+    "rollback_point_verified_required_before_apply",
+    "rollback_artifact_hash_required_for_present_config"
+  ],
+  "original_profile_write_performed": false,
+  "packet_kind": "original_live_rollback_point",
+  "reason_class": "ROLLBACK_POINT_NOT_READY",
+  "rollback_artifact_path": "",
+  "rollback_artifact_sha256": "",
+  "rollback_mode": "",
+  "rollback_point_created": false,
+  "rollback_point_verified": false,
+  "status": "blocked",
+  "temporary_route_apply_allowed": false
+}

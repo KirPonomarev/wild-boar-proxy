@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T12:14:05.029686Z",
+  "nonce_recorded": true,
+  "owner_ux_claimed": false,
+  "packet_kind": "native_route_trace_binding",
+  "prompt_hash_recorded": true,
+  "raw_prompt_recorded": false,
+  "route_status": "confirmed",
+  "route_trace_bound": true,
+  "status": "ok",
+  "trace_path": "/v1/responses",
+  "trace_request_body_sha256": "dde12c30ee4434a2a344bf8a265de30e0295a8539d17db53dbb9869e6ea89040",
+  "trace_response_body_sha256": "a1b85d4eb8937586629461c06836d1b00867bc9c2d68daa58275308fb8f0207b"
+}

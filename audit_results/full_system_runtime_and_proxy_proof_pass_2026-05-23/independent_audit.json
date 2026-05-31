@@ -1,0 +1,23 @@
+{
+  "status": "pass",
+  "issues": [],
+  "checks": {
+    "fresh_preflight_status_ok": true,
+    "fresh_preflight_healthcheck_ok": true,
+    "proxy_single_smoke_ok": true,
+    "bounded_load_20_requests": true,
+    "bounded_load_zero_failures": true,
+    "bounded_load_concurrency_bounded": true,
+    "post_load_status_ok": true,
+    "post_load_healthcheck_ok": true,
+    "post_load_rotation_ok": true,
+    "closeout_has_resume_from_here": true,
+    "closeout_has_contour_capsule": true
+  },
+  "owner_lane_lock_probe_codes": [
+    "LOCK_HELD",
+    "OK"
+  ],
+  "owner_lane_lock_probe_classification": "owner_lane_serializes_via_lock",
+  "summary": "runtime/proxy contour supported"
+}

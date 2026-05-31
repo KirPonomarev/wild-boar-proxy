@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-24T01:53:35Z",
+  "git_head_before": "ed49b66b",
+  "branch": "codex/external-agent-lab-isolated",
+  "runtime_status": "ok",
+  "runtime_machine_error_code": "OK",
+  "healthcheck_status": "ok",
+  "healthcheck_machine_error_code": "OK",
+  "launch_readiness": "ready",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "configured_model": "gpt-5.5",
+  "managed_accounts": 25,
+  "launch_capable_accounts": 15,
+  "claim_gate": {
+    "status": "blocked",
+    "machine_error_code": "CLAIM_GATE_BLOCKED",
+    "source": "policy_drift",
+    "blocking_for_this_contour": false
+  },
+  "dirty_worktree_before": "only unrelated pre-existing untracked files plus contour edits after work started"
+}

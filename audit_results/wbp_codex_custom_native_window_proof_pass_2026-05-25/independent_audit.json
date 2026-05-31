@@ -1,0 +1,67 @@
+{
+  "audit_id": "INDEPENDENT_AUDIT_WBP_CODEX_CUSTOM_NATIVE_WINDOW_PROOF_PASS_2026-05-25",
+  "audit_date": "2026-05-25",
+  "auditor": "opencode-orchestrator",
+  "status": "ok",
+  "verdict": "NATIVE_CUSTOM_WINDOW_NOT_PROVEN",
+  "findings": [
+    {
+      "id": "window_observation",
+      "packet": "evidence/window_observation_packet.json",
+      "facts": {
+        "window_observed": true,
+        "window_query": "Codex, true, false, false, 0",
+        "window_query_rc": 0,
+        "ax_window_count": 0
+      },
+      "honest": true
+    },
+    {
+      "id": "window_identity_binding",
+      "packet": "evidence/window_identity_binding_packet.json",
+      "facts": {
+        "window_bound_to_custom_launch": true,
+        "window_distinguishable_from_original_codex": true
+      },
+      "honest": true
+    },
+    {
+      "id": "input_capable_ui_surface",
+      "packet": "evidence/native_window_ui_surface_packet.json",
+      "facts": {
+        "input_capable_ui_observed": false,
+        "ax_query_error": "System Events: Не удается получить window 1. Неверный индекс. (-1719)",
+        "blocked_reason_class": "input_capable_window_not_proven_for_pid"
+      },
+      "honest": true
+    },
+    {
+      "id": "cleanup",
+      "packet": "evidence/cleanup_reversibility_packet.json",
+      "facts": {
+        "cleanup_or_rollback_status": "ok",
+        "custom_processes_gone": true,
+        "tmp_root_removed": true
+      },
+      "honest": true
+    },
+    {
+      "id": "false_green_guard",
+      "packet": "evidence/independent_native_window_audit.json",
+      "facts": {
+        "status": "ok",
+        "no_prompt_attempted": true,
+        "no_route_inference_attempted": true,
+        "no_native_completion_claim": true
+      },
+      "honest": true
+    }
+  ],
+  "overclaim_check": {
+    "provider_routing_claimed": false,
+    "prompt_response_claimed": false,
+    "native_launch_complete_claimed": false,
+    "product_status_upgraded_claimed": false
+  },
+  "final_verdict": "blocked"
+}

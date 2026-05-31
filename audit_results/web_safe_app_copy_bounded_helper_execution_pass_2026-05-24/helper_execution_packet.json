@@ -1,0 +1,52 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_PASS",
+  "source": "live_web_server_curl",
+  "request": {
+    "path": "/api/codex/app-copy/launch",
+    "body": "{}",
+    "helper_target": "redacted_server_owned_helper",
+    "helper_provenance": "server_owned_bounded_helper"
+  },
+  "packet": {
+    "status": "ok",
+    "machine_error_code": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+    "final_verdict": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+    "owner_contract_status": "admitted",
+    "owner_preflight_machine_error_code": "OK",
+    "owner_preflight_target_exists": true,
+    "owner_preflight_target_kind": "executable",
+    "owner_preflight_separate_profile": true,
+    "owner_preflight_separate_data_dir": true,
+    "owner_preflight_separate_port": true,
+    "owner_preflight_current_session_untouched": true,
+    "live_launch_admitted": true,
+    "launch_performed": true,
+    "bounded_helper_execution": true,
+    "bounded_live_launch_execution_ready": true,
+    "launch_ready_claimed": true,
+    "real_codex_app_launched": false,
+    "helper_target_safe": true,
+    "helper_execution_attempted": true,
+    "process_started": true,
+    "helper_exit_code_zero": true,
+    "cleanup_or_stop_completed": true,
+    "cleanup_or_stop_instruction": "no_process_remaining",
+    "receipt_redacted": true,
+    "helper_receipt_ref": "redacted_helper_execution_receipt",
+    "helper_stdout_omitted": true,
+    "helper_stderr_omitted": true,
+    "current_codex_touched": false,
+    "current_codex_home_touched": false,
+    "uses_current_home": false,
+    "uses_current_codex_home": false,
+    "proxy_env_injected": false,
+    "raw_path_exposed": false,
+    "raw_pid_exposed": false,
+    "raw_env_exposed": false,
+    "pid_not_exposed_to_browser": true
+  },
+  "helper_marker": {
+    "created": true,
+    "location": "redacted_temp_data_dir"
+  }
+}

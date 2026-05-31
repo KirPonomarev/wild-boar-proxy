@@ -1,0 +1,18 @@
+{
+  "browser_client_path_authority_rejected": true,
+  "browser_validation_failed_checks": [
+    "browser_client_path_authority_forbidden"
+  ],
+  "captured_at_utc": "2026-05-27T05:59:36.077280Z",
+  "client_model_provider_authority_rejected": true,
+  "packet_kind": "persistent_path_authority_enforcement",
+  "profile_storage_persistence_claimed": false,
+  "provider_validation_failed_checks": [
+    "client_model_provider_authority_forbidden"
+  ],
+  "remote_client_path_authority_rejected": true,
+  "remote_validation_failed_checks": [
+    "remote_client_path_authority_forbidden"
+  ],
+  "status": "ok"
+}

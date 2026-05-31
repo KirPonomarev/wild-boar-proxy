@@ -1,0 +1,14 @@
+{
+  "contour": "SANDBOX_POLICY_STAGE_SET_10_ADMISSION_PASS",
+  "status": "GO_TO_RERUN_ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS",
+  "policy_packet_status": "ok",
+  "machine_error_code": "OK",
+  "final_outcome": "stage_policy_updated",
+  "observed_pool_policy": {
+    "active_min": 10,
+    "active_target": 10,
+    "reserve_target": 0
+  },
+  "matches_expected_stage_10": true,
+  "no_live_drift": true
+}

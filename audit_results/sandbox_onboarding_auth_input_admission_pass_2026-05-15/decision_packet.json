@@ -1,0 +1,16 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_INPUT_ADMISSION_PASS",
+  "decision": "GO_TO_SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "owner_surface": "accounts onboard --json",
+  "stable_inventory_primary_lane": false,
+  "explicit_auth_ref_lane_selected": false,
+  "explicit_auth_ref_lane_rejection_reason": "it broadens secret/reference scope beyond the declared sandbox boundary and does not preserve root-local rollback by default",
+  "sandbox_auth_json_lane_selected": true,
+  "sandbox_auth_json_lane_reason": "it is the default owner input already bound to WBP_AUTH_FILE inside the declared sandbox root and matches the existing writable and rollback surfaces",
+  "upstream_secret_source_admitted_now": false,
+  "forbidden_live_auth_shortcut_outside_owner_surface": true,
+  "next_contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "next_contour_class": "admission",
+  "reason": "this contour narrows the next onboarding auth input lane to the sandbox-local auth.json path; exact upstream secret source admission remains for the next contour"
+}

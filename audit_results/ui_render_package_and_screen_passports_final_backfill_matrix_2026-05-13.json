@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+  "generated_at_local_date": "2026-05-13",
+  "mode": "audit_artifact_backfill_only",
+  "canon_owner_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md"
+  ],
+  "scope_boundary": {
+    "production_code_changed": false,
+    "test_code_changed": false,
+    "runtime_py_changed": false,
+    "desktop_work_started": false,
+    "allowed_write_area": "audit_results only"
+  },
+  "backfilled_files": [
+    {
+      "path": "audit_results/ui_render_package_manifest_2026-05-13.json",
+      "classification": "final render package manifest",
+      "updates": [
+        "added final_backfill metadata",
+        "recorded API Connections final web scope",
+        "recorded desktop phase block until owner approval"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "path": "audit_results/ui_screen_passports_2026-05-13.json",
+      "classification": "screen passport registry",
+      "updates": [
+        "moved next_allowed_contour to UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+        "added API Connections passport",
+        "tightened browser payload boundary for route actions"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "path": "audit_results/ui_render_surface_registry_2026-05-13.json",
+      "classification": "UI command and truth surface registry",
+      "updates": [
+        "added API route action surfaces",
+        "classified api_route_remove as allowed_registry_cleanup_only",
+        "classified api_route_create/api_route_update/api_route_draft as NOT_ADMITTED",
+        "added tests/test_cli_external_models.py to implementation evidence"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "path": "audit_results/api_connections_surface_registry_2026-05-13.json",
+      "classification": "API Connections screen-specific surface registry",
+      "updates": [
+        "split stale bundled add/update/remove command surface",
+        "mirrored api_route_remove admission as disabled route registry cleanup only",
+        "moved create/update/draft to not_admitted_controls",
+        "kept active-route, key setup, and automatic reserve controls outside admitted scope"
+      ],
+      "verdict": "PASS"
+    }
+  ],
+  "api_connections_final_scope": {
+    "admitted_actions": [
+      "api_route_validate",
+      "api_route_check",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "not_admitted_actions": [
+      "api_route_create",
+      "api_route_update",
+      "api_route_draft"
+    ],
+    "deferred_controls": [
+      "selected route semantics",
+      "key setup UI",
+      "automatic reserve/failover policy UI",
+      "adapter lifecycle UI"
+    ],
+    "browser_payload_boundary": {
+      "route_actions_allowed_payload": [
+        "ui_action",
+        "route_id"
+      ],
+      "forbidden": [
+        "command_id",
+        "raw argv",
+        "shell",
+        "arbitrary path",
+        "raw route JSON",
+        "provider config",
+        "base_url",
+        "endpoint_path",
+        "token",
+        "secret_ref",
+        "secret value"
+      ]
+    }
+  },
+  "identity_preservation_check": {
+    "external_references_may_inform": "generic interaction patterns only",
+    "must_remain_aligned_with": [
+      "original Wild Boar design baseline",
+      "Russian operator copy discipline",
+      "existing navigation hierarchy",
+      "existing logo/product treatment"
+    ],
+    "verdict": "PASS"
+  },
+  "layer_separation_check": {
+    "ui_truth_source": "strict JSON command packets only",
+    "direct_file_truth_allowed": false,
+    "route_config_editor_introduced": false,
+    "engine_layer_behavior_duplicated": false,
+    "runtime_claims_introduced": false,
+    "verdict": "PASS"
+  },
+  "next_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
+}

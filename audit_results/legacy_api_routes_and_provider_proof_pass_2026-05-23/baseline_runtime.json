@@ -1,0 +1,9 @@
+{
+  "healthcheck_human_message": "Runtime attestation failed one or more checks.",
+  "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+  "healthcheck_packet_status": "error",
+  "status_human_message": "Runtime status summary reflects live attestation failure.",
+  "status_last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+  "status_machine_error_code": "ATTESTATION_FAILED",
+  "status_packet_status": "error"
+}

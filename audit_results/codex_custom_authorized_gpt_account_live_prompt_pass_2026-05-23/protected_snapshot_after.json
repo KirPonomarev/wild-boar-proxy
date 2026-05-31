@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "not_collected",
+  "reason": "No live prompt was run.",
+  "current_codex_mutation_claimed": false
+}

@@ -1,0 +1,14 @@
+{
+  "contour": "UI_WEB_VISUAL_QA_REPAIR_PASS",
+  "auditor": "019e2b65-b514-7ba1-8232-f0cd9bdf8d99",
+  "mode": "read_only",
+  "result": "PASS",
+  "checks": {
+    "scope": "PASS: tracked diff limited to web UI and tests; no runtime/adapter/live-server/canon docs changed",
+    "p0": "PASS: folder.png exists; no var(--mono) remains in implementation",
+    "metrics": "PASS: 19 static cases and 6 interaction cases report zero broken images, visible SVG, clipping, and horizontal overflow",
+    "forbidden_inputs": "PASS: no editable file/path/token inputs or raw command textarea found",
+    "quick_start_primary": "PASS: quick-start and quick-start-stale each have one visible primary: Добавить аккаунт",
+    "contract_diff": "PASS: no staged diff and no forbidden contract changes in unstaged tracked diff"
+  }
+}

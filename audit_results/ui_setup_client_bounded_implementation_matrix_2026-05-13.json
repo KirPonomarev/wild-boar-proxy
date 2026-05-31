@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_SETUP_CLIENT_BOUNDED_IMPLEMENTATION",
+  "created_at": "2026-05-13",
+  "artifact_type": "bounded_ui_implementation_matrix",
+  "source_admission_commit": "dc3cb38",
+  "implemented_screens": [
+    {
+      "screen_id": "setup",
+      "html_section_id": "setupScreen",
+      "status": "implemented_as_inert_skeleton",
+      "route": "?screen=setup",
+      "active_ui_actions_added": [],
+      "controls": [
+        {
+          "label": "Find automatically",
+          "state": "disabled",
+          "reason": "discovery command missing",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Specify manually",
+          "state": "disabled",
+          "reason": "browser path submission forbidden",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Continue",
+          "state": "disabled",
+          "reason": "local navigation only; no setup completion claim",
+          "truth_claim": "none"
+        }
+      ],
+      "forbidden_surfaces_preserved": [
+        "no browser path payload",
+        "no filesystem scan",
+        "no direct config/state/log/runtime read",
+        "no setup completion claim"
+      ]
+    },
+    {
+      "screen_id": "select-client",
+      "html_section_id": "selectClientScreen",
+      "status": "implemented_as_inert_skeleton",
+      "route": "?screen=select-client",
+      "active_ui_actions_added": [],
+      "controls": [
+        {
+          "label": "Candidate rows",
+          "state": "placeholder",
+          "reason": "design placeholders, not detected applications",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Choose file",
+          "state": "disabled",
+          "reason": "future desktop/native picker only",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Verify path",
+          "state": "disabled",
+          "reason": "bounded dispatch is not path verification",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Save selection",
+          "state": "disabled",
+          "reason": "needs command-owned candidate id",
+          "truth_claim": "none"
+        }
+      ],
+      "forbidden_surfaces_preserved": [
+        "no file picker",
+        "no path verification command",
+        "no selection persistence",
+        "launch_client_dispatch not reused"
+      ]
+    },
+    {
+      "screen_id": "import-existing",
+      "html_section_id": "importExistingScreen",
+      "status": "implemented_as_inert_skeleton",
+      "route": "?screen=import-existing",
+      "active_ui_actions_added": [],
+      "controls": [
+        {
+          "label": "Installation placeholder",
+          "state": "placeholder",
+          "reason": "no discovery command has run",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Find installation",
+          "state": "disabled",
+          "reason": "needs command-owned discovery",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Create snapshot",
+          "state": "disabled",
+          "reason": "needs command-owned snapshot surface",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Verify",
+          "state": "disabled",
+          "reason": "needs non-mutating import dry-run packet",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Apply",
+          "state": "disabled",
+          "reason": "source-location mediation and strong confirmation missing",
+          "truth_claim": "none"
+        },
+        {
+          "label": "Rollback",
+          "state": "disabled",
+          "reason": "needs command-owned rollback surface",
+          "truth_claim": "none"
+        }
+      ],
+      "forbidden_surfaces_preserved": [
+        "no legacy import execution",
+        "no source directory payload",
+        "no dynamic account-count claim",
+        "no snapshot or rollback availability claim",
+        "no import-ready claim"
+      ]
+    }
+  ],
+  "code_changes": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py"
+  ],
+  "server_adapter_changes": {
+    "web_design_live_server.py": "unchanged",
+    "web_design_command_adapter.py": "unchanged",
+    "ui_action_allowlist_added": [],
+    "adapter_commands_added": []
+  },
+  "truth_policy": {
+    "simulated_truth_allowed": false,
+    "primary_truth_sources_added": [],
+    "direct_file_reads_added": false,
+    "runtime_mutations_added": false,
+    "desktop_work_added": false
+  },
+  "test_guards_added": [
+    "new setup/select/import screens exist",
+    "new setup/select/import sections contain no data-ui-action",
+    "new setup/select/import sections contain no live-action controls",
+    "new setup/select/import sections contain no browser path/source/auth/backend payload fields",
+    "new setup/select/import routes are static only",
+    "server metadata does not expose setup/select/import action names"
+  ],
+  "overall_verdict": "bounded_skeleton_only"
+}

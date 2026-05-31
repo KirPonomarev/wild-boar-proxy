@@ -1,0 +1,79 @@
+{
+  "contour": "UI_WEB_ACCOUNT_ONBOARDING_CANONICAL_RESULT_FLOW_PASS",
+  "date": "2026-05-14",
+  "auditors": [
+    {
+      "agent": "Nash",
+      "result": "fail",
+      "finding": "The first audit found a real risk: non-success onboarding banners were amber/red, but the outer action panel could remain green from payload.status=ok.",
+      "disposition": "fixed by making onboard_account panel color inherit onboardingResultModel.visual and by adding tests for outer panel color"
+    },
+    {
+      "agent": "Dalton",
+      "result": "pass",
+      "finding": "The second audit confirmed non-success onboarding states no longer keep a green outer action panel, selected backend ids are hidden on non-success, no browser file/path intake exists, and scope stayed inside web UI/test files.",
+      "disposition": "accepted after additional invalid_json result.status hardening"
+    }
+  ],
+  "final_audit_verdict": "pass",
+  "fact_checks": {
+    "browser_path_file_inputs_absent": {
+      "status": "pass",
+      "evidence": [
+        "index.html onboarding modal contains buttons/text only",
+        "overview.js boundedUiActionPayload copies only allowed string keys",
+        "onboard_account is invoked without extra browser payload"
+      ]
+    },
+    "green_success_gate": {
+      "status": "pass",
+      "evidence": "onboardingResultModel requires ui_state=success, reserve success outcome, reserve_first_proven=true, selected_backend_id, pool_after_onboarding=reserve, active_routing_changed=false, validate_outcome=ok, and status_observed.command_status=ok"
+    },
+    "selected_backend_hidden_on_non_success": {
+      "status": "pass",
+      "evidence": "selectedBackendId is raw only when the full success predicate is true; otherwise '-'"
+    },
+    "non_success_not_green": {
+      "status": "pass",
+      "evidence": {
+        "no_new_auth": "outer=amber banner=amber selected=-",
+        "ambiguous": "outer=amber banner=amber selected=-",
+        "validation_failed": "outer=red banner=red selected=-",
+        "status_proof_failed": "outer=red banner=red selected=-",
+        "command_error": "outer=red banner=red selected=-",
+        "invalid_json_timeout": "outer=red banner=red selected=-"
+      }
+    },
+    "actual_invalid_json_catch_path": {
+      "status": "pass",
+      "evidence": "onboardingResultModel now reads payload.status || payload.result.status, so result.status=invalid_json also renders red"
+    },
+    "no_active_routing_or_auto_promote_success_copy": {
+      "status": "pass",
+      "evidence": "success copy says reserve and active routing unchanged; follow-up actions are separate operator actions"
+    },
+    "scope": {
+      "status": "pass",
+      "changed_files": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css",
+        "tests/test_web_design_ui.py",
+        "audit_results/ui_web_account_onboarding_canonical_result_flow_pass_2026-05-14/"
+      ],
+      "runtime_adapter_allowlist_desktop_changed": false
+    },
+    "visual_metrics": {
+      "status": "pass",
+      "evidence": "after_metrics.json has 1600x1000 captures with inputs=0, fileInputs=0, visibleSvgIcons=0, and overflows=[] for all captured states"
+    },
+    "tests": {
+      "status": "pass",
+      "commands": [
+        "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+        "git diff --check"
+      ]
+    }
+  }
+}

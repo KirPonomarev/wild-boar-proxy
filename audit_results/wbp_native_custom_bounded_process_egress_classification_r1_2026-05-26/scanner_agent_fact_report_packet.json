@@ -1,0 +1,58 @@
+{
+  "captured_at_utc": "2026-05-26T20:01:36Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agent_model": "gpt-5.4-mini",
+  "mode": "read_only",
+  "edits_performed": false,
+  "live_native_launch_attempted": false,
+  "live_network_capture_attempted": false,
+  "commands_reported": [
+    "rg -n",
+    "find audit_results/... -maxdepth 1 -type f | sort",
+    "nl -ba ... | sed -n ..."
+  ],
+  "reported_existing_live_tool": "tools/native_custom_direct_egress_classification_probe.py",
+  "reported_existing_live_tool_args": [
+    "--repo-root",
+    "--evidence-dir",
+    "--mode capability|live",
+    "--model",
+    "--wait-seconds"
+  ],
+  "reported_existing_live_tool_packets": [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "version_pinning_packet.json",
+    "declared_write_surfaces_packet.json",
+    "observer_capability_packet.json",
+    "native_custom_launch_packet.json",
+    "native_process_inventory_after_packet.json",
+    "native_background_codex_noise_packet.json",
+    "native_process_network_observation_packet.json",
+    "source_wbp_trace_packet.json",
+    "wbp_trace_observation_packet.json",
+    "native_direct_egress_claim_packet.json",
+    "native_direct_egress_false_green_audit.json",
+    "cleanup_reversibility_packet.json",
+    "native_direct_egress_summary_packet.json"
+  ],
+  "reported_write_surfaces": [
+    "fresh evidence dir",
+    "temporary /tmp/wbp-native-egress-* profile if live mode is used"
+  ],
+  "reported_missing_for_current_plan": [
+    "domain_attribution_limit_packet.json",
+    "bounded_observation_window_packet.json",
+    "owner_visible_response_context_packet.json",
+    "temp_custom_cleanup_packet.json"
+  ],
+  "reported_prior_live_result": "direct non-WBP egress absence remained unproven because prior live observer saw background Codex noise and unexpected peer traffic",
+  "reported_stop_or_layer_mix_risks": [
+    "route trace must not become network proof",
+    "owner UX and screenshots must not become network proof",
+    "strict layer separation required by AGENTS.md",
+    "STOP_AND_DIAGNOSE required for correctness/truth/scope risk"
+  ],
+  "orchestrator_assessment": "accepted_as_fact_report; cross-checked locally before code/evidence closeout"
+}

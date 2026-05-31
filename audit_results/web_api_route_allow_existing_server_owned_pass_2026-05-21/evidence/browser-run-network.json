@@ -1,0 +1,26 @@
+{
+  "events": [
+    {
+      "step": "before_readonly",
+      "method": "GET",
+      "url": "http://127.0.0.1:58588/api/api-connections-readonly",
+      "status": "ok",
+      "source": "api_connections_readonly"
+    },
+    {
+      "step": "allow_action",
+      "method": "POST",
+      "url": "http://127.0.0.1:58588/api/action",
+      "status": "ok",
+      "ui_action": "api_route_allow",
+      "machine_error_code": "OK"
+    },
+    {
+      "step": "after_readonly",
+      "method": "GET",
+      "url": "http://127.0.0.1:58588/api/api-connections-readonly",
+      "status": "ok",
+      "source": "api_connections_readonly"
+    }
+  ]
+}

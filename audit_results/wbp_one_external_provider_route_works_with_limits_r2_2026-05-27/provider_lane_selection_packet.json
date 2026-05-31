@@ -1,0 +1,49 @@
+{
+  "contour": "WBP_ONE_EXTERNAL_PROVIDER_ROUTE_WORKS_WITH_LIMITS_R2",
+  "selected_provider_lane": {
+    "provider": "openrouter",
+    "route_id": "wbp-web-primary-openrouter",
+    "upstream_model": "openai/gpt-5",
+    "enabled": true
+  },
+  "selection_policy": {
+    "exactly_one_provider_admitted": true,
+    "deepseek_selected": false
+  },
+  "command": "python3 -m wild_boar_proxy external-models routes list --json",
+  "packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models routes listed from local registry.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "routes": [
+        {
+          "auth": {
+            "secret_ref": "OPENROUTER_API_KEY",
+            "type": "bearer"
+          },
+          "base_url": "https://openrouter.ai/api/v1",
+          "compatibility": "openai_chat_completions",
+          "cost_class": "paid_or_free_limited",
+          "display_name": "OpenRouter primary",
+          "enabled": true,
+          "endpoint_path": "/chat/completions",
+          "fallback_eligible": false,
+          "lane_role": "candidate",
+          "provider": "openrouter",
+          "route_id": "wbp-web-primary-openrouter",
+          "schema_version": 1,
+          "upstream_model": "openai/gpt-5"
+        }
+      ],
+      "count": 1
+    },
+    "timestamp_utc": "2026-05-27T15:36:00Z"
+  }
+}

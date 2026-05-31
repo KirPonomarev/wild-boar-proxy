@@ -1,0 +1,19 @@
+{
+  "quickStartBanner": "Упрощённый режим показывает только итоговые статусы и безопасные действия.",
+  "quickStartFooter": "Последняя общая проверка: 2026-05-20T23:53:20Z · Детальные расследования остаются в экспертных разделах.",
+  "accountsChip": "готово",
+  "apiChip": "Работает",
+  "apiProvider": "openrouter",
+  "apiModel": "deepseek/deepseek-chat · main route",
+  "apiSecret": "secret_ref: OPENROUTER_API_KEY",
+  "apiStatusTitle": "Работает",
+  "apiStatusText": "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно.",
+  "accountList": "01authРезерв · проверки нетРезерв",
+  "actionSummaryTitle": "quick_start_check_all",
+  "actionSummaryMeta": "target - · ok_refresh_complete",
+  "actionSummaryMessage": "Все bounded truth surfaces подтверждены для Quick Start summary.",
+  "actionRefreshStatus": "canonical refresh complete",
+  "actionSupportDetails": "bundle_verdict=ready · accounts=ok · api=ok · runtime=ok · route=wbp-openrouter-primary · hidden_mutation=absent",
+  "ledgerText": "ЖУРНАЛ ДЕЙСТВИЙ\nТекущая UI-сессия\n\nCommand result не является runtime truth. Reload очищает этот журнал.\n\nВсе\nОшибки\nТребуют refresh\nОчистить\nCommand results\nUI-session memory only · не persistent audit history\nне сохраняется\nquick_start_check_all · -\n02:53:21\nподтверждено\nquick_start_check_all · -\n02:53:15\nвыполняется\nSnapshot commands\noverview snapshot · live_readonly · command packet outcome only\n5 summaries\naccounts_list · primary_truth\nlive_readonly\nok\nhealthcheck · runtime_detail\nlive_readonly\nok\nmode_get · primary_truth\nlive_readonly\nok\nrollout_rotation_inspect · rollout_evidence\nlive_readonly\ncommand_error\nstatus · primary_truth\nlive_readonly\nok",
+  "overviewRefreshed": true
+}

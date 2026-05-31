@@ -1,0 +1,18 @@
+{
+  "browser_supplied_env_or_path_or_token": false,
+  "captured_at_utc": "2026-05-26T07:16:08.683712Z",
+  "clean_env_openai_api_key_present": false,
+  "clean_env_proxy_keys_present": {
+    "ALL_PROXY": false,
+    "HTTPS_PROXY": false,
+    "HTTP_PROXY": false,
+    "all_proxy": false,
+    "http_proxy": false,
+    "https_proxy": false
+  },
+  "consumer_launch_env_source": "wild_boar_proxy.native_filesystem_probe.clean_env plus explicit isolated variables",
+  "intended_codex_home": "/tmp/wbp-native-owner-assisted-4hug9t9n/profile",
+  "intended_user_data_dir": "/tmp/wbp-native-owner-assisted-4hug9t9n/profile/electron-user-data",
+  "machine_error_code": "OK",
+  "status": "ok"
+}

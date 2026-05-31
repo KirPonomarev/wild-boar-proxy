@@ -1,0 +1,33 @@
+{
+  "captured_at_utc": "2026-05-26T08:14:28.619268Z",
+  "closeout_resilience_check": {
+    "command": "python3 tools/check_closeout_resilience.py audit_results/wbp_model_catalog_contract_2026-05-26/closeout.md",
+    "exit_code": 0,
+    "result": "OK"
+  },
+  "combined_regression": {
+    "command": "python3 -m unittest -q tests.test_wbp_model_catalog_contract tests.test_codex_model_registry tests.test_operator_surface tests.test_closeout_resilience tests.test_cli_runner tests.test_codex_account_selection tests.test_external_models tests.test_cli_external_models tests.test_external_agent_lab",
+    "exit_code": 0,
+    "result": "OK",
+    "tests_run": 96
+  },
+  "commands": [
+    "python3 -m unittest -q tests.test_wbp_model_catalog_contract tests.test_codex_model_registry tests.test_operator_surface tests.test_closeout_resilience",
+    "python3 -m unittest -q tests.test_cli_runner tests.test_codex_account_selection tests.test_external_models tests.test_cli_external_models",
+    "python3 -m unittest -q tests.test_external_agent_lab",
+    "git diff --check"
+  ],
+  "json_parse_check": {
+    "json_files": 11,
+    "result": "OK"
+  },
+  "known_warnings": [
+    "ResourceWarning from negative HTTPError operator_surface tests; existing expected negative HTTP cases."
+  ],
+  "schema_version": 1,
+  "secret_scan": {
+    "result": "no_matches"
+  },
+  "status": "passed",
+  "updated_at_utc": "2026-05-26T08:15:54.621451Z"
+}

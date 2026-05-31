@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-28T13:50:46.109821Z",
+  "chain_complexity_treated_as_usefulness": false,
+  "extra_chain_steps_treated_as_better_outcome_without_packet_evidence": false,
+  "handoff_success_treated_as_workflow_value_by_itself": false,
+  "latency_or_throughput_reused_as_usefulness_proof": false,
+  "longer_output_treated_as_better_workflow_value": false,
+  "operator_mediated_chain_treated_as_autonomous_intelligence": false,
+  "packet_kind": "false_green_boundary",
+  "status": "ok"
+}

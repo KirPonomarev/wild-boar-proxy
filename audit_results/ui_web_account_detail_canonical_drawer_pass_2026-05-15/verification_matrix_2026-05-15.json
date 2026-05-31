@@ -1,0 +1,79 @@
+{
+  "contour": "UI_WEB_ACCOUNT_DETAIL_CANONICAL_DRAWER_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "pre_commit_head": "b66cb2139d1fad656bbb9c09ae1ab5c9acd496f4",
+  "scope": {
+    "web_only": true,
+    "runtime_py_changed": false,
+    "command_adapter_changed": false,
+    "allowlist_changed": false,
+    "live_server_changed": false,
+    "desktop_changed": false
+  },
+  "implementation_checks": [
+    {
+      "check": "drawer_open_ui_only",
+      "status": "pass",
+      "evidence": "row click and detail button call openAccountDrawer only"
+    },
+    {
+      "check": "account_payload_bounded",
+      "status": "pass",
+      "evidence": "accountActionButton passes only account_id to maybeConfirmAndRun"
+    },
+    {
+      "check": "eligibility_single_source",
+      "status": "pass",
+      "evidence": "row/menu/drawer use accountActionEligibility for enabled actions"
+    },
+    {
+      "check": "disabled_actions_not_dispatched",
+      "status": "pass",
+      "evidence": "disabledAccountActionButton has no command listener and tests assert disabled behavior"
+    },
+    {
+      "check": "confirmation_preflight",
+      "status": "pass",
+      "evidence": "accountActionPreflight renders account id, current pool, requested action, expected refresh"
+    },
+    {
+      "check": "sensitive_text_redaction",
+      "status": "pass",
+      "evidence": "safeAccountDetailText and redactUiSensitiveText cover last error and timeline fields"
+    },
+    {
+      "check": "missing_account_state",
+      "status": "pass",
+      "evidence": "test_web_design_ui node smoke renders accountDetailMissing after refresh removes selected account"
+    }
+  ],
+  "screenshots": [
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/active_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/reserve_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/held_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/problem_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/live_active_account_detail.png",
+    "audit_results/ui_web_account_detail_canonical_drawer_pass_2026-05-15/screenshots/account_action_confirmation_preflight.png"
+  ],
+  "commands": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "status": "pass",
+      "result": "Ran 88 tests"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    }
+  ],
+  "known_limits": [
+    "Browser screenshots use bounded demo/fake live data and do not execute real account mutations.",
+    "Missing-account visual state is covered by node smoke because the browser cannot mutate app state directly without adding a test-only endpoint."
+  ],
+  "verdict": "pass"
+}

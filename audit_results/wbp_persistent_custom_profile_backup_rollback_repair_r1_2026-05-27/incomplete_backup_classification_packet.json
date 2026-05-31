@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-27T03:19:30.222561Z",
+  "existing_backup_authoritative": false,
+  "existing_backup_complete_marker_present": false,
+  "existing_backup_counted_as_rollback_proof": false,
+  "existing_backup_deleted": false,
+  "existing_backup_present": true,
+  "existing_backup_root": "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main.backup",
+  "packet_kind": "incomplete_backup_classification",
+  "status": "ok"
+}

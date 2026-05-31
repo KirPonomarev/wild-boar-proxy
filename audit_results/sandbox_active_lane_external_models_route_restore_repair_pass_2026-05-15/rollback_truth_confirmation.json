@@ -1,0 +1,36 @@
+{
+  "captured_before_restore": {
+    "sandbox_routes_list": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "count": 0
+    },
+    "sandbox_models_list": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "count": 0,
+      "source": "local_routes_registry"
+    },
+    "sandbox_files": {
+      "routes.json": {
+        "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+        "size_bytes": 42,
+        "sha256": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4"
+      },
+      "state.json": {
+        "path": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "size_bytes": 554,
+        "sha256": "f11ebe5d4aea7a9cd7ff5e54887502bcf3ea1f64f32e832996c79d32c4f84fc5"
+      },
+      "secrets.env": {
+        "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "validate_precondition_before_restore": {
+    "route_present": false,
+    "route_id": "wbp-claude-sonnet-4-6-thinking"
+  }
+}

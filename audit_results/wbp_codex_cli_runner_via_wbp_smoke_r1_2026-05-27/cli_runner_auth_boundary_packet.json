@@ -1,0 +1,12 @@
+{
+  "ambient_openai_api_key_used": false,
+  "auth_command_invoked": true,
+  "auth_command_required": true,
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "created_at_utc": "2026-05-27T09:46:49.143425Z",
+  "current_codex_auth_json_used": false,
+  "packet_kind": "cli_runner_auth_boundary",
+  "provider_auth_strategy_reference_packet": "provider_auth_strategy_reference_packet.json",
+  "selected_strategy": "auth.command",
+  "status": "passed"
+}

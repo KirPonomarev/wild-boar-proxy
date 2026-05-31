@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_RUSSIAN_OPERATOR_COPY_LOCALIZATION",
+  "created_at": "2026-05-13",
+  "auditor": "independent read-only explorer",
+  "status": "passed_with_low_closeout_risk_resolved_by_staging_artifacts",
+  "findings": {
+    "critical": [],
+    "high": [],
+    "medium": [],
+    "low": [
+      {
+        "summary": "Contour evidence artifacts were untracked during the audit window.",
+        "resolution": "Artifacts are included in the contour file list for staging and closeout."
+      }
+    ]
+  },
+  "inspected_files": [
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/fixtures/degraded.json",
+    "wild_boar_proxy/web_design_ui/fixtures/down.json",
+    "wild_boar_proxy/web_design_ui/fixtures/healthy.json",
+    "wild_boar_proxy/web_design_ui/fixtures/integration_failure.json",
+    "wild_boar_proxy/web_design_ui/fixtures/stale.json",
+    "wild_boar_proxy/web_design_ui/fixtures/unknown.json",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "audit_results/ui_web_russian_operator_copy_browser_smoke_2026-05-13.json",
+    "audit_results/ui_web_russian_operator_copy_glossary_2026-05-13.json",
+    "audit_results/ui_web_russian_operator_copy_matrix_2026-05-13.json"
+  ],
+  "verified_points": [
+    "Scope is consistent with human-facing Russian localization.",
+    "No runtime or server-gate behavior drift was found beyond human-facing copy strings.",
+    "UI_ACTION_ALLOWLIST keys and non-copy fields remain contract-safe.",
+    "data-ui-action and ui_action identifiers remain unchanged.",
+    "Fixture JSON shapes remain unchanged.",
+    "Machine error code values remain unchanged.",
+    "Web UI copy is substantially Russian and keeps technical tokens where they preserve command meaning.",
+    "No CSS or design redesign was found.",
+    "Tracked changed-file scan found no private external reference-service traces."
+  ],
+  "auditor_commands_reported": [
+    "git status --short",
+    "git diff --stat",
+    "git diff --name-only",
+    "targeted git diff",
+    "rg scans for contract fields and external-reference markers",
+    "Python AST/regex comparisons for allowlist fields, command/action ids, machine codes and fixture shapes",
+    "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_web_design_live_server tests.test_web_design_ui",
+    "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_web_design_command_adapter",
+    "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "git diff --check"
+  ],
+  "auditor_residual_risk": "Auditor did not run a live browser visual smoke independently; orchestration browser smoke is recorded separately.",
+  "orchestrator_resolution": "The orchestrator ran system Google Chrome via Playwright against the local fake-runner server and recorded the passing browser smoke artifact."
+}

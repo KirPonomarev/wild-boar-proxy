@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before": "ecf3157",
+  "previous_contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "previous_ready_surface": "WbpTraceObserver implemented and pushed",
+  "blocked_before_live_preflight": true,
+  "runtime_preflight_executed": false,
+  "reason": "CANON.md owner authorization phrase absent from user message"
+}

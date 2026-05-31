@@ -1,0 +1,13 @@
+{
+  "automatic_delete_allowed": false,
+  "captured_at_utc": "2026-05-27T06:21:14.406182Z",
+  "cleanup_deletes_persistent_history_by_default": false,
+  "max_retained_backups": null,
+  "owner_authorization_required_for_delete": true,
+  "packet_kind": "persistent_retention_policy",
+  "persistent_profile_id": "wbp-custom-main",
+  "policy": "manual_retention_until_owner_delete",
+  "reason_class": "",
+  "retention_policy_is_history_preservation_proof": false,
+  "status": "ok"
+}

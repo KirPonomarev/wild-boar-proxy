@@ -1,0 +1,33 @@
+{
+  "audit_id": "INDEPENDENT_AUDIT_WBP_NATIVE_WINDOW_HOST_CAPABILITY_RESOLUTION_PASS_2026-05-25",
+  "audit_date": "2026-05-25",
+  "auditor": "opencode-orchestrator",
+  "status": "ok",
+  "verdict": "NATIVE_WINDOW_OBSERVATION_CAPABILITY_NOT_PROVEN",
+  "findings": [
+    {
+      "id": "quartz_unavailable",
+      "host_check": "python3 import Quartz",
+      "result": "ModuleNotFoundError"
+    },
+    {
+      "id": "application_services_unavailable",
+      "host_check": "python3 from ApplicationServices import AXIsProcessTrusted",
+      "result": "ModuleNotFoundError"
+    },
+    {
+      "id": "system_events_ui_disabled",
+      "host_check": "osascript tell application \"System Events\" to return UI elements enabled",
+      "result": false
+    },
+    {
+      "id": "historical_window_blockers_repeat",
+      "evidence": [
+        "wbp_codex_custom_native_window_proof_pass_2026-05-25/evidence/native_window_ui_surface_packet.json",
+        "wbp_native_window_alternate_observation_pass_2026-05-25/evidence/native_window_ui_surface_packet.json"
+      ],
+      "result": "same blocker class"
+    }
+  ],
+  "final_verdict": "closed_success"
+}

@@ -1,0 +1,16 @@
+{
+  "credential_present": true,
+  "credential_ref": "OPENROUTER_API_KEY",
+  "external_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmp6dz943_k/managed/external-models",
+  "external_under_managed": true,
+  "managed_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmp6dz943_k/managed",
+  "secrets_file_mode": "0o600",
+  "token_fixture": "owner-admission-test-key",
+  "token_in_admit_stdout": false,
+  "token_in_changed_files": false,
+  "token_in_evidence_packets": false,
+  "token_in_routes_add_stdout": false,
+  "token_in_routes_validate_stdout": false,
+  "token_in_status_stdout": false,
+  "validate_machine_error_code": "OK"
+}

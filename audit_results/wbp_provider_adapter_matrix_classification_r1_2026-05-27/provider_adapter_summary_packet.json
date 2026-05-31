@@ -1,0 +1,16 @@
+{
+  "active_provider_families": [
+    "deepseek",
+    "openrouter"
+  ],
+  "active_provider_family_count": 2,
+  "captured_at_utc": "2026-05-27T12:04:26.821174Z",
+  "family_wide_model_compatibility_proven": false,
+  "final_e2e_reproof_claimed": false,
+  "final_status": "WBP_PROVIDER_ADAPTER_MATRIX_CLASSIFIED_WITH_LIMITS",
+  "native_reproof_claimed": false,
+  "packet_kind": "provider_adapter_summary",
+  "provider_family_compatibility_proven": false,
+  "status": "ok",
+  "with_limits_required": true
+}

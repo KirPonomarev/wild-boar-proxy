@@ -1,0 +1,16 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "Reply exactly WBP_FIXTURE_OK",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "max_output_tokens": 32,
+  "model": "wbp-fixture-route"
+}

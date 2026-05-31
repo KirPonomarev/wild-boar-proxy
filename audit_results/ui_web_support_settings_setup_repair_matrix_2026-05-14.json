@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+  "date": "2026-05-14",
+  "mode": "implementation_visual_repair_ui_only",
+  "baseline": {
+    "settings_reference": "07_settings",
+    "setup_reference": "02_setup_client",
+    "select_client_reference": "03_select_codex_client",
+    "import_existing_reference": "08_import_existing",
+    "settings_form_width_px": 720,
+    "setup_flow_frame": "left-step-rail",
+    "form_row_min_height_px": 38
+  },
+  "changed_surfaces": [
+    {
+      "surface": "settings_screen_geometry",
+      "files": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "change": "settings screen now uses locked form-wrap width, readonly marker, and source reference marker",
+      "semantic_effect": "visual_only"
+    },
+    {
+      "surface": "setup_flow_frame",
+      "files": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "change": "setup/select/import screens now use a left setup-flow rail and inert bottom bars",
+      "semantic_effect": "visual_only"
+    },
+    {
+      "surface": "ui_tests",
+      "files": [
+        "tests/test_web_design_ui.py"
+      ],
+      "change": "added guards for visual reference markers, setup-flow frame markers, width, and row rhythm",
+      "semantic_effect": "test_guard_only"
+    }
+  ],
+  "screen_results": {
+    "settingsScreen": {
+      "visual_reference": "07_settings",
+      "contract": "readonly_or_existing_allowlisted_actions_only",
+      "new_actions_added": false,
+      "browser_payload_shape_changed": false
+    },
+    "setupScreen": {
+      "visual_reference": "02_setup_client",
+      "setup_flow_frame": "left-step-rail",
+      "contract": "inert_visual_skeleton",
+      "data_ui_actions_present": false,
+      "active_controls_present": false
+    },
+    "selectClientScreen": {
+      "visual_reference": "03_select_codex_client",
+      "setup_flow_frame": "left-step-rail",
+      "contract": "inert_visual_skeleton",
+      "data_ui_actions_present": false,
+      "active_controls_present": false
+    },
+    "importExistingScreen": {
+      "visual_reference": "08_import_existing",
+      "setup_flow_frame": "left-step-rail",
+      "contract": "inert_visual_skeleton",
+      "data_ui_actions_present": false,
+      "active_controls_present": false
+    }
+  },
+  "boundary_checks": {
+    "new_ui_action_added": false,
+    "browser_commandMarker_payload_added": false,
+    "browser_raw_argument_vector_payload_added": false,
+    "browser_os_command_payload_added": false,
+    "browser_path_payload_added": false,
+    "browser_sourceDirectory_payload_added": false,
+    "browser_file_selection_payload_added": false,
+    "browser_sensitive_value_payload_added": false,
+    "direct_config_editing_added": false,
+    "direct_filesystem_discovery_added": false,
+    "setup_completion_claim_added": false,
+    "import_success_claim_added": false,
+    "live_server_semantic_changed": false,
+    "command_adapter_semantic_changed": false,
+    "runtime_file_changed": false,
+    "desktop_file_changed": false
+  },
+  "browser_smoke_summary": {
+    "viewport": "1600x1000",
+    "screens": [
+      "settings",
+      "setup",
+      "select-client",
+      "import-existing"
+    ],
+    "body_horizontal_scroll": false,
+    "setup_like_data_actions": false,
+    "setup_like_active_controls": false,
+    "file_inputs": false,
+    "card_overflow": false,
+    "result": "PASS"
+  },
+  "final_verdict": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIRED",
+  "resume_from_here": "Use the closeout as the durable checkpoint after commit and push."
+}

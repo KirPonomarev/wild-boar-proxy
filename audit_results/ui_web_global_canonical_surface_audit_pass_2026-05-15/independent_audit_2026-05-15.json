@@ -1,0 +1,45 @@
+{
+  "contour": "UI_WEB_GLOBAL_CANONICAL_SURFACE_AUDIT_PASS",
+  "date": "2026-05-15",
+  "agents": [
+    {
+      "agent_id": "019e2882-7dd1-7c42-ba5f-b291c35918f8",
+      "role": "static UI inspector",
+      "reliability_review": "Accepted. The report inspected the current static web surface and gave file/line grounded PASS/BENIGN findings.",
+      "verdict": "PASS_WITH_BENIGN_HITS"
+    },
+    {
+      "agent_id": "019e2821-631d-7352-8eeb-aaf4c76a9d61",
+      "role": "layer/canon inspector",
+      "reliability_review": "Partially accepted. The report contained useful boundary checks but also referenced prior account-detail contour artifacts, so local verification and static scans supersede it for the global verdict.",
+      "verdict": "PARTIAL_ACCEPT_WITH_LOCAL_SUPERSESSION"
+    }
+  ],
+  "independent_findings": [
+    {
+      "status": "PASS",
+      "finding": "Expected static screens are present in index.html, including the non-navigation import-existing route."
+    },
+    {
+      "status": "PASS",
+      "finding": "No active browser file picker, editable path, token input, secret input, raw JSON editor, or direct config editor was found on audited UI surfaces."
+    },
+    {
+      "status": "PASS",
+      "finding": "About/License/Version does not claim production, release, package, desktop readiness, or canonical version proof."
+    },
+    {
+      "status": "BENIGN",
+      "finding": "Preview-only source/state selects exist in the sidebar footer and are not runtime/config mutation controls."
+    },
+    {
+      "status": "BENIGN",
+      "finding": "Tests include synthetic private paths and forbidden claim strings as negative assertions; these are not UI leaks."
+    },
+    {
+      "status": "FOLLOWUP",
+      "finding": "The non-navigation import-existing route exceeds the 1600x1000 main viewport and must not be enabled without a dedicated import/admission contour."
+    }
+  ],
+  "verdict": "PASS_WITH_DOCUMENTED_FOLLOWUPS"
+}

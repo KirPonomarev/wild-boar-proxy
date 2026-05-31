@@ -1,0 +1,15 @@
+{
+  "auth_strategy_reproved_in_this_contour": false,
+  "captured_at_utc": "2026-05-26T21:34:22.675042Z",
+  "cli_runner_reproved_in_this_contour": false,
+  "expected_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
+  "model_availability_reproved_in_this_contour": false,
+  "native_proof_claimed_from_reference": false,
+  "packet_kind": "model_availability_reference",
+  "reason_class": "",
+  "reference_only": true,
+  "runtime_route_claimed_from_reference": false,
+  "source_path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_matrix.json",
+  "source_status": "present",
+  "status": "ok"
+}

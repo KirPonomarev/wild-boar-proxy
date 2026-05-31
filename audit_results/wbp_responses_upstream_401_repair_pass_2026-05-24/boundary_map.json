@@ -1,0 +1,34 @@
+{
+  "boundaries": [
+    {
+      "evidence": "build_codex_config uses env_key OPENAI_API_KEY and wire_api responses; run_prompt sets OPENAI_API_KEY from local_api_key()",
+      "file": "wild_boar_proxy/operator_surface.py",
+      "name": "Codex engine local env"
+    },
+    {
+      "evidence": "WbpTraceObserver.forward forwards Authorization header and records status/digests without body/auth values",
+      "file": "wild_boar_proxy/operator_surface.py",
+      "name": "Trace observer forwarding"
+    },
+    {
+      "evidence": "runtime reads auth_file token for /models and /responses attestation; /models accepted same token in this contour",
+      "file": "wild_boar_proxy/runtime.py",
+      "name": "WBP local token"
+    },
+    {
+      "evidence": "GET /models with runtime/operator token returned 200; invalid token returned 401",
+      "name": "/v1/models surface"
+    },
+    {
+      "evidence": "previous live prompt POST /v1/responses was forwarded to WBP and returned 401",
+      "name": "/v1/responses surface"
+    },
+    {
+      "evidence": "selected source class was gpt_account; current trace cannot see past WBP response body without secret/body capture",
+      "name": "GPT account/upstream auth"
+    }
+  ],
+  "captured_at_utc": "2026-05-24T01:25:30.536187Z",
+  "machine_error_code": "OK",
+  "status": "ok"
+}

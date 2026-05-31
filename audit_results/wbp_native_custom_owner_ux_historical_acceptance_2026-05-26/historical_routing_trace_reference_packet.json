@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-26T13:40:33.757773Z",
+  "fresh_trace_claimed": false,
+  "historical_forwarded_to_wbp": true,
+  "historical_only": true,
+  "historical_response_hash_recorded": true,
+  "historical_route_trace_referenced": true,
+  "historical_trace_path": "/v1/responses",
+  "historical_upstream_status": 200,
+  "owner_observation_replaces_trace": false,
+  "packet_kind": "historical_routing_trace_reference",
+  "reason_class": "",
+  "routing_reproved_in_this_contour": false,
+  "source_closeout_path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/closeout.md",
+  "source_trace_path": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_owner_ux_route_live_confirmation_2026-05-26/source_wbp_trace_packet.json",
+  "status": "ok"
+}

@@ -1,0 +1,15 @@
+{
+  "bounded_chain_proves_general_multi_agent_productivity": false,
+  "bounded_usefulness_implies_answer_quality_superiority": false,
+  "captured_at_utc": "2026-05-28T13:50:46.109817Z",
+  "extra_role_steps_imply_useful_orchestration": false,
+  "longer_output_implies_better_workflow_usefulness": false,
+  "one_comparison_generalizes_to_broader_workloads": false,
+  "one_useful_comparison_authorizes_broader_orchestration_policy": false,
+  "operator_mediated_chain_equals_autonomous_workflow_intelligence": false,
+  "packet_kind": "workflow_non_claims",
+  "sequential_workflow_usefulness_implies_concurrency_usefulness": false,
+  "status": "ok",
+  "structured_chain_implies_better_spend_efficiency": false,
+  "successful_chain_implies_better_coding_quality_generally": false
+}

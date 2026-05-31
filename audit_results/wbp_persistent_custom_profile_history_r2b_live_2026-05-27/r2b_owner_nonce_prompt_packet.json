@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-27T03:40:14.364453Z",
+  "nonce_recorded": false,
+  "nonce_sha256": "eb2edecfe238b31c322467f42dab8ea4aca5dc5aefa4e1e0644ef907116d5ab9",
+  "packet_kind": "r2b_owner_nonce_prompt",
+  "prompt_hash_recorded": true,
+  "prompt_sha256": "c404188302c8436a8ee92b5a9f03a78b0df99978b51585fea18142c8572bc2ac",
+  "prompt_template_shape": "WBP Persistent Custom R2B relaunch check. Please reply with OK and this nonce only: <nonce>",
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "status": "ok"
+}

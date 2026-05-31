@@ -1,0 +1,888 @@
+# SPDX-FileCopyrightText: 2026 Kirill Ponomarev
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+from __future__ import annotations
+
+import subprocess
+import unittest
+from pathlib import Path
+
+from wild_boar_proxy.ui_shell import CommandResult, UiShellError
+from wild_boar_proxy.web_design_command_adapter import (
+    ALLOWLIST,
+    allowlist_metadata,
+    execute_command,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
+
+
+def packet(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Command completed.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class RecordingRunner:
+    def __init__(self, payload: dict[str, object] | None = None) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self.payload = payload or packet()
+
+    def run(self, *args: str) -> CommandResult:
+        self.calls.append(args)
+        return CommandResult(payload=dict(self.payload), stderr="")
+
+
+class RaisingRunner:
+    def __init__(self, error: Exception) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self.error = error
+
+    def run(self, *args: str) -> CommandResult:
+        self.calls.append(args)
+        raise self.error
+
+
+class WebDesignCommandAdapterTests(unittest.TestCase):
+    def test_allowlist_is_explicit_and_launch_client_is_disabled(self) -> None:
+        expected = {
+            "status",
+            "healthcheck",
+            "mode_get",
+            "accounts_list",
+            "accounts_onboard",
+            "accounts_onboard_auth_ref",
+            "accounts_login_start_sandbox",
+            "accounts_login_complete_sandbox",
+            "accounts_login_start_codex_device",
+            "accounts_login_status",
+            "accounts_login_complete_codex",
+            "accounts_login_cancel",
+            "accounts_validate",
+            "accounts_promote",
+            "accounts_demote",
+            "accounts_retire",
+            "accounts_hold",
+            "accounts_release",
+            "rollout_rotation_inspect",
+            "mode_stable",
+            "mode_managed",
+            "sync",
+            "smoke",
+            "stable_repair_dry_run",
+            "stable_repair_apply",
+            "diagnostics_export",
+            "external_models_routes_validate",
+            "external_models_routes_add_server_owned",
+            "external_models_credentials_status_provider",
+            "external_models_credentials_status_openrouter",
+            "external_models_credentials_admit_provider_owner_env",
+            "external_models_credentials_admit_openrouter_owner_env",
+            "external_models_routes_enable",
+            "external_models_routes_disable",
+            "external_models_routes_remove",
+            "external_models_check",
+            "external_models_live_format_check",
+            "external_models_profile_codex_desktop",
+            "external_models_evidence_capture",
+            "launch_client",
+        }
+
+        self.assertEqual(set(ALLOWLIST), expected)
+        self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_onboard_auth_ref"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_start_sandbox"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_complete_sandbox"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_start_codex_device"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_status"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_complete_codex"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_cancel"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_routes_add_server_owned"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_status_provider"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_status_openrouter"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_admit_provider_owner_env"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_admit_openrouter_owner_env"].ui_enabled)
+        self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
+        self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
+        self.assertIn(
+            {
+                "command_id": "accounts_onboard",
+                "category": "onboarding",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": ["accounts", "onboard", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_hold",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "hold", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_release",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "release", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_validate",
+                "category": "verification",
+                "ui_enabled": True,
+                "confirmation_required": False,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "validate", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_promote",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "promote", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_demote",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "demote", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_retire",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "retire", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_routes_validate",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": ["external-models", "routes", "validate", "--route", "{route_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_check",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": ["external-models", "check", "--route", "{route_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_live_format_check",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id", "prompt", "expected_text"],
+                "allowed_args": ["route_id", "prompt", "expected_text"],
+                "argv": [
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "{route_id}",
+                    "--prompt",
+                    "{prompt}",
+                    "--expected-text",
+                    "{expected_text}",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_profile_codex_desktop",
+                "category": "external_models_support",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": [
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "{route_id}",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_evidence_capture",
+                "category": "external_models_support",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": [
+                    "external-models",
+                    "evidence",
+                    "capture",
+                    "--route",
+                    "{route_id}",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_credentials_status_openrouter",
+                "category": "external_models_credential_admission",
+                "ui_enabled": False,
+                "confirmation_required": False,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": ["external-models", "credentials", "status", "--provider", "openrouter", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_credentials_admit_openrouter_owner_env",
+                "category": "external_models_credential_admission",
+                "ui_enabled": False,
+                "confirmation_required": True,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": [
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "openrouter",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "launch_client",
+                "category": "action",
+                "ui_enabled": False,
+                "confirmation_required": True,
+                "required_args": ["client_path"],
+                "allowed_args": ["client_path"],
+                "argv": ["launch", "client", "--client-path", "{client_path}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+
+    def test_allowed_truth_command_runs_exact_argv(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(runner, "status")
+
+        self.assertEqual(runner.calls, [("status", "--json")])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["ui_state"], "success")
+        self.assertEqual(result["machine_error_code"], "OK")
+
+    def test_accounts_validate_runs_exact_argv_with_structured_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": "acct-active"},
+        )
+
+        self.assertEqual(runner.calls, [("accounts", "validate", "acct-active", "--json")])
+        self.assertEqual(result["status"], "ok")
+
+    def test_accounts_onboard_runs_exact_argv_without_browser_args(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(runner, "accounts_onboard")
+
+        self.assertEqual(runner.calls, [("accounts", "onboard", "--json")])
+        self.assertEqual(result["status"], "ok")
+
+    def test_owner_login_bridge_commands_are_internal_only_and_exact(self) -> None:
+        runner = RecordingRunner()
+
+        blocked_start = execute_command(runner, "accounts_login_start_sandbox")
+        start = execute_command(runner, "accounts_login_start_sandbox", allow_disabled=True)
+        codex_start = execute_command(runner, "accounts_login_start_codex_device", allow_disabled=True)
+        codex_status = execute_command(
+            runner,
+            "accounts_login_status",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
+        codex_complete = execute_command(
+            runner,
+            "accounts_login_complete_codex",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
+        codex_cancel = execute_command(
+            runner,
+            "accounts_login_cancel",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
+        complete = execute_command(
+            runner,
+            "accounts_login_complete_sandbox",
+            structured_args={"login_session_id": "sandbox-abc", "state": "sandbox-state-abc"},
+            allow_disabled=True,
+        )
+        onboard = execute_command(
+            runner,
+            "accounts_onboard_auth_ref",
+            structured_args={"auth_ref": "/tmp/wbp-sandbox-auth.json"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(blocked_start["status"], "integration_failure")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ),
+                ("accounts", "login", "status", "--session", "codex-abc", "--json"),
+                ("accounts", "login", "complete", "--session", "codex-abc", "--json"),
+                ("accounts", "login", "cancel", "--session", "codex-abc", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    "sandbox-abc",
+                    "--state",
+                    "sandbox-state-abc",
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    "/tmp/wbp-sandbox-auth.json",
+                ),
+            ],
+        )
+        self.assertEqual(start["status"], "ok")
+        self.assertEqual(codex_start["status"], "ok")
+        self.assertEqual(codex_status["status"], "ok")
+        self.assertEqual(codex_complete["status"], "ok")
+        self.assertEqual(codex_cancel["status"], "ok")
+        self.assertEqual(complete["status"], "ok")
+        self.assertEqual(onboard["status"], "ok")
+
+    def test_account_lifecycle_commands_run_exact_argv_with_structured_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        hold = execute_command(
+            runner,
+            "accounts_hold",
+            structured_args={"account_id": "acct-active"},
+        )
+        release = execute_command(
+            runner,
+            "accounts_release",
+            structured_args={"account_id": "acct-hold"},
+        )
+        retire = execute_command(
+            runner,
+            "accounts_retire",
+            structured_args={"account_id": "acct-reserve"},
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "hold", "acct-active", "--json"),
+                ("accounts", "release", "acct-hold", "--json"),
+                ("accounts", "retire", "acct-reserve", "--json"),
+            ],
+        )
+        self.assertEqual(hold["status"], "ok")
+        self.assertEqual(release["status"], "ok")
+        self.assertEqual(retire["status"], "ok")
+
+    def test_accounts_validate_requires_only_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "accounts_validate")
+        extra = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": "acct-active", "argv": "accounts retire"},
+        )
+        non_string = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": 123},  # type: ignore[dict-item]
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(non_string["status"], "integration_failure")
+        self.assertIn("non-string args", non_string["human_message"])
+
+    def test_account_lifecycle_commands_require_only_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "accounts_hold")
+        extra = execute_command(
+            runner,
+            "accounts_retire",
+            structured_args={"account_id": "acct-hold", "argv": "accounts promote"},
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+
+    def test_external_models_route_checks_run_exact_argv_with_structured_route_id(self) -> None:
+        runner = RecordingRunner()
+
+        validate = execute_command(
+            runner,
+            "external_models_routes_validate",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        check = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        live_format = execute_command(
+            runner,
+            "external_models_live_format_check",
+            structured_args={
+                "route_id": "wbp-deepseek-v3",
+                "prompt": "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+            },
+        )
+        enable = execute_command(
+            runner,
+            "external_models_routes_enable",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        disable = execute_command(
+            runner,
+            "external_models_routes_disable",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        remove = execute_command(
+            runner,
+            "external_models_routes_remove",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        profile = execute_command(
+            runner,
+            "external_models_profile_codex_desktop",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        evidence = execute_command(
+            runner,
+            "external_models_evidence_capture",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                (
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--prompt",
+                    "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                    "--expected-text",
+                    "API_ONLY_DEEPSEEK_READY",
+                    "--json",
+                ),
+                ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "routes", "remove", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+        self.assertEqual(validate["status"], "ok")
+        self.assertEqual(check["status"], "ok")
+        self.assertEqual(live_format["status"], "ok")
+        self.assertEqual(enable["status"], "ok")
+        self.assertEqual(disable["status"], "ok")
+        self.assertEqual(remove["status"], "ok")
+        self.assertEqual(profile["status"], "ok")
+        self.assertEqual(evidence["status"], "ok")
+
+    def test_external_models_credential_bridge_commands_are_internal_only_and_exact(self) -> None:
+        runner = RecordingRunner()
+
+        blocked_status = execute_command(runner, "external_models_credentials_status_openrouter")
+        status = execute_command(
+            runner,
+            "external_models_credentials_status_openrouter",
+            allow_disabled=True,
+        )
+        admit = execute_command(
+            runner,
+            "external_models_credentials_admit_openrouter_owner_env",
+            allow_disabled=True,
+        )
+
+        self.assertEqual(blocked_status["status"], "integration_failure")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                (
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "openrouter",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ),
+            ],
+        )
+        self.assertEqual(status["status"], "ok")
+        self.assertEqual(admit["status"], "ok")
+
+    def test_external_models_generic_provider_credential_bridge_commands_accept_server_owned_provider_only(self) -> None:
+        runner = RecordingRunner()
+
+        status = execute_command(
+            runner,
+            "external_models_credentials_status_provider",
+            structured_args={"provider": "mistral"},
+            allow_disabled=True,
+        )
+        admit = execute_command(
+            runner,
+            "external_models_credentials_admit_provider_owner_env",
+            structured_args={"provider": "mistral"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "credentials", "status", "--provider", "mistral", "--json"),
+                (
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "mistral",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ),
+            ],
+        )
+        self.assertEqual(status["status"], "ok")
+        self.assertEqual(admit["status"], "ok")
+
+    def test_external_models_generic_provider_credential_bridge_commands_reject_extra_browser_fields(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "external_models_credentials_status_provider",
+            structured_args={"provider": "mistral", "secret_ref": "SHOULD_NOT_PASS"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(runner.calls, [])
+
+    def test_external_models_route_checks_require_only_route_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "external_models_routes_validate")
+        extra = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes disable"},
+        )
+        live_format_extra = execute_command(
+            runner,
+            "external_models_live_format_check",
+            structured_args={
+                "route_id": "wbp-deepseek-v3",
+                "prompt": "API_ONLY_DEEPSEEK_READY",
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+                "base_url": "https://browser.invalid/v1",
+            },
+        )
+        enable_extra = execute_command(
+            runner,
+            "external_models_routes_enable",
+            structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes add"},
+        )
+        profile_extra = execute_command(
+            runner,
+            "external_models_profile_codex_desktop",
+            structured_args={"route_id": "wbp-deepseek-v3", "path": "/tmp/profile.json"},
+        )
+        evidence_extra = execute_command(
+            runner,
+            "external_models_evidence_capture",
+            structured_args={"route_id": "wbp-deepseek-v3", "evidence_path": "/tmp/evidence.json"},
+        )
+        remove_extra = execute_command(
+            runner,
+            "external_models_routes_remove",
+            structured_args={"route_id": "wbp-deepseek-v3", "stdin": "{}"},
+        )
+        non_string = execute_command(
+            runner,
+            "external_models_routes_disable",
+            structured_args={"route_id": 123},  # type: ignore[dict-item]
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(live_format_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", live_format_extra["human_message"])
+        self.assertEqual(enable_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", enable_extra["human_message"])
+        self.assertEqual(profile_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", profile_extra["human_message"])
+        self.assertEqual(evidence_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", evidence_extra["human_message"])
+        self.assertEqual(remove_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", remove_extra["human_message"])
+        self.assertEqual(non_string["status"], "integration_failure")
+        self.assertIn("non-string args", non_string["human_message"])
+
+    def test_accounts_onboard_rejects_all_browser_args(self) -> None:
+        runner = RecordingRunner()
+
+        extra = execute_command(
+            runner,
+            "accounts_onboard",
+            structured_args={"auth_ref": "/tmp/new-auth.json"},
+        )
+        internal_relative = execute_command(
+            runner,
+            "accounts_onboard_auth_ref",
+            structured_args={"auth_ref": "relative-auth.json"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(internal_relative["status"], "integration_failure")
+        self.assertIn("auth_ref must be absolute", internal_relative["human_message"])
+
+    def test_forbidden_command_is_rejected_without_runner_call(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(runner, "policy_stage_advance")
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(result["ui_state"], "integration_failure")
+        self.assertEqual(result["machine_error_code"], "UI_COMMAND_INTEGRATION_FAILURE")
+        self.assertIn("not allowlisted", result["human_message"])
+
+    def test_extra_structured_args_are_rejected(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(runner, "sync", structured_args={"shell": "rm -rf /"})
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertIn("unsupported args", result["human_message"])
+
+    def test_disabled_command_does_not_validate_into_execution_path(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": 123},  # type: ignore[dict-item]
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertIn("disabled", result["human_message"])
+
+    def test_disabled_launch_client_is_not_executable_in_this_contour(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": "/Applications/Codex.app"},
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertIn("disabled", result["human_message"])
+
+    def test_launch_client_requires_bounded_server_bypass_and_absolute_path(self) -> None:
+        runner = RecordingRunner()
+
+        relative = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": "Codex.app"},
+            allow_disabled=True,
+        )
+        absolute = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": "/Applications/Codex.app"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(relative["status"], "integration_failure")
+        self.assertIn("absolute", relative["human_message"])
+        self.assertEqual(absolute["status"], "ok")
+        self.assertEqual(
+            runner.calls,
+            [("launch", "client", "--client-path", "/Applications/Codex.app", "--json")],
+        )
+
+    def test_runner_parse_error_maps_to_integration_failure(self) -> None:
+        runner = RaisingRunner(UiShellError("stdout must contain exactly one JSON object"))
+
+        result = execute_command(runner, "healthcheck")
+
+        self.assertEqual(runner.calls, [("healthcheck", "--json")])
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(result["machine_error_code"], "UI_COMMAND_INTEGRATION_FAILURE")
+        self.assertIn("stdout", result["human_message"])
+
+    def test_timeout_maps_to_recoverable_integration_failure(self) -> None:
+        runner = RaisingRunner(subprocess.TimeoutExpired(cmd=("status", "--json"), timeout=5))
+
+        result = execute_command(runner, "status")
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(result["machine_error_code"], "UI_COMMAND_TIMEOUT")
+        self.assertEqual(result["packet"]["severity"], "recoverable")
+        self.assertEqual(result["packet"]["operator_action"], "retry")
+
+    def test_top_level_error_packet_remains_error_even_with_exit_zero(self) -> None:
+        runner = RecordingRunner(packet(machine_error_code="provider_network_failed"))
+
+        result = execute_command(runner, "smoke")
+
+        self.assertEqual(result["status"], "command_error")
+        self.assertEqual(result["ui_state"], "error")
+        self.assertEqual(result["machine_error_code"], "provider_network_failed")
+
+    def test_missing_required_packet_field_is_integration_failure(self) -> None:
+        broken = packet()
+        broken.pop("next_action")
+        runner = RecordingRunner(broken)
+
+        result = execute_command(runner, "mode_get")
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertIn("missing required fields", result["human_message"])
+
+    def test_changed_files_must_be_list(self) -> None:
+        runner = RecordingRunner(packet(changed_files="README.md"))
+
+        result = execute_command(runner, "diagnostics_export")
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertIn("changed_files", result["human_message"])
+
+    def test_static_first_screen_keeps_launch_client_disabled(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+
+        self.assertIn("Запустить клиент", html)
+        self.assertIn('data-ui-action="launch_custom_client_native"', html)
+        self.assertIn("disabled", html)
+        self.assertNotIn("execute_command", html)
+
+
+if __name__ == "__main__":
+    unittest.main()

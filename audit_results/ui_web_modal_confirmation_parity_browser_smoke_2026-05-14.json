@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_MODAL_CONFIRMATION_PARITY",
+  "date": "2026-05-14",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "execution_policy": {
+    "fixture_ui": true,
+    "final_confirm_clicked": false,
+    "command_request_executed": false,
+    "runtime_mutation_attempted": false,
+    "modal_open_method": "frontend_open_functions_only"
+  },
+  "result": "PASS",
+  "cases": [
+    {
+      "name": "set_mode_managed_confirmation",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/set_mode_managed_confirmation_1600x1000.png",
+      "metrics": {
+        "visibleConfirm": true,
+        "visibleOnboard": false,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 625,
+          "left": 480,
+          "right": 1120,
+          "top": 188,
+          "bottom": 813
+        },
+        "confirmClickWasNotPressed": true,
+        "forbiddenInputs": 0,
+        "hasSuccessClaim": false,
+        "boundaryText": "command request\nне runtime truth\nнужен JSON refresh",
+        "truthWarning": "Это запрашивает желаемый managed mode. Фактический режим должен быть подтверждён обновлённым JSON."
+      }
+    },
+    {
+      "name": "promote_account_confirmation",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/promote_account_confirmation_1600x1000.png",
+      "metrics": {
+        "visibleConfirm": true,
+        "visibleOnboard": false,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 625,
+          "left": 480,
+          "right": 1120,
+          "top": 188,
+          "bottom": 813
+        },
+        "confirmClickWasNotPressed": true,
+        "forbiddenInputs": 0,
+        "hasSuccessClaim": false,
+        "boundaryText": "command request\nне runtime truth\nнужен JSON refresh",
+        "truthWarning": "Это запрашивает перевод в active. Это не доказательство ёмкости и не evidence готовности."
+      }
+    },
+    {
+      "name": "retire_account_confirmation",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/retire_account_confirmation_1600x1000.png",
+      "metrics": {
+        "visibleConfirm": true,
+        "visibleOnboard": false,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 625,
+          "left": 480,
+          "right": 1120,
+          "top": 188,
+          "bottom": 813
+        },
+        "confirmClickWasNotPressed": true,
+        "forbiddenInputs": 0,
+        "hasSuccessClaim": false,
+        "boundaryText": "command request\nне runtime truth\nнужен JSON refresh",
+        "truthWarning": "Это запрашивает терминальный вывод аккаунта из lifecycle. Это не удаление и не путь возврата."
+      }
+    },
+    {
+      "name": "api_route_remove_confirmation",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/api_route_remove_confirmation_1600x1000.png",
+      "metrics": {
+        "visibleConfirm": true,
+        "visibleOnboard": false,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 625,
+          "left": 480,
+          "right": 1120,
+          "top": 188,
+          "bottom": 813
+        },
+        "confirmClickWasNotPressed": true,
+        "forbiddenInputs": 0,
+        "hasSuccessClaim": false,
+        "boundaryText": "command request\nне runtime truth\nнужен JSON refresh",
+        "truthWarning": "Это удаляет отключённую registry-запись. Область действия не шире command packet."
+      }
+    },
+    {
+      "name": "onboard_account_modal",
+      "pass": true,
+      "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/ui_web_modal_confirmation_parity_screenshots_2026-05-14/onboard_account_modal_1600x1000.png",
+      "metrics": {
+        "visibleConfirm": false,
+        "visibleOnboard": true,
+        "bodyScrollWidth": 1600,
+        "viewportWidth": 1600,
+        "modal": {
+          "width": 640,
+          "height": 575,
+          "left": 480,
+          "right": 1120,
+          "top": 213,
+          "bottom": 788
+        },
+        "confirmClickWasNotPressed": true,
+        "forbiddenInputs": 0,
+        "hasSuccessClaim": false,
+        "boundaryText": "command request\nрезерв сначала\nрезультат только из packet",
+        "truthWarning": "Это окно запускает ограниченный owner command request. Оно не сканирует файлы, не загружает учётные данные и не доказывает включение в рабочий поток."
+      }
+    }
+  ]
+}

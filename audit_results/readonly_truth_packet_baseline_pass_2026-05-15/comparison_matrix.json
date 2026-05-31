@@ -1,0 +1,43 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "comparisons": {
+    "status_and_healthcheck_owner_alignment": {
+      "status_current": "ok",
+      "healthcheck_current": "error",
+      "current_alignment": false,
+      "intermediate_alignment": true,
+      "owner_truth_flip_detected": true
+    },
+    "status_vs_live_readonly_summary": {
+      "status_current": "ok",
+      "status_machine_error_code_current": "OK",
+      "status_live_server_admission": "ok",
+      "ui_state_live_server_admission": "healthy",
+      "desired_mode_match": true,
+      "effective_mode_match": true,
+      "active_count_match": true,
+      "problem_count_match": true
+    },
+    "accounts_vs_accounts_readonly_summary": {
+      "accounts_status": "ok",
+      "accounts_count": 25,
+      "accounts_readonly_status": "ok",
+      "accounts_readonly_count": 25,
+      "count_match": true
+    },
+    "external_models_vs_api_connections_summary": {
+      "external_status": "ok",
+      "routes_count": 0,
+      "models_count": 0,
+      "runtime_claim_blocked": true,
+      "api_connections_status": "ok",
+      "api_connections_routes_count": 0,
+      "api_connections_runtime_claim_blocked": true,
+      "routes_count_match": true,
+      "runtime_claim_blocked_match": true
+    }
+  },
+  "material_contradictions": [
+    "owner truth flipped between repeated status/healthcheck captures inside one readonly baseline contour"
+  ]
+}

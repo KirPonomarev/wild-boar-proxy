@@ -1,0 +1,93 @@
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "repo": {
+    "branch": "codex/external-agent-lab-isolated",
+    "head": "1f10e34",
+    "tracked_clean": true,
+    "core_hooks_path": "/Volumes/Work/wild-boar-proxy/.githooks",
+    "precommit_present": true
+  },
+  "entrypoints": {
+    "cli_module": "wild_boar_proxy/__main__.py",
+    "cli_dispatch": "wild_boar_proxy/cli.py",
+    "design_live_server": "wild_boar_proxy/web_design_live_server.py",
+    "classic_web_ui": "wild_boar_proxy/web_ui.py"
+  },
+  "live_server_surfaces": {
+    "readonly_get_endpoints": [
+      "/api/live-readonly",
+      "/api/accounts-readonly",
+      "/api/api-connections-readonly",
+      "/api/actions"
+    ],
+    "mutation_post_endpoints": [
+      "/api/action"
+    ],
+    "adapter_allowlist_count": 27,
+    "ui_action_count": 22,
+    "ui_action_available_without_launch_client_path": 21
+  },
+  "readonly_command_surfaces": [
+    "status --json",
+    "healthcheck --json",
+    "mode get --json",
+    "accounts list --json",
+    "rollout rotation inspect --json",
+    "external-models status --json",
+    "external-models models --json",
+    "external-models routes list --json"
+  ],
+  "parked_or_deferred_surface_examples": [
+    "accounts onboard --json",
+    "accounts validate <id> --json",
+    "accounts promote <id> --json",
+    "accounts demote <id> --json",
+    "accounts hold <id> --json",
+    "accounts release <id> --json",
+    "accounts retire <id> --json",
+    "mode set stable --json",
+    "mode set managed --json",
+    "sync --json",
+    "launch smoke --json",
+    "launch client --json",
+    "diagnostics export --json",
+    "external-models routes validate --route <id> --json",
+    "external-models check --route <id> --json",
+    "external-models routes enable --route <id> --json",
+    "external-models routes disable --route <id> --json",
+    "external-models routes remove --route <id> --json",
+    "external-models profile codex-desktop --route <id> --json",
+    "external-models evidence capture --route <id> --json"
+  ],
+  "json_contract": {
+    "strict_json_required": true,
+    "invalid_json_is_hard_failure": true,
+    "required_fields": [
+      "status",
+      "exit_code",
+      "human_message",
+      "machine_error_code",
+      "changed_files",
+      "next_action"
+    ]
+  },
+  "contradictions": [
+    {
+      "id": "plan_code_live_action_parking",
+      "severity": "high",
+      "summary": "Corrected master plan parks mutation actions before sandbox admission, but /api/actions marks most parked actions available on the live source."
+    },
+    {
+      "id": "readme_code_live_readonly_actions",
+      "severity": "high",
+      "summary": "README says live read-only mode does not enable action buttons, but current server metadata and client availability logic enable most allowlisted actions on ?source=live."
+    }
+  ],
+  "decision": "STOP_AND_DIAGNOSE",
+  "decision_basis": [
+    "tracked repo clean",
+    "entrypoints and readonly surfaces are localized",
+    "browser payload guard is narrow and factual",
+    "current plan/code/doc contradictions block an honest live-readonly admission contour"
+  ]
+}

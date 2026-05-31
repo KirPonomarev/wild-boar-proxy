@@ -6,7 +6,7 @@
       "model_id": "direct-cerebras-llama3.1-8b",
       "provider": "cerebras",
       "provider_type": "direct_provider",
-      "availability_state": "provider_visible_but_unverified",
+      "availability_state": "unstable",
       "lane_role": "primary_practical",
       "cost_class": "entitled_direct_limited",
       "capability_tags": [
@@ -16,11 +16,11 @@
       ],
       "fallback_eligible": true,
       "max_context_hint": null,
-      "evidence_level": "limits_ui",
-      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "evidence_level": "runtime_failure",
+      "last_verified_at": "2026-05-10T10:40:59Z",
       "blocked_reason_optional": null,
       "evidence_sources": [
-        "cerebras_personal_limits_ui"
+        "c07_dummy_cerebras_auth_failed"
       ]
     },
     {
@@ -48,7 +48,7 @@
       "model_id": "direct-gemini-2.5-flash",
       "provider": "gemini",
       "provider_type": "direct_provider",
-      "availability_state": "auth_unconfirmed",
+      "availability_state": "unstable",
       "lane_role": "comparison",
       "cost_class": "paid_direct",
       "capability_tags": [
@@ -57,11 +57,11 @@
       ],
       "fallback_eligible": false,
       "max_context_hint": null,
-      "evidence_level": "manual_assumption_forbidden",
-      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "evidence_level": "runtime_failure",
+      "last_verified_at": "2026-05-10T10:40:59Z",
       "blocked_reason_optional": null,
       "evidence_sources": [
-        "seed_placeholder_requires_provider_report"
+        "c07_dummy_gemini_invalid_key"
       ]
     },
     {
@@ -77,18 +77,18 @@
       ],
       "fallback_eligible": false,
       "max_context_hint": null,
-      "evidence_level": "manual_assumption_forbidden",
-      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "evidence_level": "runtime_failure",
+      "last_verified_at": "2026-05-10T10:40:59Z",
       "blocked_reason_optional": null,
       "evidence_sources": [
-        "seed_placeholder_requires_provider_report"
+        "c07_dummy_groq_auth_failed"
       ]
     },
     {
       "model_id": "direct-mistral-small-latest",
       "provider": "mistral",
       "provider_type": "direct_provider",
-      "availability_state": "auth_unconfirmed",
+      "availability_state": "verified_accessible",
       "lane_role": "comparison",
       "cost_class": "paid_direct",
       "capability_tags": [
@@ -97,11 +97,34 @@
       ],
       "fallback_eligible": false,
       "max_context_hint": null,
-      "evidence_level": "manual_assumption_forbidden",
-      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "evidence_level": "runtime_success",
+      "last_verified_at": "2026-05-10T10:57:37Z",
       "blocked_reason_optional": null,
       "evidence_sources": [
-        "seed_placeholder_requires_provider_report"
+        "c08_eval_20260510_105453_587249.json",
+        "c08_eval_20260510_105648_183628.json"
+      ]
+    },
+    {
+      "model_id": "direct-mistral-devstral-2512",
+      "provider": "mistral",
+      "provider_type": "direct_provider",
+      "availability_state": "verified_accessible",
+      "lane_role": "secondary_reasoning",
+      "cost_class": "paid_direct",
+      "capability_tags": [
+        "reasoning_lane",
+        "selective_use",
+        "devstral_candidate"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "runtime_success",
+      "last_verified_at": "2026-05-10T10:57:37Z",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "c08_eval_20260510_105453_587249.json",
+        "c08_eval_20260510_105648_183628.json"
       ]
     },
     {

@@ -1,0 +1,10 @@
+{
+  "admission_equals_execution": false,
+  "benchmark_result_equals_capability_proof": false,
+  "benchmark_result_equals_product_recommendation": false,
+  "benchmark_result_equals_routing_truth": false,
+  "captured_at_utc": "2026-05-27T12:33:15.208810Z",
+  "packet_kind": "provider_benchmark_claim_boundary",
+  "single_task_slice_equals_general_provider_ranking": false,
+  "status": "ok"
+}

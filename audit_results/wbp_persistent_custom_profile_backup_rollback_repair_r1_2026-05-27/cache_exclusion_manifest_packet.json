@@ -1,0 +1,4017 @@
+{
+  "cache_excluded": true,
+  "captured_at_utc": "2026-05-27T03:19:35.327719Z",
+  "excluded_classes": [
+    "cache_or_incidental_state",
+    "secret_or_auth_surface",
+    "volatile_runtime_dependency"
+  ],
+  "excluded_count": 26183,
+  "excluded_entries": [
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/.codex-plugin",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/.codex-plugin/plugin.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets/browser.png",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/assets/composer-icon.png",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser/viewport.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/browser/visibility.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/tab",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/docs/capabilities/tab/pageAssets.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/browser-client.mjs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/CHANGELOG.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/UPGRADING.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-chained-batch.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-iterator.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-level.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/abstract-snapshot.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel-iterator.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/abstract-sublevel.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/common.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/default-chained-batch.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/default-kv-iterator.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/deferred-iterator.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/deferred-queue.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/errors.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/event-monitor.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/hooks.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/prefixes.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/prewrite-batch.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/lib/range-options.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/async-iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/batch-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/chained-batch-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/clear-range-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/clear-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/common.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/deferred-open-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/del-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/encoding-buffer-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/encoding-custom-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/encoding-decode-error-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/encoding-json-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/encoding-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/events",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/events/write.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/factory-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/get-many-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/get-sync-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/get-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/has-many-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/has-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/hooks",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/hooks/newsub.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/hooks/postopen.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/hooks/prewrite.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/hooks/shared.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-explicit-snapshot-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-no-snapshot-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-range-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-seek-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-snapshot-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/manifest-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/open-create-if-missing-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/open-error-if-exists-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/open-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/put-get-del-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/put-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/abstract-iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/async-iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/attach-resource-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/defer-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/deferred-iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/deferred-operations-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/deferred-queue-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/encoding-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/errors-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/iterator-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/self/sublevel-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/sublevel-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/traits",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/traits/closed.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/traits/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/traits/open.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/test/util.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/abstract-chained-batch.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/abstract-iterator.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/abstract-level.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/abstract-snapshot.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/abstract-sublevel.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/abstract-level/types/interfaces.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level.mjs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/CHANGELOG.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/UPGRADING.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/binding.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/binding.gyp",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/binding.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/chained-batch.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/Makefile",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/build_detect_platform",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/autocompact_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/builder.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/builder.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/c.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/c_test.c",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/corruption_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_bench.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_impl.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_impl.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_iter.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_iter.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/db_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/dbformat.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/dbformat.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/dbformat_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/dumpfile.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/fault_injection_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/filename.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/filename.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/filename_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/leveldbutil.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_format.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_reader.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_reader.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_writer.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/log_writer.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/memtable.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/memtable.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/recovery_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/repair.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/skiplist.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/skiplist_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/snapshot.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/table_cache.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/table_cache.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_edit.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_edit.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_edit_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_set.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_set.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/version_set_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/write_batch.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/write_batch_internal.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/db/write_batch_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers/memenv",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers/memenv/memenv.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers/memenv/memenv.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/helpers/memenv/memenv_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/c.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/cache.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/comparator.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/db.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/dumpfile.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/env.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/filter_policy.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/iterator.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/options.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/slice.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/status.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/table.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/table_builder.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/value_sink.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/include/leveldb/write_batch.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/issues",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/issues/issue178_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/issues/issue200_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/atomic_pointer.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/port.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/port_example.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/port_posix.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/port_posix.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/port_posix_sse.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/thread_annotations.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/win",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/port/win/stdint.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/block.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/block.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/block_builder.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/block_builder.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/filter_block.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/filter_block.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/filter_block_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/format.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/format.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/iterator.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/iterator_wrapper.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/merger.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/merger.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/table.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/table_builder.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/table_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/two_level_iterator.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/table/two_level_iterator.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/arena.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/arena.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/arena_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/bloom.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/bloom_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/cache.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/cache_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/coding.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/coding.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/coding_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/comparator.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/crc32c.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/crc32c.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/crc32c_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/env.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/env_posix.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/env_posix_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/env_posix_test_helper.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/env_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/filter_policy.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/hash.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/hash.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/hash_test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/histogram.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/histogram.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/logging.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/logging.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/mutexlock.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/options.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/posix_logger.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/random.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/status.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/testharness.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/testharness.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/testutil.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb-1.20/util/testutil.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/leveldb.gyp",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/patches",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/patches/001-value-sink.patch",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/atomic_pointer_win.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/env_win.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/port_uv.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/port_uv.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/port_uv.h.bak",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/stdint-msvc2008.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/uv_condvar.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/uv_condvar_posix.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/win_logger.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/leveldb/port-libuv/win_logger.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/freebsd",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/freebsd/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/freebsd/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/linux",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/linux/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/linux/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/mac",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/mac/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/mac/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/openbsd",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/openbsd/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/openbsd/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy.gyp",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/COPYING",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/cmake",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/cmake/SnappyConfig.cmake",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/cmake/config.h.in",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-c.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-c.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-internal.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-sinksource.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-sinksource.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-stubs-internal.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-stubs-internal.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-stubs-public.h.in",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-test.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy-test.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/snappy/snappy_unittest.cc",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/solaris",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/solaris/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/solaris/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/win32",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/win32/config.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/deps/snappy/win32/snappy-stubs-public.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/iterator.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/android-arm",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/android-arm/classic-level.armv7.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/android-arm64",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/android-arm64/classic-level.armv8.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/darwin-x64+arm64",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/darwin-x64+arm64/classic-level.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-arm",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-arm/classic-level.armv6.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-arm/classic-level.armv7.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-arm64",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-arm64/classic-level.armv8.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-x64",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-x64/classic-level.musl.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/linux-x64/classic-level.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/win32-ia32",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/win32-ia32/classic-level.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/win32-x64",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/classic-level/prebuilds/win32-x64/classic-level.node",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/is-buffer/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/CHANGELOG.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/test",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/test/cloneable.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/test/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/test/self.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-supports/test/shape.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/CHANGELOG.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/UPGRADING.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/encoding.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/encoding.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/encodings.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/encodings.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/formats.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/formats.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/text-endec.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/lib/text-endec.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/level-transcoder/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/maybe-combine-errors",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/maybe-combine-errors/LICENSE.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/maybe-combine-errors/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/maybe-combine-errors/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/maybe-combine-errors/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/CHANGELOG.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/index.d.ts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/module-error/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros/napi-macros.h",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/napi-macros/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/LICENSE",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/SECURITY.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/bin.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/build-test.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/index.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/node-gyp-build.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/optional.js",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/scripts/node_modules/node-gyp-build/package.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/skills",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/skills/browser",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/skills/browser/SKILL.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/skills/browser/agents",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/browser/skills/browser/agents/openai.yaml",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/.codex-plugin",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/.codex-plugin/plugin.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/DEPENDENCIES.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/README.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/THIRD_PARTY_NOTICES.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/assets",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/assets/latex-logo.svg",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/bin",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/bin/tectonic",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/build_private_bundle.sh",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/compile_latex.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/detect_tectonic.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/detect_texlive.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/install_texlive.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/latex_doctor.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/scripts/tectonic-path.mjs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/latex-compile",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/latex-compile/SKILL.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/latex-doctor",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/latex-doctor/SKILL.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/texlive-runtime-installer",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/skills/texlive-runtime-installer/SKILL.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/tests",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/tests/test_compile_latex_strategy.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/bundled-marketplaces/openai-bundled/plugins/latex/tests/test_install_texlive_profile.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/marketplaces",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins.sha",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/plugins",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/plugins/marketplace.json",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/SKILL.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/agents",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/agents/openai.yaml",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/references",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/references/plugin-json-spec.md",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/scripts",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.agents/skills/plugin-creator/scripts/create_basic_plugin.py",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/HEAD",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/config",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/description",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/applypatch-msg.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/commit-msg.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/fsmonitor-watchman.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/post-update.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-applypatch.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-commit.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-merge-commit.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-push.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-rebase.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/pre-receive.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/prepare-commit-msg.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/push-to-checkout.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/sendemail-validate.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/hooks/update.sample",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/index",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/info",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/info/exclude",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/HEAD",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs/heads",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs/heads/main",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs/remotes",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs/remotes/origin",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/logs/refs/remotes/origin/HEAD",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects/info",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects/pack",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects/pack/pack-658bcc775797cf0056285f0645baf636526702f2.idx",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects/pack/pack-658bcc775797cf0056285f0645baf636526702f2.pack",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/objects/pack/pack-658bcc775797cf0056285f0645baf636526702f2.rev",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/packed-refs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/heads",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/heads/main",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/remotes",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/remotes/origin",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/remotes/origin/HEAD",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "dir",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/refs/tags",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.git/shallow",
+      "surface_class": "cache_or_incidental_state"
+    },
+    {
+      "decision": "exclude",
+      "kind": "file",
+      "raw_content_recorded": false,
+      "reason": "volatile_cache_or_runtime_dependency",
+      "relative_path": ".tmp/plugins/.gitignore",
+      "surface_class": "cache_or_incidental_state"
+    }
+  ],
+  "excluded_entries_truncated": true,
+  "packet_kind": "cache_exclusion_manifest",
+  "raw_content_recorded": false,
+  "reason_class": "",
+  "status": "ok"
+}

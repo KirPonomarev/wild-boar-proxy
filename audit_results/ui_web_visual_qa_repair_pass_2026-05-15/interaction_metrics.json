@@ -1,0 +1,168 @@
+{
+  "sectionChecks": [
+    {
+      "section": "runtime",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "client",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "accounts-policy",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "diagnostics-privacy",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "advanced",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "data-layout",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    }
+  ],
+  "results": [
+    {
+      "name": "quick-start-onboarding-modal",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 20,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    },
+    {
+      "name": "overview-action-ledger",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 20,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    },
+    {
+      "name": "accounts-detail-drawer",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 24,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    },
+    {
+      "name": "accounts-selected-bulk-state",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 16,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    },
+    {
+      "name": "api-actions-menu-disabled-reason",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 11,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    },
+    {
+      "name": "settings-hub-after-subflow-back",
+      "metrics": {
+        "doc": {
+          "clientWidth": 1600,
+          "scrollWidth": 1600,
+          "clientHeight": 1000,
+          "scrollHeight": 1000
+        },
+        "main": {
+          "clientHeight": 942,
+          "scrollHeight": 942
+        },
+        "brokenImages": [],
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 17,
+        "horizontalOverflow": [],
+        "clipped": [],
+        "fileInputs": 0,
+        "rawTextAreas": 0
+      }
+    }
+  ]
+}

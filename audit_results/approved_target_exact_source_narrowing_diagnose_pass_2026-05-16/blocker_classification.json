@@ -1,0 +1,12 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "classification": "mixed_blocker_with_precondition_regression_dominant",
+  "components": [
+    "family-level exact-source ambiguity remains",
+    "canonical explicit-auth singleton lane is not runnable for current existing active family",
+    "runtime truth regressed to activation_pending / observed_source_active",
+    "selector participation evidence regressed to stale"
+  ],
+  "dominant_blocker": "precondition_regression",
+  "why_exact_source_narrowing_is_not_active_blocker_now": "exact-source narrowing only becomes active after runtime truth is aligned and selector evidence is fresh; both are currently false"
+}

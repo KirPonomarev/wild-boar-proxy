@@ -1,0 +1,15 @@
+{
+  "contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "decision": "GO_TO_LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "single_exact_transfer_safe_source_admitted": false,
+  "allowed_exact_auth_ref_count": 12,
+  "selected_backend_ids_count": 0,
+  "stable_default_backend_id": "gpt2026bis-team",
+  "stable_default_backend_id_sufficient_as_selector": false,
+  "materialization_earned_now": false,
+  "next_contour": "LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+  "next_contour_class": "admission",
+  "reason": "the remaining blocker is not source discovery but selector truth inside the current live-registry auth-ref family; one narrower selector contour is required before exact-source admission or materialization"
+}

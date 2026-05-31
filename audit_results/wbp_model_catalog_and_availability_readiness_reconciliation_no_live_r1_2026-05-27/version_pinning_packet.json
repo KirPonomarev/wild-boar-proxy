@@ -1,0 +1,10 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-27T09:06:05.232730Z",
+  "live_endpoint_version_status": "not_used_by_this_contour",
+  "packet_kind": "version_pinning",
+  "python_version": "3.14.5",
+  "readiness_schema_version": 1,
+  "status": "ok",
+  "wbp_git_commit": "140a8d10948134002a07107b9ccc0c4b353f56b5"
+}

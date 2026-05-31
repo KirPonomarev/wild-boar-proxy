@@ -1,0 +1,5 @@
+{
+  "skipped": true,
+  "reason": "packet_and_refresh_already_yielded_stop_before_ui_no_overclaim_phase",
+  "ui_decides_nothing": true
+}

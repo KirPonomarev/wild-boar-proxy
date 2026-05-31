@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-25T11:01:26.107289Z",
+  "changed_surfaces": [],
+  "custom_launch_attempted": true,
+  "destructive_dialog_interacted_with": false,
+  "final_status": "CUSTOM_PROTECTED_SURFACE_OR_KEYCHAIN_SAFETY_NOT_PROVEN_PHASE3_STILL_BLOCKED",
+  "keychain_prompt_evidence_ref": "keychain_prompt_refined_observation_packet.json",
+  "keychain_reset_prompt_observed": true,
+  "machine_error_code": "CUSTOM_PROTECTED_SURFACE_OR_KEYCHAIN_SAFETY_NOT_PROVEN",
+  "native_window_usability_claimed": false,
+  "packet_kind": "final_safety_repair_summary",
+  "phase3_resume_allowed": false,
+  "process_observed": true,
+  "protected_surface_changed": false,
+  "routing_claimed": false,
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "blocked"
+}

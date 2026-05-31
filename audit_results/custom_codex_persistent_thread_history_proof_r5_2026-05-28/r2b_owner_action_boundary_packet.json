@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-28T08:10:11.914080Z",
+  "evidence_dir_preserved": true,
+  "nonce_used": true,
+  "owner_action_counts_as_route_proof": false,
+  "owner_action_counts_as_storage_proof": false,
+  "owner_action_counts_as_ux_acceptance": false,
+  "owner_action_required_before_relaunch_classification": true,
+  "owner_ready_now": true,
+  "packet_kind": "r2b_owner_action_boundary",
+  "prompt_entered": true,
+  "raw_nonce_recorded": false,
+  "raw_prompt_recorded": false,
+  "reason_class": "",
+  "status": "ok"
+}

@@ -1,0 +1,49 @@
+{
+  "agent": "Heisenberg",
+  "model_class": "gpt-5.4-mini",
+  "role": "independent_auditor",
+  "verdict": "pass",
+  "findings": [],
+  "checked_invariants": [
+    {
+      "invariant": "preflight-only",
+      "result": "pass"
+    },
+    {
+      "invariant": "no POST/live kill route",
+      "result": "pass"
+    },
+    {
+      "invariant": "no process-kill primitive in new diff",
+      "result": "pass"
+    },
+    {
+      "invariant": "browser process/session/path/home/auth selectors rejected before read",
+      "result": "pass"
+    },
+    {
+      "invariant": "no raw pid/session/path/home/auth leak in process-kill preflight packet",
+      "result": "pass"
+    },
+    {
+      "invariant": "current/original Codex candidates rejected",
+      "result": "pass"
+    },
+    {
+      "invariant": "live-ready/admitted/claimed/performed remain false even when eligible",
+      "result": "pass"
+    },
+    {
+      "invariant": "contract layer has no lifecycle mutation",
+      "result": "pass"
+    },
+    {
+      "invariant": "UI is read-only GET only and has no live kill affordance",
+      "result": "pass"
+    }
+  ],
+  "auditor_environment_notes": [
+    "Auditor ordinary python lacked optional UI dependencies for two UI/server tests.",
+    "Bundled Python gate in verification_summary passed those tests."
+  ]
+}

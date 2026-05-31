@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "packet_kind": "custom_isolation_repair",
+  "captured_at_utc": "2026-05-25T10:29:15.265520Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_ISOLATION_AND_KEYCHAIN_ROOT_CAUSE_AND_REPAIR_PASS_R2",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "launcher_backup_path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh.pre-isolation-repair-20260525T102002Z.bak",
+  "launcher_rewritten_path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+  "launcher_repo_managed_marker_valid": true,
+  "launcher_repo_managed_marker_recognized": true,
+  "isolated_home_recheck_pid": 95944,
+  "dispatch_attempted": true,
+  "process_observed": true,
+  "window_observed": false,
+  "current_codex_touched": false,
+  "touched_surface_labels": [],
+  "default_codex_surfaces_unchanged": true,
+  "cleanup_status": "ok",
+  "route_or_prompt_claimed": false,
+  "real_home_wrapper_launch_forbidden": true
+}

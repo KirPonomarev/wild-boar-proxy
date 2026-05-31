@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-27T10:17:13.601893Z",
+  "checks": [
+    {
+      "name": "no_machine_ui_proof_claim",
+      "passed": true
+    },
+    {
+      "name": "no_general_day_to_day_usability_claim",
+      "passed": true
+    },
+    {
+      "name": "route_reference_not_used_as_visible_usability_substitute",
+      "passed": true
+    },
+    {
+      "name": "source_false_green_audit_ok",
+      "passed": true
+    },
+    {
+      "name": "no_original_or_final_e2e_claim",
+      "passed": true
+    }
+  ],
+  "current_owner_action_collected": false,
+  "forbidden_claims_present": false,
+  "packet_kind": "native_owner_ux_false_green_audit",
+  "status": "ok"
+}

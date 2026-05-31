@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-28T13:50:46.109819Z",
+  "gaps": [
+    {
+      "id": "workflow_superiority_over_primary_only_not_proven",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "harness_local_synthetic_outputs_limit_usefulness_claim_scope",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "operator_mediated_chain_not_autonomous_workflow_intelligence",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "single_task_fixture_does_not_generalize_to_broader_workloads",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "workflow_gap_matrix",
+  "status": "ok"
+}

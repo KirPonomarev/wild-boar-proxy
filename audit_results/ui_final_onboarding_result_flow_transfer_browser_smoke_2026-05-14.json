@@ -1,0 +1,25 @@
+{
+  "contour_id": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER",
+  "date": "2026-05-14",
+  "browser_surface": "Codex in-app browser",
+  "server": {
+    "command": "python3 -m http.server 8787 --directory wild_boar_proxy/web_design_ui",
+    "url": "http://127.0.0.1:8787/?state=healthy&source=fixture&screen=overview"
+  },
+  "viewport_checks": [
+    {
+      "viewport": "1600x1000",
+      "url": "http://127.0.0.1:8787/?state=healthy&source=fixture&screen=overview",
+      "screenshot": "audit_results/ui_final_onboarding_result_flow_transfer_screenshots_2026-05-14/overview_static_1600x1000.png",
+      "actionPanelVisible": true,
+      "onboardingResultHiddenByDefault": true,
+      "result": "PASS"
+    }
+  ],
+  "result_state_visualization": {
+    "browser_injection_attempted": false,
+    "reason": "Synthetic browser-side state injection was not used after browser policy rejected javascript URL execution.",
+    "covered_by": "tests/test_web_design_ui.py::test_onboarding_result_flow_renders_reserve_first_without_active_claim"
+  },
+  "final_result": "PASS_WITH_VM_RESULT_STATE_COVERAGE"
+}

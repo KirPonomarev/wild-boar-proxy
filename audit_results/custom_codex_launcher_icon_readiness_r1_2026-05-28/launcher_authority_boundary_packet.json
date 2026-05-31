@@ -1,0 +1,17 @@
+{
+  "browser_payload_authority": false,
+  "captured_at_utc": "2026-05-28T09:31:06.911691Z",
+  "default_lane_path_kind": "default_owned_provisioning_target",
+  "direct_operator_exec_surface_present": true,
+  "explicit_external_override_shipping_ready": false,
+  "icon_shipped": false,
+  "launcher_owns_auth_authority": false,
+  "launcher_owns_model_authority": false,
+  "launcher_owns_path_authority": false,
+  "launcher_owns_provider_authority": false,
+  "override_lane_path_kind": "explicit_external_override",
+  "override_lane_readiness": "external_script_path_present_consumer_capability_unverified",
+  "packet_kind": "launcher_authority_boundary",
+  "raw_bundle_dispatch_surface_present": true,
+  "status": "ok"
+}

@@ -1,0 +1,28 @@
+{
+  "browser_payload_allowed": false,
+  "browser_forbidden_fields_rejected": true,
+  "forbidden_fields_tested": [
+    "artifact_id",
+    "artifact_path",
+    "path",
+    "snapshot_path",
+    "rollback_target",
+    "digest",
+    "session_id",
+    "backend_id",
+    "route_id",
+    "pid",
+    "process_id",
+    "CODEX_HOME",
+    "HOME",
+    "auth",
+    "token",
+    "api_key",
+    "secret"
+  ],
+  "blocked_machine_error_code": "ROLLBACK_APPLY_BROWSER_FIELD_REJECTED",
+  "filesystem_read_performed": false,
+  "filesystem_write_performed": false,
+  "rollback_apply_performed": false,
+  "recovery_operator_ready": false
+}

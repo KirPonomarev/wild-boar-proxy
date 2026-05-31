@@ -1,0 +1,22 @@
+{
+  "contour": "LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "prior_basis": {
+    "prior_contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+    "prior_allowed_exact_auth_ref_count": 12,
+    "prior_selected_backend_ids_count": 0,
+    "prior_stable_default_backend_id": "gpt2026bis-team",
+    "prior_materialization_earned_now": false
+  },
+  "current_owner_truth": {
+    "rotation_inspect_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_reason": "policy_drift_detected",
+    "rotation_selected_snapshot_present": true,
+    "rotation_selected_snapshot_count": 9,
+    "stable_repair_dry_run_machine_error_code": "OK",
+    "eligible_registry_auth_ref_count": 11,
+    "status_machine_error_code": "OK",
+    "effective_stable_runtime_source_kind": "observed_stable_inventory_source",
+    "effective_stable_runtime_source_path": "/Users/kirillponomarev/.cli-proxy-api"
+  }
+}

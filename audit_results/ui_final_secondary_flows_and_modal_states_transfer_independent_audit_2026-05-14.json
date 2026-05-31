@@ -1,0 +1,98 @@
+{
+  "contour": "UI_FINAL_SECONDARY_FLOWS_AND_MODAL_STATES_TRANSFER",
+  "date": "2026-05-14",
+  "verdict": "PASS",
+  "scope": {
+    "allowed_files_changed": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "tests/test_web_design_ui.py"
+    ],
+    "forbidden_files_changed": []
+  },
+  "facts": {
+    "screens_unchanged": {
+      "status": "PASS",
+      "evidence": "SCREENS remains overview, accounts, api-connections, diagnostics, settings, setup, select-client, import-existing."
+    },
+    "static_actions_unchanged": {
+      "status": "PASS",
+      "evidence": "Static data-ui-action values remain launch_client_dispatch, onboard_account, export_diagnostics, refresh_health_detail, stable_repair_plan, set_mode_managed, sync_runtime, launch_smoke, set_mode_stable."
+    },
+    "secondary_screens_inert": {
+      "status": "PASS",
+      "evidence": "setup/select-client/import-existing sections contain no data-ui-action, live-action, file input, path payload, raw config, or import execution controls."
+    },
+    "browser_payload_boundary": {
+      "status": "PASS",
+      "evidence": "runUiAction still serializes JSON.stringify({ ui_action: uiAction, ...extraPayload })."
+    },
+    "route_remove_copy": {
+      "status": "PASS",
+      "evidence": "api_route_remove copy says disabled route registry removal after server preflight and explicitly no traffic, primary route, failover, or runtime readiness change."
+    },
+    "external_reference_trace_scan": {
+      "status": "PASS",
+      "evidence": "No repo trace for forbidden external reference service terms in tracked diff or repo scan excluding generic existing authorization code."
+    }
+  },
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_web_design_ui.WebDesignUiTests",
+        "result": "PASS",
+        "summary": "25 tests"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_web_design_command_adapter.WebDesignCommandAdapterTests",
+        "result": "PASS",
+        "summary": "21 tests"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_ui_shell.OnboardingActionTests tests.test_ui_shell.LaunchClientTests",
+        "result": "PASS",
+        "summary": "14 tests"
+      },
+      {
+        "command": "git diff --check",
+        "result": "PASS"
+      }
+    ],
+    "visual_smoke": [
+      {
+        "viewport": "1600x1000",
+        "screens": [
+          "setup",
+          "select-client",
+          "import-existing",
+          "onboard_modal",
+          "route_remove_confirm"
+        ],
+        "metrics_file": "audit_results/ui_final_secondary_flows_and_modal_states_transfer_screenshots/visual_smoke_metrics.json",
+        "result": "PASS"
+      },
+      {
+        "viewport": "1280x900",
+        "screens": [
+          "setup",
+          "select-client",
+          "import-existing",
+          "onboard_modal",
+          "route_remove_confirm"
+        ],
+        "metrics_file": "audit_results/ui_final_secondary_flows_and_modal_states_transfer_screenshots/visual_smoke_metrics_1280x900.json",
+        "result": "PASS"
+      }
+    ],
+    "independent_auditor": {
+      "name": "Hooke",
+      "result": "PASS",
+      "residual_risk_addressed": "Additional 1280x900 visual smoke was captured after the audit note."
+    }
+  },
+  "residual_risks": [
+    "Secondary setup/select/import screens intentionally use vertical scrolling when content exceeds the main pane height.",
+    "This contour does not admit or implement setup discovery, client selection, import execution, or new command surfaces."
+  ]
+}

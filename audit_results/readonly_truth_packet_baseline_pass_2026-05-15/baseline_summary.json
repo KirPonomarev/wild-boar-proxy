@@ -1,0 +1,75 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "primary_runtime_truth_owner": "healthcheck --json",
+  "delegated_runtime_summary_surface": "status --json",
+  "core_capture": {
+    "status": "ok",
+    "status_machine_error_code": "OK",
+    "healthcheck": "error",
+    "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+    "mode_desired": "stable",
+    "mode_effective": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1"
+  },
+  "accounts": {
+    "account_count": 25,
+    "active_count": 17,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "healthy_count": 11,
+    "problem_count": 14,
+    "manual_hold_count": 0,
+    "stable_default_backend_id": "gpt2026bis-team"
+  },
+  "warnings_and_support": {
+    "rollout_status": "error",
+    "rollout_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "claim_gate_status": "blocked",
+    "claim_gate_blocked_claims": [
+      "active-only-traffic",
+      "pool-participation-correct",
+      "stable-15-proved"
+    ],
+    "external_models_runtime_claim_blocked": true,
+    "external_models_routes_count": 0,
+    "external_models_models_count": 0
+  },
+  "owner_truth_drift": {
+    "observed": true,
+    "initial_live_server_admission_snapshot": {
+      "live_readonly_status": "ok",
+      "live_readonly_ui_state": "healthy",
+      "warning_codes": [
+        "ROTATION_EVIDENCE_CONTRADICTED"
+      ],
+      "runtime_status_label": "Работает",
+      "active": 17,
+      "problem": 14
+    },
+    "intermediate_failure_capture": {
+      "status_status": "error",
+      "status_machine_error_code": "ATTESTATION_FAILED",
+      "status_liveness": "degraded",
+      "status_last_error": "timed out",
+      "healthcheck_status": "error",
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "responses_ok": false,
+      "launch_readiness_status": "blocked",
+      "launch_blocking_reason": "responses_probe_failed",
+      "observed_at_utc": "2026-05-15T18:37:36.196646+00:00"
+    },
+    "retry_capture": {
+      "status_status": "ok",
+      "status_machine_error_code": "OK",
+      "status_liveness": "healthy",
+      "status_last_error": "",
+      "healthcheck_status": "error",
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "responses_ok": false,
+      "launch_readiness_status": "blocked",
+      "launch_blocking_reason": "responses_probe_failed",
+      "observed_at_utc": "2026-05-15T18:40:47.996424+00:00"
+    },
+    "material_owner_truth_flip_detected": true
+  }
+}

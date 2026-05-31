@@ -1,0 +1,16 @@
+{
+  "contour": "MANAGED_SYNC_MODE_DRIFT_DIAGNOSE_PASS",
+  "status": "completed",
+  "final_verdict": "GO_TO_SYNC_MANAGED_MODE_WRITE_SURFACE_REPAIR_PASS",
+  "next_action": "repair sync-owned managed write surfaces so selector refresh does not retake effective runtime truth after stable activation evidence already exists",
+  "machine_truth_basis": [
+    "status --json reports desired_mode stable but effective_mode managed",
+    "claim_gate is blocked from policy_drift",
+    "rollout rotation inspect --json reports fresh participation evidence and clear policy_drift_status on its claim surface",
+    "sync-owned scripts rewrite runtime-effective-mode.txt, supervisor-state effective_mode, and config.toml base_url to managed surfaces"
+  ],
+  "anti_loop_assessment": {
+    "status": "progress",
+    "reason": "the contour localized an exact sync-owned write-surface family instead of returning to generic stable/runtime contradiction wording"
+  }
+}

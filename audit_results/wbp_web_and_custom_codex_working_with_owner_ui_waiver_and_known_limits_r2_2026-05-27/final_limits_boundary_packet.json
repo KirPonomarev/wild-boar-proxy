@@ -1,0 +1,16 @@
+{
+  "all_models_equally_usable_claimed": false,
+  "captured_at_utc": "2026-05-27T18:09:48.076456Z",
+  "classification": "with_limits_and_known_blocker_remain_visible",
+  "contour_final_status": "WBP_WEB_AND_CUSTOM_CODEX_WORKING_WITH_OWNER_UI_WAIVER_AND_KNOWN_LIMITS",
+  "current_live_keychain_proof_claimed": false,
+  "direct_lane_recovery_implied": false,
+  "global_egress_failure_claimed": false,
+  "imported_evidence_only": true,
+  "machine_ui_proof_claimed": false,
+  "one_selected_provider_lane_only": true,
+  "packet_kind": "final_acceptance_limits_boundary",
+  "persistence_continuity_beyond_proven_level_claimed": false,
+  "provider_family_parity_claimed": false,
+  "status": "ok"
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_OVERVIEW_PARITY_REPAIR",
+  "date": "2026-05-14",
+  "mode": "implementation_visual_repair_ui_only",
+  "baseline": {
+    "source_model": "01_overview_dashboard",
+    "target_shell": "left_sidebar_source_shell",
+    "working_viewport": "1600x1000",
+    "overview_top_grid": "496px 1fr",
+    "overview_top_gap_px": 24,
+    "kpi_columns": "repeat(4, 1fr)",
+    "kpi_card_height_px": 112,
+    "log_row_height_px": 44,
+    "log_row_columns": "28px 1fr auto"
+  },
+  "changes": [
+    {
+      "surface": "overview_header",
+      "change": "secondary overview live controls moved out of the main header",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "overview_mode_card",
+      "change": "added compact utility strip for secondary overview live controls",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "launch_client_header_control",
+      "change": "kept as primary header control, rendered compact with accessible label",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "action_ledger",
+      "change": "compact display shows five visible summary fields while preserving ledger ids",
+      "semantic_effect": "none",
+      "action_payload_effect": "unchanged"
+    },
+    {
+      "surface": "events_log",
+      "change": "overview shows two latest event rows and an honest empty state when no events exist",
+      "semantic_effect": "display_summary_only",
+      "action_payload_effect": "unchanged"
+    }
+  ],
+  "preserved_ui_actions": [
+    "refresh_health_detail",
+    "export_diagnostics",
+    "stable_repair_plan",
+    "set_mode_managed",
+    "launch_client_dispatch",
+    "sync_runtime",
+    "launch_smoke",
+    "set_mode_stable"
+  ],
+  "forbidden_changes_observed": {
+    "new_ui_actions": false,
+    "command_id_browser_payload": false,
+    "raw_argv_browser_payload": false,
+    "arbitrary_path_browser_payload": false,
+    "token_browser_payload": false,
+    "runtime_file_change": false,
+    "live_server_semantic_change": false,
+    "command_adapter_semantic_change": false,
+    "desktop_file_change": false,
+    "fabricated_runtime_truth": false
+  },
+  "acceptance": {
+    "header_single_visual_row_at_1600x1000": true,
+    "body_horizontal_scroll": false,
+    "action_panel_fits_first_viewport": true,
+    "top_grid_height_px": 248,
+    "kpi_grid_height_px": 112,
+    "log_card_height_px": 178,
+    "action_panel_height_px": 88,
+    "secondary_controls_demoted_not_removed": true,
+    "empty_events_state_honest": true
+  },
+  "resume_from_here": "Run verification, independent audit, closeout, commit, and push."
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+  "auditor": "Sagan",
+  "date": "2026-05-16",
+  "verdict": "PASS",
+  "checks": {
+    "false_success_overclaim": {
+      "status": "pass",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py:1604",
+        "wild_boar_proxy/web_design_live_server.py:1617",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:1847",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:1894",
+        "tests/test_web_design_live_server.py:746",
+        "tests/test_web_design_ui.py:2375"
+      ]
+    },
+    "browser_payload_leakage": {
+      "status": "pass",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:956",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:3294",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:4743",
+        "wild_boar_proxy/web_design_ui/index.html:2436",
+        "wild_boar_proxy/web_design_ui/index.html:2476",
+        "tests/test_web_design_live_server.py:396",
+        "tests/test_web_design_ui.py:426"
+      ]
+    },
+    "new_onboarding_engine": {
+      "status": "pass",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py:920",
+        "wild_boar_proxy/web_design_live_server.py:924",
+        "wild_boar_proxy/web_design_live_server.py:951",
+        "wild_boar_proxy/web_design_live_server.py:974",
+        "wild_boar_proxy/web_design_live_server.py:496",
+        "wild_boar_proxy/web_design_live_server.py:569"
+      ]
+    },
+    "existing_accounts_readonly_refresh_only": {
+      "status": "pass",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:886",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:906",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:5282",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:5310",
+        "wild_boar_proxy/web_design_live_server.py:980",
+        "wild_boar_proxy/web_design_live_server.py:982",
+        "wild_boar_proxy/web_design_ui/index.html:2465"
+      ]
+    },
+    "current_codex_session_risk": {
+      "status": "pass",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py:506",
+        "wild_boar_proxy/web_design_live_server.py:568",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js:1987",
+        "tests/test_web_design_ui.py:425",
+        "tests/test_web_design_ui.py:426"
+      ]
+    }
+  },
+  "summary": "No false-success, no browser-originated auth/path leakage, no new onboarding engine, no refresh path beyond accounts-readonly, and no observed risk to the current working Codex session."
+}

@@ -1,0 +1,62 @@
+{
+  "status_command": {
+    "status": "error",
+    "machine_error_code": "ATTESTATION_FAILED",
+    "liveness": "degraded",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+    "launch_readiness": {
+      "status": "blocked",
+      "owner_command_surface": "healthcheck --json",
+      "delegated_from_status": true,
+      "real_inference_required": true,
+      "listener_reachable": true,
+      "models_surface_reachable": false,
+      "responses_proof_passed": false,
+      "truth_alignment_passed": true,
+      "base_url_match": true,
+      "effective_mode_match": true,
+      "model_match": true,
+      "proxy_url_match": true,
+      "gate_passed": false,
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "failed_checks": [
+        "models_surface_unavailable_or_invalid"
+      ],
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "auth_pool_hygiene_status": "launch_capable_available",
+      "launch_capable_backend_count": 15
+    }
+  },
+  "healthcheck_command": {
+    "status": "error",
+    "machine_error_code": "ATTESTATION_FAILED",
+    "liveness": "degraded",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+    "launch_readiness": {
+      "status": "blocked",
+      "owner_command_surface": "healthcheck --json",
+      "delegated_from_status": false,
+      "real_inference_required": true,
+      "listener_reachable": true,
+      "models_surface_reachable": false,
+      "responses_proof_passed": false,
+      "truth_alignment_passed": true,
+      "base_url_match": true,
+      "effective_mode_match": true,
+      "model_match": true,
+      "proxy_url_match": true,
+      "gate_passed": false,
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "failed_checks": [
+        "models_surface_unavailable_or_invalid"
+      ],
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "auth_pool_hygiene_status": "launch_capable_available",
+      "launch_capable_backend_count": 15
+    }
+  },
+  "runtime_blocker_classification": "external_runtime_attestation_failed_invalid_api_key",
+  "concurrency_incident": "parallel status/healthcheck caused FileNotFoundError on shared .supervisor-state.json.tmp; sequential retry succeeded with command packet"
+}

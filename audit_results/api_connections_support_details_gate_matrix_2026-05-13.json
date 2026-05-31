@@ -1,0 +1,138 @@
+{
+  "contour_id": "API_CONNECTIONS_SUPPORT_DETAILS_GATE",
+  "date": "2026-05-13",
+  "status": "implemented_pending_final_audit",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md"
+  ],
+  "goal": "Expose support-only API route details actions without creating runtime, listener, Codex config, selected-route, or automatic route-switching truth.",
+  "implemented_ui_actions": [
+    {
+      "ui_action": "api_route_profile",
+      "adapter_command_id": "external_models_profile_codex_desktop",
+      "argv_template": [
+        "external-models",
+        "profile",
+        "codex-desktop",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "role": "api_route_profile_packet",
+      "mutation_class": "api_route_support",
+      "confirmation_required": true,
+      "post_action_refresh_required": false,
+      "mutates_runtime": false,
+      "affects_primary_truth": false,
+      "claim_scope": "support profile packet only; no Codex config mutation, listener readiness, profile readiness, or runtime readiness"
+    },
+    {
+      "ui_action": "api_route_evidence_capture",
+      "adapter_command_id": "external_models_evidence_capture",
+      "argv_template": [
+        "external-models",
+        "evidence",
+        "capture",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "role": "api_route_local_evidence_capture",
+      "mutation_class": "api_route_support_artifact",
+      "confirmation_required": true,
+      "post_action_refresh_required": false,
+      "mutates_runtime": false,
+      "affects_primary_truth": false,
+      "claim_scope": "local support artifact metadata only; no runtime proof or direct evidence file read"
+    }
+  ],
+  "changed_files": [
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "implementation_refs": {
+    "adapter_allowlist": "wild_boar_proxy/web_design_command_adapter.py:199",
+    "live_server_route_action_set": "wild_boar_proxy/web_design_live_server.py:66",
+    "live_server_action_metadata": "wild_boar_proxy/web_design_live_server.py:236",
+    "live_server_route_preflight": "wild_boar_proxy/web_design_live_server.py:1008",
+    "ui_confirmation_policy": "wild_boar_proxy/web_design_ui/scripts/overview.js:162",
+    "ui_support_detail_display": "wild_boar_proxy/web_design_ui/scripts/overview.js:737",
+    "ui_route_buttons": "wild_boar_proxy/web_design_ui/scripts/overview.js:1358",
+    "ui_action_panel_support_row": "wild_boar_proxy/web_design_ui/index.html:286"
+  },
+  "acceptance_checks": [
+    {
+      "check": "browser payload shape",
+      "result": "covered",
+      "evidence": "tests/test_web_design_live_server.py rejects unsupported argv for route actions and adapter tests reject path/evidence_path extras"
+    },
+    {
+      "check": "route preflight",
+      "result": "covered",
+      "evidence": "run_ui_action calls external-models routes list --json before executing support actions"
+    },
+    {
+      "check": "profile support-only semantics",
+      "result": "covered",
+      "evidence": "tests assert writes_external_config=false, profile_ready=false, listener_proven=false, runtime_claim_blocked=true"
+    },
+    {
+      "check": "evidence support artifact semantics",
+      "result": "covered",
+      "evidence": "tests assert network_dependent_evidence=false and UI renders only artifact basename metadata"
+    },
+    {
+      "check": "disabled route support behavior",
+      "result": "covered",
+      "evidence": "tests assert disabled routes remain eligible for profile/evidence support actions but not validate/check/disable"
+    },
+    {
+      "check": "identity preservation",
+      "result": "covered",
+      "evidence": "UI uses existing API-connections table/action-panel pattern and Wild Boar operator copy; no external reference artifacts added"
+    }
+  ],
+  "verification_completed": [
+    "python3 -m unittest tests.test_web_design_command_adapter",
+    "python3 -m unittest tests.test_web_design_live_server",
+    "python3 -m unittest tests.test_web_design_ui",
+    "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+    "python3 -m unittest tests.test_web_ui tests.test_cli_external_models tests.test_external_models -q",
+    "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "git diff --check"
+  ],
+  "deferred": [
+    "active route",
+    "selected route",
+    "automatic route switching",
+    "route add/edit/remove",
+    "API key/token setup",
+    "Codex config mutation",
+    "adapter start/stop lifecycle controls",
+    "direct evidence file open/read/parse from UI",
+    "desktop implementation"
+  ],
+  "scope_check": {
+    "runtime_py_touched": false,
+    "desktop_files_touched": false,
+    "external_lab_tail_staged": false,
+    "direct_state_or_log_reads_added": false,
+    "browser_path_or_token_payload_added": false
+  },
+  "next_required_steps": [
+    "independent audit",
+    "final leak scans",
+    "closeout artifact",
+    "commit and push"
+  ]
+}

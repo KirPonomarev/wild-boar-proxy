@@ -1,0 +1,117 @@
+{
+  "contour_id": "UI_WEB_DIAGNOSTICS_EXPORT_RESULT_REVIEW_AND_POLISH_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "99684e9b043cbaf2a09121bbaa7a5724cbc86eb4",
+  "changes": {
+    "web_design_live_server": [
+      "Normalize diagnostics export redaction_status to enabled/unreported/failed.",
+      "Expose claim_scope=support_artifact_only in sanitized result data.",
+      "Keep bundle_path basename-only and changed_files as diagnostics_bundle markers."
+    ],
+    "web_design_ui": [
+      "Render export diagnostics through diagnosticsExportResultModel.",
+      "Show redaction_unreported amber and redaction_failed red.",
+      "Use support artifact copy and avoid runtime health success claims.",
+      "Keep ledger and compact action state aligned with export-result state."
+    ],
+    "tests": [
+      "Added live-server redaction normalization tests.",
+      "Updated UI tests to reject invented redaction proof.",
+      "Added UI tests for enabled and failed redaction states without runtime green."
+    ]
+  },
+  "state_mapping": [
+    {
+      "state": "created",
+      "condition": "status=ok and redaction_status=enabled and artifact reference exists",
+      "visual": "blue",
+      "allowed_claim": "Support artifact created.",
+      "forbidden_claim": "Runtime is healthy."
+    },
+    {
+      "state": "redaction_unreported",
+      "condition": "status=ok and redaction status is missing or not recognized",
+      "visual": "amber",
+      "allowed_claim": "Artifact created but redaction proof is not reported.",
+      "forbidden_claim": "Redaction is enabled."
+    },
+    {
+      "state": "redaction_failed",
+      "condition": "status=ok and redaction status reports failure",
+      "visual": "red",
+      "allowed_claim": "Artifact is not considered safe.",
+      "forbidden_claim": "Safe support artifact created."
+    },
+    {
+      "state": "artifact_unavailable",
+      "condition": "status=ok but no artifact reference is available",
+      "visual": "amber",
+      "allowed_claim": "Export lacks artifact reference.",
+      "forbidden_claim": "Operator can inspect created artifact."
+    },
+    {
+      "state": "timeout",
+      "condition": "result status timeout",
+      "visual": "amber",
+      "allowed_claim": "Export timed out and may be retried.",
+      "forbidden_claim": "Export succeeded."
+    },
+    {
+      "state": "invalid_json",
+      "condition": "result status invalid_json",
+      "visual": "red",
+      "allowed_claim": "Integration failure.",
+      "forbidden_claim": "Diagnostics result is usable."
+    },
+    {
+      "state": "command_error",
+      "condition": "result status command_error or unrecognized failure status",
+      "visual": "red",
+      "allowed_claim": "Command did not create successful support artifact.",
+      "forbidden_claim": "Diagnostics were successful."
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/web_design_live_server.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server -q",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_command_adapter -q",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "passed_90_tests"
+    },
+    {
+      "command": "python3 -m json.tool audit_results/ui_web_diagnostics_export_result_review_and_polish_pass_2026-05-15/surface_scan_2026-05-15.json && python3 -m json.tool audit_results/ui_web_diagnostics_export_result_review_and_polish_pass_2026-05-15/verification_matrix_2026-05-15.json && python3 -m json.tool audit_results/ui_web_diagnostics_export_result_review_and_polish_pass_2026-05-15/independent_audit_2026-05-15.json",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "python3 tools/check_closeout_resilience.py audit_results/ui_web_diagnostics_export_result_review_and_polish_pass_2026-05-15/closeout_2026-05-15.md",
+      "result": "passed"
+    }
+  ],
+  "scope_check": {
+    "runtime_changed": false,
+    "command_adapter_changed": false,
+    "allowlist_changed": false,
+    "desktop_changed": false,
+    "diagnostics_history_implemented": false
+  },
+  "verdict": "PASS"
+}

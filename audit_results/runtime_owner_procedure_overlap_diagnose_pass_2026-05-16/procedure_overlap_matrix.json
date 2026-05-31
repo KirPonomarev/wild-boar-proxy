@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_OWNER_PROCEDURE_OVERLAP_DIAGNOSE_PASS",
+  "basis_branch": "codex/external-agent-lab-isolated",
+  "basis_head": "40ab294",
+  "localization_scope": "admitted runtime procedures in the active selector/runtime chain using existing packet and code evidence only",
+  "ranked_procedures": [
+    {
+      "rank": 1,
+      "procedure_name": "run_stable_runtime_launcher_attempt",
+      "procedure_class": "shared_launcher_backed_runtime_owner_procedure",
+      "evidence_strength": "moderate",
+      "command_surfaces": [
+        "healthcheck --json deterministic stable recovery",
+        "status --json delegated health path when recovery is needed",
+        "launch smoke --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:3367",
+        "wild_boar_proxy/runtime.py:5526",
+        "wild_boar_proxy/runtime.py:5171",
+        "wild_boar_proxy/runtime.py:6278"
+      ],
+      "lock_site": "wild_boar_proxy/runtime.py:3381",
+      "critical_section_duration_class": "long_owner_section_across_launcher_subprocess",
+      "overlap_with_sync": "yes",
+      "candidate_status": "admitted_shared_procedure",
+      "evidence_basis": [
+        "the helper itself holds serialized_lock across subprocess.run([launcher_script, smoke])",
+        "the bounded retry contour showed the same live holder pid 53546 on sync and on immediate rotation-after-sync, which fits a longer critical section better than a short observation lock",
+        "status delegates to healthcheck by default, so the shared helper remains reachable from admitted runtime observation surfaces even when launch smoke is not the explicit current contour",
+        "the prior owner-path contour identified the launcher-backed owner lane as the strongest class; this contour tightens that class to the shared helper procedure reused by both healthcheck/status recovery and launch smoke"
+      ],
+      "counterpoints": [
+        "no packet in the current artifact chain identifies which exact top-level command invoked this helper while pid 53546 held the lock",
+        "status_after_sync later reported deterministic_stable_recovery_result.status=not_invoked, so the observed post-holder status packet does not itself prove that recovery path was the holder"
+      ]
+    },
+    {
+      "rank": 2,
+      "procedure_name": "run_current_proxy_owner_path_activation",
+      "procedure_class": "launcher_backed_proxy_adoption_owner_procedure",
+      "evidence_strength": "low_to_moderate",
+      "command_surfaces": [
+        "healthcheck --json current-proxy auto-adoption",
+        "status --json delegated health path when proxy-path auto-adoption is triggered"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:1225",
+        "wild_boar_proxy/runtime.py:5796",
+        "wild_boar_proxy/runtime.py:5526",
+        "wild_boar_proxy/runtime.py:5171"
+      ],
+      "lock_site": "wild_boar_proxy/runtime.py:1225",
+      "critical_section_duration_class": "long_owner_section_across_launcher_subprocess",
+      "overlap_with_sync": "yes",
+      "candidate_status": "admitted_weaker_procedure",
+      "evidence_basis": [
+        "this helper also holds serialized_lock around subprocess activation and is reachable from healthcheck/status owner paths"
+      ],
+      "counterpoints": [
+        "current packet chain does not carry proxy-path-broken evidence around the repeated selector failure",
+        "the active retry chain gives weaker support to proxy adoption than to stable launcher recovery mechanics"
+      ]
+    },
+    {
+      "rank": 3,
+      "procedure_name": "run_rollout_rotation_inspect",
+      "procedure_class": "observation_lock_overlap_procedure",
+      "evidence_strength": "low",
+      "command_surfaces": [
+        "rollout rotation inspect --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:6885"
+      ],
+      "lock_site": "wild_boar_proxy/runtime.py:6940",
+      "critical_section_duration_class": "short_observation_lock",
+      "overlap_with_sync": "yes",
+      "candidate_status": "admitted_observation_overlap",
+      "evidence_basis": [
+        "rotation inspect shares the same lock and was actually executed immediately before and after sync in the bounded retry contour"
+      ],
+      "counterpoints": [
+        "its critical section is short and the same-holder-pid symptom across two blocked commands is a weaker fit for this procedure than for a launcher-backed helper"
+      ]
+    },
+    {
+      "rank": 4,
+      "procedure_name": "run_sync",
+      "procedure_class": "managed_selector_owner_procedure",
+      "evidence_strength": "low",
+      "command_surfaces": [
+        "sync --json"
+      ],
+      "entrypoints": [
+        "wild_boar_proxy/runtime.py:6746"
+      ],
+      "lock_site": "wild_boar_proxy/runtime.py:6756",
+      "critical_section_duration_class": "managed_mutation_lock",
+      "overlap_with_sync": "self_parallel_only",
+      "candidate_status": "generic_overlap_only",
+      "evidence_basis": [
+        "a second sync process would block the first on the same lock"
+      ],
+      "counterpoints": [
+        "the current packet chain does not show a second sync command in flight",
+        "this procedure explains the lock symptom only generically and does not tighten localization"
+      ]
+    }
+  ],
+  "procedure_level_verdict": {
+    "most_likely_overlapping_procedure": "run_stable_runtime_launcher_attempt",
+    "overlap_class": "shared_launcher_backed_runtime_owner_procedure_overlap_with_missing_operational_serialization",
+    "localization_improved_beyond_prior_owner_path_contour": true,
+    "improvement_basis": [
+      "the prior contour stopped at a top-level launcher-lane family",
+      "this contour localizes the highest-probability overlap to the shared helper procedure reused by multiple admitted command surfaces"
+    ],
+    "retry_safe_without_procedure_change": false,
+    "requires_code_fix": false,
+    "requires_runtime_procedure_change": true,
+    "exclusive_top_level_command_proved": false
+  },
+  "packet_basis": [
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/closeout.md",
+      "fact": "the bounded retry contour itself ran rotation inspect, sync, rotation inspect, then status"
+    },
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/sync_refresh_packet.json",
+      "fact": "sync returned LOCK_HELD with holder pid 53546 and changed_files=[]"
+    },
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/rotation_after_sync.json",
+      "fact": "immediate post-sync rotation inspect hit the same holder pid 53546"
+    },
+    {
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/status_after_sync.json",
+      "fact": "status delegates to healthcheck and later observed deterministic_stable_recovery_result.status=not_invoked after the holder was gone"
+    },
+    {
+      "source": "audit_results/runtime_reproof_pass_2026-05-16_v4/decision_packet.json",
+      "fact": "launch smoke belonged to the earlier runtime reproof contour and re-earned runtime green before the later selector retry contour"
+    }
+  ],
+  "code_basis": [
+    {
+      "path": "wild_boar_proxy/runtime.py:3367-3415",
+      "fact": "run_stable_runtime_launcher_attempt holds serialized_lock across the smoke subprocess"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:5171-5175",
+      "fact": "summarize_status delegates into run_healthcheck by default"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:5588-5611",
+      "fact": "healthcheck invokes run_stable_runtime_launcher_attempt when stable listener recovery is entered"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:6288-6296",
+      "fact": "launch smoke invokes the same shared helper directly"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:6885-6940",
+      "fact": "rollout rotation inspect also shares the same lock but only for an observation critical section"
+    }
+  ]
+}

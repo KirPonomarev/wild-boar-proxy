@@ -1,0 +1,49 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head": "79c250fd",
+  "checks": [
+    {
+      "name": "node syntax",
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "pass"
+    },
+    {
+      "name": "targeted launch/ui tests",
+      "command": "bundled python -B -m unittest tests.test_codex_launch_modes tests.test_web_design_live_server.WebDesignCodexLaunchModeEndpointTests tests.test_web_design_ui -q",
+      "tests": 97,
+      "status": "pass"
+    },
+    {
+      "name": "full relevant gate",
+      "command": "bundled python -B -m unittest tests.test_codex_launch_modes tests.test_web_design_live_server tests.test_web_design_ui tests.test_operator_surface -q",
+      "tests": 200,
+      "status": "pass"
+    },
+    {
+      "name": "diff whitespace",
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "name": "live bounded helper proof",
+      "command": "redacted live server plus curl packets",
+      "status": "pass"
+    },
+    {
+      "name": "server cleanup",
+      "command": "stop live test server and remove temp helper root",
+      "status": "pass"
+    }
+  ],
+  "result": {
+    "final_verdict": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+    "false_green_blockers_fixed": [
+      "invalid_or_non_object_body_no_longer_maps_to_empty_payload",
+      "empty_no_body_no_longer_maps_to_empty_payload",
+      "helper_target_requires_server_owned_provenance",
+      "symlinked_helper_targets_are_blocked"
+    ],
+    "next_master_plan_contour": "WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS"
+  }
+}

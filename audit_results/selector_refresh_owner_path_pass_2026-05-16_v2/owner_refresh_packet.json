@@ -1,0 +1,33 @@
+{
+  "sync_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+    ],
+    "selected_backends_reported": [
+      "gpt2026bis-team",
+      "kip85905-team",
+      "pig-outlook-team",
+      "beep-outlook-team",
+      "k-ponomarev-photo",
+      "k-gpt-pro-3k",
+      "k-gpt-pro",
+      "new-new22222",
+      "new-new11111",
+      "new-new44444",
+      "new-new55555",
+      "new-gpt-bis",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410"
+    ]
+  }
+}

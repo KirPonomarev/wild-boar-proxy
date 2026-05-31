@@ -1,0 +1,34 @@
+[
+  {
+    "scope": "current",
+    "workdir": "/Volumes/Work/wild-boar-proxy",
+    "test": "tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "======================================================================\nFAIL: test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof (tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/Work/wild-boar-proxy/tests/test_cli.py\", line 7315, in test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof\n    self.assertEqual(onboarding[\"status_observed\"][\"command_status\"], \"ok\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'error' != 'ok'\n- error\n+ ok\n\n\n----------------------------------------------------------------------\nRan 1 test in 1.520s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "scope": "current",
+    "workdir": "/Volumes/Work/wild-boar-proxy",
+    "test": "tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "======================================================================\nFAIL: test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible (tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Volumes/Work/wild-boar-proxy/tests/test_cli.py\", line 2863, in test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible\n    self.assertEqual(result.returncode, 0, result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 1 != 0 : sync-stable:8318\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.600s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "scope": "head_8fbb165",
+    "workdir": "/tmp/wbp-head-compare.btVnbR",
+    "test": "tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "======================================================================\nFAIL: test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof (tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/wbp-head-compare.btVnbR/tests/test_cli.py\", line 7064, in test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof\n    self.assertEqual(onboarding[\"status_observed\"][\"command_status\"], \"ok\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'error' != 'ok'\n- error\n+ ok\n\n\n----------------------------------------------------------------------\nRan 1 test in 1.017s\n\nFAILED (failures=1)\n"
+  },
+  {
+    "scope": "head_8fbb165",
+    "workdir": "/tmp/wbp-head-compare.btVnbR",
+    "test": "tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "======================================================================\nFAIL: test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible (tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/wbp-head-compare.btVnbR/tests/test_cli.py\", line 2612, in test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible\n    self.assertEqual(result.returncode, 0, result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 1 != 0 : sync-stable:8318\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.604s\n\nFAILED (failures=1)\n"
+  }
+]

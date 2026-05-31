@@ -1,0 +1,17 @@
+{
+  "backup_created": false,
+  "backup_plan_rendered": true,
+  "captured_at_utc": "2026-05-27T06:21:14.408372Z",
+  "manifest_schema_is_materialized_backup": false,
+  "packet_kind": "persistent_backup_restore_equivalence_non_claim",
+  "path_hash_inventory_is_restorable_backup": false,
+  "persistent_profile_id": "wbp-custom-main",
+  "reason_class": "",
+  "restore_executed": false,
+  "restore_plan_rendered": true,
+  "restored_state_equivalence_claimed": false,
+  "restored_state_equivalence_proven": false,
+  "rollback_executed": false,
+  "rollback_proven": false,
+  "status": "ok"
+}

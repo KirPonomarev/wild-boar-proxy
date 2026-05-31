@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "contract_id": "WBP_NATIVE_CODEX_LAUNCH_CONTRACT",
+  "status": "active_contract",
+  "scope": "contract_only_no_runtime_launch",
+  "allowed_launch_modes": [
+    "CODEX_CUSTOM_NATIVE_APP",
+    "ORIGINAL_CODEX_VIA_WBP"
+  ],
+  "non_goals": [
+    "live_codex_app_launch",
+    "runtime_mutation",
+    "ui_wiring",
+    "account_onboarding",
+    "universal_api_onboarding",
+    "final_e2e_proof"
+  ],
+  "mode_contracts": {
+    "CODEX_CUSTOM_NATIVE_APP": {
+      "requires": [
+        "separate_visible_codex_app_window",
+        "isolated_home",
+        "isolated_codex_home",
+        "isolated_profile_data_dir",
+        "isolated_app_support_dir",
+        "isolated_cache_dir",
+        "isolated_runtime_dir",
+        "keychain_reset_prompt_absent",
+        "wbp_cliproxyapi_endpoint",
+        "server_owned_route_configuration",
+        "current_codex_touched_false",
+        "cleanup_command",
+        "rollback_expectation"
+      ],
+      "forbids": [
+        "current_codex_home",
+        "browser_supplied_route",
+        "browser_supplied_backend",
+        "browser_supplied_home",
+        "browser_supplied_codex_home",
+        "web_workbench_as_native_completion"
+      ]
+    },
+    "ORIGINAL_CODEX_VIA_WBP": {
+      "requires": [
+        "ordinary_codex_app_identity",
+        "temporary_wbp_routing_config_only",
+        "permanent_user_config_mutated_false",
+        "cleanup_removes_temporary_state",
+        "restart_without_wbp_status_ok"
+      ],
+      "forbids": [
+        "custom_home",
+        "custom_codex_home",
+        "permanent_user_config_mutation",
+        "protected_baseline_only_as_original_via_wbp"
+      ]
+    }
+  },
+  "identity_chain": [
+    "wbp_action_id",
+    "launch_mode",
+    "process_id",
+    "process_lineage",
+    "window_id_or_title",
+    "profile_dir",
+    "codex_home",
+    "route_endpoint",
+    "trace_id"
+  ],
+  "negative_substitution_checks": [
+    "process_started_is_not_usable_native_window",
+    "window_observed_is_not_routed_prompt_proof",
+    "workbench_ready_is_not_native_app_launch",
+    "original_protected_baseline_is_not_original_via_wbp",
+    "route_configured_is_not_prompt_inference"
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "contour_id": "GENERATED_EVIDENCE_DECISION_GATE",
+  "captured_at_local": "2026-05-13",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "c095b73 Commit external agent lab source tail separately",
+  "mode": "decision_only",
+  "scope": {
+    "included_untracked_groups": [
+      "audit_results/external_lab_*",
+      "audit_results/c02_mini_eval_admission_2026-05-09.json",
+      "external_agent_lab/legacy/eval_results/"
+    ],
+    "excluded": [
+      "wild_boar_proxy/runtime.py",
+      "external-agent-lab source files",
+      "UI files",
+      "desktop files",
+      "evidence mutation"
+    ]
+  },
+  "inventory": {
+    "untracked_generated_evidence_total": 168,
+    "groups": [
+      {
+        "group": "untracked_external_lab_audit_artifacts",
+        "count": 157,
+        "classification": "generated_operational_evidence"
+      },
+      {
+        "group": "untracked_other_admission_artifact",
+        "count": 1,
+        "classification": "generated_admission_evidence"
+      },
+      {
+        "group": "untracked_legacy_eval_results",
+        "count": 10,
+        "classification": "generated_eval_logs"
+      }
+    ],
+    "all_matching_external_lab_artifacts_on_disk": 166,
+    "tracked_matching_external_lab_artifacts_on_disk": 9,
+    "note": "The decision tail is the untracked set. Some matching external-lab artifacts are already tracked and are not part of this tail.",
+    "untracked_generated_evidence_size": "788K"
+  },
+  "risk_scan_summary": {
+    "direct_secret_value_matches": 0,
+    "files_with_local_or_private_path_markers": 55,
+    "files_with_provider_auth_runtime_or_live_markers": 107,
+    "external_reference_trace_scan": "no_matches_reported_neutrally",
+    "risk_classification": "operational_evidence_sensitive_not_source",
+    "interpretation": [
+      "No raw token-like secret values were found by the direct scan.",
+      "The evidence tail contains enough local path, provider/auth, runtime, and live-operation markers that it should not be committed as ordinary source.",
+      "The generated evidence tail should remain pending until owner selects a dedicated execution contour."
+    ]
+  },
+  "source_dependency_check": {
+    "targeted_tests_without_evidence_mutation": "pass",
+    "static_reference_check": "metadata_references_only",
+    "source_or_tests_require_exact_generated_files": false,
+    "note": "Current source contains historical metadata references to selected eval artifact names, but the targeted tests do not require these generated files as inputs."
+  },
+  "stop_and_diagnose_event": {
+    "triggered": true,
+    "reason": "A temporary dependency-check attempt moved generated evidence before failing. This violated the decision-only contour rule.",
+    "recovery": "The generated evidence files were restored to the original tail shape before artifacts were created.",
+    "post_recovery_status": {
+      "deleted_tracked_files": 0,
+      "untracked_generated_evidence_total": 168,
+      "targeted_tests": "pass"
+    },
+    "guard_added_for_this_contour": "No further dependency checks may move, delete, park, redact, or edit generated evidence. Only static reads and tests are allowed."
+  },
+  "owner_decision_options": [
+    {
+      "option": "keep_pending_with_explicit_blocker",
+      "effect": "No filesystem mutation. UI backfill remains blocked unless owner explicitly accepts pending evidence as a documented blocker."
+    },
+    {
+      "option": "open_generated_evidence_park_execution_gate",
+      "effect": "Separate approved contour to move generated evidence outside repo."
+    },
+    {
+      "option": "open_generated_evidence_review_and_redaction_gate",
+      "effect": "Separate approved contour to review/redact evidence before any possible commit."
+    },
+    {
+      "option": "open_generated_evidence_delete_gate",
+      "effect": "Separate approved destructive contour. Requires exact owner approval."
+    },
+    {
+      "option": "open_generated_evidence_commit_as_evidence_gate",
+      "effect": "Separate approved evidence contour. Must not be ordinary source commit."
+    }
+  ],
+  "recommended_default": "keep_pending_with_explicit_owner_decision_required",
+  "final_state": "GENERATED_EVIDENCE_DECISION_READY_OWNER_APPROVAL_REQUIRED",
+  "remaining_dirty_buckets_after_this_decision": [
+    "runtime_tail",
+    "generated_evidence_tail"
+  ]
+}

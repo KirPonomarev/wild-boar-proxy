@@ -1,0 +1,21 @@
+{
+  "autonomous_orchestration_proven": false,
+  "captured_at_utc": "2026-05-29T12:04:50.582529Z",
+  "chain_step_messages": [
+    "PRIMARY_HANDOFF_READY",
+    "CODING_ARTIFACT:API_PATCH",
+    "PRIMARY_RETURN_CONFIRMED"
+  ],
+  "chain_step_slot_ids": [
+    "primary_model_slot",
+    "coding_agent_model_slot",
+    "primary_model_slot"
+  ],
+  "coding_artifact_returned": true,
+  "operator_mediated_sequential": true,
+  "packet_kind": "final_dual_lane_workflow",
+  "primary_return_consumed_coding_artifact": true,
+  "status": "ok",
+  "successful_chain_implies_autonomy": false,
+  "workflow_shape": "primary_to_coding_to_primary"
+}

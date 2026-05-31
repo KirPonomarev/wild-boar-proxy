@@ -1,0 +1,164 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_PROMOTE_DEMOTE_ACTION_GATE",
+  "date": "2026-05-12",
+  "status": "implemented_verified",
+  "scope": {
+    "included": [
+      "web design command adapter specs for accounts_promote and accounts_demote",
+      "live design server ui_action allowlist entries for promote_account and demote_account",
+      "accounts list preflight eligibility gates before lifecycle command execution",
+      "accounts screen row actions for reserve-to-active and active-to-reserve placement",
+      "targeted adapter, live server, and static UI tests"
+    ],
+    "excluded": [
+      "retire account",
+      "onboard account",
+      "desktop renderer",
+      "runtime.py",
+      "direct state or log reads",
+      "policy or rollout mutation"
+    ]
+  },
+  "canonical_boundaries": {
+    "browser_payload": "ui_action plus structured account_id only",
+    "server_preflight": "accounts list --json",
+    "adapter_commands": [
+      {
+        "adapter_command_id": "accounts_promote",
+        "argv_template": [
+          "accounts",
+          "promote",
+          "{account_id}",
+          "--json"
+        ],
+        "category": "lifecycle",
+        "confirmation_required": true,
+        "required_args": [
+          "account_id"
+        ],
+        "allowed_args": [
+          "account_id"
+        ]
+      },
+      {
+        "adapter_command_id": "accounts_demote",
+        "argv_template": [
+          "accounts",
+          "demote",
+          "{account_id}",
+          "--json"
+        ],
+        "category": "lifecycle",
+        "confirmation_required": true,
+        "required_args": [
+          "account_id"
+        ],
+        "allowed_args": [
+          "account_id"
+        ]
+      }
+    ],
+    "post_action_truth": "UI action result is not runtime truth; accounts screen refreshes canonical accounts readonly packet after action."
+  },
+  "eligibility_gates": [
+    {
+      "ui_action": "promote_account",
+      "eligible_when": [
+        "account exists in accounts list packet",
+        "pool is reserve",
+        "manual_hold is false",
+        "pool is not retired"
+      ],
+      "blocked_before_lifecycle_command_when": [
+        "unknown account_id",
+        "unsafe account_id",
+        "extra payload field",
+        "pool is active",
+        "pool is retired",
+        "manual_hold is true"
+      ],
+      "error_codes": [
+        "UI_ACCOUNT_ID_NOT_FOUND",
+        "UI_ACCOUNT_ID_UNSAFE",
+        "UI_ACTION_NOT_ALLOWED",
+        "UI_ACCOUNT_PROMOTE_INELIGIBLE",
+        "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE"
+      ]
+    },
+    {
+      "ui_action": "demote_account",
+      "eligible_when": [
+        "account exists in accounts list packet",
+        "pool is active",
+        "manual_hold is false",
+        "pool is not retired"
+      ],
+      "blocked_before_lifecycle_command_when": [
+        "unknown account_id",
+        "unsafe account_id",
+        "extra payload field",
+        "pool is reserve",
+        "pool is retired",
+        "manual_hold is true"
+      ],
+      "error_codes": [
+        "UI_ACCOUNT_ID_NOT_FOUND",
+        "UI_ACCOUNT_ID_UNSAFE",
+        "UI_ACTION_NOT_ALLOWED",
+        "UI_ACCOUNT_DEMOTE_INELIGIBLE",
+        "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE"
+      ]
+    }
+  ],
+  "ui_contract": {
+    "reserve_accounts": "render promote_account and hold_account when not retired and not manually held",
+    "active_accounts": "render demote_account and hold_account when not retired and not manually held",
+    "manual_hold_accounts": "render release_account instead of promote/demote/hold",
+    "retired_accounts": "render no lifecycle row actions",
+    "fixture_mode": "account actions remain disabled unless live action metadata allows them",
+    "copy_guard": "accounts screen no longer says lifecycle actions are deferred; it says lifecycle actions are bounded action requests"
+  },
+  "tests": {
+    "targeted_suite": {
+      "command": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+      "result": "passed",
+      "count": 52
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "count": 546
+    },
+    "coverage_added": [
+      "adapter allowlist exact argv metadata for accounts_promote/accounts_demote",
+      "server metadata for promote_account/demote_account",
+      "preflight command sequence accounts list before promote/demote",
+      "ineligible targets blocked before lifecycle command execution",
+      "raw adapter command ids are still rejected as browser ui_action values",
+      "static UI contains ui_action names and not raw accounts promote/demote strings"
+    ]
+  },
+  "changed_files": [
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "known_followups": [
+    {
+      "item": "dense account row action layout may need button grouping during visual stabilization",
+      "disposition": "defer to UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "item": "retire and onboard remain intentionally unimplemented",
+      "disposition": "next account lifecycle contours"
+    },
+    {
+      "item": "pre-existing dirty worktree tail includes runtime and external lab files outside this contour",
+      "disposition": "exclude from this contour commit and adjudicate under WORKTREE_TAIL_ADJUDICATION"
+    }
+  ]
+}

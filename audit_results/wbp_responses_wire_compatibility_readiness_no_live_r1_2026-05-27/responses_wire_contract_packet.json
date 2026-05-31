@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-27T06:58:39.430876Z",
+  "closes_parent_master_target": false,
+  "empty_input_error_ok": true,
+  "failure_semantics_fixture_ok": true,
+  "fixture_truth_present": true,
+  "live_truth_present": false,
+  "native_acceptance_truth_present": false,
+  "no_live_or_native_execution": true,
+  "non_stream_shape_ok": true,
+  "packet_kind": "responses_wire_contract",
+  "parent_master_target": "WBP_RESPONSES_LIVE_COMPATIBILITY_CLASSIFIED",
+  "status": "ok",
+  "stream_shape_ok": true,
+  "target_status": "WBP_RESPONSES_WIRE_COMPATIBILITY_READINESS_NO_LIVE_R1_CLASSIFIED",
+  "tool_loop_fixture_ok": true,
+  "transform_profile_fixture_ok": true,
+  "wire_shape_truth_present": true
+}

@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "slice": "REAL_CUSTOM_DESKTOP_CLIENT_LAUNCH_AND_REPEATABILITY",
+  "status": "ok",
+  "runs": [
+    {
+      "index": 1,
+      "real_codex_app_launched": true,
+      "launch_phase": "app_process_confirmed",
+      "process_confirmed": true,
+      "current_session_untouched_after_launch_client": true,
+      "custom_launch_running_status": true,
+      "custom_launch_claim_scope": "isolated_session_workbench_launch",
+      "custom_launch_current_codex_touched": false,
+      "session_id": "ccs-d5e51834b95a4bb3b2ac",
+      "gpt_response_marker": "WBP_CUSTOM_GPT_ACCOUNT_OK",
+      "gpt_source_class": "gpt_account",
+      "wbp_path_proven": true,
+      "cli_proxy_api_path_proven": true,
+      "trace_observer_packet_present": true,
+      "cleanup_status": "ok",
+      "cleanup_current_codex_home_touched": false,
+      "cleanup_owned_session_root_only": true,
+      "accounts_status": "degraded",
+      "accounts_machine_error_code": "ACCOUNTS_TRUTH_DEGRADED",
+      "api_connections_status": "ok",
+      "api_connections_machine_error_code": "OK",
+      "external_blocker_status": "error",
+      "external_blocker_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+    },
+    {
+      "index": 2,
+      "real_codex_app_launched": true,
+      "launch_phase": "app_process_confirmed",
+      "process_confirmed": true,
+      "current_session_untouched_after_launch_client": true,
+      "custom_launch_running_status": true,
+      "custom_launch_claim_scope": "isolated_session_workbench_launch",
+      "custom_launch_current_codex_touched": false,
+      "session_id": "ccs-cfe043c2f7214ff3b7a1",
+      "gpt_response_marker": "WBP_CUSTOM_GPT_ACCOUNT_OK",
+      "gpt_source_class": "gpt_account",
+      "wbp_path_proven": true,
+      "cli_proxy_api_path_proven": true,
+      "trace_observer_packet_present": true,
+      "cleanup_status": "ok",
+      "cleanup_current_codex_home_touched": false,
+      "cleanup_owned_session_root_only": true,
+      "accounts_status": "degraded",
+      "accounts_machine_error_code": "ACCOUNTS_TRUTH_DEGRADED",
+      "api_connections_status": "ok",
+      "api_connections_machine_error_code": "OK",
+      "external_blocker_status": "error",
+      "external_blocker_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+    },
+    {
+      "index": 3,
+      "real_codex_app_launched": true,
+      "launch_phase": "app_process_confirmed",
+      "process_confirmed": true,
+      "current_session_untouched_after_launch_client": true,
+      "custom_launch_running_status": true,
+      "custom_launch_claim_scope": "isolated_session_workbench_launch",
+      "custom_launch_current_codex_touched": false,
+      "session_id": "ccs-1c439b477bb445f0a5c9",
+      "gpt_response_marker": "WBP_CUSTOM_GPT_ACCOUNT_OK",
+      "gpt_source_class": "gpt_account",
+      "wbp_path_proven": true,
+      "cli_proxy_api_path_proven": true,
+      "trace_observer_packet_present": true,
+      "cleanup_status": "ok",
+      "cleanup_current_codex_home_touched": false,
+      "cleanup_owned_session_root_only": true,
+      "accounts_status": "degraded",
+      "accounts_machine_error_code": "ACCOUNTS_TRUTH_DEGRADED",
+      "api_connections_status": "ok",
+      "api_connections_machine_error_code": "OK",
+      "external_blocker_status": "error",
+      "external_blocker_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+    }
+  ],
+  "desktop_launch_repeatability": {
+    "attempts": 3,
+    "all_real_codex_app_launched": true,
+    "all_process_confirmed": true,
+    "all_current_session_untouched": true
+  },
+  "gpt_account_repeatability": {
+    "attempts": 3,
+    "all_running_status_true": true,
+    "all_markers_exact": true,
+    "all_source_class_gpt_account": true,
+    "all_wbp_paths_proven": true,
+    "all_trace_packets_present": true
+  },
+  "cleanup_repeatability": {
+    "attempts": 3,
+    "all_cleanup_ok": true,
+    "all_cleanup_current_codex_home_untouched": true,
+    "all_cleanup_owned_session_root_only": true
+  },
+  "accounts_checks_repeatability": {
+    "attempts": 3,
+    "statuses": [
+      "degraded",
+      "degraded",
+      "degraded"
+    ],
+    "machine_error_codes": [
+      "ACCOUNTS_TRUTH_DEGRADED",
+      "ACCOUNTS_TRUTH_DEGRADED",
+      "ACCOUNTS_TRUTH_DEGRADED"
+    ],
+    "stable_truth": true
+  },
+  "api_checks_repeatability": {
+    "attempts": 3,
+    "statuses": [
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "machine_error_codes": [
+      "OK",
+      "OK",
+      "OK"
+    ],
+    "stable_truth": true
+  },
+  "external_blocker_repeatability": {
+    "attempts": 3,
+    "all_blocked_same_way": true,
+    "machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+  },
+  "browser_proof": {
+    "dom_snapshot_after_launch_client": true,
+    "dom_snapshot_after_custom_launch": true,
+    "dom_snapshot_after_launch_client_confirmed": true,
+    "dom_snapshot_after_live_prompt": false,
+    "png_screenshots_captured": false
+  },
+  "overall_8b_status_after_slice": "partial_blocked",
+  "slice_verdict": "pass_local_gap_closed_external_gap_still_blocked"
+}

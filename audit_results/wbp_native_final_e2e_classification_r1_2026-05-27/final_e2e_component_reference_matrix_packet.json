@@ -1,0 +1,49 @@
+{
+  "captured_at_utc": "2026-05-27T10:53:06.819582Z",
+  "checks": [
+    {
+      "name": "auth_strategy_reference_ok",
+      "packet": "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-27/provider_auth_strategy_packet.json",
+      "passed": true
+    },
+    {
+      "name": "responses_reference_ok",
+      "packet": "audit_results/wbp_responses_live_compatibility_non_native_r1_2026-05-27/responses_live_non_native_summary_packet.json",
+      "passed": true
+    },
+    {
+      "name": "model_availability_reference_ok",
+      "packet": "audit_results/wbp_model_availability_smoke_matrix_r1_2026-05-27/model_availability_direct_only_summary_packet.json",
+      "passed": true
+    },
+    {
+      "name": "custom_safety_reference_ok",
+      "packet": "audit_results/wbp_native_custom_safety_refresh_pre_live_r1_2026-05-27/native_custom_safety_refresh_summary_packet.json",
+      "passed": true
+    },
+    {
+      "name": "owner_ux_contour_reference_ok",
+      "packet": "audit_results/wbp_native_custom_owner_ux_acceptance_import_r1_2026-05-27/native_owner_usability_summary_packet.json",
+      "passed": true
+    },
+    {
+      "name": "original_reversibility_reference_ok",
+      "packet": "audit_results/wbp_original_codex_via_wbp_reversibility_import_r1_2026-05-27/original_wbp_reversibility_summary_packet.json",
+      "passed": true
+    },
+    {
+      "name": "detached_network_reference_is_context_only",
+      "packet": "audit_results/wbp_detached_native_custom_egress_owner_execution_import_r4_2026-05-27/detached_native_custom_egress_import_summary_packet.json",
+      "passed": true
+    }
+  ],
+  "packet_kind": "final_e2e_component_reference_matrix",
+  "reference_invalid_packets": [],
+  "reference_missing_packets": [],
+  "source_owner_ux_current_contour_token_status": "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+  "source_owner_ux_invalid_packets": [],
+  "source_owner_ux_missing_packets": [],
+  "source_owner_ux_summary_final_status": "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+  "source_owner_ux_summary_status": "ok",
+  "status": "ok"
+}

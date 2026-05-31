@@ -1,0 +1,21 @@
+{
+  "account_promotion_allowed": false,
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T18:45:18.024958Z",
+  "codex_cli_acceptance_proven": false,
+  "direct_egress_absence_proven": false,
+  "direct_only_contour": true,
+  "filesystem_safety_proven": false,
+  "final_e2e_proven": false,
+  "live_codex_cli_launch_allowed": false,
+  "live_native_launch_allowed": false,
+  "native_app_usability_proven": false,
+  "original_codex_reversibility_proven": false,
+  "packet_kind": "model_availability_layer_boundary",
+  "previous_matrix_import_allowed_as_current_truth": false,
+  "proof_transport": "direct_wbp_http_non_stream",
+  "proves_model_availability_only": true,
+  "schema_version": 1,
+  "status": "ok",
+  "wire_fidelity_repair_allowed": false
+}

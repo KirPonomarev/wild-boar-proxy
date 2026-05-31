@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:35:53.767909Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_WINDOW_USABILITY_REPROOF_PASS_R2",
+  "dispatch_scope": "custom_only_phase_3_reproof",
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "route_inference_attempted": false,
+  "native_launch_complete": false,
+  "ui_mutation_performed": false,
+  "product_status_upgraded": false,
+  "packet_kind": "native_repaired_process_observation",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "root_pid": 98705,
+  "process_group_id": 98705,
+  "process_observed": true,
+  "process_rows": [
+    {
+      "pid": 98705,
+      "ppid": 98704,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/MacOS/Codex"
+    },
+    {
+      "pid": 98773,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper"
+    },
+    {
+      "pid": 98775,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper"
+    },
+    {
+      "pid": 98786,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Resources/native/bare-modifier-monitor"
+    },
+    {
+      "pid": 98790,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Resources/codex"
+    },
+    {
+      "pid": 98802,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer)"
+    },
+    {
+      "pid": 98810,
+      "ppid": 98790,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/bin/git"
+    },
+    {
+      "pid": 98811,
+      "ppid": 98810,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98812,
+      "ppid": 98811,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git-remote-https"
+    },
+    {
+      "pid": 98822,
+      "ppid": 98810,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98828,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/bin/git"
+    },
+    {
+      "pid": 98829,
+      "ppid": 98828,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98830,
+      "ppid": 98829,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git-remote-https"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-29T05:47:05.176454Z",
+  "cleanup_rollback_expectation": "terminate_only_custom_process; do_not_delete_persistent_profile",
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+    "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+    "/Users/kirillponomarev/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+  ],
+  "hypothesis_selection_passed": true,
+  "live_mutation_attempted": false,
+  "native_launch_attempted": false,
+  "owner_action_required_before_native_launch": true,
+  "packet_kind": "persistent_restore_r5_admission",
+  "reason_class": "",
+  "single_window_admission_passed": true,
+  "status": "ok",
+  "stop_required_before_native_launch": true,
+  "storage_proof_may_remain_unproven": true
+}

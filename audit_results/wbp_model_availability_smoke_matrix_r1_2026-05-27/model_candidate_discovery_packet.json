@@ -1,0 +1,20 @@
+{
+  "all_model_sweep_attempted": false,
+  "captured_at_utc": "2026-05-27T09:15:47.065646Z",
+  "catalog_visible_counted_as_availability": false,
+  "catalog_visible_model_ids": [
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "codex-auto-review",
+    "gpt-image-2",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4"
+  ],
+  "configured_model": "gpt-5.5",
+  "packet_kind": "model_candidate_discovery",
+  "raw_secret_recorded": false,
+  "source": "direct_wbp_models_endpoint",
+  "status": "ok"
+}

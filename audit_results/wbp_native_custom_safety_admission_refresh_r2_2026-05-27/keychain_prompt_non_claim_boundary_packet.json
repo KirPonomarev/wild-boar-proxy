@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-27T05:21:28.693589Z",
+  "keychain_independence_claimed": false,
+  "keychain_mutation_performed": false,
+  "keychain_prompt_absence_counted_as_independence_proof": false,
+  "keychain_reset_performed": false,
+  "original_keychain_runtime_dependency": false,
+  "owner_action_recorded": "none",
+  "owner_cancel_counted_as_machine_proof": false,
+  "packet_kind": "keychain_prompt_non_claim_boundary",
+  "prompt_appeared": false,
+  "prompt_observation_status": "ok",
+  "raw_secret_recorded": false,
+  "status": "ok"
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_OBSERVER_AND_LIVE_PROMPT_PASS",
+  "captured_at_local_date": "2026-05-24",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before": "f42af40",
+  "previous_contour": {
+    "name": "CODEX_CUSTOM_SESSION_MANAGER_PASS",
+    "status": "closed_success_non_live",
+    "live_prompt_default": "blocked"
+  },
+  "authorization_phrase_present_in_active_thread": false,
+  "live_wbp_api_provider_commands_allowed": false,
+  "live_wbp_api_provider_commands_run": false,
+  "token_burn": 0,
+  "current_codex_mutation_allowed": false
+}

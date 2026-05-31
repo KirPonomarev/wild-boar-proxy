@@ -1,0 +1,16 @@
+{
+  "selector_followup_needed": true,
+  "reason": "rotation participation evidence is still stale after runtime recovery",
+  "post_runtime_rotation": {
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "selected_backend_count": 15,
+    "policy_drift_status": "clear"
+  },
+  "classification": {
+    "runtime_lane": "recovered",
+    "selector_lane": "still_blocked_by_stale_snapshot",
+    "exact_source_lane": "not_reopened"
+  },
+  "next_contour_authority": "selector_refresh_owner_path"
+}

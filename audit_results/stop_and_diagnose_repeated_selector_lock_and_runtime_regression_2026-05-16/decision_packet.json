@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION",
+  "status": "verified_pending_git_close",
+  "decision": "CONTINUE_STOP_AND_DIAGNOSE_WITH_CONCURRENT_OWNER_PATH_SOURCE_LOCALIZATION",
+  "safe_to_retry_now": false,
+  "requires_code_fix": false,
+  "requires_runtime_operator_step": true,
+  "contradiction_present": false,
+  "primary_root_cause_class": "true_concurrent_owner_path_contention_plus_runtime_truth_surface_fallback",
+  "root_cause_verdict": {
+    "lock_class": "true_concurrent_lock_with_live_holder_pid",
+    "stale_lock_classification": false,
+    "selector_snapshot_mutated_by_failed_sync": false,
+    "runtime_regression_kind": "truthful_fallback_to_observed_policy_surface_after_activation_evidence_went_stale",
+    "direct_sync_to_claim_gate_mutation_proved": false
+  },
+  "why": [
+    "repeated LOCK_HELD packets carried different live holder pids and no changed_files",
+    "serialized_lock code and tests classify live holder pids as LOCK_HELD and stale locks as unlink-and-retry",
+    "failed sync does not mutate selected_backend_snapshot, so selector freshness cannot be re-earned through a failed lock-held path",
+    "status --json reuses approved-target policy drift only while fresh activation evidence and live stable runtime still admit that surface",
+    "once activation evidence is stale, status truthfully falls back to observed auth-dir policy surface, which re-detects policy_drift and re-blocks claim_gate"
+  ],
+  "next_admitted_contour": "CONCURRENT_OWNER_PATH_SOURCE_LOCALIZATION_PASS",
+  "forbidden_next_moves": [
+    "repeat sync --json without localizing the concurrent owner path",
+    "claim selector refresh success",
+    "reopen auth admission",
+    "reopen onboarding",
+    "claim stage or pilot readiness",
+    "bundle repair into this diagnosis contour"
+  ]
+}
