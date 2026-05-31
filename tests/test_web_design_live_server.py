@@ -8116,6 +8116,8 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "machine_error_code": bridge_code,
                 "upstream_status": upstream_status,
                 "route_unchanged": route_unchanged,
+                "provider_called": True,
+                "downstream_called": True,
                 "fallback_used": fallback_used,
                 "fallback_attempted": fallback_used,
                 "stream_requested": stream_requested,
@@ -8135,6 +8137,8 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "upstream_status": upstream_status,
                 "bridge_machine_error_code": bridge_code,
                 "fallback_used": fallback_used,
+                "provider_called": True,
+                "downstream_called": True,
                 "route_digest_matches_launch": route_unchanged,
                 "auth_header_seen": True,
                 "auth_ok": auth_ok,
@@ -8157,6 +8161,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["bridge_status"], "BRIDGE_READY")
         self.assertEqual(packet["machine_error_code"], "BRIDGE_READY")
+        self.assertTrue(packet["bridge_alive"])
+        self.assertTrue(packet["bridge_port_known"])
+        self.assertTrue(packet["launch_id_known"])
+        self.assertTrue(packet["trace_id_known"])
+        self.assertEqual(packet["failure_machine_error_code"], "OK")
         self.assertEqual(
             packet["final_status"],
             "CUSTOM_CODEX_LIVE_BRIDGE_STABILITY_PROVEN_WITH_LIMITS",
@@ -8166,6 +8175,20 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(packet["auth_token_consistent"])
         self.assertTrue(packet["selected_mode_known"])
         self.assertTrue(packet["bridge_session_matches_active_window"])
+        self.assertTrue(packet["request_seen_after_launch"])
+        self.assertTrue(packet["last_request_seen"])
+        self.assertTrue(packet["upstream_called"])
+        self.assertTrue(packet["response_seen"])
+        self.assertTrue(packet["stream_completed"])
+        self.assertFalse(packet["stream_disconnected"])
+        self.assertTrue(packet["auth_header_expected"])
+        self.assertTrue(packet["auth_header_seen"])
+        self.assertFalse(packet["auth_mismatch"])
+        self.assertFalse(packet["stale_port"])
+        self.assertFalse(packet["old_window_answered"])
+        self.assertFalse(packet["api_only_calls_chatgpt"])
+        self.assertFalse(packet["recovery_available"])
+        self.assertEqual(packet["recommended_recovery_action"], "none")
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["silent_fallback_used"])
         self.assertFalse(packet["raw_backend_details_exposed"])
@@ -8185,7 +8208,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["bridge_status"], "BRIDGE_AUTH_FAILED")
         self.assertEqual(packet["machine_error_code"], "BRIDGE_AUTH_FAILED")
+        self.assertEqual(packet["failure_machine_error_code"], "BRIDGE_AUTH_MISMATCH")
         self.assertEqual(packet["last_http_status"], 401)
+        self.assertTrue(packet["auth_mismatch"])
+        self.assertEqual(packet["recommended_recovery_action"], "reauthorize")
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["restart_attempted"])
 
@@ -8202,6 +8228,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["bridge_status"], "BRIDGE_STREAM_DISCONNECTED")
+        self.assertEqual(packet["failure_machine_error_code"], "UPSTREAM_STREAM_INTERRUPTED")
+        self.assertTrue(packet["stream_disconnected"])
+        self.assertFalse(packet["stream_completed"])
+        self.assertEqual(packet["recommended_recovery_action"], "restart_bridge")
         self.assertTrue(packet["recovery_required"])
         self.assertFalse(packet["fallback_used"])
 
@@ -8217,6 +8247,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["bridge_status"], "BRIDGE_STALE_PORT")
+        self.assertEqual(packet["failure_machine_error_code"], "BRIDGE_PORT_STALE")
+        self.assertTrue(packet["stale_port"])
+        self.assertEqual(packet["recommended_recovery_action"], "restart_bridge")
         self.assertTrue(packet["recovery_required"])
         self.assertFalse(packet["fallback_used"])
 
@@ -8229,8 +8262,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["bridge_status"], "BRIDGE_WINDOW_NOT_BOUND")
+        self.assertEqual(packet["failure_machine_error_code"], "WINDOW_BOUND_TO_OLD_BRIDGE")
         self.assertFalse(packet["bridge_session_matches_active_window"])
         self.assertFalse(packet["trace_id_matches_launch"])
+        self.assertTrue(packet["old_window_answered"])
+        self.assertEqual(packet["recommended_recovery_action"], "relaunch_custom")
         self.assertTrue(packet["recovery_required"])
 
     def test_custom_live_bridge_stability_exposes_fallback_without_green_status(self) -> None:
@@ -8242,6 +8278,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(packet["bridge_status"], "BRIDGE_RECOVERY_REQUIRED")
+        self.assertEqual(packet["failure_machine_error_code"], "FALLBACK_USED")
         self.assertTrue(packet["fallback_used"])
         self.assertTrue(packet["fallback_attempted"])
         self.assertFalse(packet["silent_fallback_used"])
@@ -8262,6 +8299,51 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["forbidden_fields"], ["api_key", "trace_id"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["browser_trace_authority"])
+
+    def test_custom_live_bridge_stability_blocks_chatgpt_called_in_api_only(self) -> None:
+        trace = self._live_bridge_trace_fixture()
+        trace["last_record"]["chatgpt_route_used"] = True
+        trace["bridge_request_trace_packet"]["chatgpt_route_used"] = True
+
+        packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(execution_mode="api_only"),
+            bridge_trace_packet=trace,
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["bridge_status"], "BRIDGE_API_ONLY_CHATGPT_CALLED")
+        self.assertEqual(packet["failure_machine_error_code"], "CHATGPT_CALLED_IN_API_ONLY")
+        self.assertTrue(packet["api_only_calls_chatgpt"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_custom_live_bridge_stability_blocks_request_not_seen_and_response_not_seen(self) -> None:
+        no_request = self._live_bridge_trace_fixture()
+        no_request["bridge_request_trace_packet"]["request_started"] = False
+        no_request["last_record"]["request_seen_after_launch"] = False
+
+        request_packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=no_request,
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(request_packet["status"], "blocked")
+        self.assertEqual(request_packet["failure_machine_error_code"], "REQUEST_NOT_SEEN")
+        self.assertFalse(request_packet["last_request_seen"])
+
+        no_response = self._live_bridge_trace_fixture(bridge_code="BRIDGE_RESPONSES_ENDPOINT_UNREADY")
+        no_response["last_record"]["response_seen"] = False
+
+        response_packet = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=no_response,
+            expected_bridge_port=50555,
+        )
+
+        self.assertEqual(response_packet["status"], "blocked")
+        self.assertEqual(response_packet["failure_machine_error_code"], "RESPONSE_NOT_SEEN")
+        self.assertFalse(response_packet["last_response_seen"])
 
     def test_custom_live_bridge_stability_endpoint_reports_current_packet(self) -> None:
         server = ThreadingHTTPServer(

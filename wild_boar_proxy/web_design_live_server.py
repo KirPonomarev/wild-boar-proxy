@@ -4717,6 +4717,9 @@ def build_custom_codex_live_bridge_stability_packet(
         else {}
     )
     record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
+    trace_context = (
+        trace.get("trace_context") if isinstance(trace.get("trace_context"), dict) else {}
+    )
     stable_packet = build_stable_bridge_preflight_packet(
         last_launch_packet=launch,
         bridge_trace_packet=trace,
@@ -4734,6 +4737,11 @@ def build_custom_codex_live_bridge_stability_packet(
     trace_id_matches_launch = bool(launch_trace_id and trace_id and launch_trace_id == trace_id)
     launch_id_matches_trace = bool(
         launch_id and trace_launch_id and launch_id == trace_launch_id
+    )
+    old_window_answered = bool(
+        (launch_trace_id and trace_id and launch_trace_id != trace_id)
+        or (launch_id and trace_launch_id and launch_id != trace_launch_id)
+        or trace.get("stale_launch_packet") is True
     )
     bridge_session_matches_active_window = bool(
         launch.get("native_window_observed") is True
@@ -4768,6 +4776,22 @@ def build_custom_codex_live_bridge_stability_packet(
         request_trace.get("request_started") is True
         or record.get("request_seen_after_launch") is True
     )
+    request_seen_after_launch = record.get("request_seen_after_launch") is True
+    upstream_called = (
+        request_trace.get("provider_called") is True
+        or request_trace.get("downstream_called") is True
+        or record.get("provider_called") is True
+        or record.get("downstream_called") is True
+    )
+    response_seen = record.get("response_seen") is True
+    stream_requested = request_trace.get("stream_requested") is True or record.get(
+        "stream_requested"
+    ) is True
+    stream_completed = (
+        request_trace.get("stream_completed") is True
+        or record.get("stream_completed") is True
+        or (response_seen and not stream_requested and raw_bridge_machine_error_code == "OK")
+    )
     fallback_used = stable_packet.get("fallback_used") is True or recovery_packet.get(
         "fallback_used"
     ) is True
@@ -4793,7 +4817,52 @@ def build_custom_codex_live_bridge_stability_packet(
         or last_error_class == "stale_port"
         or "stale_port" in blocking_reasons
     )
-    if stable_packet.get("status") == "ok" and bridge_session_matches_active_window:
+    bridge_port = int(stable_packet.get("bridge_port") or expected_bridge_port or 0)
+    actual_bridge_port = int(
+        health.get("bridge_port")
+        or trace.get("bridge_port")
+        or launch.get("bridge_port")
+        or bridge_port
+        or 0
+    )
+    if expected_bridge_port and actual_bridge_port and actual_bridge_port != expected_bridge_port:
+        stale_port = True
+    auth_header_expected = (
+        health.get("auth_header_expected") is True
+        or trace.get("auth_header_expected") is True
+        or request_trace.get("auth_header_expected") is True
+    )
+    auth_header_seen = (
+        health.get("auth_header_present") is True
+        or trace.get("auth_header_seen") is True
+        or request_trace.get("auth_header_seen") is True
+        or record.get("auth_header_seen") is True
+    )
+    auth_mismatch = auth_header_expected and not (
+        health.get("auth_ok") is True
+        or trace.get("auth_ok") is True
+        or request_trace.get("auth_ok") is True
+        or record.get("auth_ok") is True
+    )
+    stream_disconnected = stream_failure and not stream_completed
+    api_only_calls_chatgpt = bool(
+        str(launch.get("execution_mode") or "") == "api_only"
+        and (
+            record.get("chatgpt_route_used") is True
+            or request_trace.get("chatgpt_route_used") is True
+        )
+    )
+    bridge_ready_evidence_complete = bool(
+        stable_packet.get("status") == "ok"
+        and bridge_session_matches_active_window
+        and request_started
+        and upstream_called
+        and response_seen
+        and stream_completed
+    )
+    if api_only_calls_chatgpt:
+        bridge_status = "BRIDGE_API_ONLY_CHATGPT_CALLED"
+    elif bridge_ready_evidence_complete:
         bridge_status = "BRIDGE_READY"
     elif auth_failure:
         bridge_status = "BRIDGE_AUTH_FAILED"
@@ -4814,6 +4883,37 @@ def build_custom_codex_live_bridge_stability_packet(
         "api_only",
         "chatgpt_plus_api",
     }
+    if bridge_ready := bridge_status == "BRIDGE_READY":
+        failure_machine_error_code = "OK"
+    elif auth_failure or auth_mismatch:
+        failure_machine_error_code = "BRIDGE_AUTH_MISMATCH"
+    elif stale_port:
+        failure_machine_error_code = "BRIDGE_PORT_STALE"
+    elif old_window_answered or not bridge_session_matches_active_window:
+        failure_machine_error_code = "WINDOW_BOUND_TO_OLD_BRIDGE"
+    elif stream_disconnected:
+        failure_machine_error_code = "UPSTREAM_STREAM_INTERRUPTED"
+    elif api_only_calls_chatgpt:
+        failure_machine_error_code = "CHATGPT_CALLED_IN_API_ONLY"
+    elif fallback_used:
+        failure_machine_error_code = "FALLBACK_USED"
+    elif request_started is not True:
+        failure_machine_error_code = "REQUEST_NOT_SEEN"
+    elif response_seen is not True:
+        failure_machine_error_code = "RESPONSE_NOT_SEEN"
+    else:
+        failure_machine_error_code = raw_bridge_machine_error_code
+    recovery_available = recovery_packet.get("restart_admissible") is True
+    if bridge_ready:
+        recommended_recovery_action = "none"
+    elif auth_failure or auth_mismatch:
+        recommended_recovery_action = "reauthorize"
+    elif stale_port or stream_disconnected:
+        recommended_recovery_action = "restart_bridge"
+    elif old_window_answered or not bridge_session_matches_active_window:
+        recommended_recovery_action = "relaunch_custom"
+    else:
+        recommended_recovery_action = "restart_bridge" if recovery_available else "none"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_live_bridge_stability",
@@ -4844,14 +4944,40 @@ def build_custom_codex_live_bridge_stability_packet(
         "trace_id_matches_launch": trace_id_matches_launch,
         "launch_id_matches_trace": launch_id_matches_trace,
         "trace_id": launch_trace_id,
-        "bridge_port": int(stable_packet.get("bridge_port") or expected_bridge_port or 0),
+        "bridge_alive": health.get("bridge_alive") is True or trace.get("bridge_alive") is True,
+        "bridge_port": bridge_port,
+        "actual_bridge_port": actual_bridge_port,
+        "bridge_port_known": bridge_port > 0,
+        "launch_id": launch_id,
+        "launch_id_known": bool(launch_id),
+        "trace_context_launch_id": str(
+            trace_context.get("launch_packet_id") or trace_context.get("launch_id") or ""
+        ),
+        "trace_id_known": bool(launch_trace_id),
         "last_http_status": last_http_status,
         "last_error_class": last_error_class,
+        "failure_machine_error_code": failure_machine_error_code,
+        "auth_header_expected": auth_header_expected,
+        "auth_header_seen": auth_header_seen,
+        "auth_mismatch": auth_mismatch,
+        "request_seen_after_launch": request_seen_after_launch,
+        "last_request_seen": request_started,
+        "upstream_called": upstream_called,
+        "upstream_status": last_http_status,
+        "response_seen": response_seen,
+        "last_response_seen": response_seen,
+        "stream_completed": stream_completed,
+        "stream_disconnected": stream_disconnected,
         "fallback_used": fallback_used,
         "fallback_attempted": fallback_attempted,
+        "api_only_calls_chatgpt": api_only_calls_chatgpt,
+        "stale_port": stale_port,
+        "old_window_answered": old_window_answered,
         "silent_fallback_used": bool(fallback_used and not fallback_attempted),
         "fallback_suppressed": True,
         "recovery_required": not bridge_ready,
+        "recovery_available": recovery_available,
+        "recommended_recovery_action": recommended_recovery_action,
         "restart_attempted": False,
         "restart_admissible": recovery_packet.get("restart_admissible") is True,
         "owner_action_required_for_live_restart": recovery_packet.get(
