@@ -2644,6 +2644,67 @@ class CliTests(unittest.TestCase):
             f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
         )
 
+    def write_fake_cli_proxy_api(
+        self,
+        path: Path,
+        *,
+        listen_on_configured_port: bool = True,
+        responses_ok: bool = True,
+        ignore_sigterm: bool = False,
+    ) -> Path:
+        response_status = 200 if responses_ok else 500
+        path.write_text(
+            "#!" + sys.executable + "\n"
+            "import json\n"
+            "import signal\n"
+            "import sys\n"
+            "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
+            "from pathlib import Path\n"
+            f"if {ignore_sigterm!r}:\n"
+            "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
+            "port = 8320\n"
+            "for raw_line in config.read_text().splitlines():\n"
+            "    line = raw_line.strip()\n"
+            "    if line.startswith('port:'):\n"
+            "        port = int(line.split(':', 1)[1].strip().strip('\"'))\n"
+            "        break\n"
+            f"if not {listen_on_configured_port!r}:\n"
+            "    port = port + 1\n"
+            "class Handler(BaseHTTPRequestHandler):\n"
+            "    def do_GET(self):\n"
+            "        if self.path == '/v1/models':\n"
+            "            body = json.dumps({'data': [{'id': 'gpt-5.4'}]}).encode('utf-8')\n"
+            "            self.send_response(200)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "    def do_POST(self):\n"
+            "        if self.path == '/v1/responses':\n"
+            "            length = int(self.headers.get('Content-Length', '0'))\n"
+            "            _ = self.rfile.read(length)\n"
+            f"            status = {response_status}\n"
+            "            payload = {'output_text': 'OK'} if status == 200 else {'error': {'message': 'fail'}}\n"
+            "            body = json.dumps(payload).encode('utf-8')\n"
+            "            self.send_response(status)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "    def log_message(self, fmt, *args):\n"
+            "        return\n"
+            "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+            "server.serve_forever()\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
     def build_backend(
         self,
         *,
@@ -18087,6 +18148,216 @@ class CliTests(unittest.TestCase):
         self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
         self.assertFalse(startup_owner["startup_attempted"])
         self.assertTrue(startup_owner["managed_listener_reachable"])
+
+    def test_managed_listener_start_reports_missing_engine_entrypoint(self) -> None:
+        missing_bin = self.bin_dir / "missing-cli-proxy-api"
+        stale_pid = self.managed_dir / "managed-proxy.pid"
+        stale_pid.write_text("999999\n", encoding="utf-8")
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(missing_bin)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_ENGINE_ENTRYPOINT_MISSING",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        self.assertEqual(startup_owner["status"], "blocked")
+        self.assertFalse(startup_owner["repo_owned_startup_owner_path_defined"])
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertFalse(startup_owner["process_started"])
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(stale_pid.read_text(encoding="utf-8"), "999999\n")
+
+    def test_managed_listener_start_reports_missing_managed_config(self) -> None:
+        fake_cli = self.write_fake_cli_proxy_api(self.bin_dir / "fake-cli-proxy-api")
+        (self.managed_dir / "managed-config.yaml").unlink()
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_MANAGED_CONFIG_MISSING",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_managed_listener_start_starts_engine_and_writes_managed_truth(
+        self,
+    ) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(self.bin_dir / "fake-cli-proxy-api")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["status"] = "failed"
+        state["managed_port"] = 8318
+        state["last_error"] = "prior state"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        try:
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["machine_error_code"], "OK")
+            self.assertEqual(payload["effective_mode"], "managed")
+            self.assertEqual(startup_owner["status"], "started")
+            self.assertTrue(startup_owner["startup_attempted"])
+            self.assertTrue(startup_owner["process_started"])
+            self.assertTrue(startup_owner["pid_recorded"])
+            self.assertTrue(startup_owner["live_attestation_passed"])
+            self.assertTrue(startup_owner["effective_mode_written"])
+            self.assertTrue(startup_owner["repo_owned_startup_owner_path_defined"])
+            self.assertIn(str(self.managed_dir / "managed-proxy.pid"), payload["changed_files"])
+            self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+            self.assertIn(
+                str(self.profile_dir / "runtime-effective-mode.txt"),
+                payload["changed_files"],
+            )
+            self.assertIn(
+                str(self.managed_dir / "supervisor-state.json"),
+                payload["changed_files"],
+            )
+            self.assertEqual(
+                runtime_mod.read_toml_string(self.profile_dir / "config.toml", "base_url"),
+                f"http://127.0.0.1:{port}/v1",
+            )
+            self.assertEqual(
+                (self.profile_dir / "runtime-effective-mode.txt")
+                .read_text(encoding="utf-8")
+                .strip(),
+                "managed",
+            )
+            self.assertEqual(
+                (self.managed_dir / "managed-proxy.pid").read_text(encoding="utf-8").strip(),
+                str(pid),
+            )
+        finally:
+            runtime_mod.terminate_process_group_or_pid(pid)
+
+    def test_managed_listener_start_rejects_ambiguous_existing_listener(self) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_CLIPROXY_BIN": str(self.bin_dir / "missing-cli-proxy-api")},
+                "managed",
+                "listener",
+                "start",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_AMBIGUOUS_EXISTING_LISTENER",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        self.assertTrue(startup_owner["managed_listener_reachable"])
+        self.assertFalse(startup_owner["startup_attempted"])
+        self.assertFalse(startup_owner["effective_mode_written"])
+
+    def test_managed_listener_start_cleans_stale_pid_before_start(self) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(self.bin_dir / "fake-cli-proxy-api")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        stale_pid = self.managed_dir / "managed-proxy.pid"
+        stale_pid.write_text("999999\n", encoding="utf-8")
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        try:
+            self.assertEqual(startup_owner["startup_outcome"], "stale_pid_cleaned_and_started")
+            self.assertNotEqual(stale_pid.read_text(encoding="utf-8").strip(), "999999")
+        finally:
+            runtime_mod.terminate_process_group_or_pid(pid)
+
+    def test_managed_listener_start_kills_process_on_wrong_port_failure(self) -> None:
+        port = free_port()
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            listen_on_configured_port=False,
+            ignore_sigterm=True,
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_MANAGED_LISTENER_START_WAIT_SECONDS": "0.25",
+            },
+            "managed",
+            "listener",
+            "start",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "MANAGED_STARTUP_LISTENER_UNREACHABLE",
+        )
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        self.assertTrue(startup_owner["process_started"])
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertFalse(runtime_mod.process_is_alive(str(pid)))
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt")
+            .read_text(encoding="utf-8")
+            .strip(),
+            "managed",
+        )
 
     def test_mode_set_respects_serialized_lock(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"

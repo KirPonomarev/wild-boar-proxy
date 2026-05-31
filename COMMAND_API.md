@@ -1675,6 +1675,42 @@ Field meaning rules:
   `sync --json`, and `launch smoke --json` must not imply that they own
   long-running managed-listener startup unless a future contract explicitly adds
   that owner path
+- `managed listener start --json` is the bounded repo-owned managed startup
+  owner path
+- `managed listener start --json` may invoke the `CLIProxyAPI` engine entrypoint
+  using the configured managed config, but must not implement a second
+  OpenAI-compatible server in Wild Boar Proxy
+- `managed listener start --json` may write only:
+  - `managed/managed-proxy.pid`
+  - `runtime-effective-mode.txt`
+  - `config.toml` `base_url`
+  - `managed/supervisor-state.json`
+- those writes are valid only after live listener proof for the configured
+  managed endpoint passes
+- required `managed_startup_owner` fields for `managed listener start --json`:
+  - `status`
+  - `owner_command_surface`
+  - `startup_attempted`
+  - `startup_outcome`
+  - `process_started`
+  - `pid_recorded`
+  - `managed_listener_endpoint`
+  - `managed_listener_reachable`
+  - `live_attestation_passed`
+  - `effective_mode_written`
+  - `repo_owned_startup_owner_path_defined`
+  - `machine_error_code`
+  - `blocking_reason`
+- startup failure must remain machine-readable with one of:
+  - `MANAGED_STARTUP_ENGINE_ENTRYPOINT_MISSING`
+  - `MANAGED_STARTUP_MANAGED_CONFIG_MISSING`
+  - `MANAGED_STARTUP_PROCESS_FAILED`
+  - `MANAGED_STARTUP_LISTENER_UNREACHABLE`
+  - `MANAGED_STARTUP_ATTESTATION_FAILED`
+  - `MANAGED_STARTUP_STALE_PID_CONFLICT`
+  - `MANAGED_STARTUP_AMBIGUOUS_EXISTING_LISTENER`
+  - `MANAGED_STARTUP_ROLLBACK_FAILED`
+- failure must not report stable fallback as managed startup success
 - ambient shell proxy env must not become the authoritative control-layer truth
   surface for current proxy selection
 - derived proxy env keys such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and
