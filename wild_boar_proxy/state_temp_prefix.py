@@ -33,6 +33,24 @@ class PrefixedTempInspection:
     artifacts: tuple[PrefixedTempArtifact, ...]
 
 
+@dataclass(frozen=True)
+class PrefixedTempCleanupResult:
+    deleted_paths: tuple[str, ...]
+    skipped_paths: tuple[str, ...]
+    stale_paths: tuple[str, ...]
+    fresh_paths: tuple[str, ...]
+    blocked_paths: tuple[str, ...]
+    invalid_roots: tuple[str, ...]
+
+    @property
+    def cleanup_performed(self) -> bool:
+        return bool(self.deleted_paths)
+
+    @property
+    def cleanup_blocked(self) -> bool:
+        return bool(self.blocked_paths or self.invalid_roots)
+
+
 class StateTempPrefixError(Exception):
     def __init__(self, message: str, *, machine_error_code: str) -> None:
         super().__init__(message)
@@ -83,6 +101,20 @@ def _normalize_ttl(stale_ttl_seconds: int) -> int:
             machine_error_code=STATE_TEMP_PREFIX_INVALID,
         )
     return stale_ttl_seconds
+
+
+def _fsync_parent_best_effort(parent: Path) -> None:
+    try:
+        parent_fd = os.open(parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            os.fsync(parent_fd)
+        except OSError:
+            return
+    finally:
+        os.close(parent_fd)
 
 
 def _normalize_roots(admitted_control_owned_parent_roots: tuple[Path, ...]) -> tuple[Path, ...]:
@@ -193,4 +225,67 @@ def inspect_prefixed_temp_artifacts(
         blocked_paths=tuple(blocked_paths),
         invalid_roots=tuple(invalid_roots),
         artifacts=tuple(sorted(artifacts_by_path.values(), key=lambda artifact: artifact.path)),
+    )
+
+
+def cleanup_prefixed_temp_artifacts(
+    admitted_control_owned_parent_roots: tuple[Path, ...],
+    *,
+    prefix: str = DEFAULT_TEMP_PREFIX,
+    now: datetime | None = None,
+    stale_ttl_seconds: int = DEFAULT_STALE_TTL_SECONDS,
+) -> PrefixedTempCleanupResult:
+    inspection = inspect_prefixed_temp_artifacts(
+        admitted_control_owned_parent_roots,
+        prefix=prefix,
+        now=now,
+        stale_ttl_seconds=stale_ttl_seconds,
+    )
+    if inspection.invalid_roots or inspection.blocked_paths:
+        return PrefixedTempCleanupResult(
+            deleted_paths=(),
+            skipped_paths=inspection.stale_paths,
+            stale_paths=inspection.stale_paths,
+            fresh_paths=inspection.fresh_paths,
+            blocked_paths=inspection.blocked_paths,
+            invalid_roots=inspection.invalid_roots,
+        )
+
+    artifacts_by_path = {artifact.path: artifact for artifact in inspection.artifacts}
+    admitted_root_keys = {
+        str(root)
+        for root in _normalize_roots(admitted_control_owned_parent_roots)
+    }
+    deleted_paths: list[str] = []
+    skipped_paths: list[str] = []
+
+    for stale_path_text in inspection.stale_paths:
+        artifact = artifacts_by_path.get(stale_path_text)
+        if artifact is None or artifact.blocked or not artifact.stale:
+            _append_unique(skipped_paths, stale_path_text)
+            continue
+        if artifact.root not in admitted_root_keys:
+            _append_unique(skipped_paths, stale_path_text)
+            continue
+
+        stale_path = Path(stale_path_text)
+        parent_key = _path_str_no_follow(stale_path.parent)
+        if parent_key != artifact.root:
+            _append_unique(skipped_paths, stale_path_text)
+            continue
+        if stale_path.is_symlink() or not stale_path.exists() or not stale_path.is_file():
+            _append_unique(skipped_paths, stale_path_text)
+            continue
+
+        stale_path.unlink()
+        _fsync_parent_best_effort(stale_path.parent)
+        _append_unique(deleted_paths, stale_path_text)
+
+    return PrefixedTempCleanupResult(
+        deleted_paths=tuple(deleted_paths),
+        skipped_paths=tuple(skipped_paths),
+        stale_paths=inspection.stale_paths,
+        fresh_paths=inspection.fresh_paths,
+        blocked_paths=inspection.blocked_paths,
+        invalid_roots=inspection.invalid_roots,
     )
