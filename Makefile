@@ -19,6 +19,7 @@ test-core:
 	$(PYTEST_SAFE_ENV) $(PYTEST) -q \
 		tests/test_closeout_resilience.py \
 		tests/test_repo_hygiene.py \
+		tests/test_truth_tree_harness.py \
 		tests/test_external_models.py \
 		tests/test_owner_surface_effect_inventory.py \
 		tests/test_status_read_snapshot_contract.py \

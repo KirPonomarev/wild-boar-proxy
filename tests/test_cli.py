@@ -20,6 +20,10 @@ from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from tools.truth_tree_harness import (
+    assert_declared_mutations_match,
+    snapshot_truth_tree,
+)
 from wild_boar_proxy import runtime as runtime_mod
 
 
@@ -386,13 +390,12 @@ class CliTests(unittest.TestCase):
     def assert_changed_files_bounded_and_declared(
         self,
         *,
-        before: dict[str, str],
-        after: dict[str, str],
+        before: dict[str, dict[str, object]],
+        after: dict[str, dict[str, object]],
         changed_files: object,
     ) -> None:
         self.assertIsInstance(changed_files, list)
         temp_root = Path(self.temp_dir.name).resolve()
-        changed_file_set = set()
         for value in changed_files:
             self.assertIsInstance(value, str)
             resolved = Path(value).resolve()
@@ -400,17 +403,7 @@ class CliTests(unittest.TestCase):
                 resolved == temp_root or temp_root in resolved.parents,
                 f"changed file escapes temp root: {value}",
             )
-            changed_file_set.add(value)
-
-        snapshot_paths = set(before) | set(after)
-        mutated_truth_paths = {
-            path
-            for path in snapshot_paths
-            if not path.startswith("DIR:")
-            and not path.startswith("DIR_GLOB:")
-            and before.get(path) != after.get(path)
-        }
-        self.assertLessEqual(mutated_truth_paths, changed_file_set)
+        assert_declared_mutations_match(before, after, changed_files)
 
     def test_status_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection("status", command_path="status")
@@ -2246,6 +2239,31 @@ class CliTests(unittest.TestCase):
         for path in sorted(repair_target_dir.glob("codex-*.json")):
             snapshot[str(path)] = path.read_text(encoding="utf-8")
         return snapshot
+
+    def truth_tree_snapshot(self) -> dict[str, dict[str, object]]:
+        return snapshot_truth_tree(
+            {
+                "stable_config": self.stable_dir / "config.yaml",
+                "backend_registry": self.managed_dir / "backend-registry.json",
+                "supervisor_state": self.managed_dir / "supervisor-state.json",
+                "approved_repair_target": (
+                    self.managed_dir / "approved-repair-target.json"
+                ),
+                "target_switch_transaction": (
+                    self.managed_dir / "target-switch-transaction.json"
+                ),
+                "stable_runtime_generated_config": (
+                    self.managed_dir / "stable-runtime-config.generated.yaml"
+                ),
+                "managed_config": self.managed_dir / "managed-config.yaml",
+                "managed_pid": self.managed_dir / "managed-proxy.pid",
+                "profile_config": self.profile_dir / "config.toml",
+                "runtime_mode": self.profile_dir / "runtime-mode.txt",
+                "runtime_effective_mode": (
+                    self.profile_dir / "runtime-effective-mode.txt"
+                ),
+            }
+        )
 
     def configure_dynamic_proxy_gate(self, *, expected_proxy_url: str) -> None:
         ProbeHandler.dynamic_state_file = str(self.managed_dir / "supervisor-state.json")
@@ -17512,12 +17530,13 @@ class CliTests(unittest.TestCase):
         self.configure_managed_runtime_probe(port)
         sync_script = self.write_state_patch_sync_script(
             self.profile_dir / "sync-keeps-managed-socket-only.sh",
+            state_patch={"last_sync_at": "2026-06-01T00:00:00+00:00"},
             stderr_text="sync-managed-socket-only",
         )
         server = ThreadingHTTPServer(("127.0.0.1", port), ListenerOnlyHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        before = self.state_snapshot()
+        before = self.truth_tree_snapshot()
         try:
             result = self.run_cli_with_env(
                 {"WBP_SYNC_SCRIPT": str(sync_script)}, "sync", "--json"
@@ -17526,7 +17545,7 @@ class CliTests(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=2)
             server.server_close()
-        after = self.state_snapshot()
+        after = self.truth_tree_snapshot()
 
         self.assertNotEqual(result.returncode, 0, result.stderr)
         payload = self.parse_strict_json_object(result.stdout)
@@ -17565,10 +17584,11 @@ class CliTests(unittest.TestCase):
         ProbeHandler.runtime_identity_managed_config_path = None
         sync_script = self.write_state_patch_sync_script(
             self.profile_dir / "sync-keeps-managed-foreign-openai.sh",
+            state_patch={"last_sync_at": "2026-06-01T00:00:00+00:00"},
             stderr_text="sync-managed-foreign-openai",
         )
         server, thread = self.start_probe_server(port)
-        before = self.state_snapshot()
+        before = self.truth_tree_snapshot()
         try:
             result = self.run_cli_with_env(
                 {"WBP_SYNC_SCRIPT": str(sync_script)}, "sync", "--json"
@@ -17577,7 +17597,7 @@ class CliTests(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=2)
             server.server_close()
-        after = self.state_snapshot()
+        after = self.truth_tree_snapshot()
 
         self.assertNotEqual(result.returncode, 0, result.stderr)
         payload = self.parse_strict_json_object(result.stdout)
