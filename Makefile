@@ -21,6 +21,7 @@ test-core:
 		tests/test_repo_hygiene.py \
 		tests/test_external_models.py \
 		tests/test_owner_surface_effect_inventory.py \
+		tests/test_read_compatibility_snapshots.py \
 		tests/test_read_effect_no_write.py \
 		tests/test_cli.py::CliTests::test_invariant_check_rejects_false_green \
 		tests/test_cli.py::CliTests::test_invariant_check_does_not_write_runtime_state
