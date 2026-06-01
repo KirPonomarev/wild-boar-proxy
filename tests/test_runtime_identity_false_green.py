@@ -686,6 +686,77 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             expected_ok=True,
         )
 
+    def test_runtime_identity_green_does_not_survive_foreign_listener_reprobe(
+        self,
+    ) -> None:
+        port = _free_port()
+        self.write_runtime_fixture(port)
+        _FalseGreenProbeHandler.runtime_identity_payload = (
+            self.matching_identity_payload(port)
+        )
+        _FalseGreenProbeHandler.mode = "identity_ok"
+        server = ThreadingHTTPServer(("127.0.0.1", port), _FalseGreenProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            before = self.truth_snapshot()
+            first_result = self.run_healthcheck()
+            after_first = self.truth_snapshot()
+            _FalseGreenProbeHandler.mode = "identity_missing"
+            second_result = self.run_healthcheck()
+            after_second = self.truth_snapshot()
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        for result in (first_result, second_result):
+            self.assertEqual(result.stderr, "")
+            self.assertNotIn(SENTINEL_SECRET, result.stdout)
+            self.assertNotIn("sk-d0a-", result.stdout)
+            self.assertNotIn(SENTINEL_SECRET, result.stderr)
+            self.assertNotIn("sk-d0a-", result.stderr)
+
+        first_payload = _strict_json_object(first_result.stdout)
+        self.assertEqual(first_result.returncode, first_payload["exit_code"])
+        self.assertEqual(first_payload["status"], "ok")
+        self.assertEqual(first_payload["machine_error_code"], "OK")
+        self.assertEqual(first_payload["liveness"], "healthy")
+        self.assertEqual(first_payload["effect"], "probe")
+        self.assertEqual(first_payload["changed_files"], [])
+        self.assertIsInstance(first_payload["attestation"]["observed_at_utc"], str)
+        self.assertEqual(first_payload["attestation"]["listener_ok"], True)
+        self.assertEqual(first_payload["attestation"]["models_ok"], True)
+        self.assertEqual(first_payload["attestation"]["responses_ok"], True)
+        self.assertEqual(first_payload["attestation"]["identity_proof_ok"], True)
+        self.assertEqual(first_payload["attestation"]["identity_failure_reason"], "")
+        self.assertTrue(first_payload["launch_readiness"]["gate_passed"])
+        self.assertEqual(first_payload["launch_readiness"]["status"], "ready")
+
+        second_payload = _strict_json_object(second_result.stdout)
+        self.assertEqual(second_result.returncode, second_payload["exit_code"])
+        self.assertEqual(second_payload["status"], "error")
+        self.assertNotEqual(second_payload["machine_error_code"], "OK")
+        self.assertEqual(
+            second_payload["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN"
+        )
+        self.assertNotEqual(second_payload["liveness"], "healthy")
+        self.assertEqual(second_payload["effect"], "probe")
+        self.assertEqual(second_payload["changed_files"], [])
+        self.assertIsInstance(second_payload["attestation"]["observed_at_utc"], str)
+        self.assertEqual(second_payload["attestation"]["listener_ok"], True)
+        self.assertEqual(second_payload["attestation"]["models_ok"], True)
+        self.assertEqual(second_payload["attestation"]["responses_ok"], True)
+        self.assertEqual(second_payload["attestation"]["identity_proof_ok"], False)
+        self.assertEqual(
+            second_payload["attestation"]["identity_failure_reason"],
+            "missing_runtime_identity",
+        )
+        self.assertFalse(second_payload["launch_readiness"]["gate_passed"])
+        self.assertEqual(second_payload["launch_readiness"]["status"], "blocked")
+        assert_no_truth_mutation(before, after_first)
+        assert_no_truth_mutation(after_first, after_second)
+
     def test_malformed_live_identity_is_not_runtime_green(self) -> None:
         self.assert_identity_probe_case(
             handler_mode="identity_malformed",
