@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "packet_kind": "chatgpt_only_route_truth_r8_verification",
+  "status": "ok",
+  "final_status": "CHATGPT_ONLY_ROUTE_TRUTH_VERIFIED",
+  "scope": "chatgpt_only_route_truth_only",
+  "tests": [
+    {
+      "command": "python3 -m pytest -q tests/test_codex_model_registry.py",
+      "result": "40 passed"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_web_design_live_server.py -k 'chatgpt_only_executor_truth_endpoint or api_only_executor_truth_endpoint or chatgpt_plus_api_slot_truth_endpoint'",
+      "result": "3 passed, 248 deselected"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/codex_model_registry.py wild_boar_proxy/web_design_live_server.py tests/test_codex_model_registry.py tests/test_web_design_live_server.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_cli.py -k 'managed_listener_start'",
+      "result": "10 passed, 427 deselected"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_codex_custom_sessions.py -k 'mixed_slot_dispatch_probe_blocks_chatgpt_only_without_api_slot or fallback_used or model_lane_fallback'",
+      "result": "1 passed, 47 deselected"
+    }
+  ],
+  "live_proof": {
+    "summary_packet": "chatgpt_only_route_truth_summary_packet.json",
+    "status": "ok",
+    "final_status": "CHATGPT_ONLY_ROUTE_TRUTH_CLOSED",
+    "declared_mode": "chatgpt_only",
+    "selected_model": "gpt-5.4-mini",
+    "executed_provider": "cliproxy",
+    "executed_model": "gpt-5.4-mini",
+    "request_count": 1,
+    "expected_text_observed": true,
+    "api_or_deepseek_invoked": false,
+    "fallback_used": false,
+    "cleanup_ok": true
+  },
+  "first_live_harness_attempt": {
+    "status": "not_product_blocker",
+    "machine_error_code": "MISSING_JSON_FILE",
+    "cause": "isolated proof harness omitted backend-registry.json before managed startup",
+    "resolution": "rerun with required isolated runtime registry and preserve final passing packet"
+  },
+  "independent_audit": {
+    "agent": "gpt-5.4-mini",
+    "blocker_count": 0,
+    "non_blocker_count": 1,
+    "non_blocker_resolution": "renamed managed startup changed-file count to runtime_changed_file_count and documented scope"
+  },
+  "scope_check": {
+    "quick_start_ui_changed": false,
+    "model_matrix_claimed": false,
+    "dual_role_claimed": false,
+    "profile_history_claimed": false,
+    "voice_claimed": false,
+    "speed_claimed": false,
+    "proof_file_mutation_claimed": false
+  },
+  "secret_scan": {
+    "audit_results_chatgpt_only_route_truth_r8": "clean",
+    "raw_route_or_secret_exposed": false
+  }
+}

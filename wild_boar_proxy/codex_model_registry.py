@@ -54,6 +54,12 @@ CHATGPT_PLUS_API_SLOT_TRUTH_FINAL_STATUS = (
 CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER = (
     "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_ROUTING_NOT_PROVEN"
 )
+CHATGPT_ONLY_EXECUTOR_TRUTH_FINAL_STATUS = (
+    "CHATGPT_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS"
+)
+CHATGPT_ONLY_EXECUTOR_TRUTH_BLOCKER = (
+    "STOP_AND_DIAGNOSE_CHATGPT_ONLY_EXECUTOR_TRUTH_NOT_PROVEN"
+)
 API_ONLY_EXECUTOR_TRUTH_FINAL_STATUS = "API_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS"
 API_ONLY_EXECUTOR_TRUTH_BLOCKER = "STOP_AND_DIAGNOSE_API_ONLY_EXECUTOR_TRUTH_NOT_PROVEN"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
@@ -2672,6 +2678,196 @@ def build_api_only_executor_truth_packet(
         "live_paid_call_attempted": False,
         "original_codex_touched": server_truth_packet.get("original_codex_touched") is True,
         "asar_touched": server_truth_packet.get("asar_touched") is True,
+        "deepseek_code_mutation_proven": False,
+        "file_mutation_proven": False,
+        "server_truth_packet": server_truth_packet,
+        "selector_packet": server_truth_packet.get("selector_packet", {}),
+        "next_action": "none" if executor_truth_proven else "stop_and_diagnose",
+    }
+
+
+def build_chatgpt_only_executor_truth_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    server_truth_packet = build_server_model_selection_and_reasoning_truth_packet(
+        payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    primary_slot = dict(server_truth_packet.get("primary_model_slot") or {})
+    coding_slot = dict(server_truth_packet.get("coding_agent_model_slot") or {})
+    execution_mode = str(server_truth_packet.get("execution_mode") or "")
+    chatgpt_primary_slot_proven = (
+        execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY
+        and primary_slot.get("status") == "bound"
+        and primary_slot.get("slot_id") == "primary_model_slot"
+        and primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
+        and primary_slot.get("source") == "server_catalog"
+        and primary_slot.get("server_issued") is True
+        and primary_slot.get("selection_enabled") is True
+        and str(primary_slot.get("model_id") or "")
+        == str(server_truth_packet.get("selected_chatgpt_model") or "")
+    )
+    coding_slot_not_bound_for_mode = (
+        execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY
+        and coding_slot.get("status") == "not_bound_for_mode"
+        and coding_slot.get("slot_id") == "coding_agent_model_slot"
+        and str(coding_slot.get("reason") or "") == "chatgpt_only_disables_api_execution"
+    )
+    no_runtime_claims = all(
+        server_truth_packet.get(field) is False
+        for field in (
+            "live_call_attempted",
+            "live_api_call_attempted",
+            "provider_called",
+            "network_calls_made",
+            "runtime_execution_proven",
+            "ui_work_attempted",
+            "custom_codex_launch_attempted",
+            "live_paid_call_attempted",
+            "original_codex_touched",
+            "asar_touched",
+        )
+    )
+    no_browser_or_secret_exposure = all(
+        server_truth_packet.get(field) is False
+        for field in (
+            "raw_backend_details_exposed",
+            "route_or_backend_exposed",
+            "secret_value_exposed",
+            "browser_raw_backend_authority_widened",
+        )
+    )
+    executor_truth_proven = (
+        server_truth_packet.get("status") == "ok"
+        and server_truth_packet.get("model_selection_truth_proven") is True
+        and execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY
+        and chatgpt_primary_slot_proven
+        and coding_slot_not_bound_for_mode
+        and server_truth_packet.get("chatgpt_only_calls_api") is False
+        and no_runtime_claims
+        and no_browser_or_secret_exposure
+    )
+    machine_error_code = "OK" if executor_truth_proven else str(
+        server_truth_packet.get("machine_error_code") or CHATGPT_ONLY_EXECUTOR_TRUTH_BLOCKER
+    )
+    if not executor_truth_proven and machine_error_code == "OK":
+        if execution_mode != CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY:
+            machine_error_code = "CHATGPT_ONLY_EXECUTOR_TRUTH_REQUIRES_CHATGPT_ONLY_MODE"
+        elif not chatgpt_primary_slot_proven:
+            machine_error_code = "CHATGPT_ONLY_EXECUTOR_PRIMARY_SLOT_NOT_CHATGPT"
+        elif not coding_slot_not_bound_for_mode:
+            machine_error_code = "CHATGPT_ONLY_EXECUTOR_CODING_SLOT_MUST_BE_UNBOUND"
+        else:
+            machine_error_code = CHATGPT_ONLY_EXECUTOR_TRUTH_BLOCKER
+    selected_chatgpt_model = str(server_truth_packet.get("selected_chatgpt_model") or "")
+    return {
+        "schema_version": 1,
+        "packet_kind": "chatgpt_only_executor_truth",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if executor_truth_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "final_status": (
+            CHATGPT_ONLY_EXECUTOR_TRUTH_FINAL_STATUS
+            if executor_truth_proven
+            else CHATGPT_ONLY_EXECUTOR_TRUTH_BLOCKER
+        ),
+        "executor_truth_proven": executor_truth_proven,
+        "declared_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+        "route_truth_status": "pass" if executor_truth_proven else "blocked",
+        "route_truth_basis": "managed_codex_chatgpt_only_command_surface",
+        "execution_mode": execution_mode,
+        "allowed_browser_fields": server_truth_packet.get("allowed_browser_fields", []),
+        "forbidden_browser_fields": server_truth_packet.get("forbidden_browser_fields", []),
+        "forbidden_fields": server_truth_packet.get("forbidden_fields", []),
+        "forbidden_browser_fields_redacted": server_truth_packet.get(
+            "forbidden_browser_fields_redacted"
+        )
+        is True,
+        "forbidden_fields_redacted": server_truth_packet.get("forbidden_fields_redacted")
+        is True,
+        "forbidden_field_count": int(server_truth_packet.get("forbidden_field_count") or 0),
+        "forbidden_field_categories": [
+            str(item)
+            for item in server_truth_packet.get("forbidden_field_categories") or []
+        ],
+        "selected_model": selected_chatgpt_model,
+        "selected_chatgpt_model": selected_chatgpt_model,
+        "selected_api_model": str(server_truth_packet.get("selected_api_model") or ""),
+        "executed_provider": "cliproxy" if executor_truth_proven else "",
+        "executed_model": selected_chatgpt_model if executor_truth_proven else "",
+        "selected_model_equals_executed_model": executor_truth_proven,
+        "selected_vs_executed_separated": True,
+        "api_provider_id": str(server_truth_packet.get("api_provider_id") or ""),
+        "api_reasoning_option_id": str(server_truth_packet.get("api_reasoning_option_id") or ""),
+        "api_reasoning_operator_level": str(
+            server_truth_packet.get("api_reasoning_operator_level") or ""
+        ),
+        "source": "server_selection_truth",
+        "server_selection_truth_used": server_truth_packet.get("model_selection_truth_proven")
+        is True,
+        "server_catalog_source": server_truth_packet.get("server_catalog_source") is True,
+        "selected_chatgpt_model_server_issued": chatgpt_primary_slot_proven,
+        "primary_model_slot": primary_slot,
+        "coding_agent_model_slot": coding_slot,
+        "chatgpt_primary_slot_proven": chatgpt_primary_slot_proven,
+        "coding_agent_model_slot_not_bound_for_mode": coding_slot_not_bound_for_mode,
+        "api_primary_slot_proven": False,
+        "chatgpt_line_selected_as_executor": chatgpt_primary_slot_proven,
+        "chatgpt_line_used_as_executor": chatgpt_primary_slot_proven,
+        "api_line_selected_as_executor": False,
+        "api_line_used_as_executor": False,
+        "api_line_used_as_coding_agent": False,
+        "chatgpt_line_used_as_coding_agent": False,
+        "api_or_deepseek_invoked": False,
+        "deepseek_route_absent": True,
+        "external_api_route_absent": True,
+        "api_only_calls_chatgpt": server_truth_packet.get("api_only_calls_chatgpt") is True,
+        "chatgpt_only_calls_api": server_truth_packet.get("chatgpt_only_calls_api") is True,
+        "dual_lane_slots_preserved": False,
+        "fallback_used": False,
+        "fallback_attempted": False,
+        "fallback_can_prove_success": False,
+        "model_lane_fallback_used": False,
+        "browser_selector_used": False,
+        "ui_selector_claimed": False,
+        "browser_route_authority": False,
+        "browser_secret_authority": False,
+        "browser_model_authority": False,
+        "browser_allowed_to_request_server_model_id": True,
+        "ui_label_counts_as_model_truth": False,
+        "model_self_report_counts_as_model_truth": False,
+        "codex_window_required": False,
+        "codex_window_observed": False,
+        "dry_server_truth_only": True,
+        "raw_backend_details_exposed": server_truth_packet.get("raw_backend_details_exposed")
+        is True,
+        "route_or_backend_exposed": server_truth_packet.get("route_or_backend_exposed") is True,
+        "secret_value_exposed": server_truth_packet.get("secret_value_exposed") is True,
+        "browser_raw_backend_authority_widened": server_truth_packet.get(
+            "browser_raw_backend_authority_widened"
+        )
+        is True,
+        "live_call_attempted": server_truth_packet.get("live_call_attempted") is True,
+        "live_api_call_attempted": server_truth_packet.get("live_api_call_attempted") is True,
+        "provider_called": server_truth_packet.get("provider_called") is True,
+        "network_calls_made": server_truth_packet.get("network_calls_made") is True,
+        "runtime_execution_proven": server_truth_packet.get("runtime_execution_proven") is True,
+        "ui_work_attempted": False,
+        "custom_codex_launch_attempted": False,
+        "live_paid_call_attempted": False,
+        "original_codex_touched": server_truth_packet.get("original_codex_touched") is True,
+        "asar_touched": server_truth_packet.get("asar_touched") is True,
+        "proof_file_smoke_required": False,
         "deepseek_code_mutation_proven": False,
         "file_mutation_proven": False,
         "server_truth_packet": server_truth_packet,

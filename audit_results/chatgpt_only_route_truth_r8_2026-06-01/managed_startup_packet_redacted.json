@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "managed_startup_owner": {
+    "status": "started",
+    "startup_outcome": "started",
+    "process_started": true,
+    "listener_ready": true,
+    "catalog_ready": true,
+    "model_execution_probe_ready": true,
+    "startup_gate_passed": true,
+    "managed_listener_reachable": true,
+    "machine_error_code": "OK",
+    "blocking_reason": ""
+  },
+  "runtime_changed_file_count": 4,
+  "runtime_changed_file_count_scope": "managed_listener_start_command_packet_changed_files_only_not_git_worktree"
+}

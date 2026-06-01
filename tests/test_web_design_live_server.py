@@ -12735,6 +12735,103 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(rejected["fallback_used"])
         self.assertFalse(rejected["live_call_attempted"])
 
+    def test_codex_custom_chatgpt_only_executor_truth_endpoint_is_non_live(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/chatgpt-only-executor-truth",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                        },
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/chatgpt-only-executor-truth",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "route_id": "browser-route",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["final_status"], "CHATGPT_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS")
+        self.assertTrue(packet["executor_truth_proven"])
+        self.assertEqual(packet["declared_mode"], "chatgpt_only")
+        self.assertEqual(packet["route_truth_status"], "pass")
+        self.assertEqual(packet["execution_mode"], "chatgpt_only")
+        self.assertEqual(packet["selected_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_api_model"], "")
+        self.assertEqual(packet["executed_provider"], "cliproxy")
+        self.assertEqual(packet["executed_model"], "gpt-5.3-codex")
+        self.assertTrue(packet["selected_model_equals_executed_model"])
+        self.assertTrue(packet["selected_vs_executed_separated"])
+        self.assertTrue(packet["server_selection_truth_used"])
+        self.assertTrue(packet["server_catalog_source"])
+        self.assertTrue(packet["selected_chatgpt_model_server_issued"])
+        self.assertTrue(packet["chatgpt_primary_slot_proven"])
+        self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(packet["primary_model_slot"]["source"], "server_catalog")
+        self.assertEqual(packet["coding_agent_model_slot"]["status"], "not_bound_for_mode")
+        self.assertTrue(packet["chatgpt_line_selected_as_executor"])
+        self.assertTrue(packet["chatgpt_line_used_as_executor"])
+        self.assertFalse(packet["api_line_selected_as_executor"])
+        self.assertFalse(packet["api_line_used_as_executor"])
+        self.assertFalse(packet["api_or_deepseek_invoked"])
+        self.assertTrue(packet["deepseek_route_absent"])
+        self.assertTrue(packet["external_api_route_absent"])
+        self.assertFalse(packet["chatgpt_only_calls_api"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["fallback_attempted"])
+        self.assertFalse(packet["browser_selector_used"])
+        self.assertFalse(packet["ui_selector_claimed"])
+        self.assertFalse(packet["browser_route_authority"])
+        self.assertFalse(packet["browser_secret_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["route_or_backend_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["browser_raw_backend_authority_widened"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["live_api_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertFalse(packet["runtime_execution_proven"])
+        self.assertFalse(packet["ui_work_attempted"])
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["final_status"],
+            "STOP_AND_DIAGNOSE_CHATGPT_ONLY_EXECUTOR_TRUTH_NOT_PROVEN",
+        )
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], [])
+        self.assertEqual(rejected["forbidden_field_count"], 1)
+        self.assertTrue(rejected["forbidden_fields_redacted"])
+        rejected_json = json.dumps(rejected, ensure_ascii=False)
+        self.assertNotIn("browser-route", rejected_json)
+        self.assertNotIn('"route_id"', rejected_json)
+        self.assertFalse(rejected["browser_route_authority"])
+        self.assertFalse(rejected["browser_secret_authority"])
+        self.assertFalse(rejected["browser_model_authority"])
+        self.assertTrue(rejected["browser_raw_backend_authority_widened"])
+        self.assertFalse(rejected["fallback_used"])
+        self.assertFalse(rejected["live_call_attempted"])
+
     def test_codex_custom_api_only_executor_truth_endpoint_is_non_live(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))

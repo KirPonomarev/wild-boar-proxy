@@ -557,6 +557,28 @@ also expose:
 - `browser_selector_used=false`
 - `ui_selector_claimed=false`
 
+Successful ChatGPT-only executor truth packets from the server command surface
+must expose:
+
+- `declared_mode=chatgpt_only`
+- `route_truth_status=pass`
+- `route_truth_basis=managed_codex_chatgpt_only_command_surface`
+- `selected_model`
+- `executed_provider=cliproxy`
+- `executed_model`
+- `selected_model_equals_executed_model=true`
+- `selected_vs_executed_separated=true`
+- `api_or_deepseek_invoked=false`
+- `deepseek_route_absent=true`
+- `external_api_route_absent=true`
+- `fallback_used=false`
+- `browser_selector_used=false`
+- `ui_selector_claimed=false`
+
+This surface proves server-side mode/slot/executor truth only. It must not claim
+Custom window launch, model-matrix coverage, dual-role routing, profile/history
+persistence, proof-file mutation, or UI selector truth.
+
 ## Additional launch-client owner surface
 
 `launch client --json` is the owner surface for bounded external host-client
