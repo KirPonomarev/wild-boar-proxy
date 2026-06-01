@@ -37,6 +37,7 @@ All operator commands must support `--json`.
 - `accounts promote <id> --json`
 - `accounts demote <id> --json`
 - `accounts hold <id> --json`
+- `accounts hold <id> --dry-run --json`
 - `accounts release <id> --json`
 - `accounts retire <id> --json`
 - `accounts onboard --json`
@@ -1377,6 +1378,27 @@ Canonical release outcomes include:
 Protective hold remains separate from promotion.
 Release remains separate from promotion and must not return a backend directly
 to `active`.
+
+`accounts hold <id> --dry-run --json` is the first account lifecycle dry-run
+contract surface. It is a `mutate` command-class packet, but must not write
+truth files, invoke the external accounts command, enter lifecycle locks, run
+sync, run status proof, run healthcheck, or attempt repair/recovery.
+
+Dry-run packets must include:
+
+- `effect="mutate"`
+- `dry_run=true`
+- `mutation_id=null`
+- `would_change`
+- `precondition_status=eligible|blocked`
+- `blocked_by`
+- `changed_files=[]`
+
+`would_change` reports the planned bounded write surface only. It must not be
+treated as evidence that a write occurred. A blocked dry-run must remain
+non-mutating and report the blocker machine-readably. Blocked hold dry-run
+packets use `machine_error_code=HOLD_DRY_RUN_BLOCKED` with `blocked_by`
+carrying the canonical precondition token.
 
 ## Additional retire owner surface
 

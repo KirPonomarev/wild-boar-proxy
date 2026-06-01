@@ -26,7 +26,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .command_effects import EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR, validate_effect
+from .command_effects import (
+    EFFECT_MUTATE,
+    EFFECT_PROBE,
+    EFFECT_READ,
+    EFFECT_REPAIR,
+    validate_effect,
+)
 
 
 class RuntimeErrorInfo(Exception):
@@ -12819,12 +12825,19 @@ def observe_status_proof_for_owner_path_under_lock(
     return status_payload, summarize_owner_path_status_observation(status_payload)
 
 
-def run_hold(paths: RuntimePaths, backend_id: str, reason: str | None) -> dict[str, Any]:
+def run_hold(
+    paths: RuntimePaths,
+    backend_id: str,
+    reason: str | None,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
     return run_protective_lifecycle_owner_path(
         paths,
         backend_id,
         action="hold",
         reason=reason,
+        dry_run=dry_run,
     )
 
 
@@ -13689,34 +13702,18 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         )
 
 
-def run_protective_lifecycle_owner_path(
+def _build_protective_lifecycle_plan(
     paths: RuntimePaths,
     backend_id: str,
     *,
     action: str,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    if not paths.accounts_bin.exists():
-        raise RuntimeErrorInfo(
-            f"Missing accounts command: {paths.accounts_bin}",
-            machine_error_code="MISSING_ACCOUNTS_BIN",
-            operator_action="user_action",
-        )
-
-    before = snapshot_known_files(paths)
     before_registry = read_json(paths.registry_file)
     before_state = read_json(paths.state_file, required=False)
-    before_routing_ids = routing_eligible_active_backend_ids(before_registry)
-    before_selected_backend_ids = selected_backend_ids_from_state(before_state)
     command = [action, backend_id]
     if action == "hold" and reason:
         command.append(reason)
-
-    result_key = "hold_result" if action == "hold" else "release_result"
-    success_outcome = (
-        "backend_held" if action == "hold" else "backend_released_to_reserve"
-    )
-    failure_prefix = action.upper()
     backend_matches = get_registry_backends_by_id(before_registry, backend_id)
     selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
     previous_pool = (
@@ -13747,6 +13744,133 @@ def run_protective_lifecycle_owner_path(
         "external_command_status": "not_invoked",
         "final_outcome": "pending_preconditions",
     }
+    return {
+        "before_registry": before_registry,
+        "before_state": before_state,
+        "before_routing_ids": routing_eligible_active_backend_ids(before_registry),
+        "before_selected_backend_ids": selected_backend_ids_from_state(before_state),
+        "command": command,
+        "result_key": "hold_result" if action == "hold" else "release_result",
+        "success_outcome": (
+            "backend_held" if action == "hold" else "backend_released_to_reserve"
+        ),
+        "failure_prefix": action.upper(),
+        "backend_matches": backend_matches,
+        "previous_pool": previous_pool,
+        "previous_manual_hold": previous_manual_hold,
+        "transition_result": transition_result,
+    }
+
+
+def _protective_lifecycle_would_change(
+    paths: RuntimePaths, *, previous_pool: str
+) -> list[str]:
+    would_change = [str(paths.registry_file)]
+    if previous_pool == "active":
+        would_change.append(str(paths.state_file))
+    return would_change
+
+
+def _protective_lifecycle_precondition_result(
+    plan: dict[str, Any],
+    *,
+    action: str,
+) -> dict[str, Any] | None:
+    transition_result = plan["transition_result"]
+    backend_matches = plan["backend_matches"]
+    previous_pool = str(plan["previous_pool"])
+    previous_manual_hold = bool(plan["previous_manual_hold"])
+    failure_prefix = str(plan["failure_prefix"])
+
+    if not backend_matches:
+        transition_result["precondition_status"] = "backend_missing"
+        transition_result["final_outcome"] = "precondition_failed"
+        return {
+            "ok": False,
+            "human_message": "Lifecycle target backend does not exist.",
+            "machine_error_code": f"{failure_prefix}_PRECONDITION_FAILED",
+            "operator_action": "user_action",
+        }
+
+    if len(backend_matches) > 1:
+        transition_result["precondition_status"] = "ambiguous_backend_id"
+        transition_result["final_outcome"] = "precondition_failed"
+        return {
+            "ok": False,
+            "human_message": "Lifecycle target backend is ambiguous.",
+            "machine_error_code": f"{failure_prefix}_PRECONDITION_FAILED",
+            "operator_action": "user_action",
+        }
+
+    if previous_pool == "retired":
+        transition_result["precondition_status"] = "backend_retired"
+        transition_result["final_outcome"] = "precondition_failed"
+        return {
+            "ok": False,
+            "human_message": (
+                "Retired backend is not eligible for this lifecycle transition."
+            ),
+            "machine_error_code": f"{failure_prefix}_PRECONDITION_FAILED",
+            "operator_action": "user_action",
+        }
+
+    if action == "hold" and previous_manual_hold:
+        transition_result["precondition_status"] = "already_held"
+        transition_result["final_outcome"] = "already_held"
+        return {
+            "ok": True,
+            "human_message": "Backend is already on protective hold.",
+            "machine_error_code": "OK",
+            "operator_action": "none",
+        }
+
+    if action == "release" and not previous_manual_hold:
+        transition_result["precondition_status"] = "not_on_hold"
+        transition_result["final_outcome"] = "not_on_hold"
+        return {
+            "ok": False,
+            "human_message": "Backend is not currently on hold.",
+            "machine_error_code": f"{failure_prefix}_PRECONDITION_FAILED",
+            "operator_action": "user_action",
+        }
+
+    transition_result["precondition_status"] = (
+        "eligible_backend_for_hold"
+        if action == "hold"
+        else "eligible_backend_for_release"
+    )
+    return None
+
+
+def run_protective_lifecycle_owner_path(
+    paths: RuntimePaths,
+    backend_id: str,
+    *,
+    action: str,
+    reason: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    if not dry_run and not paths.accounts_bin.exists():
+        raise RuntimeErrorInfo(
+            f"Missing accounts command: {paths.accounts_bin}",
+            machine_error_code="MISSING_ACCOUNTS_BIN",
+            operator_action="user_action",
+        )
+
+    before = snapshot_known_files(paths)
+    plan = _build_protective_lifecycle_plan(
+        paths, backend_id, action=action, reason=reason
+    )
+    before_routing_ids = plan["before_routing_ids"]
+    before_selected_backend_ids = plan["before_selected_backend_ids"]
+    command = plan["command"]
+    result_key = plan["result_key"]
+    success_outcome = plan["success_outcome"]
+    failure_prefix = plan["failure_prefix"]
+    backend_matches = plan["backend_matches"]
+    previous_pool = plan["previous_pool"]
+    previous_manual_hold = plan["previous_manual_hold"]
+    transition_result = plan["transition_result"]
 
     def build_transition_payload(
         *,
@@ -13823,61 +13947,53 @@ def run_protective_lifecycle_owner_path(
                 extra=payload_extra,
             )
 
-    if not backend_matches:
-        transition_result["precondition_status"] = "backend_missing"
-        transition_result["final_outcome"] = "precondition_failed"
-        return build_transition_payload(
-            ok=False,
-            human_message="Lifecycle target backend does not exist.",
-            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if len(backend_matches) > 1:
-        transition_result["precondition_status"] = "ambiguous_backend_id"
-        transition_result["final_outcome"] = "precondition_failed"
-        return build_transition_payload(
-            ok=False,
-            human_message="Lifecycle target backend is ambiguous.",
-            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if previous_pool == "retired":
-        transition_result["precondition_status"] = "backend_retired"
-        transition_result["final_outcome"] = "precondition_failed"
-        return build_transition_payload(
-            ok=False,
-            human_message="Retired backend is not eligible for this lifecycle transition.",
-            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if action == "hold" and previous_manual_hold:
-        transition_result["precondition_status"] = "already_held"
-        transition_result["final_outcome"] = "already_held"
-        return build_transition_payload(
-            ok=True,
-            human_message="Backend is already on protective hold.",
-            machine_error_code="OK",
-            operator_action="none",
-        )
-
-    if action == "release" and not previous_manual_hold:
-        transition_result["precondition_status"] = "not_on_hold"
-        transition_result["final_outcome"] = "not_on_hold"
-        return build_transition_payload(
-            ok=False,
-            human_message="Backend is not currently on hold.",
-            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    transition_result["precondition_status"] = (
-        "eligible_backend_for_hold"
-        if action == "hold"
-        else "eligible_backend_for_release"
+    precondition_result = _protective_lifecycle_precondition_result(
+        plan, action=action
     )
+    if dry_run:
+        blocked = precondition_result is not None
+        transition_result["attempted"] = False
+        if not blocked:
+            transition_result["final_outcome"] = "dry_run_eligible"
+        blocked_by = (
+            [str(transition_result["precondition_status"])] if blocked else None
+        )
+        would_change = (
+            []
+            if blocked
+            else _protective_lifecycle_would_change(
+                paths, previous_pool=str(previous_pool)
+            )
+        )
+        return build_command_payload(
+            ok=not blocked,
+            human_message=(
+                "Protective hold dry-run is eligible."
+                if not blocked and action == "hold"
+                else "Protective lifecycle dry-run is blocked."
+            ),
+            machine_error_code=(
+                "OK" if not blocked else f"{failure_prefix}_DRY_RUN_BLOCKED"
+            ),
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none" if not blocked else "user_action",
+            changed_files=[],
+            extra={
+                "command": command,
+                result_key: transition_result,
+                "dry_run": True,
+                "mutation_id": None,
+                "would_change": would_change,
+                "precondition_status": "blocked" if blocked else "eligible",
+                "blocked_by": blocked_by,
+            },
+            exit_code=None if not blocked else 1,
+            effect=EFFECT_MUTATE,
+        )
+
+    if precondition_result is not None:
+        return build_transition_payload(**precondition_result)
 
     with serialized_lock(paths):
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)

@@ -130,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_hold = accounts_subparsers.add_parser("hold")
     accounts_hold.add_argument("id")
     accounts_hold.add_argument("reason", nargs="?")
+    accounts_hold.add_argument("--dry-run", action="store_true")
     accounts_hold.add_argument("--json", action="store_true", required=True)
 
     accounts_onboard = accounts_subparsers.add_parser("onboard")
@@ -429,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "accounts" and args.accounts_command == "demote":
             return emit_json(run_demote(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "hold":
-            return emit_json(run_hold(paths, args.id, args.reason))
+            return emit_json(run_hold(paths, args.id, args.reason, dry_run=args.dry_run))
         if args.command == "accounts" and args.accounts_command == "release":
             return emit_json(run_release(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "retire":

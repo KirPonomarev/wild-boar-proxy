@@ -15827,6 +15827,176 @@ class CliTests(unittest.TestCase):
         self.assertFalse(hold["rollback_point_captured"])
         self.assertFalse(hold["sync_attempted"])
 
+    def test_accounts_hold_dry_run_returns_plan_without_writes_or_subprocess(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        accounts_marker = self.profile_dir / "dry-run-accounts-invoked"
+        sync_marker = self.profile_dir / "dry-run-sync-invoked"
+        accounts_bin = self.bin_dir / "dry-run-forbidden-accounts"
+        accounts_bin.write_text(
+            "#!/bin/sh\n"
+            f"echo accounts-called > {shlex.quote(str(accounts_marker))}\n"
+            "exit 97\n",
+            encoding="utf-8",
+        )
+        accounts_bin.chmod(0o755)
+        sync_script = self.profile_dir / "dry-run-forbidden-sync.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            f"echo sync-called > {shlex.quote(str(sync_marker))}\n"
+            "exit 98\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+
+        sentinel = "WBP_C2A_SENTINEL_SECRET_TOKEN_123"
+        result = self.run_cli_with_env(
+            {
+                "WBP_ACCOUNTS_BIN": str(accounts_bin),
+                "WBP_SYNC_SCRIPT": str(sync_script),
+                "WBP_C2A_SENTINEL_SECRET": sentinel,
+            },
+            "accounts",
+            "hold",
+            "backend-a",
+            "--dry-run",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("\n"), 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertTrue(payload["dry_run"])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["precondition_status"], "eligible")
+        self.assertIsNone(payload["blocked_by"])
+        self.assertEqual(
+            payload["would_change"],
+            [str(registry_path), str(state_path)],
+        )
+        self.assertNotIn(sentinel, result.stdout)
+        hold = payload["hold_result"]
+        self.assertFalse(hold["attempted"])
+        self.assertEqual(hold["precondition_status"], "eligible_backend_for_hold")
+        self.assertEqual(hold["external_command_status"], "not_invoked")
+        self.assertFalse(hold["rollback_point_captured"])
+        self.assertFalse(hold["sync_attempted"])
+        self.assertEqual(hold["final_outcome"], "dry_run_eligible")
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+        self.assertFalse(accounts_marker.exists())
+        self.assertFalse(sync_marker.exists())
+
+    def test_accounts_hold_dry_run_blocked_missing_backend_no_writes(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        accounts_marker = self.profile_dir / "dry-run-blocked-accounts-invoked"
+        accounts_bin = self.bin_dir / "dry-run-blocked-forbidden-accounts"
+        accounts_bin.write_text(
+            "#!/bin/sh\n"
+            f"echo accounts-called > {shlex.quote(str(accounts_marker))}\n"
+            "exit 97\n",
+            encoding="utf-8",
+        )
+        accounts_bin.chmod(0o755)
+
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(accounts_bin)},
+            "accounts",
+            "hold",
+            "missing-backend",
+            "--dry-run",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stdout.count("\n"), 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "HOLD_DRY_RUN_BLOCKED")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertTrue(payload["dry_run"])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["would_change"], [])
+        self.assertEqual(payload["precondition_status"], "blocked")
+        self.assertEqual(payload["blocked_by"], ["backend_missing"])
+        hold = payload["hold_result"]
+        self.assertFalse(hold["attempted"])
+        self.assertEqual(hold["precondition_status"], "backend_missing")
+        self.assertEqual(hold["external_command_status"], "not_invoked")
+        self.assertFalse(hold["rollback_point_captured"])
+        self.assertFalse(hold["sync_attempted"])
+        self.assertEqual(hold["final_outcome"], "precondition_failed")
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+        self.assertFalse(accounts_marker.exists())
+
+    def test_accounts_hold_dry_run_runtime_path_skips_effectful_helpers(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+        def forbidden(name: str) -> AssertionError:
+            return AssertionError(f"dry-run must not call {name}")
+
+        with (
+            mock.patch.object(
+                runtime_mod,
+                "serialized_lock",
+                side_effect=forbidden("serialized_lock"),
+            ),
+            mock.patch.object(
+                runtime_mod.subprocess,
+                "run",
+                side_effect=forbidden("subprocess.run"),
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "snapshot_lifecycle_owner_path_runtime_surfaces",
+                side_effect=forbidden("snapshot_lifecycle_owner_path_runtime_surfaces"),
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "restore_lifecycle_owner_path_runtime_surfaces",
+                side_effect=forbidden("restore_lifecycle_owner_path_runtime_surfaces"),
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "run_sync_for_owner_path_under_lock",
+                side_effect=forbidden("run_sync_for_owner_path_under_lock"),
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "observe_status_proof_for_owner_path_under_lock",
+                side_effect=forbidden("observe_status_proof_for_owner_path_under_lock"),
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "run_healthcheck",
+                side_effect=forbidden("run_healthcheck"),
+            ),
+        ):
+            payload = runtime_mod.run_hold(
+                paths, "backend-a", "suspicious", dry_run=True
+            )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertTrue(payload["dry_run"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["hold_result"]["external_command_status"], "not_invoked")
+        self.assertEqual(payload["hold_result"]["sync_outcome"], "not_attempted")
+
     def test_accounts_hold_rejects_retired_backend_precondition(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
