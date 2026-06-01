@@ -9687,6 +9687,81 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_does_not_claim_ready_from_foreign_listener_without_runtime_identity(
+        self,
+    ) -> None:
+        sentinel_secret = "sk-wbp-d3a-onboard-foreign-listener"
+        (self.profile_dir / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            encoding="utf-8",
+        )
+        port = free_port()
+        auth_ref = str(self.managed_dir / "codex-onboard-foreign-listener.json")
+        self.configure_managed_runtime_probe(port)
+        ProbeHandler.runtime_identity_state_file = None
+        ProbeHandler.runtime_identity_managed_config_path = None
+        server, thread = self.start_probe_server(port)
+        before = self.truth_tree_snapshot()
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-onboard-foreign-listener",
+                                auth_ref=auth_ref,
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--skip-login",
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+        after = self.truth_tree_snapshot()
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        payload = self.parse_strict_json_object(result.stdout)
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertEqual(payload["status"], "error")
+        self.assertNotEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_SYNC_FAILED")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-onboard-foreign-listener")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "failed")
+        self.assertEqual(onboarding["final_outcome"], "sync_failed")
+        lifecycle_admission = onboarding.get("lifecycle_admission")
+        if lifecycle_admission is not None:
+            self.assertNotEqual(lifecycle_admission.get("status"), "ready")
+            self.assertNotEqual(
+                lifecycle_admission.get("reason"), "post_onboard_status_ok"
+            )
+        sync_result = payload["sync_result"]
+        self.assertEqual(sync_result["command_status"], "error")
+        self.assertEqual(sync_result["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assert_changed_files_bounded_and_declared(
+            before=before,
+            after=after,
+            changed_files=payload["changed_files"],
+        )
+        self.assertNotIn(sentinel_secret, result.stdout)
+        self.assertNotIn("sk-wbp-d3a", result.stdout)
+        self.assertNotIn(sentinel_secret, result.stderr)
+        self.assertNotIn("sk-wbp-d3a", result.stderr)
+
     def test_onboarding_lifecycle_admission_marks_reserve_only_launch_gap_ready(
         self,
     ) -> None:
