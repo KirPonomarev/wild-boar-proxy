@@ -518,6 +518,7 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         expected_ok: bool,
         expected_identity_failure_reason: str = "",
         payload_updates: dict[str, Any] | None = None,
+        payload_delete_fields: tuple[str, ...] = (),
         expected_runtime_marker: str | None = None,
     ) -> None:
         port = _free_port()
@@ -525,6 +526,8 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         runtime_identity_payload = self.matching_identity_payload(port)
         if payload_updates is not None:
             runtime_identity_payload.update(payload_updates)
+        for field in payload_delete_fields:
+            runtime_identity_payload.pop(field, None)
         _FalseGreenProbeHandler.mode = handler_mode
         _FalseGreenProbeHandler.runtime_identity_payload = runtime_identity_payload
         server = ThreadingHTTPServer(("127.0.0.1", port), _FalseGreenProbeHandler)
@@ -926,6 +929,62 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             expected_identity_failure_reason="issued_for_endpoint_mismatch",
             payload_updates={"issued_for_endpoint": "http://127.0.0.1:9/v1"},
         )
+
+    def test_required_runtime_identity_fields_missing_or_empty_are_not_runtime_green(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "managed_config_identity_missing",
+                {},
+                ("managed_config_identity",),
+                "managed_config_identity_mismatch",
+            ),
+            (
+                "managed_config_identity_empty",
+                {"managed_config_identity": ""},
+                (),
+                "managed_config_identity_mismatch",
+            ),
+            (
+                "selected_backends_digest_missing",
+                {},
+                ("selected_backends_digest",),
+                "selected_backends_digest_mismatch",
+            ),
+            (
+                "selected_backends_digest_empty",
+                {"selected_backends_digest": ""},
+                (),
+                "selected_backends_digest_mismatch",
+            ),
+            (
+                "issued_for_endpoint_missing",
+                {},
+                ("issued_for_endpoint",),
+                "issued_for_endpoint_mismatch",
+            ),
+            (
+                "issued_for_endpoint_empty",
+                {"issued_for_endpoint": ""},
+                (),
+                "issued_for_endpoint_mismatch",
+            ),
+        )
+        for (
+            name,
+            payload_updates,
+            payload_delete_fields,
+            expected_identity_failure_reason,
+        ) in cases:
+            with self.subTest(name=name):
+                self.assert_identity_probe_case(
+                    handler_mode="identity_ok",
+                    expected_ok=False,
+                    expected_identity_failure_reason=expected_identity_failure_reason,
+                    payload_updates=payload_updates,
+                    payload_delete_fields=payload_delete_fields,
+                )
 
     def test_missing_runtime_version_identity_is_not_runtime_green(self) -> None:
         self.assert_identity_probe_case(
