@@ -12352,6 +12352,84 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertNotIn('"route_id"', rejected_json)
         self.assertNotIn('"secret_ref"', rejected_json)
 
+    def test_codex_custom_server_model_reasoning_selection_truth_endpoint_is_bounded(
+        self,
+    ) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/server-model-reasoning-selection-truth",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/server-model-reasoning-selection-truth",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                            "base_url": "https://browser.invalid/v1",
+                            "secret_ref": "BROWSER_SECRET_REF",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "server_model_reasoning_selection_truth")
+        self.assertEqual(
+            packet["final_status"],
+            "SERVER_MODEL_REASONING_SELECTION_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["server_issued_catalog_used"])
+        self.assertTrue(packet["chatgpt_models_classified"])
+        self.assertTrue(packet["api_models_classified"])
+        self.assertTrue(packet["selectable_models_are_server_issued"])
+        self.assertTrue(packet["selection_disabled_reason_present"])
+        self.assertTrue(packet["api_reasoning_options_classified"])
+        self.assertTrue(packet["reasoning_options_bound_to_selected_model"])
+        self.assertTrue(packet["mismatched_reasoning_option_blocks"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["browser_route_authority"])
+        self.assertFalse(packet["browser_secret_authority"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["model_matrix_live_execution_claimed"])
+        self.assertFalse(packet["reasoning_quality_claimed"])
+        self.assertFalse(packet["quick_start_ui_claimed"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["final_status"],
+            "MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER_CLASSIFIED",
+        )
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], [])
+        self.assertEqual(rejected["forbidden_browser_fields"], [])
+        self.assertTrue(rejected["forbidden_fields_redacted"])
+        self.assertTrue(rejected["forbidden_browser_fields_redacted"])
+        rejected_json = json.dumps(rejected, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", rejected_json)
+        self.assertNotIn("BROWSER_SECRET_REF", rejected_json)
+        self.assertNotIn('"base_url"', rejected_json)
+        self.assertNotIn('"secret_ref"', rejected_json)
+
     def test_quick_start_config_admission_endpoint_returns_bounded_packet(self) -> None:
         payloads = live_payloads()
         payloads[("external-models", "status", "--json")]["data"][

@@ -83,6 +83,52 @@ class OperatorSurfaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             select_server_issued_model("gpt-free-form", ["gpt-5.3-codex"])
 
+    def test_run_prompt_rejects_server_issued_disabled_model_before_runtime(self) -> None:
+        disabled_routes = {
+            "data": {
+                "routes": [
+                    {
+                        "route_id": "wbp-disabled-openrouter",
+                        "provider": "openrouter",
+                        "enabled": False,
+                        "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+                    }
+                ]
+            }
+        }
+        session = OperatorSurfaceSession(
+            OperatorSurfaceConfig(
+                codex_bin=Path("/bin/echo"),
+                runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
+                timeout_seconds=5,
+            )
+        )
+        session.run_wbp = lambda args: {"json": disabled_routes}  # type: ignore[method-assign]
+        session.status_payload = lambda: {  # type: ignore[method-assign]
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+        }
+
+        def fail_if_called() -> str:
+            self.fail("disabled model must be rejected before runtime credentials are loaded")
+
+        session.probe_models = fail_if_called  # type: ignore[method-assign]
+        session.local_api_key = fail_if_called  # type: ignore[method-assign]
+
+        result = session.run_prompt(
+            {
+                "prompt": "Reply OK",
+                "model_id": "wbp-disabled-openrouter",
+            }
+        )
+
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(result["machine_error_code"], "MODEL_NOT_SELECTABLE")
+        self.assertEqual(result["selected_model"], "wbp-disabled-openrouter")
+        self.assertEqual(result["selection_disabled_reason_code"], "ROUTE_DISABLED")
+        self.assertEqual(result["selection_disabled_reasons"], ["route_disabled"])
+        self.assertFalse(result["secret_value_recorded"])
+
     def test_external_route_injects_runtime_truth_before_user_prompt(self) -> None:
         captured_payload: dict[str, object] = {}
         route = {

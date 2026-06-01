@@ -46,6 +46,16 @@ SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_FINAL_STATUS = (
 SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER = (
     "KNOWN_BLOCKER_CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_NOT_PROVEN"
 )
+SERVER_MODEL_REASONING_SELECTION_TRUTH_FINAL_STATUS = (
+    "SERVER_MODEL_REASONING_SELECTION_TRUTH_PROVEN_WITH_LIMITS"
+)
+SERVER_MODEL_REASONING_SELECTION_TRUTH_BLOCKER = (
+    "MODEL_REASONING_SELECTION_TRUTH_BLOCKER_CLASSIFIED"
+)
+MODEL_REASONING_BINDING_BLOCKER = "MODEL_REASONING_BINDING_BLOCKER_CLASSIFIED"
+MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER = (
+    "MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER_CLASSIFIED"
+)
 CHATGPT_PLUS_API_CODING_MODEL_REQUIRED = "wbp-deepseek-v4-pro-max"
 CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED = "deepseek"
 CHATGPT_PLUS_API_SLOT_TRUTH_FINAL_STATUS = (
@@ -2282,6 +2292,261 @@ def build_server_model_selection_and_reasoning_truth_packet(
         is True,
         "selector_packet": redacted_selector_packet,
         "next_action": "none" if model_selection_truth_proven else "stop_and_diagnose",
+    }
+
+
+def _selector_catalog_truth_summary(selector_packet: dict[str, Any]) -> dict[str, Any]:
+    def selection_classified(row: dict[str, Any]) -> bool:
+        selection_state = str(row.get("selection_state") or "")
+        if selection_state == "selectable":
+            return (
+                row.get("server_issued") is True
+                and row.get("model_lane_classified") is True
+                and row.get("model_lane_fallback_used") is not True
+            )
+        if selection_state == "disabled":
+            return bool(
+                str(row.get("selection_disabled_reason_code") or "").strip()
+                or list(row.get("selection_disabled_reasons") or [])
+            )
+        return False
+
+    chatgpt_lane = dict(selector_packet.get("chatgpt_lane") or {})
+    api_lane = dict(selector_packet.get("api_lane") or {})
+    chatgpt_rows = [
+        dict(row) for row in chatgpt_lane.get("models") or [] if isinstance(row, dict)
+    ]
+    api_rows = [dict(row) for row in api_lane.get("models") or [] if isinstance(row, dict)]
+    all_rows = [*chatgpt_rows, *api_rows]
+    selectable_rows = [row for row in all_rows if row.get("selection_enabled") is True]
+    disabled_rows = [row for row in all_rows if row.get("selection_enabled") is not True]
+    disabled_without_reason = [
+        str(row.get("model_id") or "")
+        for row in disabled_rows
+        if not str(row.get("selection_disabled_reason_code") or "").strip()
+        and not list(row.get("selection_disabled_reasons") or [])
+    ]
+    selectable_non_server_issued = [
+        str(row.get("model_id") or "")
+        for row in selectable_rows
+        if row.get("server_issued") is not True
+    ]
+    return {
+        "chatgpt_model_count": len(chatgpt_rows),
+        "api_model_count": len(api_rows),
+        "selectable_model_count": len(selectable_rows),
+        "unavailable_model_count": len(disabled_rows),
+        "chatgpt_models_classified": bool(chatgpt_rows)
+        and all(selection_classified(row) for row in chatgpt_rows),
+        "api_models_classified": bool(api_rows)
+        and all(selection_classified(row) for row in api_rows),
+        "selectable_models_are_server_issued": bool(selectable_rows)
+        and not selectable_non_server_issued,
+        "unavailable_models_marked_unselectable": not any(
+            row.get("selection_state") == "disabled"
+            and row.get("selection_enabled") is True
+            for row in disabled_rows
+        ),
+        "selection_disabled_reason_present": not disabled_without_reason,
+        "disabled_rows_without_reason": disabled_without_reason,
+        "selectable_non_server_issued_models": selectable_non_server_issued,
+    }
+
+
+def _api_reasoning_mismatch_option(selected_option_id: str) -> str:
+    selected = _canonical_api_reasoning_option_id(selected_option_id)
+    for option_id in (
+        CUSTOM_CODEX_API_REASONING_OPTION_MAX,
+        CUSTOM_CODEX_API_REASONING_OPTION_HIGH,
+        CUSTOM_CODEX_API_REASONING_OPTION_FAST,
+    ):
+        if _canonical_api_reasoning_option_id(option_id) != selected:
+            return option_id
+    return CUSTOM_CODEX_API_REASONING_OPTION_HIGH
+
+
+def build_server_model_reasoning_selection_truth_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    server_truth_packet = build_server_model_selection_and_reasoning_truth_packet(
+        payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    selector_catalog = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    catalog_summary = _selector_catalog_truth_summary(selector_catalog)
+    reasoning_packet = dict(
+        (server_truth_packet.get("selector_packet") or {}).get("api_reasoning_option_packet")
+        or {}
+    )
+    api_required = str(server_truth_packet.get("execution_mode") or "") in {
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+        CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+    }
+    mismatch_probe_packet: dict[str, Any] = {}
+    if api_required and str(server_truth_packet.get("selected_api_model") or ""):
+        mismatch_payload = {
+            "execution_mode": str(server_truth_packet.get("execution_mode") or ""),
+            "api_model_id": str(server_truth_packet.get("selected_api_model") or ""),
+            "api_reasoning_option_id": _api_reasoning_mismatch_option(
+                str(reasoning_packet.get("selected_model_option_id") or "")
+            ),
+        }
+        chatgpt_model_id = str(server_truth_packet.get("selected_chatgpt_model") or "")
+        if chatgpt_model_id:
+            mismatch_payload["chatgpt_model_id"] = chatgpt_model_id
+        mismatch_probe_packet = build_server_model_selection_and_reasoning_truth_packet(
+            mismatch_payload,
+            operator_status,
+            endpoint=endpoint,
+            recommended_default_model=recommended_default_model,
+            api_snapshot=api_snapshot,
+            availability_lattice_packet=availability_lattice_packet,
+        )
+
+    mismatched_reasoning_option_blocks = (
+        bool(mismatch_probe_packet)
+        and mismatch_probe_packet.get("status") == "blocked"
+        and mismatch_probe_packet.get("machine_error_code")
+        == "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL"
+    )
+    api_reasoning_options_classified = (
+        not api_required
+        or (
+            str(server_truth_packet.get("api_reasoning_option_id") or "") != ""
+            and str(reasoning_packet.get("source") or "") in {
+                "server_catalog_selected_model",
+                "browser_choice_server_validated",
+            }
+            and str(reasoning_packet.get("proof_level") or "") in {
+                "provider_declared",
+                "unproven",
+            }
+        )
+    )
+    truth_proven = all(
+        (
+            server_truth_packet.get("status") == "ok",
+            server_truth_packet.get("model_selection_truth_proven") is True,
+            server_truth_packet.get("server_catalog_source") is True,
+            catalog_summary["chatgpt_models_classified"],
+            catalog_summary["api_models_classified"],
+            catalog_summary["selectable_models_are_server_issued"],
+            catalog_summary["unavailable_models_marked_unselectable"],
+            catalog_summary["selection_disabled_reason_present"],
+            api_reasoning_options_classified,
+            server_truth_packet.get("api_reasoning_option_model_bound") is True,
+            mismatched_reasoning_option_blocks,
+            server_truth_packet.get("browser_route_authority") is False,
+            server_truth_packet.get("browser_secret_authority") is False,
+            server_truth_packet.get("browser_model_authority") is False,
+            server_truth_packet.get("raw_backend_details_exposed") is False,
+            server_truth_packet.get("secret_value_exposed") is False,
+            server_truth_packet.get("browser_raw_backend_authority_widened") is False,
+        )
+    )
+    machine_error_code = "OK" if truth_proven else str(
+        server_truth_packet.get("machine_error_code")
+        or SERVER_MODEL_REASONING_SELECTION_TRUTH_BLOCKER
+    )
+    if not truth_proven and machine_error_code == "OK":
+        machine_error_code = SERVER_MODEL_REASONING_SELECTION_TRUTH_BLOCKER
+    if server_truth_packet.get("machine_error_code") == "FORBIDDEN_BROWSER_FIELD":
+        final_status = MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER
+    elif machine_error_code.startswith("CUSTOM_CODEX_API_REASONING_OPTION"):
+        final_status = MODEL_REASONING_BINDING_BLOCKER
+    elif truth_proven:
+        final_status = SERVER_MODEL_REASONING_SELECTION_TRUTH_FINAL_STATUS
+    else:
+        final_status = SERVER_MODEL_REASONING_SELECTION_TRUTH_BLOCKER
+    return {
+        "schema_version": 1,
+        "packet_kind": "server_model_reasoning_selection_truth",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if truth_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "declared_scope": "server_model_and_reasoning_selection_truth",
+        "server_issued_catalog_used": server_truth_packet.get("server_catalog_source") is True,
+        "chatgpt_models_classified": catalog_summary["chatgpt_models_classified"],
+        "api_models_classified": catalog_summary["api_models_classified"],
+        "selectable_models_are_server_issued": catalog_summary[
+            "selectable_models_are_server_issued"
+        ],
+        "unavailable_models_marked_unselectable": catalog_summary[
+            "unavailable_models_marked_unselectable"
+        ],
+        "selection_disabled_reason_present": catalog_summary[
+            "selection_disabled_reason_present"
+        ],
+        "api_reasoning_options_classified": api_reasoning_options_classified,
+        "reasoning_options_bound_to_selected_model": server_truth_packet.get(
+            "api_reasoning_option_model_bound"
+        )
+        is True,
+        "mismatched_reasoning_option_blocks": mismatched_reasoning_option_blocks,
+        "browser_model_authority": False,
+        "browser_route_authority": False,
+        "browser_secret_authority": False,
+        "raw_backend_details_exposed": server_truth_packet.get("raw_backend_details_exposed")
+        is True,
+        "route_or_backend_exposed": server_truth_packet.get("route_or_backend_exposed") is True,
+        "secret_value_exposed": server_truth_packet.get("secret_value_exposed") is True,
+        "browser_raw_backend_authority_widened": server_truth_packet.get(
+            "browser_raw_backend_authority_widened"
+        )
+        is True,
+        "model_matrix_live_execution_claimed": False,
+        "reasoning_quality_claimed": False,
+        "quick_start_ui_claimed": False,
+        "live_call_attempted": server_truth_packet.get("live_call_attempted") is True,
+        "network_calls_made": server_truth_packet.get("network_calls_made") is True,
+        "provider_called": server_truth_packet.get("provider_called") is True,
+        "runtime_execution_proven": server_truth_packet.get("runtime_execution_proven") is True,
+        "selected_chatgpt_model": str(server_truth_packet.get("selected_chatgpt_model") or ""),
+        "selected_api_model": str(server_truth_packet.get("selected_api_model") or ""),
+        "api_reasoning_option_id": str(server_truth_packet.get("api_reasoning_option_id") or ""),
+        "api_reasoning_operator_level": str(
+            server_truth_packet.get("api_reasoning_operator_level") or ""
+        ),
+        "allowed_browser_fields": list(server_truth_packet.get("allowed_browser_fields") or []),
+        "forbidden_browser_fields": [],
+        "forbidden_fields": [],
+        "forbidden_field_count": int(server_truth_packet.get("forbidden_field_count") or 0),
+        "forbidden_browser_fields_redacted": True,
+        "forbidden_fields_redacted": True,
+        "catalog_summary": catalog_summary,
+        "mismatch_probe": {
+            "status": str(mismatch_probe_packet.get("status") or ""),
+            "machine_error_code": str(mismatch_probe_packet.get("machine_error_code") or ""),
+            "api_model_id": str(mismatch_probe_packet.get("api_model_id") or ""),
+            "api_reasoning_option_id": str(
+                mismatch_probe_packet.get("api_reasoning_option_id") or ""
+            ),
+            "raw_backend_details_exposed": mismatch_probe_packet.get(
+                "raw_backend_details_exposed"
+            )
+            is True,
+            "secret_value_exposed": mismatch_probe_packet.get("secret_value_exposed") is True,
+        },
+        "server_truth_packet": server_truth_packet,
+        "selector_catalog_packet_kind": str(selector_catalog.get("packet_kind") or ""),
+        "next_action": "none" if truth_proven else "stop_and_diagnose",
     }
 
 

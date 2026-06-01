@@ -1,0 +1,23 @@
+{
+  "human_message": "Model id is server-issued but not selectable.",
+  "machine_error_code": "MODEL_NOT_SELECTABLE",
+  "refresh_packet": {
+    "models": {
+      "model_ids": [
+        "gpt-5.3-codex"
+      ],
+      "server_issued": true
+    },
+    "status": {
+      "machine_error_code": "OK",
+      "status": "ok"
+    }
+  },
+  "secret_value_recorded": false,
+  "selected_model": "wbp-disabled-openrouter",
+  "selection_disabled_reason_code": "ROUTE_DISABLED",
+  "selection_disabled_reasons": [
+    "route_disabled"
+  ],
+  "status": "rejected"
+}

@@ -16,6 +16,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_custom_codex_execution_mode_selector_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
+    build_server_model_reasoning_selection_truth_packet,
     build_server_model_selection_and_reasoning_truth_packet,
     forbidden_custom_model_fields,
     validate_wbp_model_catalog_contract,
@@ -135,6 +136,23 @@ def api_snapshot_with_deepseek_reasoning_variants() -> dict[str, object]:
             },
         ]
     }
+
+
+def api_snapshot_with_deepseek_reasoning_variants_and_disabled() -> dict[str, object]:
+    snapshot = api_snapshot_with_deepseek_reasoning_variants()
+    routes = list(snapshot["routes"])
+    routes.append(
+        {
+            "route_id": "wbp-deepseek-disabled-no-secret",
+            "provider": "deepseek",
+            "upstream_model": "deepseek-v4-pro",
+            "enabled": False,
+            "secret_ref": "",
+            "thinking": {"type": "enabled", "reasoning_effort": "high"},
+            "api_parameter_sent": True,
+        }
+    )
+    return {"routes": routes}
 
 
 class CodexModelRegistryTests(unittest.TestCase):
@@ -700,6 +718,117 @@ class CodexModelRegistryTests(unittest.TestCase):
             invented_model["machine_error_code"],
             "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SERVER_ISSUED",
         )
+
+    def test_server_model_reasoning_selection_truth_proves_server_catalog_binding(
+        self,
+    ) -> None:
+        packet = build_server_model_reasoning_selection_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants_and_disabled(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "server_model_reasoning_selection_truth")
+        self.assertEqual(
+            packet["final_status"],
+            "SERVER_MODEL_REASONING_SELECTION_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(
+            packet["declared_scope"],
+            "server_model_and_reasoning_selection_truth",
+        )
+        self.assertTrue(packet["server_issued_catalog_used"])
+        self.assertTrue(packet["chatgpt_models_classified"])
+        self.assertTrue(packet["api_models_classified"])
+        self.assertTrue(packet["selectable_models_are_server_issued"])
+        self.assertTrue(packet["unavailable_models_marked_unselectable"])
+        self.assertTrue(packet["selection_disabled_reason_present"])
+        self.assertGreaterEqual(packet["catalog_summary"]["unavailable_model_count"], 1)
+        self.assertTrue(packet["api_reasoning_options_classified"])
+        self.assertTrue(packet["reasoning_options_bound_to_selected_model"])
+        self.assertTrue(packet["mismatched_reasoning_option_blocks"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["browser_route_authority"])
+        self.assertFalse(packet["browser_secret_authority"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["model_matrix_live_execution_claimed"])
+        self.assertFalse(packet["reasoning_quality_claimed"])
+        self.assertFalse(packet["quick_start_ui_claimed"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(packet["api_reasoning_operator_level"], "max")
+        self.assertEqual(packet["mismatch_probe"]["status"], "blocked")
+        self.assertEqual(
+            packet["mismatch_probe"]["machine_error_code"],
+            "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
+        )
+
+    def test_server_model_reasoning_selection_truth_classifies_blockers_and_redacts(
+        self,
+    ) -> None:
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants_and_disabled()
+        mismatch = build_server_model_reasoning_selection_truth_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_high",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+        raw_backend = build_server_model_reasoning_selection_truth_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "base_url": "https://browser.invalid/v1",
+                "api_key": "browser-secret",
+                "raw_config": {"route_id": "browser-route"},
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot,
+        )
+
+        self.assertEqual(mismatch["status"], "blocked")
+        self.assertEqual(mismatch["final_status"], "MODEL_REASONING_BINDING_BLOCKER_CLASSIFIED")
+        self.assertEqual(
+            mismatch["machine_error_code"],
+            "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
+        )
+        self.assertFalse(mismatch["reasoning_options_bound_to_selected_model"])
+        self.assertFalse(mismatch["live_call_attempted"])
+
+        self.assertEqual(raw_backend["status"], "blocked")
+        self.assertEqual(
+            raw_backend["final_status"],
+            "MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER_CLASSIFIED",
+        )
+        self.assertEqual(raw_backend["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertGreaterEqual(raw_backend["forbidden_field_count"], 3)
+        self.assertEqual(raw_backend["forbidden_fields"], [])
+        self.assertEqual(raw_backend["forbidden_browser_fields"], [])
+        self.assertTrue(raw_backend["forbidden_fields_redacted"])
+        self.assertTrue(raw_backend["forbidden_browser_fields_redacted"])
+        self.assertFalse(raw_backend["raw_backend_details_exposed"])
+        self.assertFalse(raw_backend["secret_value_exposed"])
+        self.assertTrue(raw_backend["browser_raw_backend_authority_widened"])
+        rejected_json = json.dumps(raw_backend, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", rejected_json)
+        self.assertNotIn("browser-secret", rejected_json)
+        self.assertNotIn("browser-route", rejected_json)
+        self.assertNotIn('"base_url"', rejected_json)
+        self.assertNotIn('"api_key"', rejected_json)
+        self.assertNotIn('"raw_config"', rejected_json)
 
     def test_chatgpt_plus_api_slot_truth_proves_slots_without_live_claims(self) -> None:
         packet = build_chatgpt_plus_api_slot_truth_packet(

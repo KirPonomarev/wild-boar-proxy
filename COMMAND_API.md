@@ -611,6 +611,37 @@ This surface proves role-slot routing truth only. It must not claim live paired
 agent execution, file mutation, model-matrix coverage, profile/history
 persistence, speed, voice, or Quick Start UI readiness.
 
+Successful server model/reasoning selection truth packets from the command
+surface must expose:
+
+- `packet_kind=server_model_reasoning_selection_truth`
+- `declared_scope=server_model_and_reasoning_selection_truth`
+- `server_issued_catalog_used=true`
+- `chatgpt_models_classified=true`
+- `api_models_classified=true`
+- `selectable_models_are_server_issued=true`
+- `unavailable_models_marked_unselectable=true`
+- `selection_disabled_reason_present=true`
+- `api_reasoning_options_classified=true`
+- `reasoning_options_bound_to_selected_model=true`
+- `mismatched_reasoning_option_blocks=true`
+- `browser_model_authority=false`
+- `browser_route_authority=false`
+- `browser_secret_authority=false`
+- `raw_backend_details_exposed=false`
+- `secret_value_exposed=false`
+- `model_matrix_live_execution_claimed=false`
+- `reasoning_quality_claimed=false`
+- `quick_start_ui_claimed=false`
+
+Blocked packets must classify the blocker as one of
+`MODEL_REASONING_SELECTION_TRUTH_BLOCKER_CLASSIFIED`,
+`MODEL_REASONING_BINDING_BLOCKER_CLASSIFIED`, or
+`MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER_CLASSIFIED`. This surface proves
+server-issued selection and provider-declared reasoning binding only. It must
+not claim live execution for every model, UI readiness, intelligence quality,
+profile/history persistence, speed, voice, or final E2E readiness.
+
 ## Additional launch-client owner surface
 
 `launch client --json` is the owner surface for bounded external host-client
