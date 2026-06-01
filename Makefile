@@ -29,6 +29,7 @@ test-core:
 		tests/test_state_temp_prefix_inspection.py \
 		tests/test_state_temp_prefix_cleanup.py \
 		tests/test_state_startup_recovery.py \
+		tests/test_state_startup_lock.py \
 		tests/test_state_store_atomic_write.py \
 		tests/test_state_store_json_read_validation.py \
 		tests/test_status_read_snapshot_contract.py \
