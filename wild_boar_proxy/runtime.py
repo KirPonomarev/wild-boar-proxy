@@ -6241,22 +6241,46 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
 
 
 def response_ok(payload: dict[str, Any]) -> bool:
-    def iter_strings(value: Any) -> list[str]:
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, dict):
-            strings: list[str] = []
-            for nested in value.values():
-                strings.extend(iter_strings(nested))
-            return strings
-        if isinstance(value, list):
-            strings = []
-            for nested in value:
-                strings.extend(iter_strings(nested))
-            return strings
-        return []
+    candidates: list[str] = []
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str):
+        candidates.append(output_text)
 
-    return any(item.strip() == "OK" for item in iter_strings(payload))
+    output = payload.get("output")
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "")
+            item_text = item.get("text")
+            if item_type in {"output_text", "text"} and isinstance(item_text, str):
+                candidates.append(item_text)
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                block_type = str(block.get("type") or "")
+                block_text = block.get("text")
+                if block_type in {"output_text", "text"} and isinstance(
+                    block_text, str
+                ):
+                    candidates.append(block_text)
+
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            message = choice.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                candidates.append(content)
+
+    return any(item.strip() == "OK" for item in candidates)
 
 
 def is_proxy_path_error(error_detail: str) -> bool:
