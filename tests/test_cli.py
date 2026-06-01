@@ -155,6 +155,17 @@ class ProbeHandler(BaseHTTPRequestHandler):
         return
 
 
+class ListenerOnlyHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        self.send_error(404)
+
+    def do_POST(self) -> None:  # noqa: N802
+        self.send_error(404)
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
 def free_port() -> int:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -350,6 +361,13 @@ class CliTests(unittest.TestCase):
             check=False,
         )
 
+    def parse_strict_json_object(self, stdout: str) -> dict[str, object]:
+        decoder = json.JSONDecoder()
+        payload, index = decoder.raw_decode(stdout)
+        self.assertEqual(stdout[index:].strip(), "")
+        self.assertIsInstance(payload, dict)
+        return payload
+
     def assert_missing_json_parser_rejection(
         self, *args: str, command_path: str
     ) -> None:
@@ -364,6 +382,35 @@ class CliTests(unittest.TestCase):
             "error: the following arguments are required: --json",
             result.stderr,
         )
+
+    def assert_changed_files_bounded_and_declared(
+        self,
+        *,
+        before: dict[str, str],
+        after: dict[str, str],
+        changed_files: object,
+    ) -> None:
+        self.assertIsInstance(changed_files, list)
+        temp_root = Path(self.temp_dir.name).resolve()
+        changed_file_set = set()
+        for value in changed_files:
+            self.assertIsInstance(value, str)
+            resolved = Path(value).resolve()
+            self.assertTrue(
+                resolved == temp_root or temp_root in resolved.parents,
+                f"changed file escapes temp root: {value}",
+            )
+            changed_file_set.add(value)
+
+        snapshot_paths = set(before) | set(after)
+        mutated_truth_paths = {
+            path
+            for path in snapshot_paths
+            if not path.startswith("DIR:")
+            and not path.startswith("DIR_GLOB:")
+            and before.get(path) != after.get(path)
+        }
+        self.assertLessEqual(mutated_truth_paths, changed_file_set)
 
     def test_status_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection("status", command_path="status")
@@ -17442,7 +17489,7 @@ class CliTests(unittest.TestCase):
         self.configure_stable_runtime_probe(port)
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, "managed listener should remain absent")
-        payload = json.loads(result.stdout)
+        payload = self.parse_strict_json_object(result.stdout)
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["effective_mode"], "stable")
@@ -17452,6 +17499,111 @@ class CliTests(unittest.TestCase):
         helper_text = self.sync_script.read_text(encoding="utf-8")
         self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
         self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
+
+    def test_sync_rejects_socket_only_managed_listener_without_runtime_identity(
+        self,
+    ) -> None:
+        sentinel_secret = "sk-wbp-d1b-sentinel-secret-socket-only"
+        (self.profile_dir / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            encoding="utf-8",
+        )
+        port = free_port()
+        self.configure_managed_runtime_probe(port)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-keeps-managed-socket-only.sh",
+            stderr_text="sync-managed-socket-only",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ListenerOnlyHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        before = self.state_snapshot()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)}, "sync", "--json"
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+        after = self.state_snapshot()
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        payload = self.parse_strict_json_object(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertNotEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effective_mode"], "managed")
+        self.assertNotEqual(payload["liveness"], "healthy")
+        self.assertEqual(result.stderr.strip(), "sync-managed-socket-only")
+        post_sync_proof = payload.get("post_sync_proof")
+        self.assertIsInstance(post_sync_proof, dict)
+        self.assertNotEqual(post_sync_proof.get("machine_error_code"), "OK")
+        self.assertNotEqual(post_sync_proof.get("launch_readiness_status"), "ready")
+        self.assertIs(post_sync_proof.get("launch_readiness_gate_passed"), False)
+        self.assert_changed_files_bounded_and_declared(
+            before=before,
+            after=after,
+            changed_files=payload["changed_files"],
+        )
+        self.assertNotIn(sentinel_secret, result.stdout)
+        self.assertNotIn("sk-wbp-d1b", result.stdout)
+        self.assertNotIn(sentinel_secret, result.stderr)
+        self.assertNotIn("sk-wbp-d1b", result.stderr)
+
+    def test_sync_rejects_foreign_openai_listener_without_runtime_identity(
+        self,
+    ) -> None:
+        sentinel_secret = "sk-wbp-d1b-sentinel-secret-foreign-openai"
+        (self.profile_dir / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            encoding="utf-8",
+        )
+        port = free_port()
+        self.configure_managed_runtime_probe(port)
+        ProbeHandler.runtime_identity_state_file = None
+        ProbeHandler.runtime_identity_managed_config_path = None
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-keeps-managed-foreign-openai.sh",
+            stderr_text="sync-managed-foreign-openai",
+        )
+        server, thread = self.start_probe_server(port)
+        before = self.state_snapshot()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)}, "sync", "--json"
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+        after = self.state_snapshot()
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        payload = self.parse_strict_json_object(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertNotEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effective_mode"], "managed")
+        self.assertNotEqual(payload["liveness"], "healthy")
+        self.assertEqual(result.stderr.strip(), "sync-managed-foreign-openai")
+        post_sync_proof = payload.get("post_sync_proof")
+        self.assertIsInstance(post_sync_proof, dict)
+        self.assertIs(post_sync_proof.get("identity_proof_ok"), False)
+        self.assertEqual(
+            post_sync_proof.get("identity_failure_reason"), "missing_runtime_identity"
+        )
+        self.assertNotEqual(post_sync_proof.get("launch_readiness_status"), "ready")
+        self.assertIs(post_sync_proof.get("launch_readiness_gate_passed"), False)
+        self.assert_changed_files_bounded_and_declared(
+            before=before,
+            after=after,
+            changed_files=payload["changed_files"],
+        )
+        self.assertNotIn(sentinel_secret, result.stdout)
+        self.assertNotIn("sk-wbp-d1b", result.stdout)
+        self.assertNotIn(sentinel_secret, result.stderr)
+        self.assertNotIn("sk-wbp-d1b", result.stderr)
 
     def test_sync_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
@@ -17933,10 +18085,11 @@ class CliTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertNotEqual(payload["healthcheck_machine_error_code"], "OK")
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-promoted")
 

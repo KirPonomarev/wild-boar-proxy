@@ -9208,6 +9208,66 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             exit_code=1,
         )
 
+    post_sync_probe = run_healthcheck_probe(paths, model=model)
+    if post_sync_probe.get("status") != "ok":
+        state = read_json(paths.state_file, required=False)
+        changed_files = detect_changed_files(before, changed_surface_candidates)
+        probe_attestation = post_sync_probe.get("attestation")
+        if not isinstance(probe_attestation, dict):
+            probe_attestation = {}
+        probe_launch_readiness = post_sync_probe.get("launch_readiness")
+        if not isinstance(probe_launch_readiness, dict):
+            probe_launch_readiness = {}
+        return build_command_payload(
+            ok=False,
+            human_message="Managed sync completed but runtime post-sync proof failed.",
+            machine_error_code="SYNC_HEALTHCHECK_FAILED",
+            liveness=str(post_sync_probe.get("liveness", "degraded") or "degraded"),
+            severity=str(
+                post_sync_probe.get("severity", "recoverable") or "recoverable"
+            ),
+            operator_action=str(
+                post_sync_probe.get("operator_action", "retry") or "retry"
+            ),
+            changed_files=changed_files,
+            extra={
+                "desired_mode": desired_mode,
+                "effective_mode": str(
+                    post_sync_probe.get("effective_mode", reported_effective_mode)
+                ),
+                "endpoint": str(post_sync_probe.get("endpoint", reported_endpoint)),
+                "last_error": str(
+                    post_sync_probe.get("last_error", state.get("last_error", ""))
+                ),
+                "healthcheck_machine_error_code": str(
+                    post_sync_probe.get("machine_error_code", "")
+                ),
+                "post_sync_proof": {
+                    "status": str(post_sync_probe.get("status", "")),
+                    "machine_error_code": str(
+                        post_sync_probe.get("machine_error_code", "")
+                    ),
+                    "liveness": str(post_sync_probe.get("liveness", "")),
+                    "identity_proof_required": bool(
+                        probe_attestation.get("identity_proof_required")
+                    ),
+                    "identity_proof_ok": bool(
+                        probe_attestation.get("identity_proof_ok")
+                    ),
+                    "identity_failure_reason": str(
+                        probe_attestation.get("identity_failure_reason", "")
+                    ),
+                    "launch_readiness_status": str(
+                        probe_launch_readiness.get("status", "")
+                    ),
+                    "launch_readiness_gate_passed": bool(
+                        probe_launch_readiness.get("gate_passed")
+                    ),
+                },
+            },
+            exit_code=1,
+        )
+
     materialize_selected_backend_snapshot_for_sync(paths)
     state = read_json(paths.state_file, required=False)
     changed_files = detect_changed_files(before, changed_surface_candidates)
