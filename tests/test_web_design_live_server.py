@@ -15581,6 +15581,125 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(packet["live_file_mutation_claimed"])
         self.assertEqual(created_sessions[0].run_payloads, [])
 
+    def test_codex_custom_mixed_role_slot_live_edit_probe_endpoint_proves_coder_file_mutation(self) -> None:
+        class MixedRoleSlotLiveEditFakeOperatorSurfaceSession(DualLaneFakeOperatorSurfaceSession):
+            def run_prompt(
+                self,
+                payload: dict[str, object],
+                *,
+                trace_wbp: bool = False,
+                sandbox_mode_override: str = "read-only",
+                writable_additional_dir: Path | None = None,
+                working_dir_override: Path | None = None,
+                declared_repo_tmp_dir: Path | None = None,
+            ) -> dict[str, object]:
+                assert sandbox_mode_override == "workspace-write"
+                assert writable_additional_dir is not None
+                assert declared_repo_tmp_dir == writable_additional_dir
+                if payload.get("slot_id") == "coding_agent_model_slot":
+                    target = writable_additional_dir / "chatgpt_plus_api_role_slot_live_edit_probe.txt"
+                    target.write_text(
+                        "WBP_CHATGPT_PLUS_DEEPSEEK_CODER_EDIT_OK",
+                        encoding="utf-8",
+                    )
+                return super().run_prompt(
+                    payload,
+                    trace_wbp=trace_wbp,
+                    sandbox_mode_override=sandbox_mode_override,
+                    writable_additional_dir=writable_additional_dir,
+                    working_dir_override=working_dir_override,
+                )
+
+        created_sessions: list[MixedRoleSlotLiveEditFakeOperatorSurfaceSession] = []
+
+        def factory() -> MixedRoleSlotLiveEditFakeOperatorSurfaceSession:
+            session = MixedRoleSlotLiveEditFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=MappingRunner(payloads),
+                        owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                        safe_worktree_repo_root=repo,
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    created = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/sessions",
+                            {
+                                "primary_model_id": "gpt-5.3-codex",
+                                "coding_agent_model_id": "wbp-deepseek-v3",
+                            },
+                        )
+                    )
+                    session_id = created["session"]["session_id"]
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/sessions/{session_id}/mixed-role-slot-live-edit-probe",
+                            {},
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertTrue(packet["primary_slot_dispatched"])
+        self.assertTrue(packet["coding_agent_model_slot_dispatched"])
+        self.assertEqual(packet["primary_model_slot_lane"], "codex_account_lane")
+        self.assertEqual(packet["coding_agent_model_slot_lane"], "api_route_lane")
+        self.assertEqual(packet["coding_slot_provider"], "deepseek")
+        self.assertTrue(packet["coding_slot_selected_model_equals_bound_route"])
+        self.assertTrue(packet["dispatch_route_packet_matches_session_slot_packet"])
+        self.assertTrue(packet["proof_file_digest_changed"])
+        self.assertTrue(packet["proof_file_mutation_attributed_to_coding_slot"])
+        self.assertEqual(
+            packet["changed_files"],
+            [".tmp/chatgpt_plus_api_role_slot_live_edit_probe.txt"],
+        )
+        self.assertTrue(packet["changed_files_exactly_expected"])
+        self.assertFalse(packet["primary_slot_file_mutation_observed"])
+        self.assertFalse(packet["primary_slot_file_mutation_claimed"])
+        self.assertFalse(packet["chatgpt_as_coder"])
+        self.assertFalse(packet["api_line_used_as_primary_executor"])
+        self.assertFalse(packet["slots_collapsed"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertEqual(
+            [payload["slot_id"] for payload in created_sessions[0].run_payloads],
+            ["primary_model_slot", "coding_agent_model_slot"],
+        )
+
     def test_codex_custom_mixed_slot_dispatch_probe_endpoint_requires_owner_auth(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
 

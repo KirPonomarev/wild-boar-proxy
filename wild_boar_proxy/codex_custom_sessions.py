@@ -54,6 +54,7 @@ SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_CODER_ALLOWED_FIELDS = {"api_model_id", "task"}
 REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 MIXED_SLOT_DISPATCH_PROBE_ALLOWED_FIELDS: set[str] = set()
+MIXED_ROLE_SLOT_LIVE_EDIT_PROBE_ALLOWED_FIELDS: set[str] = set()
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {
     "ready",
@@ -180,6 +181,12 @@ def forbidden_repo_tmp_edit_probe_fields(payload: Any) -> list[str]:
 
 def forbidden_mixed_slot_dispatch_probe_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, MIXED_SLOT_DISPATCH_PROBE_ALLOWED_FIELDS)))
+
+
+def forbidden_mixed_role_slot_live_edit_probe_fields(payload: Any) -> list[str]:
+    return sorted(
+        set(_forbidden_fields(payload, MIXED_ROLE_SLOT_LIVE_EDIT_PROBE_ALLOWED_FIELDS))
+    )
 
 
 def _model_ids(
@@ -2124,6 +2131,298 @@ class CodexCustomSessionManager:
                 self._sessions.get(session_id) or session
             ),
             "next_action": "none" if success else "stop_and_diagnose_mixed_slot_dispatch",
+        }
+
+    def mixed_role_slot_live_edit_probe_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any], Path], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+        repo_root: Path | None = None,
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        packet_kind = "chatgpt_plus_api_role_slot_live_edit_probe"
+        blocked_final_status = "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_NOT_PROVEN"
+        forbidden = forbidden_mixed_role_slot_live_edit_probe_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "packet_kind": packet_kind,
+                "final_status": blocked_final_status,
+                "execution_mode": "chatgpt_plus_api",
+                "proof_file_mutation_attributed_to_coding_slot": False,
+                "fallback_used": False,
+                "browser_backend_intake": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+        if not owner_authorized:
+            return {
+                **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+                "session_id": session_id,
+                "packet_kind": packet_kind,
+                "final_status": blocked_final_status,
+                "execution_mode": "chatgpt_plus_api",
+                "primary_slot_dispatched": False,
+                "coding_agent_model_slot_dispatched": False,
+                "proof_file_mutation_attributed_to_coding_slot": False,
+                "fallback_used": False,
+                "prompt_runner_called": False,
+                "next_action": "provide_exact_owner_authorization_phrase",
+            }
+
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        primary_slot = dict(role_slots.get(PRIMARY_MODEL_SLOT) or _unbound_slot(PRIMARY_MODEL_SLOT))
+        coding_slot = dict(
+            role_slots.get(CODING_AGENT_MODEL_SLOT) or _unbound_slot(CODING_AGENT_MODEL_SLOT)
+        )
+        primary_model_id = str(primary_slot.get("model_id") or "")
+        coding_model_id = str(coding_slot.get("model_id") or "")
+        precondition_failures: list[str] = []
+        if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
+            precondition_failures.append("SESSION_STATUS_NOT_RUNNABLE")
+        if primary_slot.get("binding_status") != "bound":
+            precondition_failures.append("PRIMARY_SLOT_NOT_BOUND")
+        if coding_slot.get("binding_status") != "bound":
+            precondition_failures.append("CODING_SLOT_NOT_BOUND")
+        if primary_slot.get("selected_source_class") != "gpt_account":
+            precondition_failures.append("PRIMARY_SLOT_NOT_CHATGPT_ACCOUNT")
+        if coding_slot.get("selected_source_class") != "route_backed":
+            precondition_failures.append("CODING_SLOT_NOT_API_ROUTE_BACKED")
+        primary_model_slot_lane = str(primary_slot.get("model_lane") or "")
+        coding_agent_model_slot_lane = str(coding_slot.get("model_lane") or "")
+        if primary_model_id and coding_model_id and primary_model_id == coding_model_id:
+            precondition_failures.append("PRIMARY_AND_CODING_MODELS_COLLAPSED")
+        if primary_model_slot_lane == coding_agent_model_slot_lane:
+            precondition_failures.append("PRIMARY_AND_CODING_LANES_COLLAPSED")
+        for slot_id, slot in (
+            (PRIMARY_MODEL_SLOT, primary_slot),
+            (CODING_AGENT_MODEL_SLOT, coding_slot),
+        ):
+            admission = _slot_dispatch_admission_packet(
+                session=session,
+                slot=slot,
+                requested_slot_id=slot_id,
+            )
+            if not admission["slot_admission_passed"]:
+                precondition_failures.append(f"{slot_id.upper()}_ADMISSION_FAILED")
+
+        repo = (repo_root or Path.cwd()).resolve()
+        git_root = _run_git_command(repo, ["rev-parse", "--show-toplevel"])
+        if not git_root["ok"]:
+            precondition_failures.append("REPO_TMP_EDIT_REPO_ROOT_NOT_GIT")
+        if precondition_failures:
+            return {
+                **self._base_packet("blocked", precondition_failures[0]),
+                "session_id": session_id,
+                "packet_kind": packet_kind,
+                "final_status": blocked_final_status,
+                "execution_mode": "chatgpt_plus_api",
+                "precondition_failures": sorted(set(precondition_failures)),
+                "primary_model_id": primary_model_id,
+                "coding_agent_model_id": coding_model_id,
+                "primary_model_slot_lane": primary_model_slot_lane,
+                "coding_agent_model_slot_lane": coding_agent_model_slot_lane,
+                "slots_collapsed": True,
+                "primary_slot_dispatched": False,
+                "coding_agent_model_slot_dispatched": False,
+                "proof_file_mutation_attributed_to_coding_slot": False,
+                "fallback_used": False,
+                "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                "next_action": "repair_mixed_role_slot_binding",
+            }
+
+        repo = Path(str(git_root["stdout"]).strip()).resolve()
+        status_before = _run_git_command(repo, ["status", "--porcelain=v1", "-uall"])
+        status_before_lines = str(status_before.get("stdout") or "").splitlines()
+        target_rel = Path(".tmp/chatgpt_plus_api_role_slot_live_edit_probe.txt")
+        tmp_dir = repo / ".tmp"
+        target = repo / target_rel
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        before_text = "WBP_CHATGPT_PLUS_API_CODER_EDIT_BEFORE"
+        expected_text = "WBP_CHATGPT_PLUS_DEEPSEEK_CODER_EDIT_OK"
+        target.write_text(before_text, encoding="utf-8")
+        proof_file_before_sha256 = _digest(before_text)
+
+        primary_packet = self.prompt_packet(
+            session_id,
+            {
+                "prompt": (
+                    "Reply with exactly WBP_MIXED_PRIMARY_SLOT_OK. "
+                    "Do not use tools and do not edit files."
+                ),
+                "slot_id": PRIMARY_MODEL_SLOT,
+            },
+            lambda runner_payload: prompt_runner(runner_payload, tmp_dir),
+            owner_authorized=True,
+        )
+        after_primary_content = (
+            target.read_text(encoding="utf-8", errors="replace") if target.exists() else ""
+        )
+        primary_slot_file_mutation_observed = after_primary_content != before_text
+        coding_packet: dict[str, Any] = {}
+        if primary_packet.get("status") == "ok" and not primary_slot_file_mutation_observed:
+            coding_prompt = (
+                "Use the available command execution tool. Run exactly this shell command, "
+                "then answer with exactly the file content and nothing else:\n"
+                f"printf {shlex.quote(expected_text)} > {shlex.quote(str(target))} && "
+                f"cat {shlex.quote(str(target))}"
+            )
+            coding_packet = self.prompt_packet(
+                session_id,
+                {
+                    "prompt": coding_prompt,
+                    "slot_id": CODING_AGENT_MODEL_SLOT,
+                },
+                lambda runner_payload: prompt_runner(runner_payload, tmp_dir),
+                owner_authorized=True,
+            )
+
+        after_content = target.read_text(encoding="utf-8", errors="replace") if target.exists() else ""
+        proof_file_after_sha256 = _digest(after_content) if target.exists() else ""
+        proof_file_digests_present = bool(proof_file_before_sha256 and proof_file_after_sha256)
+        proof_file_digest_changed = bool(
+            proof_file_digests_present
+            and proof_file_before_sha256 != proof_file_after_sha256
+        )
+        status_after = _run_git_command(repo, ["status", "--porcelain=v1", "-uall"])
+        status_after_lines = str(status_after.get("stdout") or "").splitlines()
+
+        def outside_tmp(lines: list[str]) -> list[str]:
+            outside: list[str] = []
+            for line in lines:
+                path_text = line[3:] if len(line) > 3 else line
+                if path_text.startswith(".tmp/") or " -> .tmp/" in path_text:
+                    continue
+                outside.append(line)
+            return outside
+
+        outside_write_surface_changed = outside_tmp(status_before_lines) != outside_tmp(status_after_lines)
+        changed_files = [str(target_rel)] if target.exists() and after_content == expected_text else []
+        changed_files_exactly_expected = changed_files == [str(target_rel)]
+        primary_dispatch_proven = self._slot_dispatch_probe_success(
+            primary_packet,
+            requested_slot_id=PRIMARY_MODEL_SLOT,
+            expected_model_id=primary_model_id,
+            expected_provider="cliproxy",
+            expected_source_provenance="backend_proven",
+        )
+        coding_dispatch_proven = self._slot_dispatch_probe_success(
+            coding_packet,
+            requested_slot_id=CODING_AGENT_MODEL_SLOT,
+            expected_model_id=coding_model_id,
+            expected_provider="external_route",
+            expected_source_provenance="route_proven",
+        )
+        coding_slot_selected_model_equals_bound_route = (
+            str(coding_packet.get("runtime_selected_model") or "") == coding_model_id
+        )
+        dispatch_route_packet_matches_session_slot_packet = bool(
+            coding_dispatch_proven
+            and coding_packet.get("wbp_runner_payload_slot_id") == CODING_AGENT_MODEL_SLOT
+            and coding_packet.get("wbp_runner_payload_model_id") == coding_model_id
+            and coding_packet.get("executed_slot_id") == CODING_AGENT_MODEL_SLOT
+            and coding_packet.get("executed_slot_model_id") == coding_model_id
+        )
+        fallback_used = (
+            primary_packet.get("fallback_attempted") is True
+            or coding_packet.get("fallback_attempted") is True
+        )
+        slots_collapsed = bool(
+            primary_model_id == coding_model_id
+            or primary_model_slot_lane == coding_agent_model_slot_lane
+        )
+        proof_file_mutation_attributed_to_coding_slot = bool(
+            primary_dispatch_proven
+            and coding_dispatch_proven
+            and not primary_slot_file_mutation_observed
+            and proof_file_digest_changed
+            and after_content == expected_text
+            and changed_files_exactly_expected
+        )
+        success = bool(
+            primary_dispatch_proven
+            and coding_dispatch_proven
+            and coding_slot_selected_model_equals_bound_route
+            and dispatch_route_packet_matches_session_slot_packet
+            and proof_file_mutation_attributed_to_coding_slot
+            and not slots_collapsed
+            and not fallback_used
+            and not outside_write_surface_changed
+            and primary_packet.get("current_codex_touched") is False
+            and coding_packet.get("current_codex_touched") is False
+        )
+        return {
+            **self._base_packet("ok" if success else "blocked", "OK" if success else "MIXED_ROLE_SLOT_LIVE_EDIT_NOT_PROVEN"),
+            "packet_kind": packet_kind,
+            "final_status": (
+                "CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_PROVEN_WITH_LIMITS"
+                if success
+                else blocked_final_status
+            ),
+            "execution_mode": "chatgpt_plus_api",
+            "session_id": session_id,
+            "primary_model_slot_lane": primary_model_slot_lane,
+            "coding_agent_model_slot_lane": coding_agent_model_slot_lane,
+            "primary_slot_dispatched": primary_dispatch_proven,
+            "primary_dispatch_proven": primary_dispatch_proven,
+            "coding_agent_model_slot_dispatched": coding_dispatch_proven,
+            "coding_dispatch_proven": coding_dispatch_proven,
+            "coding_slot_provider": "deepseek" if "deepseek" in coding_model_id.lower() else "external_route",
+            "coding_slot_selected_model_equals_bound_route": coding_slot_selected_model_equals_bound_route,
+            "dispatch_route_packet_matches_session_slot_packet": dispatch_route_packet_matches_session_slot_packet,
+            "primary_model_id": primary_model_id,
+            "coding_agent_model_id": coding_model_id,
+            "primary_executed_slot_id": str(primary_packet.get("executed_slot_id") or ""),
+            "coding_executed_slot_id": str(coding_packet.get("executed_slot_id") or ""),
+            "primary_runtime_model": str(primary_packet.get("runtime_selected_model") or ""),
+            "coding_runtime_model": str(coding_packet.get("runtime_selected_model") or ""),
+            "primary_configured_provider": str(primary_packet.get("configured_provider") or ""),
+            "coding_configured_provider": str(coding_packet.get("configured_provider") or ""),
+            "proof_file_before_sha256": proof_file_before_sha256,
+            "proof_file_after_sha256": proof_file_after_sha256,
+            "proof_file_digests_present": proof_file_digests_present,
+            "proof_file_digest_changed": proof_file_digest_changed,
+            "proof_file_mutation_attributed_to_coding_slot": proof_file_mutation_attributed_to_coding_slot,
+            "proof_file_relative_path": str(target_rel),
+            "changed_files": changed_files,
+            "changed_files_exactly_expected": changed_files_exactly_expected,
+            "primary_slot_file_mutation_observed": primary_slot_file_mutation_observed,
+            "primary_slot_file_mutation_claimed": False,
+            "chatgpt_as_coder": False,
+            "api_line_used_as_primary_executor": False,
+            "slots_collapsed": slots_collapsed,
+            "outside_write_surface_changed": outside_write_surface_changed,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "fallback_used": fallback_used,
+            "fallback_attempted": fallback_used,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "original_codex_profile_touched": False,
+            "current_codex_touched": (
+                primary_packet.get("current_codex_touched") is True
+                or coding_packet.get("current_codex_touched") is True
+            ),
+            "wbp_patch_applier_used": False,
+            "commit_attempted": False,
+            "push_attempted": False,
+            "merge_attempted": False,
+            "response_text_counts_as_proof": False,
+            "ui_label_counts_as_proof": False,
+            "model_self_report_counts_as_runtime_truth": False,
+            "primary_packet_summary": self._slot_dispatch_probe_summary(primary_packet),
+            "coding_packet_summary": self._slot_dispatch_probe_summary(coding_packet),
+            "role_slot_binding_packet": self._role_slot_binding_packet(
+                self._sessions.get(session_id) or session
+            ),
+            "next_action": "none" if success else "stop_and_diagnose_mixed_role_slot_live_edit",
         }
 
     def temp_write_probe_packet(
