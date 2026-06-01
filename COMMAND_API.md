@@ -579,6 +579,38 @@ This surface proves server-side mode/slot/executor truth only. It must not claim
 Custom window launch, model-matrix coverage, dual-role routing, profile/history
 persistence, proof-file mutation, or UI selector truth.
 
+Successful ChatGPT+API role-slot truth packets from the server command surface
+must expose:
+
+- `declared_mode=chatgpt_plus_api`
+- `route_truth_status=pass`
+- `route_truth_basis=server_role_slot_command_surface`
+- `selected_chatgpt_model`
+- `selected_api_model`
+- `primary_executor=chatgpt`
+- `coding_executor=deepseek`
+- `primary_model_slot_lane=codex_account_lane`
+- `coding_agent_model_slot_lane=api_route_lane`
+- `coding_agent_model_slot_provider=deepseek`
+- `chatgpt_line_used_as_executor=true`
+- `api_line_used_as_coding_agent=true`
+- `api_line_used_as_primary_executor=false`
+- `chatgpt_line_used_as_coding_agent=false`
+- `dual_lane_slots_preserved=true`
+- `slots_collapsed=false`
+- `fallback_used=false`
+- `browser_selector_used=false`
+- `ui_selector_claimed=false`
+- `raw_backend_details_exposed=false`
+- `secret_value_exposed=false`
+- `custom_codex_window_launched=false`
+- `proof_file_mutation_claimed=false`
+- `model_matrix_claimed=false`
+
+This surface proves role-slot routing truth only. It must not claim live paired
+agent execution, file mutation, model-matrix coverage, profile/history
+persistence, speed, voice, or Quick Start UI readiness.
+
 ## Additional launch-client owner surface
 
 `launch client --json` is the owner surface for bounded external host-client
