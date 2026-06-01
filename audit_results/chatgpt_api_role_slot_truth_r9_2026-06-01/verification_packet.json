@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "packet_kind": "chatgpt_api_role_slot_truth_r9_verification",
+  "status": "ok",
+  "final_status": "CHATGPT_PLUS_API_ROLE_SLOT_TRUTH_VERIFIED",
+  "scope": "chatgpt_plus_api_role_slot_truth_only",
+  "tests": [
+    {
+      "command": "python3 -m pytest -q tests/test_codex_model_registry.py -k 'chatgpt_plus_api_slot_truth or chatgpt_only_executor_truth or api_only_executor_truth or server_model_selection_truth'",
+      "result": "8 passed, 32 deselected"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_web_design_live_server.py -k 'chatgpt_plus_api_slot_truth_endpoint or chatgpt_only_executor_truth_endpoint or api_only_executor_truth_endpoint'",
+      "result": "3 passed, 248 deselected"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_codex_model_registry.py",
+      "result": "40 passed"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_codex_custom_sessions.py -k 'mixed_slot_dispatch_probe_blocks_chatgpt_only_without_api_slot or fallback_used or model_lane_fallback'",
+      "result": "1 passed, 47 deselected"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/codex_model_registry.py wild_boar_proxy/web_design_live_server.py tests/test_codex_model_registry.py tests/test_web_design_live_server.py",
+      "result": "passed"
+    },
+    {
+      "command": "jq -e '.status == \"ok\" and .final_status == \"CHATGPT_PLUS_API_ROLE_SLOT_TRUTH_CLOSED\" and .declared_mode == \"chatgpt_plus_api\" and .route_truth_status == \"pass\" and .primary_model_slot_lane == \"codex_account_lane\" and .coding_agent_model_slot_lane == \"api_route_lane\" and .coding_agent_model_slot_provider == \"deepseek\" and .chatgpt_line_used_as_executor == true and .api_line_used_as_coding_agent == true and .api_line_used_as_primary_executor == false and .chatgpt_line_used_as_coding_agent == false and .dual_lane_slots_preserved == true and .slots_collapsed == false and .fallback_used == false and .browser_selector_used == false and .ui_selector_claimed == false and .secret_value_exposed == false and .raw_backend_details_exposed == false' audit_results/chatgpt_api_role_slot_truth_r9_2026-06-01/summary_packet.json",
+      "result": "true"
+    }
+  ],
+  "evidence": {
+    "summary_packet": "summary_packet.json",
+    "role_slot_truth_packet": "role_slot_truth_packet.json",
+    "status": "ok",
+    "final_status": "CHATGPT_PLUS_API_ROLE_SLOT_TRUTH_CLOSED",
+    "declared_mode": "chatgpt_plus_api",
+    "selected_chatgpt_model": "gpt-5.4-mini",
+    "selected_api_model": "wbp-deepseek-v4-pro-max",
+    "primary_executor": "chatgpt",
+    "coding_executor": "deepseek",
+    "fallback_used": false,
+    "browser_selector_used": false,
+    "ui_selector_claimed": false,
+    "live_paired_execution_claimed": false,
+    "live_file_mutation_claimed": false
+  },
+  "scope_check": {
+    "quick_start_ui_changed": false,
+    "model_matrix_claimed": false,
+    "dual_role_live_execution_claimed": false,
+    "profile_history_claimed": false,
+    "voice_claimed": false,
+    "speed_claimed": false,
+    "proof_file_mutation_claimed": false
+  },
+  "secret_scan": {
+    "audit_results_chatgpt_api_role_slot_truth_r9": "clean",
+    "raw_route_or_secret_exposed": false
+  }
+}

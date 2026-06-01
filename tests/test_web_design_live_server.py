@@ -12669,9 +12669,14 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["final_status"], "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS")
         self.assertTrue(packet["slot_truth_proven"])
+        self.assertEqual(packet["declared_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["route_truth_status"], "pass")
+        self.assertEqual(packet["route_truth_basis"], "server_role_slot_command_surface")
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
         self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
         self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(packet["primary_executor"], "chatgpt")
+        self.assertEqual(packet["coding_executor"], "deepseek")
         self.assertEqual(packet["source"], "server_selection_truth")
         self.assertTrue(packet["server_selection_truth_used"])
         self.assertTrue(packet["server_catalog_source"])
@@ -12688,8 +12693,11 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(packet["codex_window_observed"])
         self.assertTrue(packet["dry_server_truth_only"])
         self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(packet["primary_model_slot_lane"], "codex_account_lane")
         self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(packet["coding_agent_model_slot_lane"], "api_route_lane")
         self.assertEqual(packet["coding_agent_model_slot"]["provider"], "deepseek")
+        self.assertEqual(packet["coding_agent_model_slot_provider"], "deepseek")
         self.assertEqual(
             packet["coding_agent_model_slot"]["model_id"],
             "wbp-deepseek-v4-pro-max",
@@ -12702,6 +12710,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(packet["api_line_used_as_primary_executor"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["fallback_attempted"])
+        self.assertFalse(packet["browser_selector_used"])
+        self.assertFalse(packet["ui_selector_claimed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["route_or_backend_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
@@ -12713,8 +12723,11 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(packet["runtime_execution_proven"])
         self.assertFalse(packet["ui_work_attempted"])
         self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["custom_codex_window_launched"])
         self.assertFalse(packet["live_paid_call_attempted"])
         self.assertFalse(packet["full_delegation_claimed"])
+        self.assertFalse(packet["proof_file_mutation_claimed"])
+        self.assertFalse(packet["model_matrix_claimed"])
 
         self.assertEqual(rejected["status"], "blocked")
         self.assertEqual(
@@ -12722,6 +12735,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_ROUTING_NOT_PROVEN",
         )
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["route_truth_status"], "blocked")
         self.assertEqual(rejected["forbidden_fields"], [])
         self.assertEqual(rejected["forbidden_field_count"], 1)
         self.assertTrue(rejected["forbidden_fields_redacted"])
