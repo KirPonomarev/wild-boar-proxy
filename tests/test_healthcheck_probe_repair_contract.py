@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import socket
@@ -15,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from tools.truth_tree_harness import assert_no_truth_mutation, snapshot_truth_tree
 from wild_boar_proxy import runtime as runtime_mod
 
 
@@ -25,19 +25,6 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
-
-
-def _file_snapshot(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"exists": False}
-    stat_result = path.stat()
-    return {
-        "exists": True,
-        "size": stat_result.st_size,
-        "mode": stat_result.st_mode & 0o777,
-        "mtime_ns": stat_result.st_mtime_ns,
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    }
 
 
 def _strict_json_object(raw: str) -> dict[str, Any]:
@@ -201,25 +188,19 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         return env
 
     def truth_snapshot(self) -> dict[str, dict[str, Any]]:
-        return {
-            "backend-registry.json": _file_snapshot(
-                self.managed_dir / "backend-registry.json"
-            ),
-            "supervisor-state.json": _file_snapshot(
-                self.managed_dir / "supervisor-state.json"
-            ),
-            "managed-config.yaml": _file_snapshot(
-                self.managed_dir / "managed-config.yaml"
-            ),
-            "runtime-mode.txt": _file_snapshot(
-                self.profile_dir / "runtime-mode.txt"
-            ),
-            "runtime-effective-mode.txt": _file_snapshot(
-                self.profile_dir / "runtime-effective-mode.txt"
-            ),
-            "config.toml": _file_snapshot(self.profile_dir / "config.toml"),
-            "managed-proxy.pid": _file_snapshot(self.pid_file),
-        }
+        return snapshot_truth_tree(
+            {
+                "backend-registry.json": self.managed_dir / "backend-registry.json",
+                "supervisor-state.json": self.managed_dir / "supervisor-state.json",
+                "managed-config.yaml": self.managed_dir / "managed-config.yaml",
+                "runtime-mode.txt": self.profile_dir / "runtime-mode.txt",
+                "runtime-effective-mode.txt": (
+                    self.profile_dir / "runtime-effective-mode.txt"
+                ),
+                "config.toml": self.profile_dir / "config.toml",
+                "managed-proxy.pid": self.pid_file,
+            }
+        )
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -254,7 +235,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         )
         self.assertNotIn("deterministic_stable_recovery_result", payload)
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
-        self.assertEqual(before, after)
+        assert_no_truth_mutation(before, after)
 
     def test_healthcheck_probe_does_not_call_repair_primitives(self) -> None:
         with (

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -12,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+
+from tools.truth_tree_harness import assert_no_truth_mutation, snapshot_truth_tree
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,21 +32,6 @@ EXTERNAL_MODELS_TRUTH_FILES = (
     "routes.json",
     "secrets.env",
 )
-
-
-def _file_snapshot(path: Path, *, secret: bool = False) -> dict[str, Any]:
-    if not path.exists():
-        return {"exists": False}
-    stat_result = path.stat()
-    snapshot: dict[str, Any] = {
-        "exists": True,
-        "size": stat_result.st_size,
-        "mode": stat_result.st_mode & 0o777,
-        "mtime_ns": stat_result.st_mtime_ns,
-    }
-    if not secret:
-        snapshot["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return snapshot
 
 
 def _decode_single_json_object(raw: str) -> dict[str, Any]:
@@ -176,7 +162,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
         env["no_proxy"] = "*"
         return env
 
-    def truth_snapshot(self) -> dict[str, dict[str, Any]]:
+    def truth_snapshot(self) -> dict[str, dict[str, object]]:
         paths = {
             "backend-registry.json": self.managed_dir / "backend-registry.json",
             "supervisor-state.json": self.managed_dir / "supervisor-state.json",
@@ -188,10 +174,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
             "routes.json": self.external_dir / "routes.json",
             "secrets.env": self.external_dir / "secrets.env",
         }
-        return {
-            name: _file_snapshot(path, secret=name == "secrets.env")
-            for name, path in paths.items()
-        }
+        return snapshot_truth_tree(paths, secret_labels={"secrets.env"})
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -211,7 +194,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
 
         self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
-        self.assertEqual(before, after)
+        assert_no_truth_mutation(before, after)
         return payload
 
     def test_read_effect_commands_do_not_write_truth_files(self) -> None:

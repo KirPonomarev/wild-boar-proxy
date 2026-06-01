@@ -150,6 +150,56 @@ OWNER_SURFACES = {
         REPAIR,
         frozenset({"run_healthcheck"}),
     ),
+    "run_onboard": Surface(
+        RUNTIME,
+        "run_onboard",
+        SUBPROCESS_ADJACENT,
+        frozenset({"serialized_lock", "subprocess.run", "run_accounts_command"}),
+    ),
+    "run_promote": Surface(
+        RUNTIME,
+        "run_promote",
+        SUBPROCESS_ADJACENT,
+        frozenset({"serialized_lock", "subprocess.run", "detect_changed_files"}),
+    ),
+    "run_demote": Surface(
+        RUNTIME,
+        "run_demote",
+        SUBPROCESS_ADJACENT,
+        frozenset(
+            {
+                "serialized_lock",
+                "subprocess.run",
+                "run_sync_for_owner_path_under_lock",
+                "observe_status_proof_for_owner_path_under_lock",
+            }
+        ),
+    ),
+    "run_hold": Surface(
+        RUNTIME,
+        "run_hold",
+        SUBPROCESS_ADJACENT,
+        frozenset({"run_protective_lifecycle_owner_path"}),
+    ),
+    "run_release": Surface(
+        RUNTIME,
+        "run_release",
+        SUBPROCESS_ADJACENT,
+        frozenset({"run_protective_lifecycle_owner_path"}),
+    ),
+    "run_retire": Surface(
+        RUNTIME,
+        "run_retire",
+        SUBPROCESS_ADJACENT,
+        frozenset(
+            {
+                "serialized_lock",
+                "subprocess.run",
+                "run_sync_for_owner_path_under_lock",
+                "observe_status_proof_for_owner_path_under_lock",
+            }
+        ),
+    ),
     "_run_credentials_command": Surface(
         EXTERNAL_MODELS,
         "_run_credentials_command",
@@ -163,6 +213,29 @@ OWNER_SURFACES = {
         frozenset(
             {"emit_json", "run_healthcheck_probe", "run_healthcheck_repair", "summarize_status"}
         ),
+    ),
+}
+
+KNOWN_EFFECT_CONTRACT_GAPS = {
+    "mode_set_missing_mutate_effect": (
+        RUNTIME,
+        "mode_set",
+        "effect=EFFECT_MUTATE",
+    ),
+    "cli_runtime_error_handler_missing_effect_context": (
+        CLI,
+        "main",
+        '"effect"',
+    ),
+    "healthcheck_repair_missing_mutation_metadata": (
+        RUNTIME,
+        "run_healthcheck_repair",
+        "mutation_id",
+    ),
+    "promote_missing_mutation_metadata": (
+        RUNTIME,
+        "run_promote",
+        "mutation_id",
     ),
 }
 
@@ -226,6 +299,12 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "run_healthcheck"),
                 (RUNTIME, "run_healthcheck_probe"),
                 (RUNTIME, "run_healthcheck_repair"),
+                (RUNTIME, "run_onboard"),
+                (RUNTIME, "run_promote"),
+                (RUNTIME, "run_demote"),
+                (RUNTIME, "run_hold"),
+                (RUNTIME, "run_release"),
+                (RUNTIME, "run_retire"),
                 (EXTERNAL_MODELS, "_run_credentials_command"),
                 (CLI, "main"),
             },
@@ -259,6 +338,35 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertTrue(calls & LOCK_PRIMITIVES)
         self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
         self.assertTrue(calls & WRITE_PRIMITIVES)
+
+    def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
+        for name in (
+            "run_onboard",
+            "run_promote",
+            "run_demote",
+            "run_hold",
+            "run_release",
+            "run_retire",
+        ):
+            surface = OWNER_SURFACES[name]
+            with self.subTest(function=surface.function):
+                calls = _call_names(_function(surface.path, surface.function))
+                self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
+                self.assertTrue(surface.required_calls <= calls)
+
+        for name in ("run_onboard", "run_promote", "run_demote", "run_retire"):
+            surface = OWNER_SURFACES[name]
+            with self.subTest(function=f"{surface.function}_raw_effects"):
+                calls = _call_names(_function(surface.path, surface.function))
+                self.assertTrue(calls & LOCK_PRIMITIVES)
+                self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
+
+        for name in ("run_hold", "run_release"):
+            surface = OWNER_SURFACES[name]
+            with self.subTest(function=f"{surface.function}_delegates"):
+                calls = _call_names(_function(surface.path, surface.function))
+                self.assertEqual(set(), calls & LOCK_PRIMITIVES)
+                self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_status_is_read_snapshot_and_healthcheck_remains_repair(self) -> None:
         status_surface = OWNER_SURFACES["summarize_status"]
@@ -318,6 +426,21 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(expected_class, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
                 self.assertEqual(set(), calls & forbidden_raw_primitives)
+
+    def test_known_effect_contract_gaps_are_explicitly_tracked(self) -> None:
+        self.assertEqual(
+            {
+                "mode_set_missing_mutate_effect",
+                "cli_runtime_error_handler_missing_effect_context",
+                "healthcheck_repair_missing_mutation_metadata",
+                "promote_missing_mutation_metadata",
+            },
+            set(KNOWN_EFFECT_CONTRACT_GAPS),
+        )
+        for gap, (path, function, absent_text) in KNOWN_EFFECT_CONTRACT_GAPS.items():
+            with self.subTest(gap=gap):
+                source = _function_source(path, function)
+                self.assertNotIn(absent_text, source)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,8 @@ test-core:
 		tests/test_cli.py::CliTests::test_invariant_check_rejects_false_green \
 		tests/test_cli.py::CliTests::test_invariant_check_does_not_write_runtime_state
 
-smoke: check
+smoke:
+	$(PYTHON) tools/smoke_temp_runtime.py
 
 test-full:
 	$(PYTEST_SAFE_ENV) $(PYTEST) -q
