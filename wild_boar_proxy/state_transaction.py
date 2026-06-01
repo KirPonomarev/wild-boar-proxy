@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -28,6 +28,8 @@ TRANSACTION_RECOVERABLE = "recoverable"
 TRANSACTION_BLOCKED = "blocked"
 TRANSACTION_METADATA_SUFFIX = ".transaction.json"
 TRANSACTION_STORE_DIRNAME = "transactions"
+TRANSACTION_WORK_DIR_SUFFIX = ".files"
+TRANSACTION_ARTIFACT_STALE_TTL_SECONDS = 3600
 
 STATE_TRANSACTION_INVALID = "STATE_TRANSACTION_INVALID"
 STATE_TRANSACTION_INCOMPLETE = "STATE_TRANSACTION_INCOMPLETE"
@@ -118,6 +120,39 @@ class TransactionCommitResult:
     file_count: int
 
 
+@dataclass(frozen=True)
+class TransactionTempArtifact:
+    path: str
+    transaction_id: str
+    artifact_kind: str
+    referenced: bool
+    exists: bool
+    stale: bool
+
+
+@dataclass(frozen=True)
+class TransactionTempInspection:
+    artifacts: tuple[TransactionTempArtifact, ...]
+    referenced_artifact_paths: tuple[str, ...]
+    unreferenced_artifact_paths: tuple[str, ...]
+    stale_artifact_paths: tuple[str, ...]
+    incomplete_transaction_ids: tuple[str, ...]
+    recoverable_transaction_ids: tuple[str, ...]
+    blocked_transaction_ids: tuple[str, ...]
+    invalid_metadata_paths: tuple[str, ...]
+
+    @property
+    def is_clean(self) -> bool:
+        return not (
+            self.unreferenced_artifact_paths
+            or self.stale_artifact_paths
+            or self.incomplete_transaction_ids
+            or self.recoverable_transaction_ids
+            or self.blocked_transaction_ids
+            or self.invalid_metadata_paths
+        )
+
+
 class StateTransactionError(Exception):
     def __init__(self, message: str, *, machine_error_code: str) -> None:
         super().__init__(message)
@@ -192,6 +227,24 @@ def _write_bytes_fsync(path: Path, payload: bytes) -> None:
         file_obj.flush()
         os.fsync(file_obj.fileno())
     _fsync_parent_best_effort(target.parent)
+
+
+def _absolute_path_no_follow(path: Path) -> Path:
+    return Path(os.path.abspath(os.path.normpath(os.fspath(path))))
+
+
+def _path_str_no_follow(path: Path) -> str:
+    return str(_absolute_path_no_follow(path))
+
+
+def _path_is_under_no_follow(path: Path, root: Path) -> bool:
+    candidate = _absolute_path_no_follow(path)
+    transaction_root = _absolute_path_no_follow(root)
+    try:
+        candidate.relative_to(transaction_root)
+    except ValueError:
+        return False
+    return True
 
 
 def _parse_utc(value: str) -> datetime:
@@ -569,6 +622,251 @@ def classify_transaction_store(root: Path) -> TransactionStoreClassification:
 
 def _transaction_store_root_for(transaction_root: Path) -> Path:
     return Path(transaction_root) / TRANSACTION_STORE_DIRNAME
+
+
+def _transaction_work_root_for(store_root: Path, transaction_id: str) -> Path:
+    return Path(store_root) / f"{transaction_id}{TRANSACTION_WORK_DIR_SUFFIX}"
+
+
+def _artifact_kind_for_path(path: Path) -> str:
+    if path.name.endswith(".tmp"):
+        return "temp"
+    if path.name.endswith(".backup"):
+        return "backup"
+    return "workfile"
+
+
+def _normalize_inspection_now(now: datetime | None) -> datetime:
+    if now is None:
+        return datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise StateTransactionError(
+            "Inspection time must include timezone.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    return now.astimezone(timezone.utc)
+
+
+def _artifact_is_stale(
+    path: Path,
+    *,
+    now: datetime,
+    stale_ttl_seconds: int,
+) -> bool:
+    modified_at = datetime.fromtimestamp(path.stat(follow_symlinks=False).st_mtime, timezone.utc)
+    return modified_at <= now - timedelta(seconds=stale_ttl_seconds)
+
+
+def _merge_temp_artifact(
+    artifacts_by_path: dict[str, TransactionTempArtifact],
+    *,
+    path: str,
+    transaction_id: str,
+    artifact_kind: str,
+    referenced: bool,
+    exists: bool,
+    stale: bool,
+) -> None:
+    existing = artifacts_by_path.get(path)
+    if existing is None:
+        artifacts_by_path[path] = TransactionTempArtifact(
+            path=path,
+            transaction_id=transaction_id,
+            artifact_kind=artifact_kind,
+            referenced=referenced,
+            exists=exists,
+            stale=stale,
+        )
+        return
+    artifacts_by_path[path] = TransactionTempArtifact(
+        path=path,
+        transaction_id=existing.transaction_id,
+        artifact_kind=existing.artifact_kind,
+        referenced=existing.referenced or referenced,
+        exists=existing.exists or exists,
+        stale=existing.stale or stale,
+    )
+
+
+def _append_unique(values: list[str], value: str) -> None:
+    if value not in values:
+        values.append(value)
+
+
+def inspect_transaction_temp_artifacts(
+    transaction_root: Path,
+    *,
+    now: datetime | None = None,
+    stale_ttl_seconds: int = TRANSACTION_ARTIFACT_STALE_TTL_SECONDS,
+) -> TransactionTempInspection:
+    root = Path(transaction_root)
+    if not root.is_absolute():
+        raise StateTransactionError(
+            "Transaction root must be absolute.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    if (
+        isinstance(stale_ttl_seconds, bool)
+        or not isinstance(stale_ttl_seconds, int)
+        or stale_ttl_seconds < 0
+    ):
+        raise StateTransactionError(
+            "Transaction artifact TTL must be a non-negative integer.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+
+    normalized_root = root.resolve(strict=False)
+    normalized_now = _normalize_inspection_now(now)
+    store_root = _transaction_store_root_for(normalized_root)
+    if not store_root.exists():
+        return TransactionTempInspection(
+            artifacts=(),
+            referenced_artifact_paths=(),
+            unreferenced_artifact_paths=(),
+            stale_artifact_paths=(),
+            incomplete_transaction_ids=(),
+            recoverable_transaction_ids=(),
+            blocked_transaction_ids=(),
+            invalid_metadata_paths=(),
+        )
+    if not store_root.is_dir():
+        raise StateTransactionError(
+            "Transaction store root must be a directory.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+
+    artifacts_by_path: dict[str, TransactionTempArtifact] = {}
+    referenced_artifact_paths: list[str] = []
+    unreferenced_artifact_paths: list[str] = []
+    stale_artifact_paths: list[str] = []
+    incomplete_transaction_ids: list[str] = []
+    recoverable_transaction_ids: list[str] = []
+    blocked_transaction_ids: list[str] = []
+    invalid_metadata_paths: list[str] = []
+    blocked_id_set: set[str] = set()
+    referenced_path_set: set[str] = set()
+
+    for metadata_path in list_transaction_metadata(store_root):
+        try:
+            transaction_id = _transaction_id_from_metadata_path(metadata_path)
+            if metadata_path.is_symlink() or not metadata_path.is_file():
+                raise StateTransactionError(
+                    "Transaction metadata path must be a regular file.",
+                    machine_error_code=STATE_TRANSACTION_INVALID,
+                )
+            metadata = read_transaction_metadata(metadata_path)
+            classification = classify_transaction_metadata(metadata)
+        except (OSError, StateTransactionError, state_store.StateStoreError):
+            _append_unique(invalid_metadata_paths, _path_str_no_follow(metadata_path))
+            continue
+
+        if classification.classification == TRANSACTION_BLOCKED:
+            _append_unique(blocked_transaction_ids, transaction_id)
+            blocked_id_set.add(transaction_id)
+            continue
+
+        work_root = _transaction_work_root_for(store_root, transaction_id)
+        metadata_blocked = False
+        for file_record in metadata.files:
+            for artifact_path_text, artifact_kind in (
+                (file_record.temp_path, "temp"),
+                (file_record.backup_path, "backup"),
+            ):
+                artifact_path = Path(artifact_path_text)
+                if not _path_is_under_no_follow(artifact_path, work_root):
+                    metadata_blocked = True
+                    break
+                artifact_key = _path_str_no_follow(artifact_path)
+                if artifact_path.is_symlink():
+                    metadata_blocked = True
+                    break
+                if artifact_path.exists() and not artifact_path.is_file():
+                    metadata_blocked = True
+                    break
+                referenced_path_set.add(artifact_key)
+                _append_unique(referenced_artifact_paths, artifact_key)
+                _merge_temp_artifact(
+                    artifacts_by_path,
+                    path=artifact_key,
+                    transaction_id=transaction_id,
+                    artifact_kind=artifact_kind,
+                    referenced=True,
+                    exists=artifact_path.exists(),
+                    stale=False,
+                )
+            if metadata_blocked:
+                break
+
+        if metadata_blocked:
+            _append_unique(blocked_transaction_ids, transaction_id)
+            blocked_id_set.add(transaction_id)
+            continue
+
+        if classification.classification == TRANSACTION_RECOVERABLE:
+            _append_unique(recoverable_transaction_ids, transaction_id)
+        elif classification.classification == TRANSACTION_INCOMPLETE:
+            _append_unique(incomplete_transaction_ids, transaction_id)
+
+    for candidate in sorted(store_root.iterdir(), key=lambda item: item.name):
+        if not candidate.name.endswith(TRANSACTION_WORK_DIR_SUFFIX):
+            continue
+        transaction_id = candidate.name[: -len(TRANSACTION_WORK_DIR_SUFFIX)]
+        try:
+            validate_transaction_id(transaction_id)
+        except StateTransactionError:
+            continue
+        if transaction_id in blocked_id_set:
+            continue
+        if candidate.is_symlink() or not candidate.is_dir():
+            _append_unique(blocked_transaction_ids, transaction_id)
+            blocked_id_set.add(transaction_id)
+            continue
+
+        for artifact_path in sorted(candidate.iterdir(), key=lambda item: item.name):
+            artifact_key = _path_str_no_follow(artifact_path)
+            if artifact_path.is_symlink() or artifact_path.is_dir():
+                _append_unique(blocked_transaction_ids, transaction_id)
+                blocked_id_set.add(transaction_id)
+                break
+            if artifact_key in referenced_path_set:
+                _merge_temp_artifact(
+                    artifacts_by_path,
+                    path=artifact_key,
+                    transaction_id=transaction_id,
+                    artifact_kind=_artifact_kind_for_path(artifact_path),
+                    referenced=True,
+                    exists=True,
+                    stale=False,
+                )
+                continue
+            stale = _artifact_is_stale(
+                artifact_path,
+                now=normalized_now,
+                stale_ttl_seconds=stale_ttl_seconds,
+            )
+            _append_unique(unreferenced_artifact_paths, artifact_key)
+            if stale:
+                _append_unique(stale_artifact_paths, artifact_key)
+            _merge_temp_artifact(
+                artifacts_by_path,
+                path=artifact_key,
+                transaction_id=transaction_id,
+                artifact_kind=_artifact_kind_for_path(artifact_path),
+                referenced=False,
+                exists=True,
+                stale=stale,
+            )
+
+    return TransactionTempInspection(
+        artifacts=tuple(sorted(artifacts_by_path.values(), key=lambda artifact: artifact.path)),
+        referenced_artifact_paths=tuple(referenced_artifact_paths),
+        unreferenced_artifact_paths=tuple(unreferenced_artifact_paths),
+        stale_artifact_paths=tuple(stale_artifact_paths),
+        incomplete_transaction_ids=tuple(incomplete_transaction_ids),
+        recoverable_transaction_ids=tuple(recoverable_transaction_ids),
+        blocked_transaction_ids=tuple(blocked_transaction_ids),
+        invalid_metadata_paths=tuple(invalid_metadata_paths),
+    )
 
 
 def _failed_metadata(
