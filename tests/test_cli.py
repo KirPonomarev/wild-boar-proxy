@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shlex
@@ -30,6 +31,8 @@ class ProbeHandler(BaseHTTPRequestHandler):
     response_status = 200
     response_payload: object | None = None
     last_request_headers: dict[str, str] | None = None
+    runtime_identity_state_file: str | None = None
+    runtime_identity_managed_config_path: str | None = None
     dynamic_state_file: str | None = None
     dynamic_launcher_path: str | None = None
     dynamic_managed_config_path: str | None = None
@@ -38,6 +41,43 @@ class ProbeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models":
             body = json.dumps({"data": [{"id": "gpt-5.4"}]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/v1/wbp/runtime-identity":
+            if (
+                self.runtime_identity_state_file is None
+                or self.runtime_identity_managed_config_path is None
+            ):
+                self.send_error(404)
+                return
+            state_path = Path(self.runtime_identity_state_file)
+            managed_config_path = Path(self.runtime_identity_managed_config_path)
+            if not state_path.exists() or not managed_config_path.exists():
+                self.send_error(404)
+                return
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            host = self.headers.get("Host", "")
+            body = json.dumps(
+                {
+                    "schema_version": runtime_mod.RUNTIME_IDENTITY_SCHEMA_VERSION,
+                    "runtime_marker": "wbp-test-runtime-marker",
+                    "managed_config_identity": hashlib.sha256(
+                        managed_config_path.read_bytes()
+                    ).hexdigest(),
+                    "selected_backends_digest": runtime_mod.get_selected_backends_digest(
+                        state
+                    ),
+                    "runtime_version": str(
+                        state.get("version", state.get("schema_version", "unknown"))
+                    ),
+                    "issued_for_endpoint": f"http://{host}/v1",
+                    "issued_at_utc": "2026-06-01T00:00:00+00:00",
+                }
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -129,6 +169,8 @@ class CliTests(unittest.TestCase):
         ProbeHandler.response_status = 200
         ProbeHandler.response_payload = None
         ProbeHandler.last_request_headers = None
+        ProbeHandler.runtime_identity_state_file = None
+        ProbeHandler.runtime_identity_managed_config_path = None
         ProbeHandler.dynamic_state_file = None
         ProbeHandler.dynamic_launcher_path = None
         ProbeHandler.dynamic_managed_config_path = None
@@ -245,6 +287,12 @@ class CliTests(unittest.TestCase):
         )
         self.launcher_script = self.profile_dir / "codex-custom-launch-override.sh"
         self.write_recording_stable_launcher(self.launcher_script)
+        ProbeHandler.runtime_identity_state_file = str(
+            self.managed_dir / "supervisor-state.json"
+        )
+        ProbeHandler.runtime_identity_managed_config_path = str(
+            self.managed_dir / "managed-config.yaml"
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
