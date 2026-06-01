@@ -515,9 +515,14 @@ route-level provider model visibility proof.
 `external-models check --route <id> --json` is the owner surface for route-level
 provider smoke proof.
 
+`external-models live-format-check --route <id> --json` is the owner surface for
+a no-write API-only provider response-format proof.
+
 Both surfaces must remain route-local. They may write route observation state and
 network evidence, but they must not claim live listener readiness or mutate Codex
 account routing.
+
+The no-write live-format surface must not write route state or evidence.
 
 Verification must block before any provider network call when:
 
@@ -537,6 +542,20 @@ Successful route validation/check packets should expose:
 - `listener_proven=false`
 - `runtime_claim_blocked=true`
 - `profile_ready=false`
+
+Successful API-only route truth packets from `check` or `live-format-check` must
+also expose:
+
+- `declared_mode=api_only`
+- `route_truth_status=pass`
+- `selected_model`
+- `executed_provider`
+- `executed_model`
+- `chatgpt_invoked=false`
+- `chatgpt_route_absent=true`
+- `fallback_used=false`
+- `browser_selector_used=false`
+- `ui_selector_claimed=false`
 
 ## Additional launch-client owner surface
 
