@@ -24,6 +24,7 @@ test-core:
 		tests/test_owner_surface_effect_inventory.py \
 		tests/test_state_store_entry_inventory.py \
 		tests/test_state_lock_owner_policy.py \
+		tests/test_state_migration_policy.py \
 		tests/test_state_store_atomic_write.py \
 		tests/test_state_store_json_read_validation.py \
 		tests/test_status_read_snapshot_contract.py \

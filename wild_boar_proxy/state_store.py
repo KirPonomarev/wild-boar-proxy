@@ -40,6 +40,11 @@ def _schema_version(
     payload: dict[str, Any], expected_schema_version: int | None
 ) -> int | None:
     version = payload.get("schema_version")
+    if "schema_version" in payload and isinstance(version, bool):
+        raise StateStoreError(
+            "State payload schema_version is unsupported.",
+            machine_error_code=STATE_SCHEMA_UNSUPPORTED,
+        )
     if expected_schema_version is None:
         return version if isinstance(version, int) else None
     if "schema_version" not in payload:
@@ -47,7 +52,11 @@ def _schema_version(
             "State payload is missing schema_version.",
             machine_error_code=STATE_SCHEMA_MISSING,
         )
-    if not isinstance(version, int) or version != expected_schema_version:
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != expected_schema_version
+    ):
         raise StateStoreError(
             "State payload schema_version is unsupported.",
             machine_error_code=STATE_SCHEMA_UNSUPPORTED,

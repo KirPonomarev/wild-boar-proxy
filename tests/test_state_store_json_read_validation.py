@@ -109,6 +109,42 @@ class StateStoreJsonReadValidationTests(unittest.TestCase):
             state_store.STATE_SCHEMA_UNSUPPORTED,
         )
 
+    def test_read_rejects_bool_schema_version_as_unsupported(self) -> None:
+        target = self.root / "backend-registry.json"
+        target.write_text('{"schema_version": true}', encoding="utf-8")
+
+        with self.assertRaises(state_store.StateStoreError) as raised:
+            state_store.read_json(target, expected_schema_version=1)
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_store.STATE_SCHEMA_UNSUPPORTED,
+        )
+
+    def test_read_rejects_bool_schema_version_without_expected_schema(self) -> None:
+        target = self.root / "backend-registry.json"
+        target.write_text('{"schema_version": true}', encoding="utf-8")
+
+        with self.assertRaises(state_store.StateStoreError) as raised:
+            state_store.read_json(target)
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_store.STATE_SCHEMA_UNSUPPORTED,
+        )
+
+    def test_write_rejects_bool_schema_version_without_expected_schema(self) -> None:
+        target = self.root / "backend-registry.json"
+
+        with self.assertRaises(state_store.StateStoreError) as raised:
+            state_store.write_json(target, {"schema_version": True})
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_store.STATE_SCHEMA_UNSUPPORTED,
+        )
+        self.assertFalse(target.exists())
+
     def test_read_blocks_missing_schema_when_expected(self) -> None:
         target = self.root / "backend-registry.json"
         target.write_text('{"backends": []}', encoding="utf-8")
