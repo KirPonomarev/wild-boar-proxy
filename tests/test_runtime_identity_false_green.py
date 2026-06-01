@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import socket
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.truth_tree_harness import assert_no_truth_mutation, snapshot_truth_tree
+from wild_boar_proxy import runtime as runtime_mod
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +43,7 @@ def _strict_json_object(raw: str) -> dict[str, Any]:
 class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
     mode = "no_openai_surfaces"
     last_authorization = ""
+    runtime_identity_payload: dict[str, Any] | None = None
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models" and self.mode in {
@@ -49,6 +52,11 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
             "responses_auth_unavailable",
             "responses_status_ok_wrong_shape",
             "responses_not_ok",
+            "identity_ok",
+            "identity_malformed",
+            "identity_wrong_managed_config",
+            "identity_wrong_selected_digest",
+            "identity_wrong_endpoint",
         }:
             body = json.dumps({"data": [{"id": "gpt-5.4"}]}).encode("utf-8")
             self.send_response(200)
@@ -57,6 +65,28 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if self.path == "/v1/wbp/runtime-identity":
+            if self.mode == "identity_malformed":
+                body = b'["not-an-object"]'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.mode in {
+                "identity_ok",
+                "identity_wrong_managed_config",
+                "identity_wrong_selected_digest",
+                "identity_wrong_endpoint",
+            } and self.runtime_identity_payload is not None:
+                body = json.dumps(self.runtime_identity_payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
         self.send_error(404)
 
     def do_POST(self) -> None:  # noqa: N802
@@ -74,6 +104,15 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
             }
             status_code = 503
         elif self.mode == "responses_ok":
+            payload = {"output_text": "OK"}
+            status_code = 200
+        elif self.mode in {
+            "identity_ok",
+            "identity_malformed",
+            "identity_wrong_managed_config",
+            "identity_wrong_selected_digest",
+            "identity_wrong_endpoint",
+        }:
             payload = {"output_text": "OK"}
             status_code = 200
         elif self.mode == "responses_status_ok_wrong_shape":
@@ -115,6 +154,7 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             path.mkdir(parents=True)
         _FalseGreenProbeHandler.mode = "no_openai_surfaces"
         _FalseGreenProbeHandler.last_authorization = ""
+        _FalseGreenProbeHandler.runtime_identity_payload = None
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -245,6 +285,21 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             }
         )
 
+    def matching_identity_payload(self, port: int) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "runtime_marker": "wbp-test-runtime-marker",
+            "managed_config_identity": hashlib.sha256(
+                (self.managed_dir / "managed-config.yaml").read_bytes()
+            ).hexdigest(),
+            "selected_backends_digest": runtime_mod.get_selected_backend_ids_digest(
+                ["backend-a"]
+            ),
+            "runtime_version": "2",
+            "issued_for_endpoint": f"http://127.0.0.1:{port}/v1",
+            "issued_at_utc": "2026-06-01T00:00:00+00:00",
+        }
+
     def run_healthcheck(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "wild_boar_proxy", "healthcheck", "--json"],
@@ -263,6 +318,8 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         machine_error_code: str = "ATTESTATION_FAILED",
         auth_pool_status: str = "launch_capable_available",
         blocking_reason: str,
+        identity_failure_reason: str = "missing_runtime_identity",
+        runtime_marker: str = "",
     ) -> None:
         for field in (
             "status",
@@ -307,10 +364,10 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertFalse(observed_attestation["identity_proof_ok"])
         self.assertEqual(
             observed_attestation["identity_failure_reason"],
-            "missing_runtime_identity",
+            identity_failure_reason,
         )
         self.assertNotEqual(observed_attestation["managed_config_identity"], "")
-        self.assertEqual(observed_attestation["runtime_marker"], "")
+        self.assertEqual(observed_attestation["runtime_marker"], runtime_marker)
         for field, expected in attestation.items():
             self.assertEqual(observed_attestation[field], expected)
 
@@ -322,7 +379,7 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertFalse(launch_readiness["runtime_identity_proof_passed"])
         self.assertEqual(
             launch_readiness["runtime_identity_failure_reason"],
-            "missing_runtime_identity",
+            identity_failure_reason,
         )
         self.assertEqual(
             launch_readiness["owner_command_surface"], "healthcheck --json"
@@ -343,10 +400,14 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         expected_machine_error_code: str = "ATTESTATION_FAILED",
         auth_pool_unusable: bool = False,
         expected_auth_pool_status: str = "launch_capable_available",
+        runtime_identity_payload: dict[str, Any] | None = None,
+        expected_identity_failure_reason: str = "missing_runtime_identity",
+        expected_runtime_marker: str = "",
     ) -> None:
         port = _free_port()
         self.write_runtime_fixture(port, auth_pool_unusable=auth_pool_unusable)
         _FalseGreenProbeHandler.mode = handler_mode
+        _FalseGreenProbeHandler.runtime_identity_payload = runtime_identity_payload
         server = ThreadingHTTPServer(("127.0.0.1", port), _FalseGreenProbeHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -371,7 +432,85 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             machine_error_code=expected_machine_error_code,
             auth_pool_status=expected_auth_pool_status,
             blocking_reason=expected_blocking_reason,
+            identity_failure_reason=expected_identity_failure_reason,
+            runtime_marker=expected_runtime_marker,
         )
+        assert_no_truth_mutation(before, after)
+
+    def assert_identity_probe_case(
+        self,
+        *,
+        handler_mode: str,
+        expected_ok: bool,
+        expected_identity_failure_reason: str = "",
+        payload_updates: dict[str, Any] | None = None,
+        expected_runtime_marker: str | None = None,
+    ) -> None:
+        port = _free_port()
+        self.write_runtime_fixture(port)
+        runtime_identity_payload = self.matching_identity_payload(port)
+        if payload_updates is not None:
+            runtime_identity_payload.update(payload_updates)
+        _FalseGreenProbeHandler.mode = handler_mode
+        _FalseGreenProbeHandler.runtime_identity_payload = runtime_identity_payload
+        server = ThreadingHTTPServer(("127.0.0.1", port), _FalseGreenProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            before = self.truth_snapshot()
+            result = self.run_healthcheck()
+            after = self.truth_snapshot()
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.stderr, "")
+        self.assertNotIn(SENTINEL_SECRET, result.stdout)
+        self.assertNotIn("sk-d0a-", result.stdout)
+        payload = _strict_json_object(result.stdout)
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertEqual(result.returncode, 0 if expected_ok else 1)
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["attestation"]["listener_ok"], True)
+        self.assertEqual(payload["attestation"]["models_ok"], True)
+        self.assertEqual(payload["attestation"]["responses_ok"], True)
+        self.assertEqual(payload["attestation"]["identity_proof_required"], True)
+        self.assertEqual(payload["attestation"]["identity_proof_ok"], expected_ok)
+        self.assertEqual(
+            payload["attestation"]["runtime_marker"],
+            (
+                str(runtime_identity_payload.get("runtime_marker") or "")
+                if expected_runtime_marker is None
+                else expected_runtime_marker
+            ),
+        )
+        self.assertEqual(
+            payload["attestation"]["identity_failure_reason"],
+            expected_identity_failure_reason,
+        )
+        self.assertEqual(
+            payload["launch_readiness"]["runtime_identity_proof_passed"],
+            expected_ok,
+        )
+        if expected_ok:
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["machine_error_code"], "OK")
+            self.assertEqual(payload["liveness"], "healthy")
+            self.assertEqual(payload["operator_action"], "none")
+            self.assertTrue(payload["launch_readiness"]["gate_passed"])
+        else:
+            self.assertEqual(payload["status"], "error")
+            self.assertEqual(
+                payload["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN"
+            )
+            self.assertEqual(payload["liveness"], "degraded")
+            self.assertFalse(payload["launch_readiness"]["gate_passed"])
+            self.assertEqual(
+                payload["launch_readiness"]["blocking_reason"],
+                "runtime_identity_unproven",
+            )
         assert_no_truth_mutation(before, after)
 
     def test_listener_without_openai_surfaces_is_not_runtime_green(self) -> None:
@@ -440,6 +579,46 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             },
             expected_blocking_reason="runtime_identity_unproven",
             expected_machine_error_code="RUNTIME_IDENTITY_UNPROVEN",
+        )
+
+    def test_managed_runtime_with_matching_live_identity_can_be_runtime_green(
+        self,
+    ) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=True,
+        )
+
+    def test_malformed_live_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_malformed",
+            expected_ok=False,
+            expected_identity_failure_reason="invalid_runtime_identity",
+            expected_runtime_marker="",
+        )
+
+    def test_wrong_managed_config_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_wrong_managed_config",
+            expected_ok=False,
+            expected_identity_failure_reason="managed_config_identity_mismatch",
+            payload_updates={"managed_config_identity": "wrong-managed-config"},
+        )
+
+    def test_wrong_selected_backends_digest_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_wrong_selected_digest",
+            expected_ok=False,
+            expected_identity_failure_reason="selected_backends_digest_mismatch",
+            payload_updates={"selected_backends_digest": "wrong-selected-digest"},
+        )
+
+    def test_wrong_issued_for_endpoint_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_wrong_endpoint",
+            expected_ok=False,
+            expected_identity_failure_reason="issued_for_endpoint_mismatch",
+            payload_updates={"issued_for_endpoint": "http://127.0.0.1:9/v1"},
         )
 
     def test_unusable_auth_pool_is_not_runtime_green(self) -> None:

@@ -78,6 +78,8 @@ SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
+RUNTIME_IDENTITY_SCHEMA_VERSION = 1
+RUNTIME_IDENTITY_ENDPOINT_PATH = "/wbp/runtime-identity"
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
 SCALE_EVIDENCE_FIELD_TARGET = "16"
 SCALE_EVIDENCE_CLAIM_SCOPE = "field_evidence_observed_only"
@@ -804,25 +806,96 @@ def get_managed_config_identity(paths: RuntimePaths) -> str:
     return hashlib.sha256(paths.managed_config_file.read_bytes()).hexdigest()
 
 
+def runtime_identity_url(attestation_endpoint: str) -> str:
+    return f"{attestation_endpoint.rstrip('/')}{RUNTIME_IDENTITY_ENDPOINT_PATH}"
+
+
+def probe_runtime_identity_payload(
+    attestation_endpoint: str, api_key: str
+) -> tuple[dict[str, Any] | None, str]:
+    try:
+        return http_get_json(runtime_identity_url(attestation_endpoint), api_key), ""
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None, "missing_runtime_identity"
+        return None, "runtime_identity_probe_failed"
+    except urllib.error.URLError:
+        return None, "runtime_identity_probe_failed"
+    except json.JSONDecodeError:
+        return None, "invalid_runtime_identity"
+    except RuntimeErrorInfo as exc:
+        if exc.machine_error_code == "INVALID_HTTP_JSON":
+            return None, "invalid_runtime_identity"
+        raise
+
+
 def build_runtime_identity_proof(
     paths: RuntimePaths,
     *,
     reported_effective_mode: str,
     state: dict[str, Any],
+    runtime_identity_payload: dict[str, Any] | None = None,
+    runtime_identity_probe_error: str = "",
+    issued_for_endpoint: str = "",
 ) -> dict[str, Any]:
     identity_required = reported_effective_mode == "managed"
+    expected_managed_config_identity = (
+        get_managed_config_identity(paths) if identity_required else ""
+    )
+    expected_selected_backends_digest = (
+        get_selected_backends_digest(state) if identity_required else ""
+    )
     runtime_marker = ""
-    identity_failure_reason = ""
-    if identity_required and not runtime_marker:
-        identity_failure_reason = "missing_runtime_identity"
+    runtime_version = str(state.get("version", state.get("schema_version", "unknown")))
+    observed_selected_backends_digest = ""
+    observed_issued_for_endpoint = ""
+    identity_failure_reason = runtime_identity_probe_error if identity_required else ""
+    if identity_required and runtime_identity_payload is None:
+        identity_failure_reason = identity_failure_reason or "missing_runtime_identity"
+    elif identity_required and not isinstance(runtime_identity_payload, dict):
+        identity_failure_reason = "invalid_runtime_identity"
+    elif identity_required:
+        schema_version = runtime_identity_payload.get("schema_version")
+        runtime_marker = str(runtime_identity_payload.get("runtime_marker") or "")
+        observed_managed_config_identity = str(
+            runtime_identity_payload.get("managed_config_identity") or ""
+        )
+        observed_selected_backends_digest = str(
+            runtime_identity_payload.get("selected_backends_digest") or ""
+        )
+        payload_runtime_version = str(
+            runtime_identity_payload.get("runtime_version") or ""
+        )
+        observed_issued_for_endpoint = str(
+            runtime_identity_payload.get("issued_for_endpoint") or ""
+        )
+        issued_at_utc = runtime_identity_payload.get("issued_at_utc")
+        if payload_runtime_version:
+            runtime_version = payload_runtime_version
+        if schema_version != RUNTIME_IDENTITY_SCHEMA_VERSION:
+            identity_failure_reason = "unsupported_runtime_identity_schema"
+        elif not runtime_marker:
+            identity_failure_reason = "missing_runtime_marker"
+        elif observed_managed_config_identity != expected_managed_config_identity:
+            identity_failure_reason = "managed_config_identity_mismatch"
+        elif observed_selected_backends_digest != expected_selected_backends_digest:
+            identity_failure_reason = "selected_backends_digest_mismatch"
+        elif not payload_runtime_version:
+            identity_failure_reason = "runtime_version_missing"
+        elif observed_issued_for_endpoint != issued_for_endpoint:
+            identity_failure_reason = "issued_for_endpoint_mismatch"
+        elif issued_at_utc is not None and not isinstance(issued_at_utc, str):
+            identity_failure_reason = "issued_at_utc_invalid"
     return {
-        "managed_config_identity": (
-            get_managed_config_identity(paths) if identity_required else ""
-        ),
+        "managed_config_identity": expected_managed_config_identity,
         "runtime_marker": runtime_marker,
-        "runtime_version": str(
-            state.get("version", state.get("schema_version", "unknown"))
+        "runtime_version": runtime_version,
+        "runtime_identity_endpoint": issued_for_endpoint,
+        "runtime_identity_selected_backends_digest": observed_selected_backends_digest,
+        "runtime_identity_expected_selected_backends_digest": (
+            expected_selected_backends_digest
         ),
+        "runtime_identity_issued_for_endpoint": observed_issued_for_endpoint,
         "identity_proof_required": identity_required,
         "identity_proof_ok": not identity_required or not identity_failure_reason,
         "identity_failure_reason": identity_failure_reason,
@@ -7817,6 +7890,7 @@ def run_healthcheck(
     proxy_reprobe: dict[str, Any] | None = None
     proxy_reprobe_adoption_result: dict[str, Any] | None = None
 
+    api_key = ""
     if listener_ok:
         api_key = read_api_key(paths.auth_file)
         try:
@@ -7860,10 +7934,19 @@ def run_healthcheck(
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    runtime_identity_payload: dict[str, Any] | None = None
+    runtime_identity_probe_error = ""
+    if listener_ok and reported_effective_mode == "managed":
+        runtime_identity_payload, runtime_identity_probe_error = (
+            probe_runtime_identity_payload(reported_endpoint, api_key)
+        )
     identity_proof = build_runtime_identity_proof(
         paths,
         reported_effective_mode=reported_effective_mode,
         state=state,
+        runtime_identity_payload=runtime_identity_payload,
+        runtime_identity_probe_error=runtime_identity_probe_error,
+        issued_for_endpoint=reported_endpoint,
     )
     identity_proof_ok = bool(identity_proof["identity_proof_ok"])
     identity_failure_reason = str(identity_proof["identity_failure_reason"])
