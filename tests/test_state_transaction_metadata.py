@@ -78,6 +78,16 @@ class StateTransactionMetadataTests(unittest.TestCase):
         state_transaction.write_transaction_metadata(metadata_path, metadata)
         return metadata_path
 
+    def transaction_write(
+        self,
+        name: str,
+        payload: bytes = b"new",
+    ) -> state_transaction.TransactionWrite:
+        return state_transaction.TransactionWrite(
+            target_path=str(self.root / name),
+            payload=payload,
+        )
+
     def test_valid_metadata_roundtrip_through_state_store(self) -> None:
         metadata = self.metadata(state=state_transaction.TRANSACTION_COMMITTED, files=(self.file_record(committed=True),))
 
@@ -546,6 +556,249 @@ class StateTransactionMetadataTests(unittest.TestCase):
         write_json.assert_not_called()
         write_text.assert_not_called()
 
+    def test_commit_state_transaction_writes_single_file_and_committed_metadata(self) -> None:
+        target = self.root / "state.json"
+
+        result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-commit",
+            (self.transaction_write("state.json", b'{"ok": true}'),),
+        )
+        metadata = state_transaction.read_transaction_metadata(Path(result.metadata_path))
+
+        self.assertEqual(target.read_bytes(), b'{"ok": true}')
+        self.assertEqual(result.classification, state_transaction.TRANSACTION_CLEAN)
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_COMMITTED)
+        self.assertEqual(metadata.files[0].target_path, str(target.resolve(strict=False)))
+        self.assertTrue(metadata.files[0].committed)
+        self.assertIsNone(metadata.files[0].sha256_before)
+        self.assertIsNotNone(metadata.files[0].sha256_after)
+        self.assertEqual(
+            state_transaction.classify_transaction_store(self.root / "transactions").classification,
+            state_transaction.TRANSACTION_CLEAN,
+        )
+
+    def test_commit_state_transaction_writes_multi_file_in_input_order(self) -> None:
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-multi",
+            (
+                self.transaction_write("b.json", b"second"),
+                self.transaction_write("a.json", b"first"),
+            ),
+        )
+        metadata = state_transaction.read_transaction_metadata(
+            state_transaction.transaction_metadata_path(self.root / "transactions", "txn-multi")
+        )
+
+        self.assertEqual((self.root / "a.json").read_bytes(), b"first")
+        self.assertEqual((self.root / "b.json").read_bytes(), b"second")
+        self.assertEqual(
+            tuple(Path(record.target_path).name for record in metadata.files),
+            ("b.json", "a.json"),
+        )
+        self.assertTrue(all(record.committed for record in metadata.files))
+
+    def test_commit_state_transaction_records_backup_evidence_without_rollback_fields(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+
+        result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-backup",
+            (self.transaction_write("state.json", b"new"),),
+        )
+        metadata = state_transaction.read_transaction_metadata(Path(result.metadata_path))
+        record = metadata.files[0]
+
+        self.assertEqual(target.read_bytes(), b"new")
+        self.assertIsNotNone(record.sha256_before)
+        self.assertEqual(Path(record.backup_path).read_bytes(), b"old")
+        result_fields = set(state_transaction.TransactionCommitResult.__dataclass_fields__)
+        self.assertNotIn("rollback_available", result_fields)
+        self.assertNotIn("rollback_id", result_fields)
+
+    def test_commit_state_transaction_rejects_relative_root_invalid_id_and_empty_writes(self) -> None:
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(Path("relative"), "txn", (self.transaction_write("state.json"),))
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(self.root, "../txn", (self.transaction_write("state.json"),))
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(self.root, "txn-empty", ())
+
+    def test_commit_state_transaction_rejects_target_outside_root_and_duplicate_targets(self) -> None:
+        outside = self.root.parent / "outside.json"
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-outside",
+                (state_transaction.TransactionWrite(target_path=str(outside), payload=b"bad"),),
+            )
+        self.assertFalse(outside.exists())
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-duplicate",
+                (
+                    self.transaction_write("state.json", b"one"),
+                    self.transaction_write("state.json", b"two"),
+                ),
+            )
+
+    def test_commit_state_transaction_rejects_target_inside_transaction_store(self) -> None:
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-nested",
+                (self.transaction_write("transactions/state.json", b"bad"),),
+            )
+
+    def test_commit_state_transaction_blocks_when_store_not_clean(self) -> None:
+        self.write_store_metadata("txn-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+
+        with self.assertRaises(state_transaction.StateTransactionError) as raised:
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-new",
+                (self.transaction_write("state.json"),),
+            )
+
+        self.assertEqual(raised.exception.machine_error_code, state_transaction.STATE_TRANSACTION_INCOMPLETE)
+
+    def test_commit_state_transaction_failure_before_metadata_write_leaves_no_metadata(self) -> None:
+        def fail(point: str) -> None:
+            if point == "before_metadata_write":
+                raise RuntimeError("pre metadata failure")
+
+        with self.assertRaises(RuntimeError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-no-metadata",
+                (self.transaction_write("state.json"),),
+                failure_hook=fail,
+            )
+
+        metadata_path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-no-metadata")
+        self.assertFalse(metadata_path.exists())
+        self.assertFalse((self.root / "state.json").exists())
+
+    def test_commit_state_transaction_failure_between_staged_writes_leaves_no_metadata_or_targets(self) -> None:
+        staged_count = 0
+
+        def fail(point: str) -> None:
+            nonlocal staged_count
+            if point == "after_stage_temp":
+                staged_count += 1
+            if point == "before_stage_temp" and staged_count == 1:
+                raise RuntimeError("second temp failure")
+
+        with self.assertRaises(RuntimeError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-stage-failure",
+                (
+                    self.transaction_write("first.json", b"first"),
+                    self.transaction_write("second.json", b"second"),
+                ),
+                failure_hook=fail,
+            )
+
+        metadata_path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-stage-failure")
+        self.assertFalse(metadata_path.exists())
+        self.assertFalse((self.root / "first.json").exists())
+        self.assertFalse((self.root / "second.json").exists())
+
+    def test_commit_state_transaction_failure_after_prepared_marks_failed_blocked(self) -> None:
+        def fail(point: str) -> None:
+            if point == "after_prepared":
+                raise RuntimeError("prepared failure")
+
+        with self.assertRaises(state_transaction.StateTransactionError) as raised:
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-fail-prepared",
+                (self.transaction_write("state.json"),),
+                failure_hook=fail,
+            )
+
+        self.assertEqual(raised.exception.machine_error_code, state_transaction.STATE_TRANSACTION_FAILED_BLOCKED)
+        metadata = state_transaction.read_transaction_metadata(
+            state_transaction.transaction_metadata_path(self.root / "transactions", "txn-fail-prepared")
+        )
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_FAILED_BLOCKED)
+        self.assertFalse(metadata.files[0].committed)
+        self.assertEqual(
+            state_transaction.classify_transaction_store(self.root / "transactions").classification,
+            state_transaction.TRANSACTION_BLOCKED,
+        )
+        self.assertFalse((self.root / "state.json").exists())
+
+    def test_commit_state_transaction_failure_before_replace_marks_failed_blocked(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+
+        def fail(point: str) -> None:
+            if point == "before_replace":
+                raise RuntimeError("replace failure")
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-fail-replace",
+                (self.transaction_write("state.json", b"new"),),
+                failure_hook=fail,
+            )
+
+        metadata = state_transaction.read_transaction_metadata(
+            state_transaction.transaction_metadata_path(self.root / "transactions", "txn-fail-replace")
+        )
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_FAILED_BLOCKED)
+        self.assertFalse(metadata.files[0].committed)
+        self.assertEqual(target.read_bytes(), b"old")
+        self.assertEqual(
+            state_transaction.classify_transaction_store(self.root / "transactions").classification,
+            state_transaction.TRANSACTION_BLOCKED,
+        )
+
+    def test_commit_state_transaction_failure_after_replace_marks_failed_blocked(self) -> None:
+        def fail(point: str) -> None:
+            if point == "after_replace":
+                raise RuntimeError("post replace failure")
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.commit_state_transaction(
+                self.root,
+                "txn-fail-after-replace",
+                (self.transaction_write("state.json", b"new"),),
+                failure_hook=fail,
+            )
+
+        metadata = state_transaction.read_transaction_metadata(
+            state_transaction.transaction_metadata_path(self.root / "transactions", "txn-fail-after-replace")
+        )
+        self.assertEqual((self.root / "state.json").read_bytes(), b"new")
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_FAILED_BLOCKED)
+        self.assertFalse(metadata.files[0].committed)
+        self.assertEqual(
+            state_transaction.classify_transaction_store(self.root / "transactions").classification,
+            state_transaction.TRANSACTION_BLOCKED,
+        )
+
+    def test_commit_state_transaction_does_not_cleanup_unrelated_stale_temp_files(self) -> None:
+        stale_temp = self.root / ".wbp-tmp-unrelated"
+        stale_temp.write_bytes(b"stale")
+
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-no-cleanup",
+            (self.transaction_write("state.json", b"new"),),
+        )
+
+        self.assertEqual(stale_temp.read_bytes(), b"stale")
+
     def test_metadata_module_does_not_import_runtime_layers(self) -> None:
         source = Path(state_transaction.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -569,6 +822,7 @@ class StateTransactionMetadataTests(unittest.TestCase):
         classification_fields = set(state_transaction.TransactionClassification.__dataclass_fields__)
         result_fields = set(state_transaction.TransactionMetadataWriteResult.__dataclass_fields__)
         store_classification_fields = set(state_transaction.TransactionStoreClassification.__dataclass_fields__)
+        commit_result_fields = set(state_transaction.TransactionCommitResult.__dataclass_fields__)
 
         forbidden = {
             "changed_files",
@@ -579,7 +833,9 @@ class StateTransactionMetadataTests(unittest.TestCase):
             "liveness",
             "next_action",
             "operator_action",
+            "repair_required",
             "rollback_available",
+            "rollback_id",
             "severity",
             "schema_version",
             "status",
@@ -589,6 +845,7 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertTrue(packet_forbidden.isdisjoint(classification_fields))
         self.assertTrue(packet_forbidden.isdisjoint(result_fields))
         self.assertTrue(forbidden.isdisjoint(store_classification_fields))
+        self.assertTrue(forbidden.isdisjoint(commit_result_fields))
 
 
 if __name__ == "__main__":

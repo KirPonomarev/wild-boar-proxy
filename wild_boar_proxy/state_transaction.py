@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from wild_boar_proxy import state_store
 
@@ -25,6 +27,7 @@ TRANSACTION_INCOMPLETE = "incomplete"
 TRANSACTION_RECOVERABLE = "recoverable"
 TRANSACTION_BLOCKED = "blocked"
 TRANSACTION_METADATA_SUFFIX = ".transaction.json"
+TRANSACTION_STORE_DIRNAME = "transactions"
 
 STATE_TRANSACTION_INVALID = "STATE_TRANSACTION_INVALID"
 STATE_TRANSACTION_INCOMPLETE = "STATE_TRANSACTION_INCOMPLETE"
@@ -99,6 +102,22 @@ class TransactionStoreClassification:
     invalid_metadata_paths: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class TransactionWrite:
+    target_path: str
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class TransactionCommitResult:
+    classification: str
+    machine_error_code: str
+    transaction_id: str
+    transaction_root: str
+    metadata_path: str
+    file_count: int
+
+
 class StateTransactionError(Exception):
     def __init__(self, message: str, *, machine_error_code: str) -> None:
         super().__init__(message)
@@ -130,6 +149,49 @@ def _require_absolute_store_root(root: Path) -> Path:
             machine_error_code=STATE_TRANSACTION_INVALID,
         )
     return transaction_store_root.resolve(strict=False)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        hasher = hashlib.sha256()
+        with Path(path).open("rb") as file_obj:
+            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except FileNotFoundError:
+        return None
+
+
+def _fsync_parent_best_effort(parent: Path) -> None:
+    try:
+        parent_fd = os.open(parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            os.fsync(parent_fd)
+        except OSError:
+            return
+    finally:
+        os.close(parent_fd)
+
+
+def _write_bytes_fsync(path: Path, payload: bytes) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as file_obj:
+        file_obj.write(payload)
+        file_obj.flush()
+        os.fsync(file_obj.fileno())
+    _fsync_parent_best_effort(target.parent)
 
 
 def _parse_utc(value: str) -> datetime:
@@ -502,4 +564,221 @@ def classify_transaction_store(root: Path) -> TransactionStoreClassification:
         TRANSACTION_CLEAN,
         STATE_TRANSACTION_CLEAN,
         transaction_ids=transaction_ids_tuple,
+    )
+
+
+def _transaction_store_root_for(transaction_root: Path) -> Path:
+    return Path(transaction_root) / TRANSACTION_STORE_DIRNAME
+
+
+def _failed_metadata(
+    metadata: TransactionMetadata,
+    *,
+    state: str,
+    files: tuple[TransactionFileRecord, ...],
+    error: str,
+) -> TransactionMetadata:
+    return TransactionMetadata(
+        schema_version=TRANSACTION_METADATA_SCHEMA_VERSION,
+        transaction_id=metadata.transaction_id,
+        state=state,
+        created_at_utc=metadata.created_at_utc,
+        updated_at_utc=_utc_now_iso(),
+        transaction_root=metadata.transaction_root,
+        files=files,
+        error=error,
+    )
+
+
+def _metadata_with_state(
+    metadata: TransactionMetadata,
+    *,
+    state: str,
+    files: tuple[TransactionFileRecord, ...] | None = None,
+    error: str | None = None,
+) -> TransactionMetadata:
+    return TransactionMetadata(
+        schema_version=TRANSACTION_METADATA_SCHEMA_VERSION,
+        transaction_id=metadata.transaction_id,
+        state=state,
+        created_at_utc=metadata.created_at_utc,
+        updated_at_utc=_utc_now_iso(),
+        transaction_root=metadata.transaction_root,
+        files=metadata.files if files is None else files,
+        error=error,
+    )
+
+
+def _call_failure_hook(
+    failure_hook: Callable[[str], None] | None,
+    point: str,
+) -> None:
+    if failure_hook is not None:
+        failure_hook(point)
+
+
+def commit_state_transaction(
+    transaction_root: Path,
+    transaction_id: str,
+    writes: tuple[TransactionWrite, ...],
+    *,
+    failure_hook: Callable[[str], None] | None = None,
+) -> TransactionCommitResult:
+    root = Path(transaction_root)
+    if not root.is_absolute():
+        raise StateTransactionError(
+            "Transaction root must be absolute.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    root = root.resolve(strict=False)
+    validated_transaction_id = validate_transaction_id(transaction_id)
+    if not writes:
+        raise StateTransactionError(
+            "Transaction requires at least one write.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+
+    store_root = _transaction_store_root_for(root)
+    store_classification = classify_transaction_store(store_root)
+    if store_classification.classification != TRANSACTION_CLEAN:
+        raise StateTransactionError(
+            "Transaction store is not clean.",
+            machine_error_code=store_classification.machine_error_code,
+        )
+
+    transaction_work_root = store_root / f"{validated_transaction_id}.files"
+    if transaction_work_root.exists():
+        raise StateTransactionError(
+            "Transaction work root already exists.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+
+    target_paths: list[Path] = []
+    target_path_keys: set[str] = set()
+    for write in writes:
+        if not isinstance(write, TransactionWrite):
+            raise StateTransactionError(
+                "Transaction write is invalid.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        if not isinstance(write.payload, bytes):
+            raise StateTransactionError(
+                "Transaction write payload must be bytes.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        target = Path(_require_path(write.target_path, field_name="target_path"))
+        if not _path_is_under(str(target), str(root)):
+            raise StateTransactionError(
+                "Transaction target escapes transaction_root.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        target = target.resolve(strict=False)
+        if _path_is_under(str(target), str(store_root)):
+            raise StateTransactionError(
+                "Transaction target must not be inside transaction store.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        target_key = str(target)
+        if target_key in target_path_keys:
+            raise StateTransactionError(
+                "Transaction contains duplicate target paths.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        target_path_keys.add(target_key)
+        target_paths.append(target)
+
+    transaction_work_root.mkdir(parents=True, exist_ok=False)
+    _fsync_parent_best_effort(transaction_work_root.parent)
+
+    records: list[TransactionFileRecord] = []
+    for index, (write, target) in enumerate(zip(writes, target_paths, strict=True)):
+        temp_path = transaction_work_root / f"{index:04d}.tmp"
+        backup_path = transaction_work_root / f"{index:04d}.backup"
+        _call_failure_hook(failure_hook, "before_stage_temp")
+        _write_bytes_fsync(temp_path, write.payload)
+        _call_failure_hook(failure_hook, "after_stage_temp")
+        records.append(
+            TransactionFileRecord(
+                target_path=str(target),
+                temp_path=str(temp_path),
+                backup_path=str(backup_path),
+                sha256_before=_sha256_file(target),
+                sha256_after=_sha256_bytes(write.payload),
+                committed=False,
+            )
+        )
+
+    metadata_path = transaction_metadata_path(store_root, validated_transaction_id)
+    created_at = _utc_now_iso()
+    metadata = TransactionMetadata(
+        schema_version=TRANSACTION_METADATA_SCHEMA_VERSION,
+        transaction_id=validated_transaction_id,
+        state=TRANSACTION_PREPARING,
+        created_at_utc=created_at,
+        updated_at_utc=created_at,
+        transaction_root=str(root),
+        files=tuple(records),
+        error=None,
+    )
+
+    _call_failure_hook(failure_hook, "before_metadata_write")
+    write_transaction_metadata(metadata_path, metadata)
+
+    try:
+        _call_failure_hook(failure_hook, "after_preparing")
+        metadata = _metadata_with_state(metadata, state=TRANSACTION_PREPARED)
+        write_transaction_metadata(metadata_path, metadata)
+        _call_failure_hook(failure_hook, "after_prepared")
+        metadata = _metadata_with_state(metadata, state=TRANSACTION_COMMITTING)
+        write_transaction_metadata(metadata_path, metadata)
+        _call_failure_hook(failure_hook, "after_committing")
+
+        committed_records: list[TransactionFileRecord] = []
+        for write, target, record in zip(writes, target_paths, records, strict=True):
+            backup_path = Path(record.backup_path)
+            if target.exists():
+                _call_failure_hook(failure_hook, "before_backup")
+                _write_bytes_fsync(backup_path, target.read_bytes())
+            _call_failure_hook(failure_hook, "before_replace")
+            os.replace(record.temp_path, target)
+            _fsync_parent_best_effort(target.parent)
+            _call_failure_hook(failure_hook, "after_replace")
+            committed_records.append(
+                TransactionFileRecord(
+                    target_path=record.target_path,
+                    temp_path=record.temp_path,
+                    backup_path=record.backup_path,
+                    sha256_before=record.sha256_before,
+                    sha256_after=_sha256_bytes(write.payload),
+                    committed=True,
+                )
+            )
+            records = committed_records + records[len(committed_records) :]
+
+        metadata = _metadata_with_state(
+            metadata,
+            state=TRANSACTION_COMMITTED,
+            files=tuple(records),
+        )
+        write_transaction_metadata(metadata_path, metadata)
+    except Exception as exc:  # noqa: BLE001
+        failed_metadata = _failed_metadata(
+            metadata,
+            state=TRANSACTION_FAILED_BLOCKED,
+            files=tuple(records),
+            error=str(exc) or exc.__class__.__name__,
+        )
+        write_transaction_metadata(metadata_path, failed_metadata)
+        raise StateTransactionError(
+            "Transaction commit failed.",
+            machine_error_code=STATE_TRANSACTION_FAILED_BLOCKED,
+        ) from exc
+
+    return TransactionCommitResult(
+        classification=TRANSACTION_CLEAN,
+        machine_error_code=STATE_TRANSACTION_CLEAN,
+        transaction_id=validated_transaction_id,
+        transaction_root=str(root),
+        metadata_path=str(metadata_path),
+        file_count=len(records),
     )
