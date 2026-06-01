@@ -22,6 +22,7 @@ test-core:
 		tests/test_truth_tree_harness.py \
 		tests/test_external_models.py \
 		tests/test_owner_surface_effect_inventory.py \
+		tests/test_state_store_entry_inventory.py \
 		tests/test_status_read_snapshot_contract.py \
 		tests/test_healthcheck_probe_repair_contract.py \
 		tests/test_invariant_false_green.py \
