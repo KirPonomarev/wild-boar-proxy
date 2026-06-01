@@ -1,0 +1,32 @@
+{
+  "chatgpt_invoked": false,
+  "chatgpt_route_absent": true,
+  "codex_compatible_response_shape": true,
+  "contour": "api_only_route_truth_r7",
+  "declared_mode": "api_only",
+  "evidence_files": [
+    "preconditions_packet.json",
+    "live_format_command_packet.json",
+    "api_only_route_truth_packet.json",
+    "independent_audit_packet.json",
+    "closeout.md",
+    "summary_packet.json"
+  ],
+  "evidence_written": false,
+  "executed_model": "deepseek-v4-flash",
+  "executed_provider": "deepseek",
+  "expected_text_observed": true,
+  "fallback_used": false,
+  "file_mutation_attempted": false,
+  "live_call_attempted": true,
+  "observed_at_utc": "2026-06-01T00:03:50.991978+00:00",
+  "outcome": "API_ONLY_ROUTE_TRUTH_CLOSED",
+  "proof_file_smoke_required": false,
+  "provider_called": true,
+  "request_count": 1,
+  "retry_count": 0,
+  "route_id": "wbp-deepseek-v4-flash-fast",
+  "schema_version": 1,
+  "secrets_redacted": true,
+  "state_written": false
+}

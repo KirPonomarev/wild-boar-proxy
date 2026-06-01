@@ -1,0 +1,16 @@
+{
+  "contour": "api_only_route_truth_r7",
+  "declared_mode": "api_only",
+  "observed_at_utc": "2026-06-01T00:03:49.787400+00:00",
+  "owner_authorized_for_live_provider_call": true,
+  "proof_file_smoke_required": false,
+  "provider": "deepseek",
+  "route_id": "wbp-deepseek-v4-flash-fast",
+  "schema_version": 1,
+  "scope": "api_only_route_truth_only_no_ui_no_dual_role_no_profile_history",
+  "secret_ref_value_redacted": true,
+  "secrets_redacted": true,
+  "server_route_secret_ref_present": true,
+  "state_or_evidence_write_expected": false,
+  "upstream_model": "deepseek-v4-flash"
+}

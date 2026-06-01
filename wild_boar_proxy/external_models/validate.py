@@ -128,6 +128,26 @@ def _route_observation_patch(
     return payload
 
 
+def _api_only_route_truth_metadata(route: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "declared_mode": "api_only",
+        "route_truth_status": "pass",
+        "route_truth_basis": "external_models_provider_only_command_surface",
+        "selected_model": route["route_id"],
+        "executed_provider": route["provider"],
+        "executed_model": route["upstream_model"],
+        "chatgpt_invoked": False,
+        "chatgpt_route_absent": True,
+        "codex_or_chatgpt_route_invoked": False,
+        "browser_selector_used": False,
+        "ui_selector_claimed": False,
+        "selected_model_equals_executed_model": route["route_id"]
+        == route["upstream_model"],
+        "selected_vs_executed_separated": True,
+        "proof_file_smoke_required": False,
+    }
+
+
 def _update_route_observation(
     *,
     paths: ExternalModelsPaths,
@@ -431,6 +451,7 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "latency_ms": response.latency_ms,
             "request_count": 1,
         }
+        data.update(_api_only_route_truth_metadata(route))
         data.update(request_metadata)
         data.update(
             {
@@ -532,6 +553,8 @@ def check_route_provider_once_no_write(
         "requested_model": route["route_id"],
         "effective_model": route["upstream_model"],
         "provider": route["provider"],
+        "listener_proven": False,
+        "runtime_claim_blocked": True,
         "fallback_used": False,
         "fallback_chain": [route["route_id"]],
         "cost_class": route["cost_class"],
@@ -550,6 +573,7 @@ def check_route_provider_once_no_write(
         "commands_started_by_provider": False,
         "codex_history_sent": False,
         "repo_context_sent": False,
+        **_api_only_route_truth_metadata(route),
         **request_metadata,
         "response_profile": response_metadata["response_profile"],
         "response_shape": response_metadata["response_shape"],

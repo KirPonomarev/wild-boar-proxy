@@ -1,0 +1,31 @@
+{
+  "auditor": "gpt-5.4-mini",
+  "blocker": false,
+  "checks": {
+    "chatgpt_or_dual_role_scope_present": false,
+    "code_changes_minimal_route_truth_only": true,
+    "evidence_matches_summary": true,
+    "live_api_only_route_truth_passed": true,
+    "raw_auth_or_config_material_present": false,
+    "runtime_listener_readiness_claimed": false,
+    "ui_or_profile_history_scope_present": false
+  },
+  "commands_reported": [
+    "git -C /private/tmp/wbp-api-only-route-truth-r7 diff --name-only",
+    "rg over audit_results/api_only_route_truth_r7_2026-06-01",
+    "python3 -m unittest tests.test_cli_external_models"
+  ],
+  "contour": "api_only_route_truth_r7",
+  "evidence_reviewed": [
+    "COMMAND_API.md",
+    "wild_boar_proxy/external_models/validate.py",
+    "tests/test_cli_external_models.py",
+    "audit_results/api_only_route_truth_r7_2026-06-01/preconditions_packet.json",
+    "audit_results/api_only_route_truth_r7_2026-06-01/live_format_command_packet.json",
+    "audit_results/api_only_route_truth_r7_2026-06-01/api_only_route_truth_packet.json",
+    "audit_results/api_only_route_truth_r7_2026-06-01/summary_packet.json"
+  ],
+  "finding": "No blocker. The diff stays in API-only route truth surfaces, the live evidence shows declared api_only, executed_provider deepseek, executed_model deepseek-v4-flash, chatgpt_invoked false, fallback_used false, request_count 1, retry_count 0, and no state, evidence, or file mutation.",
+  "schema_version": 1,
+  "secrets_redacted": true
+}
