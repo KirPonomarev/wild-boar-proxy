@@ -7636,8 +7636,18 @@ def _path_is_tmp(path: Path | None) -> bool:
         return False
     raw_text = str(path.expanduser())
     if raw_text == "/tmp" or raw_text.startswith("/tmp/") or raw_text.startswith("/private/tmp/"):
+        try:
+            path.expanduser().resolve(strict=False).relative_to(ROOT)
+            return False
+        except ValueError:
+            pass
         return True
     text = str(path.expanduser().resolve(strict=False))
+    try:
+        Path(text).relative_to(ROOT)
+        return False
+    except ValueError:
+        pass
     return text == "/tmp" or text.startswith("/tmp/") or text.startswith("/private/tmp/")
 
 
