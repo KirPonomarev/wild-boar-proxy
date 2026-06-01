@@ -351,6 +351,27 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             "issued_at_utc": "2026-06-01T00:00:00+00:00",
         }
 
+    def seed_cached_green_identity_evidence(self, port: int) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["latest_attestation"] = {
+            "attestation_source": "persisted-cache",
+            "observed_at_utc": "2999-01-01T00:00:00+00:00",
+            "listener_ok": True,
+            "models_ok": True,
+            "responses_ok": True,
+            "identity_proof_required": True,
+            "identity_proof_ok": True,
+            "identity_failure_reason": "",
+            "runtime_marker": "stale-cached-runtime-marker",
+            "runtime_version": "cached-version",
+            "runtime_identity_endpoint": f"http://127.0.0.1:{port}/v1",
+        }
+        state_path.write_text(
+            json.dumps(state, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
     def run_healthcheck(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "wild_boar_proxy", "healthcheck", "--json"],
@@ -756,6 +777,74 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertEqual(second_payload["launch_readiness"]["status"], "blocked")
         assert_no_truth_mutation(before, after_first)
         assert_no_truth_mutation(after_first, after_second)
+
+    def test_cached_future_green_identity_evidence_never_overrides_live_reprobe(
+        self,
+    ) -> None:
+        port = _free_port()
+        self.write_runtime_fixture(port)
+        self.seed_cached_green_identity_evidence(port)
+        _FalseGreenProbeHandler.mode = "identity_missing"
+        server = ThreadingHTTPServer(("127.0.0.1", port), _FalseGreenProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            before = self.truth_snapshot()
+            result = self.run_healthcheck()
+            after = self.truth_snapshot()
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.stderr, "")
+        self.assertNotIn(SENTINEL_SECRET, result.stdout)
+        self.assertNotIn("sk-d0a-", result.stdout)
+        self.assertNotIn(SENTINEL_SECRET, result.stderr)
+        self.assertNotIn("sk-d0a-", result.stderr)
+        payload = _strict_json_object(result.stdout)
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN")
+        self.assertNotEqual(payload["machine_error_code"], "OK")
+        self.assertNotEqual(payload["liveness"], "healthy")
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+
+        attestation = payload["attestation"]
+        self.assertEqual(attestation["attestation_source"], "healthcheck --json")
+        self.assertNotEqual(
+            attestation["observed_at_utc"],
+            "2999-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(attestation["listener_ok"], True)
+        self.assertEqual(attestation["models_ok"], True)
+        self.assertEqual(attestation["responses_ok"], True)
+        self.assertEqual(attestation["identity_proof_required"], True)
+        self.assertEqual(attestation["identity_proof_ok"], False)
+        self.assertEqual(
+            attestation["identity_failure_reason"],
+            "missing_runtime_identity",
+        )
+        self.assertEqual(attestation["runtime_marker"], "")
+        self.assertNotEqual(
+            attestation["runtime_marker"], "stale-cached-runtime-marker"
+        )
+
+        launch_readiness = payload["launch_readiness"]
+        self.assertFalse(launch_readiness["gate_passed"])
+        self.assertEqual(launch_readiness["status"], "blocked")
+        self.assertEqual(
+            launch_readiness["blocking_reason"],
+            "runtime_identity_unproven",
+        )
+        self.assertFalse(launch_readiness["runtime_identity_proof_passed"])
+        self.assertEqual(
+            launch_readiness["runtime_identity_failure_reason"],
+            "missing_runtime_identity",
+        )
+        assert_no_truth_mutation(before, after)
 
     def test_malformed_live_identity_is_not_runtime_green(self) -> None:
         self.assert_identity_probe_case(
