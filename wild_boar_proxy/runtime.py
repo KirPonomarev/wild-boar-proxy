@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .command_effects import EFFECT_READ, validate_effect
+
 
 class RuntimeErrorInfo(Exception):
     def __init__(
@@ -6597,6 +6599,7 @@ def build_command_payload(
     changed_files: list[str],
     extra: dict[str, Any] | None = None,
     exit_code: int | None = None,
+    effect: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "ok" if ok else "error",
@@ -6609,6 +6612,8 @@ def build_command_payload(
         "severity": severity,
         "operator_action": operator_action,
     }
+    if effect is not None:
+        payload["effect"] = validate_effect(effect)
     if extra:
         payload.update(extra)
     return payload
@@ -7056,6 +7061,7 @@ def build_invariant_check_packet(
         severity="recoverable" if not failed_checks else "fatal",
         operator_action="none" if not failed_checks else "required_repair",
         changed_files=[],
+        effect=EFFECT_READ,
         extra={
             "invariant_result": invariant_result,
             "recovery_hints": recovery_hints,
@@ -8136,6 +8142,7 @@ def mode_get(paths: RuntimePaths) -> dict[str, Any]:
         severity="recoverable",
         operator_action="none",
         changed_files=[],
+        effect=EFFECT_READ,
         extra={
             "desired_mode": desired_mode,
             "effective_mode": reported_effective_mode,
@@ -8847,6 +8854,7 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
         severity="recoverable",
         operator_action="none",
         changed_files=[],
+        effect=EFFECT_READ,
         extra={
             "accounts": registry.get("backends", []),
             "registry_identity": get_registry_identity(registry),

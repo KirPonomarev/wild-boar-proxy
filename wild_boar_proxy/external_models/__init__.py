@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from wild_boar_proxy.command_effects import EFFECT_READ
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
@@ -20,6 +21,15 @@ from .validate import (
     check_route_provider_once_no_write,
     validate_route_provider,
 )
+
+
+def _command_effect_for_args(args: Any) -> str | None:
+    if (
+        args.external_models_command == "credentials"
+        and getattr(args, "credentials_command", "") == "status"
+    ):
+        return EFFECT_READ
+    return None
 
 
 def run_external_models_command(args: Any) -> dict[str, Any]:
@@ -163,6 +173,7 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             severity=exc.severity,
             liveness="unknown",
             exit_code=exc.exit_code,
+            effect=_command_effect_for_args(args),
             data=getattr(exc, "data", {}),
         )
 
@@ -279,6 +290,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
             ok=True,
             human_message="External-models credential status collected from sandbox owner paths.",
             machine_error_code=errors.OK,
+            effect=EFFECT_READ,
             data={"credential_result": credential_status(paths, provider=args.provider)},
         )
     raise RuntimeErrorInfo(

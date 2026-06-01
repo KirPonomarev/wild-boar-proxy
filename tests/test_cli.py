@@ -346,6 +346,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["invariant_result"]["status"], "passed")
         self.assertEqual(payload["invariant_result"]["failed"], 0)
         self.assertEqual(payload["recovery_hints"], [])
@@ -557,6 +558,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(before, after)
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["effect"], "read")
 
     def test_policy_stage_set_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection(
@@ -2763,6 +2765,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+        self.assertNotIn("effect", payload)
         self.assertEqual(payload["liveness"], "down")
         recovery = payload["stable_runtime_consumer"][
             "deterministic_stable_recovery_result"
@@ -2894,6 +2897,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
+        self.assertNotIn("effect", payload)
         self.assertEqual(payload["liveness"], "healthy")
         self.assertIn("attestation", payload)
         self.assertTrue(payload["attestation"]["listener_ok"])
@@ -8146,6 +8150,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["accounts"][0]["id"], "backend-a")
         self.assertEqual(payload["registry_identity"]["status"], "clear")
         self.assertEqual(payload["registry_identity"]["machine_error_code"], "OK")
@@ -17760,6 +17766,8 @@ class CliTests(unittest.TestCase):
         result = self.run_cli("mode", "get", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["desired_mode"], "stable")
         self.assertEqual(payload["effective_mode"], "stable")
 

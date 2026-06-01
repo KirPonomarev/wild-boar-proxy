@@ -385,6 +385,8 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         status_payload = self.parse_payload(status_result)
         self.assertEqual(status_payload["status"], "ok")
+        self.assertEqual(status_payload["effect"], "read")
+        self.assertEqual(status_payload["changed_files"], [])
         status_credential = status_payload["data"]["credential_result"]
         self.assertEqual(status_credential["status"], "present")
         self.assertEqual(status_credential["provider"], "deepseek")
@@ -485,6 +487,8 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(
             payload["machine_error_code"], "EXTERNAL_MODELS_PROVIDER_UNSUPPORTED"
         )
@@ -567,6 +571,8 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         credential_result = payload["data"]["credential_result"]
         self.assertEqual(credential_result["status"], "missing")
         self.assertFalse(credential_result["credential_present"])

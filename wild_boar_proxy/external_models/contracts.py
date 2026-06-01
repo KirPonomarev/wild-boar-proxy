@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from wild_boar_proxy.command_effects import validate_effect
 from wild_boar_proxy.runtime import build_command_payload
 
 ROUTE_SCHEMA_VERSION = 1
@@ -158,6 +159,7 @@ def build_external_models_payload(
     severity: str = "recoverable",
     liveness: str = "not_applicable",
     exit_code: int | None = None,
+    effect: str | None = None,
 ) -> dict[str, Any]:
     payload = build_command_payload(
         ok=ok,
@@ -169,5 +171,6 @@ def build_external_models_payload(
         changed_files=changed_files or [],
         extra={"data": data or {}, "timestamp_utc": utc_now_iso()},
         exit_code=exit_code,
+        effect=validate_effect(effect) if effect is not None else None,
     )
     return payload

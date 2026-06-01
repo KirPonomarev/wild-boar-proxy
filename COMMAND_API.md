@@ -127,6 +127,35 @@ Every command response must include all required fields on both success and fail
 - commands that carry runtime attestation must expose an `attestation` object
   containing the required attestation fields from `RUNTIME_CONTRACT.md`
 
+## Effect field
+
+Command packets may include additive field `effect`.
+
+Allowed values:
+
+- `read`
+- `probe`
+- `mutate`
+- `repair`
+
+The field describes the command path effect class, not command success,
+liveness, severity, readiness, or attestation quality.
+
+Current `read` surfaces:
+
+- `invariant-check --json`
+- `mode get --json`
+- `accounts list --json`
+- `external-models credentials status --provider <provider> --json`
+
+When `effect=read`, `changed_files` must be `[]` and the command must not write
+runtime truth state.
+
+`status --json` and `healthcheck --json` must not be labeled `read` merely
+because they are observational. Their current runtime contract allows delegated
+owner-path readout, live attestation, fallback reconciliation, recovery, and
+write reporting through `changed_files`.
+
 ## Severity classes
 
 - `recoverable`
