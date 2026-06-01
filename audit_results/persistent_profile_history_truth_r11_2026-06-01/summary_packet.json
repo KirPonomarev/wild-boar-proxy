@@ -1,0 +1,49 @@
+{
+  "acceptance": {
+    "asar_touched": false,
+    "before_snapshot_status": "ok",
+    "history_persistence_final_status": "CUSTOM_CODEX_STABLE_PROFILE_HISTORY_PERSISTENCE_PROVEN_WITH_LIMITS",
+    "history_persistence_status": "ok",
+    "original_codex_touched": false,
+    "profile_final_status": "CUSTOM_CODEX_PERSISTENT_PROFILE_PROVEN_WITH_LIMITS",
+    "profile_history_proof_final_status": "CUSTOM_CODEX_HISTORY_RESTORE_PROVEN_WITH_LIMITS",
+    "profile_history_proof_status": "ok",
+    "profile_packet_status": "ok",
+    "profile_persistence_proven": true,
+    "profile_relaunch_proven": true,
+    "profile_root_redacted": true,
+    "raw_thread_content_recorded": false,
+    "relaunch_final_status": "CUSTOM_CODEX_PERSISTENT_RELAUNCH_PROFILE_PROVEN_WITH_LIMITS",
+    "relaunch_packet_status": "ok",
+    "tmp_profile_blocked": true
+  },
+  "final_status": "PERSISTENT_PROFILE_HISTORY_TRUTH_R11_CLOSED",
+  "fix_summary": "repo-contained profile fixtures are not classified as tmp; explicit /tmp profile roots remain blocked",
+  "independent_audit_packet": "independent_audit_packet.json",
+  "independent_audit_remaining_blockers": [],
+  "independent_audit_status": "ok",
+  "non_claims": {
+    "model_matrix_live_execution_claimed": false,
+    "quick_start_ui_changed": false,
+    "speed_claimed": false,
+    "voice_claimed": false
+  },
+  "packet_kind": "persistent_profile_history_truth_r11_summary",
+  "root_cause": "tmp classifier treated repo-contained test fixtures as temp profiles when worktree lives under a temporary parent directory",
+  "schema_version": 1,
+  "status": "ok",
+  "tmp_classifier_boundary_probe": {
+    "explicit_private_tmp": true,
+    "explicit_tmp": true,
+    "repo_fixture_tmp": false
+  },
+  "verification_commands": [
+    "python3 -m pytest -q <8 known R11 failing tests>",
+    "python3 -m pytest -q tests/test_web_design_live_server.py",
+    "python3 -m pytest -q tests/test_codex_model_registry.py tests/test_custom_codex_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_server_issued_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_dual_lane_model_selection_ui_r1_probe.py tests/test_model_intelligence_and_speed_metadata_fidelity_r1_probe.py tests/test_operator_surface.py",
+    "git diff --check",
+    "python3 -m py_compile wild_boar_proxy/web_design_live_server.py"
+  ],
+  "verification_packet": "verification_packet.json",
+  "verification_status": "ok"
+}

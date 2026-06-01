@@ -1,0 +1,36 @@
+{
+  "browser_profile_authority": false,
+  "captured_at_utc": "2026-06-01T00:56:49.859043Z",
+  "history_marker_seen": true,
+  "history_marker_sha256": "de49b775bd613636e71ecf02e372f5079423f9cfa3e1ff0c3f01eb6c06329d12",
+  "machine_error_code": "OK",
+  "next_action": [
+    "relaunch_custom_codex_then_prove_after"
+  ],
+  "packet_kind": "custom_codex_stable_profile_history_before_snapshot",
+  "profile_id": "wbp-custom-main",
+  "raw_thread_content_read": false,
+  "raw_thread_content_recorded": false,
+  "schema_version": 1,
+  "snapshot": {
+    "history_marker_seen": true,
+    "history_marker_sha256": "de49b775bd613636e71ecf02e372f5079423f9cfa3e1ff0c3f01eb6c06329d12",
+    "log_db_seen": false,
+    "log_record_count": 0,
+    "profile_root_available": true,
+    "profile_root_exists": true,
+    "raw_profile_path_exposed": false,
+    "raw_thread_content_read": false,
+    "raw_thread_content_recorded": false,
+    "session_file_count": 1,
+    "session_jsonl_seen": true,
+    "snapshot_captured_at_utc": "2026-06-01T00:56:49.859321Z",
+    "snapshot_source": "current_stable_profile_storage_before_relaunch",
+    "state_db_seen": true,
+    "thread_count": 1
+  },
+  "stable_profile_root_exposed": false,
+  "stable_profile_used": true,
+  "status": "ok",
+  "thread_count": 1
+}

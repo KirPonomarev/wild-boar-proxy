@@ -1,0 +1,19 @@
+{
+  "auditor": "gpt-5.4-mini Boyle",
+  "finding": "no path/security weakening found in scoped diff; explicit temp roots remain tmp while repo-contained fixtures under ROOT are exempted",
+  "packet_kind": "persistent_profile_history_truth_r11_independent_audit",
+  "remaining_blockers": [],
+  "schema_version": 1,
+  "scope": "persistent_profile_history_truth_only",
+  "status": "ok",
+  "verification": [
+    {
+      "command": "python3 -m pytest -q tests/test_web_design_live_server.py::WebDesignCodexLaunchModeEndpointTests::test_custom_persistent_profile_packet_blocks_tmp_profile_root tests/test_web_design_live_server.py::WebDesignCodexLaunchModeEndpointTests::test_custom_persistent_profile_packet_separates_profile_and_session_storage",
+      "result": "passed"
+    },
+    {
+      "command": "jq summary acceptance",
+      "result": "true"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "checks": [
+    {
+      "command": "python3 -m pytest -q <8 known persistent profile/history failures>",
+      "name": "known_r11_failures_after_fix",
+      "result": "8 passed"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_web_design_live_server.py",
+      "name": "full_web_design_live_server",
+      "result": "252 passed, 2 subtests passed"
+    },
+    {
+      "command": "python3 -m pytest -q tests/test_codex_model_registry.py tests/test_custom_codex_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_server_issued_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_dual_lane_model_selection_ui_r1_probe.py tests/test_model_intelligence_and_speed_metadata_fidelity_r1_probe.py tests/test_operator_surface.py",
+      "name": "r10_selection_operator_regression_suite",
+      "result": "110 passed, 3 subtests passed"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/web_design_live_server.py",
+      "name": "py_compile_modified_file",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "name": "diff_check",
+      "result": "passed"
+    },
+    {
+      "command": "jq -e acceptance predicate against summary_packet.json",
+      "name": "summary_acceptance_jq",
+      "result": "true"
+    },
+    {
+      "command": "rg redaction sentinel patterns in R11 evidence directory",
+      "name": "evidence_raw_path_secret_scan",
+      "result": "no matches"
+    },
+    {
+      "command": "python3 inline probe for repo fixture vs explicit temp roots plus two targeted tests",
+      "name": "tmp_classifier_boundary_probe",
+      "result": "repo_fixture_tmp False; explicit_tmp True; explicit_private_tmp True; 2 passed"
+    }
+  ],
+  "packet_kind": "persistent_profile_history_truth_r11_verification",
+  "schema_version": 1,
+  "status": "ok"
+}
