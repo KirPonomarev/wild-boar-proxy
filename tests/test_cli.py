@@ -2945,7 +2945,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
-        self.assertNotIn("effect", payload)
+        self.assertEqual(payload["effect"], "probe")
         self.assertEqual(payload["liveness"], "healthy")
         self.assertIn("attestation", payload)
         self.assertTrue(payload["attestation"]["listener_ok"])
@@ -2960,7 +2960,9 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["launch_readiness"]["gate_passed"])
         self.assertEqual(payload["launch_readiness"]["blocking_reason"], "")
         recovery_contract = payload["deterministic_stable_recovery_contract"]
-        self.assertEqual(recovery_contract["owner_command_surface"], "healthcheck --json")
+        self.assertEqual(
+            recovery_contract["owner_command_surface"], "healthcheck --repair --json"
+        )
         self.assertEqual(
             recovery_contract["entry_lane_surface"]["status"],
             "owner_path_emitted",
@@ -3003,9 +3005,9 @@ class CliTests(unittest.TestCase):
         current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
         self.assertEqual(
             current_proxy_adoption_contract["owner_command_surface"],
-            "healthcheck --json",
+            "healthcheck --repair --json",
         )
-        self.assertTrue(current_proxy_adoption_contract["status_delegates_to_owner"])
+        self.assertFalse(current_proxy_adoption_contract["status_delegates_to_owner"])
         self.assertEqual(
             current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
             "current_proxy_url",
@@ -3694,7 +3696,14 @@ class CliTests(unittest.TestCase):
                 f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
             )
             result = subprocess.run(
-                ["python3", "-m", "wild_boar_proxy", "healthcheck", "--json"],
+                [
+                    "python3",
+                    "-m",
+                    "wild_boar_proxy",
+                    "healthcheck",
+                    "--repair",
+                    "--json",
+                ],
                 cwd=ROOT,
                 env=env,
                 text=True,
@@ -3795,6 +3804,7 @@ class CliTests(unittest.TestCase):
                     )
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
                 include_launcher_override=False,
             )
@@ -3903,6 +3913,7 @@ class CliTests(unittest.TestCase):
                     ),
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
             )
         finally:
@@ -4005,7 +4016,7 @@ class CliTests(unittest.TestCase):
                     "wild_boar_proxy.runtime.http_post_json",
                     side_effect=post_side_effect,
                 ):
-                    payload = runtime_mod.run_healthcheck(paths)
+                    payload = runtime_mod.run_healthcheck_repair(paths)
         finally:
             candidate_socket.close()
             server.shutdown()
@@ -4050,6 +4061,7 @@ class CliTests(unittest.TestCase):
                     "WBP_PROXY_REPROBE_CANDIDATES": current_proxy_url,
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
                 include_launcher_override=False,
             )
@@ -4110,6 +4122,7 @@ class CliTests(unittest.TestCase):
                     )
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
                 include_launcher_override=False,
             )
@@ -4174,6 +4187,7 @@ class CliTests(unittest.TestCase):
                     )
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
                 include_launcher_override=False,
             )
@@ -4223,7 +4237,7 @@ class CliTests(unittest.TestCase):
         )
         server, thread = self.start_probe_server(stable_port)
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli("healthcheck", "--repair", "--json")
         finally:
             server.shutdown()
             thread.join()
@@ -4278,6 +4292,7 @@ class CliTests(unittest.TestCase):
                     )
                 },
                 "healthcheck",
+                "--repair",
                 "--json",
                 include_launcher_override=False,
             )
@@ -4325,7 +4340,7 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli("healthcheck", "--repair", "--json")
         finally:
             server.shutdown()
             thread.join()
@@ -4345,7 +4360,7 @@ class CliTests(unittest.TestCase):
             f"host: 127.0.0.1\nport: {stable_port}\n",
             encoding="utf-8",
         )
-        result = self.run_cli("healthcheck", "--json")
+        result = self.run_cli("healthcheck", "--repair", "--json")
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
@@ -4378,7 +4393,7 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli("healthcheck", "--repair", "--json")
         finally:
             server.shutdown()
             thread.join()
@@ -4435,7 +4450,7 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli("healthcheck", "--repair", "--json")
         finally:
             server.shutdown()
             thread.join()
@@ -4476,7 +4491,12 @@ class CliTests(unittest.TestCase):
             start_server=True,
         )
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
@@ -4487,7 +4507,9 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["attestation"]["listener_ok"])
         self.assertTrue(recovery["attempted"])
         self.assertEqual(recovery["status"], "completed")
-        self.assertEqual(recovery["owner_command_surface"], "healthcheck --json")
+        self.assertEqual(
+            recovery["owner_command_surface"], "healthcheck --repair --json"
+        )
         self.assertFalse(recovery["delegated_from_status"])
         self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
@@ -4558,7 +4580,12 @@ class CliTests(unittest.TestCase):
             start_server=True,
         )
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
@@ -4624,7 +4651,12 @@ class CliTests(unittest.TestCase):
             exit_code=9,
         )
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
@@ -4677,7 +4709,12 @@ class CliTests(unittest.TestCase):
             exit_code=9,
         )
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
@@ -4718,7 +4755,12 @@ class CliTests(unittest.TestCase):
             start_server=True,
         )
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
@@ -4841,7 +4883,12 @@ class CliTests(unittest.TestCase):
         )
         launcher.chmod(0o755)
         result = self.run_cli_with_env(
-            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+            {
+                "WBP_LAUNCHER_SCRIPT": str(launcher),
+            },
+            "healthcheck",
+            "--repair",
+            "--json",
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
@@ -5144,6 +5191,19 @@ class CliTests(unittest.TestCase):
     def test_healthcheck_responses_probe_emits_x_session_id(self) -> None:
         port = free_port()
         self.configure_stable_runtime_probe(port)
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
         server, thread = self.start_probe_server(port)
         try:
             result = self.run_cli("healthcheck", "--json")
