@@ -6993,6 +6993,26 @@ def active_routing_failure(onboarding_evidence: dict[str, Any] | None) -> str:
     return ""
 
 
+def runtime_identity_truth_failure(
+    status_packet: dict[str, Any], effective_mode: str
+) -> str:
+    if effective_mode != "managed":
+        return ""
+    status_green = (
+        str(status_packet.get("status") or "") == "ok"
+        and str(status_packet.get("machine_error_code") or "") == "OK"
+    )
+    if not status_green:
+        return ""
+    attestation = status_packet.get("attestation")
+    if not isinstance(attestation, dict):
+        return "missing_attestation"
+    if attestation.get("identity_proof_ok") is not True:
+        reason = str(attestation.get("identity_failure_reason") or "").strip()
+        return reason or "runtime_identity_unproven"
+    return ""
+
+
 def build_invariant_check_packet(
     paths: RuntimePaths,
     *,
@@ -7083,6 +7103,26 @@ def build_invariant_check_packet(
                 else f"Declared runtime endpoint is not proven reachable at {endpoint}."
             ),
             machine_error_code=listener_packet_code or "LISTENER_DOWN",
+        )
+    )
+
+    identity_failure = runtime_identity_truth_failure(status_packet, effective_mode)
+    if identity_failure:
+        failure_codes.append("RUNTIME_IDENTITY_UNPROVEN")
+    checks.append(
+        build_invariant_check(
+            "runtime_identity_truth",
+            passed=not identity_failure,
+            severity="critical",
+            evidence_source="status_evidence_packet.runtime_identity",
+            human_message=(
+                "Managed runtime identity evidence is sufficient."
+                if not identity_failure
+                else "Managed runtime identity evidence is insufficient: "
+                + identity_failure
+                + "."
+            ),
+            machine_error_code="RUNTIME_IDENTITY_UNPROVEN",
         )
     )
 

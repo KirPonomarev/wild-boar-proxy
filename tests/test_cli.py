@@ -373,7 +373,7 @@ class CliTests(unittest.TestCase):
             "invariant-check", command_path="invariant-check"
         )
 
-    def test_invariant_check_json_healthy_passes(self) -> None:
+    def test_invariant_check_rejects_managed_listener_without_runtime_identity(self) -> None:
         port = free_port()
         server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -389,15 +389,22 @@ class CliTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=5)
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_INVARIANT_FAILED")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["effect"], "read")
-        self.assertEqual(payload["invariant_result"]["status"], "passed")
-        self.assertEqual(payload["invariant_result"]["failed"], 0)
-        self.assertEqual(payload["recovery_hints"], [])
+        self.assertEqual(payload["invariant_result"]["status"], "failed")
+        identity_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "runtime_identity_truth"
+        )
+        self.assertEqual(identity_check["status"], "fail")
+        self.assertEqual(
+            identity_check["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN"
+        )
 
     def test_invariant_check_reports_listener_down(self) -> None:
         result = self.run_cli("invariant-check", "--json")

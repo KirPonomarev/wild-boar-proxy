@@ -23,6 +23,7 @@ test-core:
 		tests/test_owner_surface_effect_inventory.py \
 		tests/test_status_read_snapshot_contract.py \
 		tests/test_healthcheck_probe_repair_contract.py \
+		tests/test_invariant_false_green.py \
 		tests/test_runtime_identity_false_green.py \
 		tests/test_read_compatibility_snapshots.py \
 		tests/test_repair_adjacent_packet_shape_snapshots.py \
