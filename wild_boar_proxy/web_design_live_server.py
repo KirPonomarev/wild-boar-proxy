@@ -6208,6 +6208,7 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     ok_final_status: str = "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS",
     blocked_final_status: str = "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
     blocked_machine_error_code: str = "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_NOT_PROVEN",
+    require_route_bound_live_edit_proof: bool = False,
 ) -> dict[str, Any]:
     payload = browser_payload if isinstance(browser_payload, dict) else {}
     forbidden = _forbidden_quick_start_deepseek_code_edit_fields(browser_payload)
@@ -6296,6 +6297,15 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     provider_id = str(record.get("provider_id") or "")
     upstream_model = str(record.get("upstream_model") or "")
     effective_route_model = str(record.get("effective_route_model") or selected_model)
+    selected_model_equals_bound_route = bool(
+        selected_model and effective_route_model == selected_model
+    )
+    dispatch_target_deepseek_route = bool(
+        provider_called
+        and provider_id == "deepseek"
+        and upstream_model == "deepseek-v4-pro"
+        and selected_model_equals_bound_route
+    )
     request_seen = record.get("request_seen_after_launch") is True
     response_seen = record.get("response_seen") is True
     forced_route_used = record.get("forced_route_used") is True
@@ -6350,6 +6360,22 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     chatgpt_called = record.get("chatgpt_route_used") is True or bool(
         log_evidence.get("chatgpt_model_seen")
     )
+    proof_file_before_sha256 = str(
+        record.get("proof_file_before_sha256")
+        or record.get("file_before_sha256")
+        or request_trace.get("proof_file_before_sha256")
+        or request_trace.get("file_before_sha256")
+        or ""
+    )
+    proof_file_after_sha256 = file_content_sha256 if file_created else ""
+    proof_file_digests_present = bool(proof_file_before_sha256 and proof_file_after_sha256)
+    proof_file_digest_changed = bool(
+        proof_file_digests_present and proof_file_before_sha256 != proof_file_after_sha256
+    )
+    proof_file_mutation_after_dispatch = (
+        record.get("proof_file_mutation_observed_after_dispatch") is True
+        or request_trace.get("proof_file_mutation_observed_after_dispatch") is True
+    )
     api_primary_slot_proven = bool(
         execution_mode == "api_only"
         and selected_model == "wbp-deepseek-v4-pro-max"
@@ -6363,6 +6389,15 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         and selected_route_preserved
         and not chatgpt_called
         and not fallback_used
+    )
+    route_bound_live_edit_proof_chain_proven = bool(
+        api_only_executor_truth_proven
+        and dispatch_target_deepseek_route
+        and proof_file_digests_present
+        and proof_file_digest_changed
+        and proof_file_mutation_after_dispatch
+        and file_mutation_observed
+        and mutation_scope_allowed
     )
     launch_alive_enough = (
         launch.get("status") == "ok"
@@ -6398,6 +6433,10 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         and trace_id_matches_launch
         and not chatgpt_called
         and not fallback_used
+        and (
+            not require_route_bound_live_edit_proof
+            or route_bound_live_edit_proof_chain_proven
+        )
         and launch.get("original_codex_touched") is False
         and launch.get("asar_touched") is False
     )
@@ -6418,6 +6457,8 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "selected_model": selected_model,
         "api_primary_slot_proven": api_primary_slot_proven,
         "api_only_executor_truth_proven": api_only_executor_truth_proven,
+        "route_bound_live_edit_proof_required": require_route_bound_live_edit_proof,
+        "route_bound_live_edit_proof_chain_proven": route_bound_live_edit_proof_chain_proven,
         "primary_model_slot": {
             "slot_id": "primary_model_slot",
             "status": "bound" if api_primary_slot_proven else "not_proven",
@@ -6466,6 +6507,11 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "provider_id": provider_id,
         "upstream_model": upstream_model,
         "effective_route_model": effective_route_model,
+        "bound_route_model": effective_route_model,
+        "selected_model_equals_bound_route": selected_model_equals_bound_route,
+        "dispatch_target_provider_id": provider_id,
+        "dispatch_target_model": upstream_model,
+        "dispatch_target_deepseek_route": dispatch_target_deepseek_route,
         "request_seen_after_launch": request_seen,
         "response_seen": response_seen,
         "route_digest_matches_launch": route_digest_matches,
@@ -6479,10 +6525,20 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "forced_route_used": forced_route_used,
         "forced_route_counts_as_fallback": forced_route_counts_as_fallback,
         "chatgpt_called": chatgpt_called,
+        "chatgpt_invoked": chatgpt_called,
         "api_only_calls_chatgpt": chatgpt_called,
         "fallback_used": fallback_used,
+        "proof_file_before_sha256": proof_file_before_sha256,
+        "proof_file_after_sha256": proof_file_after_sha256,
+        "proof_file_digests_present": proof_file_digests_present,
+        "proof_file_digest_changed": proof_file_digest_changed,
+        "proof_file_mutation_observed_after_dispatch": proof_file_mutation_after_dispatch,
         "log_evidence": log_evidence,
         "profile_path_exposed": False,
+        "ui_usability_claimed": False,
+        "native_window_usability_claimed": False,
+        "profile_history_claimed": False,
+        "model_matrix_claimed": False,
         "raw_prompt_recorded": False,
         "response_text_counts_as_proof": False,
         "ui_label_counts_as_proof": False,
@@ -6516,6 +6572,7 @@ def build_custom_codex_deepseek_route_bound_real_edit_packet(
         ok_final_status="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_PROVEN_WITH_LIMITS",
         blocked_final_status="KNOWN_BLOCKER_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
         blocked_machine_error_code="CUSTOM_CODEX_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
+        require_route_bound_live_edit_proof=True,
     )
 
 
@@ -6538,6 +6595,7 @@ def build_api_only_deepseek_live_code_edit_truth_packet(
         ok_final_status="API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_PROVEN_WITH_LIMITS",
         blocked_final_status="STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
         blocked_machine_error_code="API_ONLY_DEEPSEEK_LIVE_CODE_EDIT_NOT_PROVEN",
+        require_route_bound_live_edit_proof=True,
     )
 
 

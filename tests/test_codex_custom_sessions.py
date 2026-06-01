@@ -1887,10 +1887,26 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 ".tmp/deepseek_api_only_live_edit_probe.txt",
             )
             self.assertTrue(packet["provider_called"])
+            self.assertEqual(packet["bound_route_model"], "wbp-deepseek-v3")
+            self.assertTrue(packet["selected_model_equals_bound_route"])
+            self.assertEqual(packet["dispatch_target_provider_id"], "deepseek")
+            self.assertTrue(packet["dispatch_target_deepseek_route"])
+            self.assertTrue(packet["route_bound_live_edit_proof_chain_proven"])
             self.assertTrue(packet["tool_loop_proven"])
             self.assertTrue(packet["setup_probe_file_seeded_by_wbp"])
             self.assertTrue(packet["file_changed_by_codex_tool"])
             self.assertTrue(packet["file_content_matches"])
+            self.assertEqual(
+                packet["proof_file_before_sha256"],
+                "71365070eea6aac5e27530d863400aa9feb2faa0dcf198caec3977039617d1c8",
+            )
+            self.assertEqual(
+                packet["proof_file_after_sha256"],
+                "8824e44257ce27045c1e47e79807aa93ceb66b90a31c1f49a5b88637b97a3a0c",
+            )
+            self.assertTrue(packet["proof_file_digests_present"])
+            self.assertTrue(packet["proof_file_digest_changed"])
+            self.assertTrue(packet["proof_file_mutation_observed_after_dispatch"])
             self.assertFalse(packet["outside_write_surface_changed"])
             self.assertFalse(packet["api_only_calls_chatgpt"])
             self.assertFalse(packet["chatgpt_only_calls_api"])

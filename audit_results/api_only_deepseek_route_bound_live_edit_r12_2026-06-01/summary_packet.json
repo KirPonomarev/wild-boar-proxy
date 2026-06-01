@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "packet_kind": "api_only_deepseek_route_bound_live_edit_r12_summary",
+  "captured_at_utc": "2026-06-01T01:15:00Z",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "branch": "codex/api-only-deepseek-route-bound-live-edit-r12",
+  "base_head": "ddddc80d",
+  "scope": "execution_core_api_only_deepseek_route_bound_live_edit",
+  "live_server": {
+    "host": "127.0.0.1",
+    "port": 18788,
+    "action_phase": "full",
+    "owner_authorized": true
+  },
+  "live_repo_tmp_edit_probe": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "final_status": "API_ONLY_DEEPSEEK_CODEX_TOOL_EDIT_PROVEN_WITH_LIMITS",
+    "model_id": "wbp-deepseek-v4-pro-max",
+    "provider_id": "deepseek",
+    "provider_called": true,
+    "selected_model_equals_bound_route": true,
+    "dispatch_target_deepseek_route": true,
+    "route_bound_live_edit_proof_chain_proven": true,
+    "proof_file_digests_present": true,
+    "proof_file_digest_changed": true,
+    "proof_file_mutation_observed_after_dispatch": true,
+    "api_only_calls_chatgpt": false,
+    "chatgpt_only_calls_api": false,
+    "fallback_used": false,
+    "file_relative_path": ".tmp/deepseek_api_only_live_edit_probe.txt",
+    "file_changed_by_codex_tool": true,
+    "file_content_matches": true,
+    "outside_write_surface_changed": false,
+    "current_codex_touched": false,
+    "response_preview_bounded": "WBP_API_ONLY_DEEPSEEK_EDIT_OK",
+    "request_count": 2,
+    "workspace_write_admitted": true,
+    "additional_writable_dir_admitted": true,
+    "secret_value_recorded": false,
+    "secret_in_probe_file": false,
+    "commit_attempted": false,
+    "push_attempted": false,
+    "merge_attempted": false
+  },
+  "verification": {
+    "tests": [
+      "python3 -m pytest tests/test_web_design_live_server.py::WebDesignCodexCustomDeepSeekCodeEditProofTests -q",
+      "python3 -m pytest tests/test_codex_custom_sessions.py -q",
+      "python3 -m pytest tests/test_web_design_live_server.py -q"
+    ],
+    "test_results": [
+      "17 passed in 1.97s",
+      "48 passed in 0.56s",
+      "256 passed, 2 subtests passed in 74.01s"
+    ]
+  },
+  "non_claims": {
+    "quick_start_ui_design_done": false,
+    "model_matrix_done": false,
+    "chatgpt_plus_api_live_pair_done": false,
+    "persistent_profile_history_done": false,
+    "voice_done": false,
+    "speed_done": false
+  }
+}
