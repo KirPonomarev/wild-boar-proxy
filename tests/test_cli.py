@@ -2655,6 +2655,7 @@ class CliTests(unittest.TestCase):
         argv_record_path: Path | None = None,
         empty_model_responses_before_ready: int = 0,
         ignore_sigterm: bool = False,
+        required_proxy_url_for_responses: str = "",
     ) -> Path:
         if model_ids is None:
             model_ids = ["gpt-5.4"]
@@ -2667,6 +2668,7 @@ class CliTests(unittest.TestCase):
             "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
             "from pathlib import Path\n"
             f"argv_record_path = {str(argv_record_path) if argv_record_path else ''!r}\n"
+            f"required_proxy_url_for_responses = {required_proxy_url_for_responses!r}\n"
             "if argv_record_path:\n"
             "    Path(argv_record_path).write_text(json.dumps(sys.argv) + '\\n')\n"
             f"if {ignore_sigterm!r}:\n"
@@ -2677,7 +2679,11 @@ class CliTests(unittest.TestCase):
             "    line = raw_line.strip()\n"
             "    if line.startswith('port:'):\n"
             "        port = int(line.split(':', 1)[1].strip().strip('\"'))\n"
-            "        break\n"
+            "proxy_url = ''\n"
+            "for raw_line in config.read_text().splitlines():\n"
+            "    line = raw_line.strip()\n"
+            "    if line.startswith('proxy-url:'):\n"
+            "        proxy_url = line.split(':', 1)[1].strip().strip('\"')\n"
             f"if not {listen_on_configured_port!r}:\n"
             "    port = port + 1\n"
             "model_request_count = 0\n"
@@ -2703,6 +2709,9 @@ class CliTests(unittest.TestCase):
             "            _ = self.rfile.read(length)\n"
             f"            status = {response_status}\n"
             f"            error_message = {response_error_message!r}\n"
+            "            if required_proxy_url_for_responses and proxy_url != required_proxy_url_for_responses:\n"
+            "                status = 500\n"
+            "                error_message = 'proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused'\n"
             "            payload = {'output_text': 'OK'} if status == 200 else {'error': {'message': error_message}}\n"
             "            body = json.dumps(payload).encode('utf-8')\n"
             "            self.send_response(status)\n"
@@ -18285,6 +18294,147 @@ class CliTests(unittest.TestCase):
             )
         finally:
             runtime_mod.terminate_process_group_or_pid(pid)
+
+    def test_managed_listener_start_retries_proxy_candidate_after_proxy_path_failure(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            required_proxy_url_for_responses=expected_proxy_url,
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f'host: 127.0.0.1\nport: {port}\nproxy-url: "http://127.0.0.1:10808"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_CLIPROXY_BIN": str(fake_cli),
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    ),
+                },
+                "managed",
+                "listener",
+                "start",
+                "--json",
+            )
+        finally:
+            candidate_socket.close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        try:
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["machine_error_code"], "OK")
+            self.assertEqual(startup_owner["startup_outcome"], "proxy_candidate_retried_and_started")
+            self.assertTrue(startup_owner["proxy_candidate_retry_attempted"])
+            self.assertEqual(startup_owner["proxy_candidate_used"], expected_proxy_url)
+            self.assertTrue(startup_owner["child_proxy_env_injected"])
+            self.assertTrue(startup_owner["managed_config_proxy_url_written"])
+            self.assertTrue(startup_owner["live_attestation_passed"])
+            self.assertTrue(startup_owner["effective_mode_written"])
+            self.assertEqual(
+                runtime_mod.read_yaml_value(
+                    self.managed_dir / "managed-config.yaml", "proxy-url"
+                ),
+                expected_proxy_url,
+            )
+            state_after = json.loads(
+                (self.managed_dir / "supervisor-state.json").read_text()
+            )
+            self.assertEqual(state_after["current_proxy_url"], expected_proxy_url)
+            self.assertIn(
+                str(self.managed_dir / "managed-config.yaml"),
+                payload["changed_files"],
+            )
+        finally:
+            runtime_mod.terminate_process_group_or_pid(pid)
+
+    def test_managed_listener_start_rolls_back_proxy_candidate_when_reproof_fails(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        fake_cli = self.write_fake_cli_proxy_api(
+            self.bin_dir / "fake-cli-proxy-api",
+            required_proxy_url_for_responses="http://127.0.0.1:65500",
+        )
+        original_managed_config = (
+            f'host: 127.0.0.1\nport: {port}\nproxy-url: "http://127.0.0.1:10808"\n'
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            original_managed_config,
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        original_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_CLIPROXY_BIN": str(fake_cli),
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    ),
+                },
+                "managed",
+                "listener",
+                "start",
+                "--json",
+            )
+        finally:
+            candidate_socket.close()
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "MANAGED_STARTUP_ATTESTATION_FAILED"
+        )
+        startup_owner = payload["managed_startup_owner"]
+        pid = int(startup_owner["started_pid"])
+        self.assertEqual(
+            startup_owner["startup_outcome"],
+            "proxy_candidate_retry_attestation_failed",
+        )
+        self.assertTrue(startup_owner["proxy_candidate_retry_attempted"])
+        self.assertEqual(startup_owner["proxy_candidate_used"], expected_proxy_url)
+        self.assertFalse(startup_owner["effective_mode_written"])
+        self.assertFalse(runtime_mod.process_is_alive(str(pid)))
+        self.assertEqual(
+            (self.managed_dir / "managed-config.yaml").read_text(encoding="utf-8"),
+            original_managed_config,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            original_state,
+        )
+        self.assertEqual(payload["changed_files"], [])
 
     def test_managed_listener_start_uses_remote_model_catalog(self) -> None:
         port = free_port()

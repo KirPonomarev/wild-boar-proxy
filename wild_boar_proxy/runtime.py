@@ -627,6 +627,22 @@ def write_toml_string_atomic(path: Path, key: str, value: str) -> None:
     write_text_atomic(path, "\n".join(rewritten))
 
 
+def write_yaml_string_atomic(path: Path, key: str, value: str) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    updated = False
+    prefix = f"{key}:"
+    rewritten: list[str] = []
+    for raw_line in lines:
+        if raw_line.strip().startswith(prefix):
+            rewritten.append(f'{key}: "{value}"')
+            updated = True
+        else:
+            rewritten.append(raw_line)
+    if not updated:
+        rewritten.append(f'{key}: "{value}"')
+    write_text_atomic(path, "\n".join(rewritten))
+
+
 def read_api_key(path: Path) -> str:
     data = read_json(path)
     api_key = data.get("OPENAI_API_KEY") or data.get("access_token")
@@ -6622,6 +6638,10 @@ def build_managed_listener_start_surface(
     machine_error_code: str,
     blocking_reason: str,
     started_pid: int | None = None,
+    proxy_candidate_retry_attempted: bool = False,
+    proxy_candidate_used: str = "",
+    child_proxy_env_injected: bool = False,
+    managed_config_proxy_url_written: bool = False,
 ) -> dict[str, Any]:
     listener_stage_ready = (
         managed_listener_reachable if listener_ready is None else listener_ready
@@ -6650,6 +6670,10 @@ def build_managed_listener_start_surface(
         "repo_owned_startup_owner_path_defined": repo_owned_startup_owner_path_defined,
         "machine_error_code": machine_error_code,
         "blocking_reason": blocking_reason,
+        "proxy_candidate_retry_attempted": proxy_candidate_retry_attempted,
+        "proxy_candidate_used": proxy_candidate_used,
+        "child_proxy_env_injected": child_proxy_env_injected,
+        "managed_config_proxy_url_written": managed_config_proxy_url_written,
     }
 
 
@@ -6674,6 +6698,11 @@ def managed_listener_start_failure_payload(
     changed_files: list[str] | None = None,
     last_error: str = "",
     startup_attestation: dict[str, Any] | None = None,
+    proxy_reprobe: dict[str, Any] | None = None,
+    proxy_candidate_retry_attempted: bool = False,
+    proxy_candidate_used: str = "",
+    child_proxy_env_injected: bool = False,
+    managed_config_proxy_url_written: bool = False,
 ) -> dict[str, Any]:
     _, _, managed_endpoint = get_endpoint(paths, "managed")
     return build_command_payload(
@@ -6711,8 +6740,13 @@ def managed_listener_start_failure_payload(
                 repo_owned_startup_owner_path_defined=repo_owned_startup_owner_path_defined,
                 machine_error_code=machine_error_code,
                 blocking_reason=blocking_reason,
+                proxy_candidate_retry_attempted=proxy_candidate_retry_attempted,
+                proxy_candidate_used=proxy_candidate_used,
+                child_proxy_env_injected=child_proxy_env_injected,
+                managed_config_proxy_url_written=managed_config_proxy_url_written,
             ),
             "startup_attestation": startup_attestation or {},
+            "proxy_reprobe": proxy_reprobe or {},
             "last_error": last_error,
         },
     )
@@ -6842,9 +6876,30 @@ def restore_managed_listener_start_runtime_surfaces(
         snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
     )
     restore_path_state(
+        paths.managed_config_file,
+        snapshots.get("managed_config_file", {"state": "missing"}),
+    )
+    restore_path_state(
         managed_pid_path(paths),
         snapshots.get("managed_pid_file", {"state": "missing"}),
     )
+
+
+def managed_listener_start_child_env(proxy_url: str = "") -> dict[str, str]:
+    env = sanitized_env()
+    candidate = str(proxy_url or "").strip()
+    if candidate:
+        env[CURRENT_PROXY_URL_HANDOFF_ENV] = candidate
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ):
+            env[key] = candidate
+    return env
 
 
 def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
@@ -6855,6 +6910,7 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
         "runtime_effective_mode_file": snapshot_path_state(
             paths.runtime_effective_mode_file
         ),
+        "managed_config_file": snapshot_path_state(paths.managed_config_file),
         "managed_pid_file": snapshot_path_state(managed_pid_path(paths)),
     }
     managed_host, managed_port, managed_endpoint = get_endpoint(paths, "managed")
@@ -6867,6 +6923,11 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
     live_attestation_passed = False
     effective_mode_written = False
     repo_owned_path_defined = cli_proxy_bin.exists() and cli_proxy_bin.is_file()
+    proxy_reprobe: dict[str, Any] | None = None
+    proxy_candidate_retry_attempted = False
+    proxy_candidate_used = ""
+    child_proxy_env_injected = False
+    managed_config_proxy_url_written = False
 
     try:
         with serialized_lock(paths):
@@ -6938,6 +6999,7 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     text=True,
+                    env=managed_listener_start_child_env(),
                     start_new_session=True,
                 )
                 process_started = True
@@ -6985,43 +7047,163 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                 probe_managed_listener_start_attestation(paths)
             )
             if not proof_passed:
-                if started_process is not None and startup_attempted:
-                    terminate_started_managed_process(started_process)
-                elif started_pid is not None and startup_attempted:
-                    terminate_process_group_or_pid(started_pid)
-                restore_managed_listener_start_runtime_surfaces(
-                    paths, runtime_snapshots
-                )
-                blocking_reason = str(
-                    startup_attestation.get("binding_failure_reason", "")
-                )
-                return managed_listener_start_failure_payload(
-                    paths,
-                    machine_error_code=attestation_error_code,
-                    blocking_reason=blocking_reason or "live_attestation_failed",
-                    startup_outcome="attestation_failed",
-                    startup_attempted=startup_attempted,
-                    process_started=process_started,
-                    started_pid=started_pid,
-                    listener_ready=bool(startup_attestation.get("listener_ok")),
-                    catalog_ready=bool(startup_attestation.get("models_ok")),
-                    model_execution_probe_ready=bool(
-                        startup_attestation.get("responses_ok")
-                    ),
-                    startup_gate_passed=False,
-                    managed_listener_reachable=socket_is_listening(
-                        managed_host, managed_port
-                    ),
-                    repo_owned_startup_owner_path_defined=repo_owned_path_defined,
-                    last_error=error_detail,
-                    startup_attestation=startup_attestation,
-                )
+                if (
+                    attestation_error_code == "MANAGED_STARTUP_ATTESTATION_FAILED"
+                    and is_proxy_path_error(error_detail)
+                ):
+                    retry_state = read_json(paths.state_file, required=False)
+                    proxy_reprobe = run_proxy_reprobe(retry_state)
+                    working_candidate = str(proxy_reprobe.get("working_candidate") or "")
+                    configured_managed_proxy_url = read_yaml_value(
+                        paths.managed_config_file, "proxy-url"
+                    )
+                    if (
+                        proxy_reprobe.get("found_candidate") is True
+                        and parse_local_proxy_candidate(working_candidate) is not None
+                        and working_candidate != configured_managed_proxy_url
+                    ):
+                        proxy_candidate_retry_attempted = True
+                        proxy_candidate_used = working_candidate
+                        if started_process is not None and startup_attempted:
+                            terminate_started_managed_process(started_process)
+                        elif started_pid is not None and startup_attempted:
+                            terminate_process_group_or_pid(started_pid)
+                        write_yaml_string_atomic(
+                            paths.managed_config_file,
+                            "proxy-url",
+                            working_candidate,
+                        )
+                        managed_config_proxy_url_written = True
+                        started_process = subprocess.Popen(
+                            command,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            text=True,
+                            env=managed_listener_start_child_env(working_candidate),
+                            start_new_session=True,
+                        )
+                        child_proxy_env_injected = True
+                        process_started = True
+                        started_pid = started_process.pid
+                        deadline = time.monotonic() + managed_listener_start_wait_seconds()
+                        while time.monotonic() < deadline:
+                            if socket_is_listening(managed_host, managed_port):
+                                break
+                            if started_process.poll() is not None:
+                                restore_managed_listener_start_runtime_surfaces(
+                                    paths, runtime_snapshots
+                                )
+                                return managed_listener_start_failure_payload(
+                                    paths,
+                                    machine_error_code="MANAGED_STARTUP_PROCESS_FAILED",
+                                    blocking_reason=(
+                                        "proxy_candidate_retry_process_failed"
+                                    ),
+                                    startup_outcome=(
+                                        "proxy_candidate_retry_process_failed"
+                                    ),
+                                    startup_attempted=True,
+                                    process_started=True,
+                                    started_pid=started_pid,
+                                    repo_owned_startup_owner_path_defined=True,
+                                    last_error=(
+                                        f"engine_exit_code={started_process.returncode}"
+                                    ),
+                                    proxy_reprobe=proxy_reprobe,
+                                    proxy_candidate_retry_attempted=True,
+                                    proxy_candidate_used=proxy_candidate_used,
+                                    child_proxy_env_injected=child_proxy_env_injected,
+                                    managed_config_proxy_url_written=(
+                                        managed_config_proxy_url_written
+                                    ),
+                                )
+                            time.sleep(0.05)
+                        if not socket_is_listening(managed_host, managed_port):
+                            terminate_started_managed_process(started_process)
+                            restore_managed_listener_start_runtime_surfaces(
+                                paths, runtime_snapshots
+                            )
+                            return managed_listener_start_failure_payload(
+                                paths,
+                                machine_error_code="MANAGED_STARTUP_LISTENER_UNREACHABLE",
+                                blocking_reason=(
+                                    "proxy_candidate_retry_listener_unreachable"
+                                ),
+                                startup_outcome=(
+                                    "proxy_candidate_retry_listener_unreachable"
+                                ),
+                                startup_attempted=True,
+                                process_started=True,
+                                started_pid=started_pid,
+                                repo_owned_startup_owner_path_defined=True,
+                                proxy_reprobe=proxy_reprobe,
+                                proxy_candidate_retry_attempted=True,
+                                proxy_candidate_used=proxy_candidate_used,
+                                child_proxy_env_injected=child_proxy_env_injected,
+                                managed_config_proxy_url_written=(
+                                    managed_config_proxy_url_written
+                                ),
+                            )
+                        startup_outcome = "proxy_candidate_retried_and_started"
+                        (
+                            proof_passed,
+                            startup_attestation,
+                            error_detail,
+                            attestation_error_code,
+                        ) = probe_managed_listener_start_attestation(paths)
+                if proof_passed:
+                    pass
+                else:
+                    if started_process is not None and startup_attempted:
+                        terminate_started_managed_process(started_process)
+                    elif started_pid is not None and startup_attempted:
+                        terminate_process_group_or_pid(started_pid)
+                    restore_managed_listener_start_runtime_surfaces(
+                        paths, runtime_snapshots
+                    )
+                    blocking_reason = str(
+                        startup_attestation.get("binding_failure_reason", "")
+                    )
+                    return managed_listener_start_failure_payload(
+                        paths,
+                        machine_error_code=attestation_error_code,
+                        blocking_reason=blocking_reason or "live_attestation_failed",
+                        startup_outcome="attestation_failed"
+                        if not proxy_candidate_retry_attempted
+                        else "proxy_candidate_retry_attestation_failed",
+                        startup_attempted=startup_attempted,
+                        process_started=process_started,
+                        started_pid=started_pid,
+                        listener_ready=bool(startup_attestation.get("listener_ok")),
+                        catalog_ready=bool(startup_attestation.get("models_ok")),
+                        model_execution_probe_ready=bool(
+                            startup_attestation.get("responses_ok")
+                        ),
+                        startup_gate_passed=False,
+                        managed_listener_reachable=socket_is_listening(
+                            managed_host, managed_port
+                        ),
+                        repo_owned_startup_owner_path_defined=repo_owned_path_defined,
+                        last_error=error_detail,
+                        startup_attestation=startup_attestation,
+                        proxy_reprobe=proxy_reprobe,
+                        proxy_candidate_retry_attempted=(
+                            proxy_candidate_retry_attempted
+                        ),
+                        proxy_candidate_used=proxy_candidate_used,
+                        child_proxy_env_injected=child_proxy_env_injected,
+                        managed_config_proxy_url_written=(
+                            managed_config_proxy_url_written
+                        ),
+                    )
             live_attestation_passed = True
             state = read_json(paths.state_file, required=False)
             state["status"] = "healthy"
             state["last_error"] = ""
             state["effective_mode"] = "managed"
             state["managed_port"] = managed_port
+            if proxy_candidate_used:
+                state["current_proxy_url"] = proxy_candidate_used
             state["last_sync_at"] = now_iso()
             write_json_atomic(paths.state_file, state)
             write_text_atomic(paths.runtime_effective_mode_file, "managed")
@@ -7073,6 +7255,11 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     repo_owned_startup_owner_path_defined=repo_owned_path_defined,
                     changed_files=changed_files,
                     last_error=str(exc),
+                    proxy_reprobe=proxy_reprobe,
+                    proxy_candidate_retry_attempted=proxy_candidate_retry_attempted,
+                    proxy_candidate_used=proxy_candidate_used,
+                    child_proxy_env_injected=child_proxy_env_injected,
+                    managed_config_proxy_url_written=managed_config_proxy_url_written,
                 )
             return managed_listener_start_failure_payload(
                 paths,
@@ -7093,6 +7280,11 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     before, runtime_write_surface_candidates(paths)
                 ),
                 last_error=str(post_payload.get("last_error", "")),
+                proxy_reprobe=proxy_reprobe,
+                proxy_candidate_retry_attempted=proxy_candidate_retry_attempted,
+                proxy_candidate_used=proxy_candidate_used,
+                child_proxy_env_injected=child_proxy_env_injected,
+                managed_config_proxy_url_written=managed_config_proxy_url_written,
             )
 
         changed_files = detect_changed_files(
@@ -7130,7 +7322,12 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                     repo_owned_startup_owner_path_defined=repo_owned_path_defined,
                     machine_error_code="OK",
                     blocking_reason="",
+                    proxy_candidate_retry_attempted=proxy_candidate_retry_attempted,
+                    proxy_candidate_used=proxy_candidate_used,
+                    child_proxy_env_injected=child_proxy_env_injected,
+                    managed_config_proxy_url_written=managed_config_proxy_url_written,
                 ),
+                "proxy_reprobe": proxy_reprobe or {},
                 "last_error": "",
             },
         )
@@ -7154,6 +7351,11 @@ def run_managed_listener_start(paths: RuntimePaths) -> dict[str, Any]:
                 before, runtime_write_surface_candidates(paths)
             ),
             last_error=str(exc),
+            proxy_reprobe=proxy_reprobe,
+            proxy_candidate_retry_attempted=proxy_candidate_retry_attempted,
+            proxy_candidate_used=proxy_candidate_used,
+            child_proxy_env_injected=child_proxy_env_injected,
+            managed_config_proxy_url_written=managed_config_proxy_url_written,
         )
 
 

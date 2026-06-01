@@ -500,6 +500,94 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertTrue(result["direct_non_wbp_model_egress_absent_proven"])
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
 
+    def test_run_prompt_adopts_managed_status_endpoint_for_wbp_downstream(self) -> None:
+        session = OperatorSurfaceSession(
+            OperatorSurfaceConfig(
+                endpoint="http://127.0.0.1:8318/v1",
+                codex_bin=Path("/bin/echo"),
+                runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
+                timeout_seconds=5,
+            )
+        )
+        session.probe_models = lambda: {  # type: ignore[method-assign]
+            "ok": True,
+            "model_ids": ["gpt-5.3-codex"],
+            "server_issued": True,
+        }
+
+        def fake_run_wbp(args: list[str]) -> dict[str, object]:
+            if args == ["status", "--json"]:
+                return {
+                    "json": {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "liveness": "healthy",
+                        "effective_mode": "managed",
+                        "endpoint": "127.0.0.1:8320",
+                    }
+                }
+            if args == ["external-models", "routes", "list", "--json"]:
+                return {"json": {"data": {"routes": []}}}
+            return {"json": {}}
+
+        session.run_wbp = fake_run_wbp  # type: ignore[method-assign]
+        session.status_payload = lambda: {  # type: ignore[method-assign]
+            "status": {"status": "ok", "machine_error_code": "OK", "endpoint": "127.0.0.1:8320"},
+            "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+        }
+        session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
+
+        def fake_observed_run(command: list[str], **kwargs: object) -> dict[str, object]:
+            env = kwargs.get("env")
+            self.assertIsInstance(env, dict)
+            codex_home = Path(str(env["CODEX_HOME"]))  # type: ignore[index]
+            config_text = (codex_home / "config.toml").read_text(encoding="utf-8")
+            self.assertIn('base_url = "http://127.0.0.1:8320/v1"', config_text)
+            allowed = kwargs.get("allowed_local_endpoints")
+            self.assertIn("127.0.0.1:8320", allowed)  # type: ignore[operator]
+            last_message = Path(command[command.index("-o") + 1])
+            last_message.write_text("MANAGED_ENDPOINT_OK\n", encoding="utf-8")
+            return {
+                "exit_code": 0,
+                "stderr": "",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 2,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": ["127.0.0.1:8320"],
+                    "allowed_local_endpoint_observed": True,
+                    "peer_endpoints": [{"endpoint": "127.0.0.1:8320", "host_class": "local"}],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
+
+        with mock.patch(
+            "wild_boar_proxy.operator_surface._run_command_with_observation",
+            side_effect=fake_observed_run,
+        ):
+            result = session.run_prompt(
+                {
+                    "prompt": "Reply with exactly MANAGED_ENDPOINT_OK.",
+                    "model_id": "gpt-5.3-codex",
+                }
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["configured_base_url"], "http://127.0.0.1:8320/v1")
+        self.assertEqual(result["downstream_wbp_endpoint"], "http://127.0.0.1:8320/v1")
+        self.assertEqual(result["runtime_wbp_endpoint_source"], "status_json")
+        self.assertEqual(result["runtime_wbp_endpoint_status"]["effective_mode"], "managed")
+        self.assertEqual(result["final_message"], "MANAGED_ENDPOINT_OK")
+        self.assertNotIn("10808", json.dumps(result))
+
     def test_run_prompt_admits_workspace_write_only_with_temp_add_dir(self) -> None:
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
@@ -1018,6 +1106,48 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertIn("gpt-5.3-codex", result["model_ids"])
         self.assertIn("wbp-web-primary-openrouter", result["model_ids"])
+
+    def test_probe_models_uses_runtime_status_endpoint_when_managed_is_live(self) -> None:
+        captured_urls: list[str] = []
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+
+        class FakeOpener:
+            def open(self, request, timeout=20):  # noqa: ANN001
+                captured_urls.append(request.full_url)
+                return FakeResponse()
+
+        def fake_run_wbp(args: list[str]) -> dict[str, object]:
+            if args == ["status", "--json"]:
+                return {
+                    "json": {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "liveness": "healthy",
+                        "effective_mode": "managed",
+                        "endpoint": "127.0.0.1:8320",
+                    }
+                }
+            return {"json": {"data": {"routes": []}}}
+
+        session = OperatorSurfaceSession(OperatorSurfaceConfig(endpoint="http://127.0.0.1:8318/v1"))
+        session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
+        session.run_wbp = fake_run_wbp  # type: ignore[method-assign]
+        with mock.patch("wild_boar_proxy.operator_surface.urllib.request.build_opener", return_value=FakeOpener()):
+            result = session.probe_models()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(captured_urls, ["http://127.0.0.1:8320/v1/models"])
 
     def test_hybrid_openai_compat_adapter_merges_route_ids_into_models(self) -> None:
         class DownstreamHandler(BaseHTTPRequestHandler):

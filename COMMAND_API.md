@@ -1786,11 +1786,16 @@ Field meaning rules:
   OpenAI-compatible server in Wild Boar Proxy
 - `managed listener start --json` may write only:
   - `managed/managed-proxy.pid`
+  - `managed/managed-config.yaml` `proxy-url` after bounded candidate retry
   - `runtime-effective-mode.txt`
   - `config.toml` `base_url`
   - `managed/supervisor-state.json`
 - those writes are valid only after live listener proof for the configured
   managed endpoint passes
+- when startup attestation fails with `PROXY_PATH_BROKEN`, the owner path may
+  perform one bounded retry using `proxy_reprobe.working_candidate`; the
+  candidate remains non-authoritative until the restarted managed listener
+  passes `/models` and `/responses` live proof
 - required `managed_startup_owner` fields for `managed listener start --json`:
   - `status`
   - `owner_command_surface`
