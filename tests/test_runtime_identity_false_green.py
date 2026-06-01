@@ -423,6 +423,8 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertNotIn(SENTINEL_SECRET, result.stdout)
         self.assertNotIn("sk-d0a-", result.stdout)
+        self.assertNotIn(SENTINEL_SECRET, result.stderr)
+        self.assertNotIn("sk-d0a-", result.stderr)
         payload = _strict_json_object(result.stdout)
         self.assertEqual(result.returncode, payload["exit_code"])
         self.assertEqual(result.returncode, 1)
@@ -502,10 +504,13 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             self.assertTrue(payload["launch_readiness"]["gate_passed"])
         else:
             self.assertEqual(payload["status"], "error")
+            self.assertNotEqual(payload["machine_error_code"], "OK")
             self.assertEqual(
                 payload["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN"
             )
             self.assertEqual(payload["liveness"], "degraded")
+            self.assertNotEqual(payload["liveness"], "healthy")
+            self.assertEqual(payload["launch_readiness"]["status"], "blocked")
             self.assertFalse(payload["launch_readiness"]["gate_passed"])
             self.assertEqual(
                 payload["launch_readiness"]["blocking_reason"],
@@ -597,6 +602,23 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             expected_runtime_marker="",
         )
 
+    def test_missing_runtime_marker_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=False,
+            expected_identity_failure_reason="missing_runtime_marker",
+            payload_updates={"runtime_marker": ""},
+            expected_runtime_marker="",
+        )
+
+    def test_unsupported_runtime_identity_schema_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=False,
+            expected_identity_failure_reason="unsupported_runtime_identity_schema",
+            payload_updates={"schema_version": 999},
+        )
+
     def test_wrong_managed_config_identity_is_not_runtime_green(self) -> None:
         self.assert_identity_probe_case(
             handler_mode="identity_wrong_managed_config",
@@ -619,6 +641,30 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             expected_ok=False,
             expected_identity_failure_reason="issued_for_endpoint_mismatch",
             payload_updates={"issued_for_endpoint": "http://127.0.0.1:9/v1"},
+        )
+
+    def test_missing_runtime_version_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=False,
+            expected_identity_failure_reason="runtime_version_missing",
+            payload_updates={"runtime_version": ""},
+        )
+
+    def test_non_string_issued_at_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=False,
+            expected_identity_failure_reason="issued_at_utc_invalid",
+            payload_updates={"issued_at_utc": 123},
+        )
+
+    def test_future_issued_at_identity_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_ok",
+            expected_ok=False,
+            expected_identity_failure_reason="future_runtime_identity_issued_at",
+            payload_updates={"issued_at_utc": "2999-01-01T00:00:00+00:00"},
         )
 
     def test_unusable_auth_pool_is_not_runtime_green(self) -> None:

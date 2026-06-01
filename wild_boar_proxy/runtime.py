@@ -886,6 +886,13 @@ def build_runtime_identity_proof(
             identity_failure_reason = "issued_for_endpoint_mismatch"
         elif issued_at_utc is not None and not isinstance(issued_at_utc, str):
             identity_failure_reason = "issued_at_utc_invalid"
+        elif issued_at_utc is not None:
+            issued_at = parse_utc_datetime(issued_at_utc)
+            current_time = parse_utc_datetime(now_iso())
+            if issued_at is None or current_time is None:
+                identity_failure_reason = "issued_at_utc_invalid"
+            elif issued_at > current_time:
+                identity_failure_reason = "future_runtime_identity_issued_at"
     return {
         "managed_config_identity": expected_managed_config_identity,
         "runtime_marker": runtime_marker,
