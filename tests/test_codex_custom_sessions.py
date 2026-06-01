@@ -1152,6 +1152,252 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             "RUNTIME_MODEL_ID_MISMATCH",
         )
 
+    def test_mixed_role_slot_live_edit_probe_attributes_file_to_coding_slot(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            calls.append(dict(payload))
+            slot_id = str(payload.get("slot_id") or "")
+            route_backed = slot_id == "coding_agent_model_slot"
+            model_id = str(payload.get("model_id") or "")
+            if route_backed:
+                target = writable_dir / "chatgpt_plus_api_role_slot_live_edit_probe.txt"
+                target.write_text("WBP_CHATGPT_PLUS_DEEPSEEK_CODER_EDIT_OK", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": slot_id,
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_CHATGPT_PLUS_DEEPSEEK_CODER_EDIT_OK"
+                if route_backed
+                else "WBP_MIXED_PRIMARY_SLOT_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.mixed_role_slot_live_edit_probe_packet(
+                created["session"]["session_id"],
+                {},
+                runner,
+                owner_authorized=True,
+                repo_root=repo,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertTrue(packet["primary_slot_dispatched"])
+        self.assertTrue(packet["coding_agent_model_slot_dispatched"])
+        self.assertEqual(packet["primary_model_slot_lane"], "codex_account_lane")
+        self.assertEqual(packet["coding_agent_model_slot_lane"], "api_route_lane")
+        self.assertEqual(packet["coding_slot_provider"], "deepseek")
+        self.assertTrue(packet["coding_slot_selected_model_equals_bound_route"])
+        self.assertTrue(packet["dispatch_route_packet_matches_session_slot_packet"])
+        self.assertEqual(
+            packet["proof_file_relative_path"],
+            ".tmp/chatgpt_plus_api_role_slot_live_edit_probe.txt",
+        )
+        self.assertEqual(
+            packet["proof_file_before_sha256"],
+            "4c2159cc27f636e1a2f41dc61eeaa9624e9a57c3a6bf3adc14b94a0449071cd0",
+        )
+        self.assertEqual(
+            packet["proof_file_after_sha256"],
+            "2c3fe3750198d57901be8cbac89d53f66745df603499d39d7c1cb15d63d1a7aa",
+        )
+        self.assertTrue(packet["proof_file_digests_present"])
+        self.assertTrue(packet["proof_file_digest_changed"])
+        self.assertTrue(packet["proof_file_mutation_attributed_to_coding_slot"])
+        self.assertEqual(
+            packet["changed_files"],
+            [".tmp/chatgpt_plus_api_role_slot_live_edit_probe.txt"],
+        )
+        self.assertTrue(packet["changed_files_exactly_expected"])
+        self.assertFalse(packet["primary_slot_file_mutation_observed"])
+        self.assertFalse(packet["primary_slot_file_mutation_claimed"])
+        self.assertFalse(packet["chatgpt_as_coder"])
+        self.assertFalse(packet["api_line_used_as_primary_executor"])
+        self.assertFalse(packet["slots_collapsed"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(
+            [call["slot_id"] for call in calls],
+            ["primary_model_slot", "coding_agent_model_slot"],
+        )
+
+    def test_mixed_role_slot_live_edit_probe_blocks_primary_file_mutation(self) -> None:
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            slot_id = str(payload.get("slot_id") or "")
+            model_id = str(payload.get("model_id") or "")
+            target = writable_dir / "chatgpt_plus_api_role_slot_live_edit_probe.txt"
+            if slot_id == "primary_model_slot":
+                target.write_text("PRIMARY_WRONG", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": slot_id,
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "PRIMARY_WRONG",
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy"
+                if slot_id == "primary_model_slot"
+                else "external_route",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.mixed_role_slot_live_edit_probe_packet(
+                created["session"]["session_id"],
+                {},
+                runner,
+                owner_authorized=True,
+                repo_root=repo,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["primary_slot_dispatched"])
+        self.assertFalse(packet["coding_agent_model_slot_dispatched"])
+        self.assertTrue(packet["primary_slot_file_mutation_observed"])
+        self.assertFalse(packet["proof_file_mutation_attributed_to_coding_slot"])
+        self.assertFalse(packet["primary_slot_file_mutation_claimed"])
+
+    def test_mixed_role_slot_live_edit_probe_blocks_coder_runtime_mismatch(self) -> None:
+        def runner(payload: dict[str, object], writable_dir: Path) -> dict[str, object]:
+            slot_id = str(payload.get("slot_id") or "")
+            model_id = str(payload.get("model_id") or "")
+            route_backed = slot_id == "coding_agent_model_slot"
+            if route_backed:
+                target = writable_dir / "chatgpt_plus_api_role_slot_live_edit_probe.txt"
+                target.write_text("WBP_CHATGPT_PLUS_DEEPSEEK_CODER_EDIT_OK", encoding="utf-8")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": slot_id,
+                "selected_model": model_id,
+                "runtime_model": "gpt-5.3-codex" if route_backed else model_id,
+                "final_message": "OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            init_git_repo(repo)
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+
+            packet = manager.mixed_role_slot_live_edit_probe_packet(
+                created["session"]["session_id"],
+                {},
+                runner,
+                owner_authorized=True,
+                repo_root=repo,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["primary_slot_dispatched"])
+        self.assertFalse(packet["coding_agent_model_slot_dispatched"])
+        self.assertFalse(packet["coding_slot_selected_model_equals_bound_route"])
+        self.assertFalse(packet["dispatch_route_packet_matches_session_slot_packet"])
+        self.assertFalse(packet["proof_file_mutation_attributed_to_coding_slot"])
+
     def test_prompt_run_can_dispatch_bound_reviewer_slot_without_primary_swap(self) -> None:
         calls: list[dict[str, object]] = []
 

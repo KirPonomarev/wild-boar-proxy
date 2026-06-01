@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "packet_kind": "chatgpt_plus_api_role_slot_live_edit_r13_summary",
+  "observed_at_utc": "2026-06-01T01:36:25Z",
+  "branch": "codex/chatgpt-api-role-slot-live-edit-r13",
+  "base_branch": "origin/codex/api-only-deepseek-route-bound-live-edit-r12",
+  "base_head": "7fc6a1a0",
+  "result": {
+    "status": "bounded_implementation_closed_with_live_runtime_blocker",
+    "machine_error_code": "PROXY_PATH_BROKEN",
+    "final_status": "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_NOT_LIVE_PROVEN",
+    "runtime_code_changed": true,
+    "ui_design_changed": false,
+    "model_matrix_changed": false,
+    "profile_history_changed": false,
+    "speed_or_voice_changed": false
+  },
+  "implemented_surfaces": {
+    "session_packet": "CodexCustomSessionManager.mixed_role_slot_live_edit_probe_packet",
+    "endpoint": "/api/codex/custom/sessions/{session_id}/mixed-role-slot-live-edit-probe",
+    "packet_kind": "chatgpt_plus_api_role_slot_live_edit_probe",
+    "success_final_status": "CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_PROVEN_WITH_LIMITS",
+    "blocked_final_status": "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_ROLE_SLOT_LIVE_EDIT_NOT_PROVEN"
+  },
+  "proof_contract": {
+    "requires_primary_slot_dispatch": true,
+    "requires_coding_agent_model_slot_dispatch": true,
+    "requires_coder_runtime_model_equal_bound_route": true,
+    "requires_session_slot_packet_match": true,
+    "requires_digest_before_after_present": true,
+    "requires_digest_changed": true,
+    "requires_file_mutation_attributed_to_coding_slot": true,
+    "requires_primary_file_mutation_absent": true,
+    "requires_no_slot_collapse": true,
+    "requires_no_fallback": true,
+    "response_text_counts_as_proof": false,
+    "ui_label_counts_as_proof": false,
+    "model_self_report_counts_as_runtime_truth": false
+  },
+  "unit_verification": {
+    "tests_passed": true,
+    "targeted_command": "python3 -m pytest tests/test_codex_custom_sessions.py tests/test_web_design_live_server.py -q",
+    "targeted_result": "308 passed, 2 subtests passed in 75.79s",
+    "diff_check_command": "git diff --check",
+    "diff_check_exit_code": 0
+  },
+  "live_verification": {
+    "attempted": true,
+    "live_green": false,
+    "blocked_before_coder_slot": true,
+    "primary_slot_dispatch_status": "failed",
+    "primary_slot_machine_error_code": "ENGINE_PROMPT_FAILED",
+    "runtime_status_machine_error_code": "PROXY_PATH_BROKEN",
+    "configured_proxy_url": "http://127.0.0.1:10808",
+    "current_proxy_url": "http://127.0.0.1:10808",
+    "proxy_error_bounded": "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused",
+    "managed_listener_endpoint": "http://127.0.0.1:8320/v1",
+    "managed_listener_reachable": false,
+    "working_candidate": "http://127.0.0.1:18080",
+    "fallback_used": false,
+    "secret_value_exposed": false,
+    "raw_backend_details_exposed": false
+  },
+  "independent_audit_summary": {
+    "agent_evidence_used": true,
+    "managed_startup_owner_gap_confirmed": true,
+    "r13_should_not_fix_managed_listener_lifecycle": true,
+    "scope_mix_rejected": true
+  },
+  "scope_check": {
+    "runtime_packet_endpoint_tests_only": true,
+    "quick_start_ui_changed": false,
+    "model_catalog_changed": false,
+    "persistent_profile_changed": false,
+    "original_codex_touched": false,
+    "current_codex_touched_by_probe": false,
+    "browser_secret_authority": false
+  }
+}
