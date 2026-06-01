@@ -153,6 +153,30 @@ class TransactionTempInspection:
         )
 
 
+@dataclass(frozen=True)
+class TransactionTempCleanupResult:
+    deleted_artifact_paths: tuple[str, ...]
+    skipped_artifact_paths: tuple[str, ...]
+    stale_artifact_paths: tuple[str, ...]
+    incomplete_transaction_ids: tuple[str, ...]
+    recoverable_transaction_ids: tuple[str, ...]
+    blocked_transaction_ids: tuple[str, ...]
+    invalid_metadata_paths: tuple[str, ...]
+
+    @property
+    def cleanup_performed(self) -> bool:
+        return bool(self.deleted_artifact_paths)
+
+    @property
+    def cleanup_blocked(self) -> bool:
+        return bool(
+            self.incomplete_transaction_ids
+            or self.recoverable_transaction_ids
+            or self.blocked_transaction_ids
+            or self.invalid_metadata_paths
+        )
+
+
 class StateTransactionError(Exception):
     def __init__(self, message: str, *, machine_error_code: str) -> None:
         super().__init__(message)
@@ -866,6 +890,79 @@ def inspect_transaction_temp_artifacts(
         recoverable_transaction_ids=tuple(recoverable_transaction_ids),
         blocked_transaction_ids=tuple(blocked_transaction_ids),
         invalid_metadata_paths=tuple(invalid_metadata_paths),
+    )
+
+
+def cleanup_transaction_store_artifacts(
+    transaction_root: Path,
+    *,
+    now: datetime | None = None,
+    stale_ttl_seconds: int = TRANSACTION_ARTIFACT_STALE_TTL_SECONDS,
+) -> TransactionTempCleanupResult:
+    inspection = inspect_transaction_temp_artifacts(
+        transaction_root,
+        now=now,
+        stale_ttl_seconds=stale_ttl_seconds,
+    )
+    if (
+        inspection.incomplete_transaction_ids
+        or inspection.recoverable_transaction_ids
+        or inspection.blocked_transaction_ids
+        or inspection.invalid_metadata_paths
+    ):
+        return TransactionTempCleanupResult(
+            deleted_artifact_paths=(),
+            skipped_artifact_paths=inspection.stale_artifact_paths,
+            stale_artifact_paths=inspection.stale_artifact_paths,
+            incomplete_transaction_ids=inspection.incomplete_transaction_ids,
+            recoverable_transaction_ids=inspection.recoverable_transaction_ids,
+            blocked_transaction_ids=inspection.blocked_transaction_ids,
+            invalid_metadata_paths=inspection.invalid_metadata_paths,
+        )
+
+    root = Path(transaction_root).resolve(strict=False)
+    store_root = _transaction_store_root_for(root)
+    deleted_artifact_paths: list[str] = []
+    skipped_artifact_paths: list[str] = []
+    stale_path_set = set(inspection.stale_artifact_paths)
+
+    for stale_path_text in inspection.stale_artifact_paths:
+        stale_path = Path(stale_path_text)
+        transaction_work_root = stale_path.parent
+        try:
+            transaction_id = transaction_work_root.name[: -len(TRANSACTION_WORK_DIR_SUFFIX)]
+            validate_transaction_id(transaction_id)
+        except StateTransactionError:
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        if not transaction_work_root.name.endswith(TRANSACTION_WORK_DIR_SUFFIX):
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        expected_work_root = _transaction_work_root_for(store_root, transaction_id)
+        if not _path_is_under_no_follow(stale_path, expected_work_root):
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        if not _path_is_under_no_follow(stale_path, store_root):
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        if stale_path.is_symlink() or not stale_path.exists() or not stale_path.is_file():
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        if stale_path_text not in stale_path_set:
+            _append_unique(skipped_artifact_paths, stale_path_text)
+            continue
+        stale_path.unlink()
+        _fsync_parent_best_effort(stale_path.parent)
+        _append_unique(deleted_artifact_paths, stale_path_text)
+
+    return TransactionTempCleanupResult(
+        deleted_artifact_paths=tuple(deleted_artifact_paths),
+        skipped_artifact_paths=tuple(skipped_artifact_paths),
+        stale_artifact_paths=inspection.stale_artifact_paths,
+        incomplete_transaction_ids=inspection.incomplete_transaction_ids,
+        recoverable_transaction_ids=inspection.recoverable_transaction_ids,
+        blocked_transaction_ids=inspection.blocked_transaction_ids,
+        invalid_metadata_paths=inspection.invalid_metadata_paths,
     )
 
 
