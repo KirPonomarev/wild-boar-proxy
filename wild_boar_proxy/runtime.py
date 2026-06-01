@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -819,7 +820,7 @@ def probe_runtime_identity_payload(
         if exc.code == 404:
             return None, "missing_runtime_identity"
         return None, "runtime_identity_probe_failed"
-    except urllib.error.URLError:
+    except (urllib.error.URLError, http.client.HTTPException):
         return None, "runtime_identity_probe_failed"
     except json.JSONDecodeError:
         return None, "invalid_runtime_identity"
@@ -7943,12 +7944,13 @@ def run_healthcheck(
         try:
             models_payload = http_get_json(f"{attestation_endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
-            responses_payload = http_post_json(
-                f"{attestation_endpoint}/responses",
-                api_key,
-                {"model": model_name, "input": "Respond with exactly OK"},
-            )
-            responses_ok = response_ok(responses_payload)
+            if models_ok:
+                responses_payload = http_post_json(
+                    f"{attestation_endpoint}/responses",
+                    api_key,
+                    {"model": model_name, "input": "Respond with exactly OK"},
+                )
+                responses_ok = response_ok(responses_payload)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore").strip()
             error_detail = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"

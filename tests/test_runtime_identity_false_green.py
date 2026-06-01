@@ -48,17 +48,36 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models" and self.mode in {
             "models_only",
+            "models_wrong_shape",
             "responses_ok",
             "responses_auth_unavailable",
+            "responses_invalid_json",
             "responses_status_ok_wrong_shape",
             "responses_not_ok",
             "identity_ok",
+            "identity_missing",
+            "identity_http_500",
+            "identity_transport_closed",
+            "identity_invalid_json",
             "identity_malformed",
             "identity_wrong_managed_config",
             "identity_wrong_selected_digest",
             "identity_wrong_endpoint",
         }:
-            body = json.dumps({"data": [{"id": "gpt-5.4"}]}).encode("utf-8")
+            payload = (
+                {"data": {"id": "gpt-5.4"}}
+                if self.mode == "models_wrong_shape"
+                else {"data": [{"id": "gpt-5.4"}]}
+            )
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/v1/models" and self.mode == "models_invalid_json":
+            body = b'{"data": ['
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -66,6 +85,25 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if self.path == "/v1/wbp/runtime-identity":
+            if self.mode == "identity_transport_closed":
+                self.close_connection = True
+                return
+            if self.mode == "identity_http_500":
+                body = b'{"error": "identity unavailable"}'
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.mode == "identity_invalid_json":
+                body = b'{"schema_version": '
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.mode == "identity_malformed":
                 body = b'["not-an-object"]'
                 self.send_response(200)
@@ -107,7 +145,12 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
             payload = {"output_text": "OK"}
             status_code = 200
         elif self.mode in {
+            "models_wrong_shape",
             "identity_ok",
+            "identity_missing",
+            "identity_http_500",
+            "identity_transport_closed",
+            "identity_invalid_json",
             "identity_malformed",
             "identity_wrong_managed_config",
             "identity_wrong_selected_digest",
@@ -115,6 +158,14 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
         }:
             payload = {"output_text": "OK"}
             status_code = 200
+        elif self.mode == "responses_invalid_json":
+            body = b'{"output_text": '
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         elif self.mode == "responses_status_ok_wrong_shape":
             payload = {"status": "OK"}
             status_code = 200
@@ -470,6 +521,8 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertNotIn(SENTINEL_SECRET, result.stdout)
         self.assertNotIn("sk-d0a-", result.stdout)
+        self.assertNotIn(SENTINEL_SECRET, result.stderr)
+        self.assertNotIn("sk-d0a-", result.stderr)
         payload = _strict_json_object(result.stdout)
         self.assertEqual(result.returncode, payload["exit_code"])
         self.assertEqual(result.returncode, 0 if expected_ok else 1)
@@ -544,9 +597,48 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             expected_blocking_reason="responses_probe_failed",
         )
 
+    def test_invalid_models_json_is_not_runtime_green(self) -> None:
+        self.assert_case(
+            handler_mode="models_invalid_json",
+            expected_attestation={
+                "listener_ok": True,
+                "models_ok": False,
+                "responses_ok": False,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+            expected_blocking_reason="models_surface_unavailable_or_invalid",
+        )
+
+    def test_wrong_shape_models_json_is_not_runtime_green(self) -> None:
+        self.assert_case(
+            handler_mode="models_wrong_shape",
+            expected_attestation={
+                "listener_ok": True,
+                "models_ok": False,
+                "responses_ok": False,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+            expected_blocking_reason="models_surface_unavailable_or_invalid",
+        )
+
     def test_broken_responses_proof_is_not_runtime_green(self) -> None:
         self.assert_case(
             handler_mode="responses_not_ok",
+            expected_attestation={
+                "listener_ok": True,
+                "models_ok": True,
+                "responses_ok": False,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+            expected_blocking_reason="responses_probe_failed",
+        )
+
+    def test_invalid_responses_json_is_not_runtime_green(self) -> None:
+        self.assert_case(
+            handler_mode="responses_invalid_json",
             expected_attestation={
                 "listener_ok": True,
                 "models_ok": True,
@@ -599,6 +691,38 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             handler_mode="identity_malformed",
             expected_ok=False,
             expected_identity_failure_reason="invalid_runtime_identity",
+            expected_runtime_marker="",
+        )
+
+    def test_missing_runtime_identity_endpoint_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_missing",
+            expected_ok=False,
+            expected_identity_failure_reason="missing_runtime_identity",
+            expected_runtime_marker="",
+        )
+
+    def test_runtime_identity_transport_close_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_transport_closed",
+            expected_ok=False,
+            expected_identity_failure_reason="runtime_identity_probe_failed",
+            expected_runtime_marker="",
+        )
+
+    def test_runtime_identity_invalid_json_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_invalid_json",
+            expected_ok=False,
+            expected_identity_failure_reason="invalid_runtime_identity",
+            expected_runtime_marker="",
+        )
+
+    def test_runtime_identity_http_500_is_not_runtime_green(self) -> None:
+        self.assert_identity_probe_case(
+            handler_mode="identity_http_500",
+            expected_ok=False,
+            expected_identity_failure_reason="runtime_identity_probe_failed",
             expected_runtime_marker="",
         )
 
