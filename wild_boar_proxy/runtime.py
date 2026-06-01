@@ -798,6 +798,37 @@ def truth_drift_detail(
     return "; ".join(drift_parts)
 
 
+def get_managed_config_identity(paths: RuntimePaths) -> str:
+    if not paths.managed_config_file.exists():
+        return ""
+    return hashlib.sha256(paths.managed_config_file.read_bytes()).hexdigest()
+
+
+def build_runtime_identity_proof(
+    paths: RuntimePaths,
+    *,
+    reported_effective_mode: str,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    identity_required = reported_effective_mode == "managed"
+    runtime_marker = ""
+    identity_failure_reason = ""
+    if identity_required and not runtime_marker:
+        identity_failure_reason = "missing_runtime_identity"
+    return {
+        "managed_config_identity": (
+            get_managed_config_identity(paths) if identity_required else ""
+        ),
+        "runtime_marker": runtime_marker,
+        "runtime_version": str(
+            state.get("version", state.get("schema_version", "unknown"))
+        ),
+        "identity_proof_required": identity_required,
+        "identity_proof_ok": not identity_required or not identity_failure_reason,
+        "identity_failure_reason": identity_failure_reason,
+    }
+
+
 def build_launch_readiness_surface(
     *,
     owner_command_surface: str,
@@ -812,6 +843,9 @@ def build_launch_readiness_surface(
     machine_error_code: str,
     error_detail: str,
     auth_pool_hygiene: dict[str, Any] | None = None,
+    identity_proof_required: bool = False,
+    identity_proof_ok: bool = True,
+    identity_failure_reason: str = "",
 ) -> dict[str, Any]:
     failed_checks: list[str] = []
     if not listener_ok:
@@ -828,6 +862,8 @@ def build_launch_readiness_surface(
         failed_checks.append("model_truth_drift")
     if not proxy_url_match:
         failed_checks.append("proxy_truth_drift")
+    if identity_proof_required and not identity_proof_ok:
+        failed_checks.append("runtime_identity_unproven")
     auth_pool_hygiene_status = ""
     launch_capable_backend_count = None
     if isinstance(auth_pool_hygiene, dict):
@@ -858,6 +894,9 @@ def build_launch_readiness_surface(
         "effective_mode_match": effective_mode_match,
         "model_match": model_match,
         "proxy_url_match": proxy_url_match,
+        "runtime_identity_required": identity_proof_required,
+        "runtime_identity_proof_passed": identity_proof_ok,
+        "runtime_identity_failure_reason": identity_failure_reason,
         "gate_passed": gate_passed,
         "blocking_reason": "" if gate_passed else failed_checks[0],
         "failed_checks": failed_checks,
@@ -7821,6 +7860,13 @@ def run_healthcheck(
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    identity_proof = build_runtime_identity_proof(
+        paths,
+        reported_effective_mode=reported_effective_mode,
+        state=state,
+    )
+    identity_proof_ok = bool(identity_proof["identity_proof_ok"])
+    identity_failure_reason = str(identity_proof["identity_failure_reason"])
     if not error_detail:
         error_detail = truth_drift_detail(
             configured_model=configured_model,
@@ -7851,6 +7897,24 @@ def run_healthcheck(
         and effective_mode_match
         and model_match
         and proxy_url_match
+        and not identity_proof_ok
+    ):
+        liveness = "degraded"
+        severity = "recoverable"
+        operator_action = "retry"
+        machine_error_code = "RUNTIME_IDENTITY_UNPROVEN"
+        human_message = "Managed runtime identity proof is missing or invalid."
+        if not error_detail:
+            error_detail = identity_failure_reason or "runtime_identity_unproven"
+        ok = False
+    elif (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+        and identity_proof_ok
     ):
         liveness = "healthy"
         severity = "recoverable"
@@ -8187,9 +8251,9 @@ def run_healthcheck(
         "current_proxy_url": current_proxy_url,
         "proxy_url_match": proxy_url_match,
         "selected_backends_digest": get_selected_backends_digest(state),
-        "observed_at_utc": now_iso(),
-        "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": owner_command_surface,
+        "observed_at_utc": now_iso(),
+        **identity_proof,
     }
     launch_readiness = build_launch_readiness_surface(
         owner_command_surface=owner_command_surface,
@@ -8213,6 +8277,9 @@ def run_healthcheck(
             )
         ),
         auth_pool_hygiene=auth_pool_hygiene,
+        identity_proof_required=bool(identity_proof["identity_proof_required"]),
+        identity_proof_ok=identity_proof_ok,
+        identity_failure_reason=identity_failure_reason,
     )
     native_auth_recovery_hint = build_native_auth_recovery_hint(
         machine_error_code=machine_error_code,

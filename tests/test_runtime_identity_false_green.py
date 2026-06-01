@@ -45,6 +45,7 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models" and self.mode in {
             "models_only",
+            "responses_ok",
             "responses_auth_unavailable",
             "responses_status_ok_wrong_shape",
             "responses_not_ok",
@@ -72,6 +73,9 @@ class _FalseGreenProbeHandler(BaseHTTPRequestHandler):
                 }
             }
             status_code = 503
+        elif self.mode == "responses_ok":
+            payload = {"output_text": "OK"}
+            status_code = 200
         elif self.mode == "responses_status_ok_wrong_shape":
             payload = {"status": "OK"}
             status_code = 200
@@ -290,9 +294,23 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
             "responses_ok",
             "effective_mode_match",
             "base_url_match",
+            "identity_proof_required",
+            "identity_proof_ok",
         ):
             self.assertIsInstance(observed_attestation[field], bool)
         self.assertIsInstance(observed_attestation["observed_at_utc"], str)
+        self.assertIsInstance(observed_attestation["managed_config_identity"], str)
+        self.assertIsInstance(observed_attestation["runtime_marker"], str)
+        self.assertIsInstance(observed_attestation["runtime_version"], str)
+        self.assertIsInstance(observed_attestation["identity_failure_reason"], str)
+        self.assertTrue(observed_attestation["identity_proof_required"])
+        self.assertFalse(observed_attestation["identity_proof_ok"])
+        self.assertEqual(
+            observed_attestation["identity_failure_reason"],
+            "missing_runtime_identity",
+        )
+        self.assertNotEqual(observed_attestation["managed_config_identity"], "")
+        self.assertEqual(observed_attestation["runtime_marker"], "")
         for field, expected in attestation.items():
             self.assertEqual(observed_attestation[field], expected)
 
@@ -300,6 +318,12 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
         self.assertFalse(launch_readiness["gate_passed"])
         self.assertEqual(launch_readiness["status"], "blocked")
         self.assertEqual(launch_readiness["blocking_reason"], blocking_reason)
+        self.assertTrue(launch_readiness["runtime_identity_required"])
+        self.assertFalse(launch_readiness["runtime_identity_proof_passed"])
+        self.assertEqual(
+            launch_readiness["runtime_identity_failure_reason"],
+            "missing_runtime_identity",
+        )
         self.assertEqual(
             launch_readiness["owner_command_surface"], "healthcheck --json"
         )
@@ -400,6 +424,22 @@ class RuntimeIdentityFalseGreenTests(unittest.TestCase):
                 "base_url_match": True,
             },
             expected_blocking_reason="responses_probe_failed",
+        )
+
+    def test_foreign_openai_compatible_endpoint_without_identity_is_not_runtime_green(
+        self,
+    ) -> None:
+        self.assert_case(
+            handler_mode="responses_ok",
+            expected_attestation={
+                "listener_ok": True,
+                "models_ok": True,
+                "responses_ok": True,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+            expected_blocking_reason="runtime_identity_unproven",
+            expected_machine_error_code="RUNTIME_IDENTITY_UNPROVEN",
         )
 
     def test_unusable_auth_pool_is_not_runtime_green(self) -> None:
