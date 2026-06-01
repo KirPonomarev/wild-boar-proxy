@@ -56,6 +56,28 @@ class StateTransactionMetadataTests(unittest.TestCase):
             error=error,
         )
 
+    def write_store_metadata(
+        self,
+        transaction_id: str,
+        *,
+        state: str = state_transaction.TRANSACTION_COMMITTED,
+        committed: bool = True,
+        sha256_after: str | None = "after",
+        error: str | None = None,
+    ) -> Path:
+        store_root = self.root / "transactions"
+        metadata = self.metadata(
+            state=state,
+            files=(self.file_record(committed=committed, sha256_after=sha256_after),)
+            if state != state_transaction.TRANSACTION_PREPARING
+            else (),
+            transaction_id=transaction_id,
+            error=error,
+        )
+        metadata_path = state_transaction.transaction_metadata_path(store_root, transaction_id)
+        state_transaction.write_transaction_metadata(metadata_path, metadata)
+        return metadata_path
+
     def test_valid_metadata_roundtrip_through_state_store(self) -> None:
         metadata = self.metadata(state=state_transaction.TRANSACTION_COMMITTED, files=(self.file_record(committed=True),))
 
@@ -98,6 +120,19 @@ class StateTransactionMetadataTests(unittest.TestCase):
         for transaction_id in ("../txn", "nested/txn", "nested\\txn", "txn..escape", ""):
             with self.assertRaises(state_transaction.StateTransactionError):
                 state_transaction.validate_transaction_id(transaction_id)
+
+    def test_transaction_metadata_path_rejects_relative_root_and_bad_id(self) -> None:
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.transaction_metadata_path(Path("relative"), "txn-001")
+
+        for transaction_id in ("../txn", "nested/txn", "nested\\txn", "txn\x00bad", ""):
+            with self.assertRaises(state_transaction.StateTransactionError):
+                state_transaction.transaction_metadata_path(self.root / "transactions", transaction_id)
+
+    def test_transaction_metadata_path_uses_validated_transaction_id(self) -> None:
+        path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-001")
+
+        self.assertEqual(path, (self.root / "transactions" / "txn-001.transaction.json").resolve(strict=False))
 
     def test_nul_in_transaction_id_or_path_blocks(self) -> None:
         with self.assertRaises(state_transaction.StateTransactionError):
@@ -246,6 +281,271 @@ class StateTransactionMetadataTests(unittest.TestCase):
 
         self.assertEqual(calls, ["write_json"])
 
+    def test_missing_transaction_store_classifies_clean(self) -> None:
+        classification = state_transaction.classify_transaction_store(self.root / "missing-transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_CLEAN)
+        self.assertEqual(classification.machine_error_code, state_transaction.STATE_TRANSACTION_CLEAN)
+        self.assertEqual(classification.transaction_ids, ())
+
+    def test_transaction_store_relative_root_blocks_classification(self) -> None:
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.classify_transaction_store(Path("relative-transactions"))
+
+    def test_empty_transaction_store_classifies_clean(self) -> None:
+        store_root = self.root / "transactions"
+        store_root.mkdir()
+
+        classification = state_transaction.classify_transaction_store(store_root)
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_CLEAN)
+        self.assertEqual(classification.transaction_ids, ())
+
+    def test_transaction_store_root_file_blocks_listing(self) -> None:
+        store_root = self.root / "transactions"
+        store_root.write_text("not a dir", encoding="utf-8")
+
+        with self.assertRaises(state_transaction.StateTransactionError):
+            state_transaction.list_transaction_metadata(store_root)
+
+    def test_list_transaction_metadata_is_top_level_suffix_only_and_sorted(self) -> None:
+        self.write_store_metadata("txn-b", state=state_transaction.TRANSACTION_COMMITTED)
+        self.write_store_metadata("txn-a", state=state_transaction.TRANSACTION_COMMITTED)
+        store_root = self.root / "transactions"
+        (store_root / "txn-c.json").write_text("{}", encoding="utf-8")
+        (store_root / "txn-d.transaction.json.backup").write_text("{}", encoding="utf-8")
+        nested_root = store_root / "nested"
+        nested_root.mkdir()
+        (nested_root / "txn-nested.transaction.json").write_text("{}", encoding="utf-8")
+
+        metadata_paths = state_transaction.list_transaction_metadata(store_root)
+
+        self.assertEqual(
+            tuple(path.name for path in metadata_paths),
+            ("txn-a.transaction.json", "txn-b.transaction.json"),
+        )
+
+    def test_committed_only_transaction_store_classifies_clean(self) -> None:
+        self.write_store_metadata("txn-001", state=state_transaction.TRANSACTION_COMMITTED)
+        self.write_store_metadata("txn-002", state=state_transaction.TRANSACTION_COMMITTED)
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_CLEAN)
+        self.assertEqual(classification.transaction_ids, ("txn-001", "txn-002"))
+
+    def test_incomplete_transaction_store_classifies_incomplete(self) -> None:
+        for state in (
+            state_transaction.TRANSACTION_PREPARING,
+            state_transaction.TRANSACTION_PREPARED,
+            state_transaction.TRANSACTION_COMMITTING,
+        ):
+            with self.subTest(state=state):
+                temp_dir = tempfile.TemporaryDirectory()
+                self.addCleanup(temp_dir.cleanup)
+                root = Path(temp_dir.name)
+                store_root = root / "transactions"
+                file_record = state_transaction.TransactionFileRecord(
+                    target_path=str(root / "state.json"),
+                    temp_path=str(root / ".tmp-state.json"),
+                    backup_path=str(root / "state.json.backup"),
+                    sha256_before="before",
+                    sha256_after="after",
+                    committed=False,
+                )
+                metadata = state_transaction.TransactionMetadata(
+                    schema_version=state_transaction.TRANSACTION_METADATA_SCHEMA_VERSION,
+                    transaction_id=f"txn-{state}",
+                    state=state,
+                    created_at_utc="2026-06-01T12:00:00+00:00",
+                    updated_at_utc="2026-06-01T12:01:00+00:00",
+                    transaction_root=str(root),
+                    files=(file_record,) if state != state_transaction.TRANSACTION_PREPARING else (),
+                    error=None,
+                )
+                state_transaction.write_transaction_metadata(
+                    state_transaction.transaction_metadata_path(store_root, metadata.transaction_id),
+                    metadata,
+                )
+
+                classification = state_transaction.classify_transaction_store(store_root)
+
+                self.assertEqual(classification.classification, state_transaction.TRANSACTION_INCOMPLETE)
+                self.assertEqual(classification.incomplete_transaction_ids, (metadata.transaction_id,))
+
+    def test_failed_recoverable_transaction_store_classifies_recoverable(self) -> None:
+        self.write_store_metadata(
+            "txn-recoverable",
+            state=state_transaction.TRANSACTION_FAILED_RECOVERABLE,
+            error="publish failed",
+        )
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_RECOVERABLE)
+        self.assertEqual(classification.recoverable_transaction_ids, ("txn-recoverable",))
+
+    def test_failed_blocked_transaction_store_classifies_blocked(self) -> None:
+        self.write_store_metadata(
+            "txn-blocked",
+            state=state_transaction.TRANSACTION_FAILED_BLOCKED,
+            error="unsafe",
+        )
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(classification.blocked_transaction_ids, ("txn-blocked",))
+
+    def test_corrupt_canonical_metadata_blocks_store(self) -> None:
+        metadata_path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-corrupt")
+        metadata_path.parent.mkdir(parents=True)
+        metadata_path.write_text("{not-json", encoding="utf-8")
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(
+            classification.invalid_metadata_paths,
+            (str(metadata_path.parent.resolve(strict=False) / metadata_path.name),),
+        )
+
+    def test_invalid_canonical_metadata_blocks_store(self) -> None:
+        metadata_path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-invalid")
+        metadata_path.parent.mkdir(parents=True)
+        metadata_path.write_text(
+            '{"schema_version": 1, "transaction_id": "txn-invalid", "state": "done"}',
+            encoding="utf-8",
+        )
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(
+            classification.invalid_metadata_paths,
+            (str(metadata_path.parent.resolve(strict=False) / metadata_path.name),),
+        )
+
+    def test_invalid_canonical_metadata_filename_blocks_store(self) -> None:
+        metadata_path = self.root / "transactions" / ".transaction.json"
+        metadata_path.parent.mkdir(parents=True)
+        metadata_path.write_text("{}", encoding="utf-8")
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(
+            classification.invalid_metadata_paths,
+            (str(metadata_path.parent.resolve(strict=False) / metadata_path.name),),
+        )
+
+    def test_directory_canonical_metadata_candidate_blocks_store(self) -> None:
+        metadata_path = self.root / "transactions" / "txn-dir.transaction.json"
+        metadata_path.mkdir(parents=True)
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(classification.invalid_metadata_paths, (str(metadata_path.resolve(strict=False)),))
+
+    def test_symlink_canonical_metadata_candidate_blocks_store(self) -> None:
+        outside = self.root / "outside.transaction.json"
+        outside.write_text("{}", encoding="utf-8")
+        metadata_path = self.root / "transactions" / "txn-link.transaction.json"
+        metadata_path.parent.mkdir(parents=True)
+        try:
+            metadata_path.symlink_to(outside)
+        except (NotImplementedError, OSError) as exc:
+            self.skipTest(f"symlink unavailable: {exc}")
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(
+            classification.invalid_metadata_paths,
+            (str(metadata_path.parent.resolve(strict=False) / metadata_path.name),),
+        )
+
+    def test_foreign_non_metadata_files_are_ignored_by_store_classification(self) -> None:
+        store_root = self.root / "transactions"
+        store_root.mkdir()
+        (store_root / ".DS_Store").write_text("foreign", encoding="utf-8")
+        (store_root / "notes.txt").write_text("foreign", encoding="utf-8")
+
+        classification = state_transaction.classify_transaction_store(store_root)
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_CLEAN)
+        self.assertEqual(classification.invalid_metadata_paths, ())
+
+    def test_blocked_store_precedence_beats_recoverable_and_incomplete(self) -> None:
+        self.write_store_metadata("txn-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+        self.write_store_metadata(
+            "txn-recoverable",
+            state=state_transaction.TRANSACTION_FAILED_RECOVERABLE,
+            error="publish failed",
+        )
+        self.write_store_metadata(
+            "txn-blocked",
+            state=state_transaction.TRANSACTION_FAILED_BLOCKED,
+            error="unsafe",
+        )
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(classification.blocked_transaction_ids, ("txn-blocked",))
+        self.assertEqual(classification.recoverable_transaction_ids, ("txn-recoverable",))
+        self.assertEqual(classification.incomplete_transaction_ids, ("txn-incomplete",))
+
+    def test_invalid_store_precedence_beats_clean_recoverable_and_incomplete(self) -> None:
+        self.write_store_metadata("txn-clean", state=state_transaction.TRANSACTION_COMMITTED)
+        self.write_store_metadata("txn-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+        self.write_store_metadata(
+            "txn-recoverable",
+            state=state_transaction.TRANSACTION_FAILED_RECOVERABLE,
+            error="publish failed",
+        )
+        invalid_path = state_transaction.transaction_metadata_path(self.root / "transactions", "txn-invalid")
+        invalid_path.write_text("{not-json", encoding="utf-8")
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_BLOCKED)
+        self.assertEqual(classification.transaction_ids, ("txn-clean", "txn-incomplete", "txn-recoverable"))
+        self.assertEqual(classification.recoverable_transaction_ids, ("txn-recoverable",))
+        self.assertEqual(classification.incomplete_transaction_ids, ("txn-incomplete",))
+        self.assertEqual(
+            classification.invalid_metadata_paths,
+            (str(invalid_path.parent.resolve(strict=False) / invalid_path.name),),
+        )
+
+    def test_recoverable_store_precedence_beats_incomplete(self) -> None:
+        self.write_store_metadata("txn-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+        self.write_store_metadata(
+            "txn-recoverable",
+            state=state_transaction.TRANSACTION_FAILED_RECOVERABLE,
+            error="publish failed",
+        )
+
+        classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_RECOVERABLE)
+        self.assertEqual(classification.recoverable_transaction_ids, ("txn-recoverable",))
+        self.assertEqual(classification.incomplete_transaction_ids, ("txn-incomplete",))
+
+    def test_store_classification_does_not_write(self) -> None:
+        self.write_store_metadata("txn-001", state=state_transaction.TRANSACTION_COMMITTED)
+
+        with (
+            mock.patch.object(state_transaction.state_store, "write_json") as write_json,
+            mock.patch.object(state_transaction.state_store, "write_text") as write_text,
+        ):
+            classification = state_transaction.classify_transaction_store(self.root / "transactions")
+
+        self.assertEqual(classification.classification, state_transaction.TRANSACTION_CLEAN)
+        write_json.assert_not_called()
+        write_text.assert_not_called()
+
     def test_metadata_module_does_not_import_runtime_layers(self) -> None:
         source = Path(state_transaction.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -268,18 +568,27 @@ class StateTransactionMetadataTests(unittest.TestCase):
     def test_classification_and_result_are_not_command_packets(self) -> None:
         classification_fields = set(state_transaction.TransactionClassification.__dataclass_fields__)
         result_fields = set(state_transaction.TransactionMetadataWriteResult.__dataclass_fields__)
+        store_classification_fields = set(state_transaction.TransactionStoreClassification.__dataclass_fields__)
 
         forbidden = {
+            "changed_files",
+            "committed",
             "effect",
             "exit_code",
             "human_message",
             "liveness",
             "next_action",
+            "operator_action",
+            "rollback_available",
             "severity",
+            "schema_version",
             "status",
+            "target",
         }
-        self.assertTrue(forbidden.isdisjoint(classification_fields))
-        self.assertTrue(forbidden.isdisjoint(result_fields))
+        packet_forbidden = forbidden - {"changed_files", "committed", "schema_version", "target"}
+        self.assertTrue(packet_forbidden.isdisjoint(classification_fields))
+        self.assertTrue(packet_forbidden.isdisjoint(result_fields))
+        self.assertTrue(forbidden.isdisjoint(store_classification_fields))
 
 
 if __name__ == "__main__":

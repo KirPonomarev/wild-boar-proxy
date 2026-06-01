@@ -24,6 +24,7 @@ TRANSACTION_CLEAN = "clean"
 TRANSACTION_INCOMPLETE = "incomplete"
 TRANSACTION_RECOVERABLE = "recoverable"
 TRANSACTION_BLOCKED = "blocked"
+TRANSACTION_METADATA_SUFFIX = ".transaction.json"
 
 STATE_TRANSACTION_INVALID = "STATE_TRANSACTION_INVALID"
 STATE_TRANSACTION_INCOMPLETE = "STATE_TRANSACTION_INCOMPLETE"
@@ -87,6 +88,17 @@ class TransactionMetadataWriteResult:
     schema_version: int
 
 
+@dataclass(frozen=True)
+class TransactionStoreClassification:
+    classification: str
+    machine_error_code: str
+    transaction_ids: tuple[str, ...]
+    incomplete_transaction_ids: tuple[str, ...]
+    recoverable_transaction_ids: tuple[str, ...]
+    blocked_transaction_ids: tuple[str, ...]
+    invalid_metadata_paths: tuple[str, ...]
+
+
 class StateTransactionError(Exception):
     def __init__(self, message: str, *, machine_error_code: str) -> None:
         super().__init__(message)
@@ -108,6 +120,16 @@ def validate_transaction_id(transaction_id: str) -> str:
             machine_error_code=STATE_TRANSACTION_INVALID,
         )
     return transaction_id
+
+
+def _require_absolute_store_root(root: Path) -> Path:
+    transaction_store_root = Path(root)
+    if not transaction_store_root.is_absolute():
+        raise StateTransactionError(
+            "Transaction store root must be absolute.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    return transaction_store_root.resolve(strict=False)
 
 
 def _parse_utc(value: str) -> datetime:
@@ -361,4 +383,123 @@ def write_transaction_metadata(
         target=result.target,
         changed_files=result.changed_files,
         schema_version=TRANSACTION_METADATA_SCHEMA_VERSION,
+    )
+
+
+def transaction_metadata_path(root: Path, transaction_id: str) -> Path:
+    store_root = _require_absolute_store_root(Path(root))
+    validated_transaction_id = validate_transaction_id(transaction_id)
+    return store_root / f"{validated_transaction_id}{TRANSACTION_METADATA_SUFFIX}"
+
+
+def _transaction_id_from_metadata_path(path: Path) -> str:
+    name = path.name
+    if not name.endswith(TRANSACTION_METADATA_SUFFIX):
+        raise StateTransactionError(
+            "Transaction metadata path has invalid suffix.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    transaction_id = name[: -len(TRANSACTION_METADATA_SUFFIX)]
+    return validate_transaction_id(transaction_id)
+
+
+def list_transaction_metadata(root: Path) -> tuple[Path, ...]:
+    store_root = _require_absolute_store_root(Path(root))
+    if not store_root.exists():
+        return ()
+    if not store_root.is_dir():
+        raise StateTransactionError(
+            "Transaction store root must be a directory.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    metadata_paths: list[Path] = []
+    for candidate in sorted(store_root.iterdir(), key=lambda item: item.name):
+        if not candidate.name.endswith(TRANSACTION_METADATA_SUFFIX):
+            continue
+        metadata_paths.append(candidate)
+    return tuple(metadata_paths)
+
+
+def _store_classification(
+    classification: str,
+    machine_error_code: str,
+    *,
+    transaction_ids: tuple[str, ...],
+    incomplete_transaction_ids: tuple[str, ...] = (),
+    recoverable_transaction_ids: tuple[str, ...] = (),
+    blocked_transaction_ids: tuple[str, ...] = (),
+    invalid_metadata_paths: tuple[str, ...] = (),
+) -> TransactionStoreClassification:
+    return TransactionStoreClassification(
+        classification=classification,
+        machine_error_code=machine_error_code,
+        transaction_ids=transaction_ids,
+        incomplete_transaction_ids=incomplete_transaction_ids,
+        recoverable_transaction_ids=recoverable_transaction_ids,
+        blocked_transaction_ids=blocked_transaction_ids,
+        invalid_metadata_paths=invalid_metadata_paths,
+    )
+
+
+def classify_transaction_store(root: Path) -> TransactionStoreClassification:
+    metadata_paths = list_transaction_metadata(root)
+    transaction_ids: list[str] = []
+    incomplete_transaction_ids: list[str] = []
+    recoverable_transaction_ids: list[str] = []
+    blocked_transaction_ids: list[str] = []
+    invalid_metadata_paths: list[str] = []
+
+    for metadata_path in metadata_paths:
+        try:
+            transaction_id = _transaction_id_from_metadata_path(metadata_path)
+            if metadata_path.is_symlink() or not metadata_path.is_file():
+                raise StateTransactionError(
+                    "Transaction metadata path must be a regular file.",
+                    machine_error_code=STATE_TRANSACTION_INVALID,
+                )
+            metadata = read_transaction_metadata(metadata_path)
+            classification = classify_transaction_metadata(metadata)
+        except (OSError, StateTransactionError, state_store.StateStoreError):
+            invalid_metadata_paths.append(str(metadata_path))
+            continue
+
+        transaction_ids.append(transaction_id)
+        if classification.classification == TRANSACTION_BLOCKED:
+            blocked_transaction_ids.append(transaction_id)
+        elif classification.classification == TRANSACTION_RECOVERABLE:
+            recoverable_transaction_ids.append(transaction_id)
+        elif classification.classification == TRANSACTION_INCOMPLETE:
+            incomplete_transaction_ids.append(transaction_id)
+
+    transaction_ids_tuple = tuple(transaction_ids)
+    invalid_metadata_paths_tuple = tuple(invalid_metadata_paths)
+    if invalid_metadata_paths_tuple or blocked_transaction_ids:
+        return _store_classification(
+            TRANSACTION_BLOCKED,
+            STATE_TRANSACTION_FAILED_BLOCKED,
+            transaction_ids=transaction_ids_tuple,
+            incomplete_transaction_ids=tuple(incomplete_transaction_ids),
+            recoverable_transaction_ids=tuple(recoverable_transaction_ids),
+            blocked_transaction_ids=tuple(blocked_transaction_ids),
+            invalid_metadata_paths=invalid_metadata_paths_tuple,
+        )
+    if recoverable_transaction_ids:
+        return _store_classification(
+            TRANSACTION_RECOVERABLE,
+            STATE_TRANSACTION_FAILED_RECOVERABLE,
+            transaction_ids=transaction_ids_tuple,
+            incomplete_transaction_ids=tuple(incomplete_transaction_ids),
+            recoverable_transaction_ids=tuple(recoverable_transaction_ids),
+        )
+    if incomplete_transaction_ids:
+        return _store_classification(
+            TRANSACTION_INCOMPLETE,
+            STATE_TRANSACTION_INCOMPLETE,
+            transaction_ids=transaction_ids_tuple,
+            incomplete_transaction_ids=tuple(incomplete_transaction_ids),
+        )
+    return _store_classification(
+        TRANSACTION_CLEAN,
+        STATE_TRANSACTION_CLEAN,
+        transaction_ids=transaction_ids_tuple,
     )
