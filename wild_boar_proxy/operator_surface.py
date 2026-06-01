@@ -83,6 +83,31 @@ BRIDGE_CANONICAL_RECOVERABLE_CODES = {
 }
 
 
+def _normalize_local_openai_endpoint(raw_endpoint: Any) -> str:
+    text = str(raw_endpoint or "").strip()
+    if not text:
+        return ""
+    if not text.startswith(("http://", "https://")):
+        text = f"http://{text}"
+    try:
+        parsed = urllib.parse.urlparse(text)
+    except ValueError:
+        return ""
+    host = parsed.hostname or ""
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        return ""
+    normalized = text.rstrip("/")
+    return normalized if normalized.endswith("/v1") else f"{normalized}/v1"
+
+
+def _runtime_status_endpoint_from_packet(packet: Any) -> str:
+    if not isinstance(packet, dict):
+        return ""
+    if packet.get("status") != "ok" or packet.get("machine_error_code") != "OK":
+        return ""
+    return _normalize_local_openai_endpoint(packet.get("endpoint"))
+
+
 def _canonical_bridge_error_code(
     code: str,
     *,
@@ -2749,6 +2774,22 @@ class OperatorSurfaceSession:
     def local_api_key(self) -> str:
         return extract_local_api_key(self.config.runtime_config)
 
+    def runtime_wbp_endpoint(self) -> tuple[str, str, dict[str, Any]]:
+        status = self.run_wbp(["status", "--json"])
+        packet = status.get("json") if isinstance(status.get("json"), dict) else {}
+        endpoint = _runtime_status_endpoint_from_packet(packet)
+        summary = {
+            "status": packet.get("status") if isinstance(packet, dict) else None,
+            "machine_error_code": packet.get("machine_error_code") if isinstance(packet, dict) else None,
+            "liveness": packet.get("liveness") if isinstance(packet, dict) else None,
+            "effective_mode": packet.get("effective_mode") if isinstance(packet, dict) else None,
+            "endpoint": endpoint,
+            "source": "status_json" if endpoint else "operator_config",
+        }
+        if endpoint:
+            return endpoint, "status_json", summary
+        return self.config.endpoint.rstrip("/"), "operator_config", summary
+
     def probe_models(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             "status_code": None,
@@ -2760,8 +2801,9 @@ class OperatorSurfaceSession:
             "captured_at_utc": utc_now(),
         }
         try:
+            endpoint, _endpoint_source, _endpoint_status = self.runtime_wbp_endpoint()
             request = urllib.request.Request(
-                f"{self.config.endpoint}/models",
+                f"{endpoint}/models",
                 headers={"Authorization": f"Bearer {self.local_api_key()}"},
             )
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -2957,10 +2999,15 @@ class OperatorSurfaceSession:
                 "refresh_packet": self.status_payload(),
                 "secret_value_recorded": False,
             }
+        (
+            resolved_wbp_endpoint,
+            resolved_wbp_endpoint_source,
+            resolved_wbp_endpoint_status,
+        ) = self.runtime_wbp_endpoint()
         configured_provider = "cliproxy"
         configured_wire_api = "responses"
         configured_label = "CLIProxyAPI via Wild Boar Proxy"
-        downstream_endpoint = self.config.endpoint
+        downstream_endpoint = resolved_wbp_endpoint
         runtime_model = selected_model
         route_provider_endpoint = ""
         route_secret = ""
@@ -3304,6 +3351,8 @@ class OperatorSurfaceSession:
             "runtime_model": runtime_model,
             "configured_base_url": effective_endpoint,
             "downstream_wbp_endpoint": downstream_endpoint,
+            "runtime_wbp_endpoint_source": resolved_wbp_endpoint_source,
+            "runtime_wbp_endpoint_status": resolved_wbp_endpoint_status,
             "route_provider_endpoint": route_provider_endpoint,
             "route_adapter_used": route_record is not None,
             "configured_wire_api": configured_wire_api,
