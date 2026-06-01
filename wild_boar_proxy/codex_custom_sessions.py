@@ -2639,6 +2639,7 @@ class CodexCustomSessionManager:
         target.write_text(before_text, encoding="utf-8")
         before_existed = target.exists()
         before_content = target.read_text(encoding="utf-8", errors="replace") if before_existed else ""
+        before_sha256 = _digest(before_content) if before_existed else ""
         expected_text = "WBP_API_ONLY_DEEPSEEK_EDIT_OK"
         result: dict[str, Any] = {
             "status": "failed",
@@ -2669,6 +2670,7 @@ class CodexCustomSessionManager:
 
         after_existed = target.exists()
         after_content = target.read_text(encoding="utf-8", errors="replace") if after_existed else ""
+        after_sha256 = _digest(after_content) if after_existed else ""
         status_after = _run_git_command(repo, ["status", "--porcelain=v1", "-uall"])
         status_after_lines = str(status_after.get("stdout") or "").splitlines()
 
@@ -2692,16 +2694,45 @@ class CodexCustomSessionManager:
         file_changed_by_codex_tool = after_existed and file_content_matches and (
             not before_existed or before_content != after_content
         )
+        proof_file_digests_present = bool(before_sha256 and after_sha256)
+        proof_file_digest_changed = bool(
+            proof_file_digests_present and before_sha256 != after_sha256
+        )
+        selected_model_equals_bound_route = model_id == api_model_id
+        dispatch_target_deepseek_route = bool(
+            provider_response_proven
+            and result.get("configured_provider") == "external_route"
+            and result.get("runtime_model") == model_id
+            and "deepseek" in model_id.lower()
+        )
+        proof_file_mutation_observed_after_dispatch = bool(
+            dispatch_target_deepseek_route
+            and tool_loop_proven
+            and file_changed_by_codex_tool
+            and proof_file_digest_changed
+        )
+        route_bound_live_edit_proof_chain_proven = bool(
+            selected_model_equals_bound_route
+            and dispatch_target_deepseek_route
+            and proof_file_mutation_observed_after_dispatch
+            and not outside_write_surface_changed
+            and result.get("current_codex_home_used") is False
+        )
         success = (
             provider_response_proven
             and tool_loop_proven
             and result.get("configured_provider") == "external_route"
             and result.get("runtime_model") == model_id
+            and selected_model_equals_bound_route
+            and dispatch_target_deepseek_route
             and result.get("workspace_write_admitted") is True
             and result.get("additional_writable_dir_admitted") is True
             and after_existed
             and file_content_matches
             and file_changed_by_codex_tool
+            and proof_file_digests_present
+            and proof_file_digest_changed
+            and proof_file_mutation_observed_after_dispatch
             and not outside_write_surface_changed
             and result.get("current_codex_home_used") is False
             and result.get("secret_value_recorded") is False
@@ -2717,6 +2748,12 @@ class CodexCustomSessionManager:
             "session_id": session_id,
             "model_id": model_id,
             "provider_id": "deepseek",
+            "bound_route_model": model_id,
+            "selected_model_equals_bound_route": selected_model_equals_bound_route,
+            "dispatch_target_provider_id": "deepseek",
+            "dispatch_target_model": model_id,
+            "dispatch_target_deepseek_route": dispatch_target_deepseek_route,
+            "route_bound_live_edit_proof_chain_proven": route_bound_live_edit_proof_chain_proven,
             "current_execution_slot_id": PRIMARY_MODEL_SLOT,
             "selected_source_class": slot.get("selected_source_class"),
             "selected_from_server_catalog": slot.get("server_issued") is True,
@@ -2739,7 +2776,12 @@ class CodexCustomSessionManager:
             "file_existed_after_tool": after_existed,
             "file_changed_by_codex_tool": file_changed_by_codex_tool,
             "file_content_matches": file_content_matches,
-            "file_sha256": _digest(after_content) if after_existed else "",
+            "proof_file_before_sha256": before_sha256,
+            "proof_file_after_sha256": after_sha256,
+            "proof_file_digests_present": proof_file_digests_present,
+            "proof_file_digest_changed": proof_file_digest_changed,
+            "proof_file_mutation_observed_after_dispatch": proof_file_mutation_observed_after_dispatch,
+            "file_sha256": after_sha256,
             "outside_write_surface_changed": outside_write_surface_changed,
             "secret_value_recorded": result.get("secret_value_recorded") is True,
             "secret_in_probe_file": bool(

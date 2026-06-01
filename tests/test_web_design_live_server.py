@@ -16610,6 +16610,10 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                 "forced_route_used": True,
                 "fallback_used": False,
                 "chatgpt_route_used": False,
+                "proof_file_before_sha256": (
+                    "71365070eea6aac5e27530d863400aa9feb2faa0dcf198caec3977039617d1c8"
+                ),
+                "proof_file_mutation_observed_after_dispatch": True,
             }
             if record_overrides:
                 record.update(record_overrides)
@@ -16658,6 +16662,11 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         )
         self.assertEqual(packet["provider_id"], "deepseek")
         self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
+        self.assertEqual(packet["bound_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(packet["selected_model_equals_bound_route"])
+        self.assertTrue(packet["dispatch_target_deepseek_route"])
+        self.assertTrue(packet["route_bound_live_edit_proof_required"])
+        self.assertTrue(packet["route_bound_live_edit_proof_chain_proven"])
         self.assertEqual(packet["stable_bridge_preflight"], "ok")
         self.assertTrue(packet["stable_bridge_preflight_ok"])
         self.assertTrue(packet["stable_bridge_preflight_required"])
@@ -16672,14 +16681,27 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
             packet["file_content_sha256"],
             "8824e44257ce27045c1e47e79807aa93ceb66b90a31c1f49a5b88637b97a3a0c",
         )
+        self.assertEqual(
+            packet["proof_file_before_sha256"],
+            "71365070eea6aac5e27530d863400aa9feb2faa0dcf198caec3977039617d1c8",
+        )
+        self.assertEqual(packet["proof_file_after_sha256"], packet["file_content_sha256"])
+        self.assertTrue(packet["proof_file_digests_present"])
+        self.assertTrue(packet["proof_file_digest_changed"])
+        self.assertTrue(packet["proof_file_mutation_observed_after_dispatch"])
         self.assertTrue(packet["route_unchanged"])
         self.assertTrue(packet["selected_route_preserved"])
         self.assertFalse(packet["chatgpt_called"])
+        self.assertFalse(packet["chatgpt_invoked"])
         self.assertFalse(packet["api_only_calls_chatgpt"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["response_text_counts_as_proof"])
         self.assertFalse(packet["ui_label_counts_as_proof"])
+        self.assertFalse(packet["ui_usability_claimed"])
+        self.assertFalse(packet["native_window_usability_claimed"])
+        self.assertFalse(packet["profile_history_claimed"])
+        self.assertFalse(packet["model_matrix_claimed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
 
@@ -16768,6 +16790,62 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
             "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
         )
 
+    def test_api_only_deepseek_live_code_edit_truth_blocks_missing_digest_chain(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "proof_file_before_sha256": "",
+                "proof_file_mutation_observed_after_dispatch": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["proof_file_digests_present"])
+        self.assertFalse(packet["proof_file_digest_changed"])
+        self.assertFalse(packet["proof_file_mutation_observed_after_dispatch"])
+        self.assertFalse(packet["route_bound_live_edit_proof_chain_proven"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_unchanged_digest_claim(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "proof_file_before_sha256": (
+                    "8824e44257ce27045c1e47e79807aa93ceb66b90a31c1f49a5b88637b97a3a0c"
+                ),
+                "proof_file_mutation_observed_after_dispatch": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["proof_file_digests_present"])
+        self.assertFalse(packet["proof_file_digest_changed"])
+        self.assertTrue(packet["proof_file_mutation_observed_after_dispatch"])
+        self.assertFalse(packet["route_bound_live_edit_proof_chain_proven"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_bound_route_mismatch(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            record_overrides={
+                "effective_route_model": "wbp-deepseek-v3",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["selected_model_equals_bound_route"])
+        self.assertFalse(packet["dispatch_target_deepseek_route"])
+        self.assertFalse(packet["api_primary_slot_proven"])
+        self.assertFalse(packet["api_only_executor_truth_proven"])
+        self.assertFalse(packet["route_bound_live_edit_proof_chain_proven"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
+
     def test_api_only_deepseek_live_code_edit_truth_blocks_chatgpt_or_fallback(self) -> None:
         packet = self._api_only_live_code_edit_truth_packet(
             record_overrides={
@@ -16820,6 +16898,43 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
             packet["final_status"],
             "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
         )
+        self.assertFalse(packet["commit_attempted"])
+        self.assertFalse(packet["push_attempted"])
+        self.assertFalse(packet["merge_attempted"])
+        self.assertFalse(packet["wbp_patch_applier_used"])
+
+    def test_deepseek_route_bound_real_edit_endpoint_reports_blocked_without_live_call(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            packet = json.loads(
+                post_json(
+                    f"{base}/api/codex/custom/quick-start/deepseek-route-bound-edit-proof",
+                    {
+                        "execution_mode": "api_only",
+                        "api_model_id": "wbp-deepseek-v4-pro-max",
+                        "api_reasoning_option_id": "provider_declared_max",
+                    },
+                )
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "custom_codex_deepseek_route_bound_real_edit")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_DEEPSEEK_ROUTE_BOUND_REAL_EDIT_NOT_PROVEN",
+        )
+        self.assertTrue(packet["route_bound_live_edit_proof_required"])
+        self.assertFalse(packet["route_bound_live_edit_proof_chain_proven"])
         self.assertFalse(packet["commit_attempted"])
         self.assertFalse(packet["push_attempted"])
         self.assertFalse(packet["merge_attempted"])
@@ -17199,6 +17314,10 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                         "forced_route_used": True,
                         "fallback_used": False,
                         "chatgpt_route_used": False,
+                        "proof_file_before_sha256": (
+                            "a7b17131a8bb37585a6e039812a73ec4cd42c96f7c58b2a2217824dcbfe72415"
+                        ),
+                        "proof_file_mutation_observed_after_dispatch": True,
                     }
                 },
                 browser_payload={
@@ -17220,6 +17339,14 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertTrue(packet["provider_called"])
         self.assertEqual(packet["provider_id"], "deepseek")
         self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
+        self.assertEqual(packet["bound_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(packet["selected_model_equals_bound_route"])
+        self.assertTrue(packet["dispatch_target_deepseek_route"])
+        self.assertTrue(packet["route_bound_live_edit_proof_required"])
+        self.assertTrue(packet["route_bound_live_edit_proof_chain_proven"])
+        self.assertTrue(packet["proof_file_digests_present"])
+        self.assertTrue(packet["proof_file_digest_changed"])
+        self.assertTrue(packet["proof_file_mutation_observed_after_dispatch"])
         self.assertTrue(packet["route_digest_matches_launch"])
         self.assertTrue(packet["trace_launch_packet_matches"])
         self.assertTrue(packet["trace_id_matches_launch"])
