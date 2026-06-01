@@ -1,0 +1,55 @@
+{
+  "blocker_acceptance": {
+    "browser_authority_final_status": "MODEL_SELECTION_BROWSER_AUTHORITY_BLOCKER_CLASSIFIED",
+    "disabled_model_guard_before_local_api_key": true,
+    "disabled_model_guard_before_probe_models": true,
+    "disabled_model_machine_error_code": "MODEL_NOT_SELECTABLE",
+    "disabled_model_reason_code": "ROUTE_DISABLED",
+    "reasoning_mismatch_final_status": "MODEL_REASONING_BINDING_BLOCKER_CLASSIFIED"
+  },
+  "final_status": "SERVER_MODEL_REASONING_SELECTION_TRUTH_R10_CLOSED",
+  "full_web_design_live_server_result": "8 failed, 244 passed, 2 subtests passed",
+  "full_web_failure_classification": "baseline_failure_out_of_scope",
+  "full_web_failure_classification_packet": "full_web_failure_classification_packet.json",
+  "independent_audit_packet": "independent_audit_packet.json",
+  "independent_audit_remaining_blockers": [],
+  "independent_audit_status": "ok",
+  "non_claims": {
+    "live_model_matrix_executed": false,
+    "profile_history_proven": false,
+    "quick_start_ui_changed": false,
+    "reasoning_quality_measured": false
+  },
+  "packet_kind": "server_model_reasoning_selection_truth_r10_summary",
+  "schema_version": 1,
+  "status": "ok",
+  "success_acceptance": {
+    "api_models_classified": true,
+    "api_reasoning_options_classified": true,
+    "browser_model_authority": false,
+    "browser_route_authority": false,
+    "browser_secret_authority": false,
+    "chatgpt_models_classified": true,
+    "declared_scope": "server_model_and_reasoning_selection_truth",
+    "mismatched_reasoning_option_blocks": true,
+    "model_matrix_live_execution_claimed": false,
+    "packet_kind": "server_model_reasoning_selection_truth",
+    "quick_start_ui_claimed": false,
+    "raw_backend_details_exposed": false,
+    "reasoning_options_bound_to_selected_model": true,
+    "reasoning_quality_claimed": false,
+    "secret_value_exposed": false,
+    "selectable_models_are_server_issued": true,
+    "selection_disabled_reason_present": true,
+    "server_issued_catalog_used": true,
+    "unavailable_models_marked_unselectable": true
+  },
+  "verification_commands": [
+    "python3 -m pytest -q tests/test_codex_model_registry.py -k 'server_model_reasoning_selection_truth or server_model_selection_truth'",
+    "python3 -m pytest -q tests/test_web_design_live_server.py -k 'server_model_reasoning_selection_truth_endpoint or server_model_selection_truth_endpoint or execution_mode_dry_run_endpoint or chatgpt_plus_api_slot_truth_endpoint'",
+    "python3 -m pytest -q tests/test_codex_model_registry.py tests/test_custom_codex_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_server_issued_model_grid_bound_authority_r1_probe.py tests/test_custom_codex_dual_lane_model_selection_ui_r1_probe.py tests/test_model_intelligence_and_speed_metadata_fidelity_r1_probe.py tests/test_operator_surface.py",
+    "python3 -m py_compile wild_boar_proxy/codex_model_registry.py wild_boar_proxy/web_design_live_server.py wild_boar_proxy/operator_surface.py"
+  ],
+  "verification_packet": "verification_packet.json",
+  "verification_status": "ok"
+}

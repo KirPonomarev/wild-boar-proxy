@@ -1,0 +1,15 @@
+{
+  "auditor": "gpt-5.4-mini Hooke",
+  "auditor_verification": [
+    {
+      "command": "python3 -m pytest -q tests/test_operator_surface.py::OperatorSurfaceTests::test_run_prompt_rejects_server_issued_disabled_model_before_runtime",
+      "result": "1 passed in 0.05s"
+    }
+  ],
+  "initial_blocker": "disabled-model guard was false-green because rejection was after probe_models/local_api_key and production probe did not emit model_entries",
+  "packet_kind": "server_model_reasoning_selection_truth_r10_independent_audit",
+  "remaining_blockers": [],
+  "resolution": "disabled external routes are now rejected from external-models routes list before probe_models/local_api_key",
+  "schema_version": 1,
+  "status": "ok"
+}

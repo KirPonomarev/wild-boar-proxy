@@ -68,6 +68,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_dual_lane_selection_intent_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
+    build_server_model_reasoning_selection_truth_packet,
     build_server_model_selection_and_reasoning_truth_packet,
     model_lane_classification_from_registry,
 )
@@ -9775,6 +9776,20 @@ def build_handler(
                 )
                 self._send_json(
                     build_server_model_selection_and_reasoning_truth_packet(
+                        payload,
+                        operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/server-model-reasoning-selection-truth":
+                payload = self._read_json_body()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                self._send_json(
+                    build_server_model_reasoning_selection_truth_packet(
                         payload,
                         operator_status,
                         api_snapshot=api_snapshot,

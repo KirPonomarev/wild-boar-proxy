@@ -659,6 +659,36 @@ def _external_route_from_packet(
     return None
 
 
+def _external_route_disabled_reason_from_packet(
+    packet: dict[str, Any] | None,
+    model_id: str,
+) -> tuple[str, list[str]]:
+    if not isinstance(packet, dict):
+        return "", []
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return "", []
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        return "", []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        if str(route.get("route_id") or "").strip() != model_id:
+            continue
+        auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+        secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+        reasons: list[str] = []
+        if route.get("enabled") is not True:
+            reasons.append("route_disabled")
+        if not secret_ref:
+            reasons.append("secret_ref_missing")
+        if not reasons:
+            return "", []
+        return "_AND_".join(reason.upper() for reason in reasons), reasons
+    return "", []
+
+
 def _parse_simple_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.exists():
@@ -1159,6 +1189,28 @@ def select_server_issued_model(model_id: str, allowed_models: list[str]) -> str:
     if model_id not in allowed_models:
         raise ValueError("model_id_not_server_issued")
     return model_id
+
+
+def model_selection_disabled_reason(
+    model_id: str,
+    models_packet: dict[str, Any] | None,
+) -> tuple[str, list[str]]:
+    entries = models_packet.get("model_entries") if isinstance(models_packet, dict) else []
+    if not isinstance(entries, list):
+        return "", []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("model_id") or "").strip() != model_id:
+            continue
+        selection_enabled = entry.get("selection_enabled")
+        selection_state = str(entry.get("selection_state") or "").strip()
+        if selection_enabled is not False and selection_state != "disabled":
+            return "", []
+        reason_code = str(entry.get("selection_disabled_reason_code") or "").strip()
+        reasons = [str(item) for item in entry.get("selection_disabled_reasons") or []]
+        return reason_code or "MODEL_NOT_SELECTABLE", reasons
+    return "", []
 
 
 def redact_text(text: str, secret_values: list[str] | None = None) -> str:
@@ -2854,6 +2906,21 @@ class OperatorSurfaceSession:
         route_record = None
         if isinstance(model_id, str):
             route_record = _external_route_from_packet(routes_list.get("json"), model_id)
+            (
+                route_disabled_reason_code,
+                route_disabled_reasons,
+            ) = _external_route_disabled_reason_from_packet(routes_list.get("json"), model_id)
+            if route_disabled_reason_code:
+                return {
+                    "status": "rejected",
+                    "machine_error_code": "MODEL_NOT_SELECTABLE",
+                    "human_message": "Model id is server-issued but not selectable.",
+                    "selected_model": model_id,
+                    "selection_disabled_reason_code": route_disabled_reason_code,
+                    "selection_disabled_reasons": route_disabled_reasons,
+                    "refresh_packet": self.status_payload(),
+                    "secret_value_recorded": False,
+                }
         models = self.probe_models()
         try:
             selected_model = select_server_issued_model(model_id, list(models.get("model_ids", [])))
@@ -2863,6 +2930,21 @@ class OperatorSurfaceSession:
                 "machine_error_code": "MODEL_NOT_SERVER_ISSUED",
                 "human_message": "Model id was not present in the current server-issued list.",
                 "refresh_packet": self.status_payload(),
+            }
+        selection_disabled_reason_code, selection_disabled_reasons = model_selection_disabled_reason(
+            selected_model,
+            models,
+        )
+        if selection_disabled_reason_code:
+            return {
+                "status": "rejected",
+                "machine_error_code": "MODEL_NOT_SELECTABLE",
+                "human_message": "Model id is server-issued but not selectable.",
+                "selected_model": selected_model,
+                "selection_disabled_reason_code": selection_disabled_reason_code,
+                "selection_disabled_reasons": selection_disabled_reasons,
+                "refresh_packet": self.status_payload(),
+                "secret_value_recorded": False,
             }
         try:
             local_api_key = self.local_api_key()
