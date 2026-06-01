@@ -217,6 +217,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
     def test_read_effect_commands_do_not_write_truth_files(self) -> None:
         commands = (
             ("invariant-check", "--json"),
+            ("status", "--json"),
             ("mode", "get", "--json"),
             ("accounts", "list", "--json"),
             (
@@ -249,11 +250,12 @@ class ReadEffectNoWriteTests(unittest.TestCase):
             "EXTERNAL_MODELS_PROVIDER_UNSUPPORTED",
         )
 
-    def test_runtime_status_and_healthcheck_are_not_read_effect_harness_members(
+    def test_status_is_read_effect_member_and_healthcheck_is_not(
         self,
     ) -> None:
         harness_commands = {
             ("invariant-check", "--json"),
+            ("status", "--json"),
             ("mode", "get", "--json"),
             ("accounts", "list", "--json"),
             (
@@ -274,5 +276,5 @@ class ReadEffectNoWriteTests(unittest.TestCase):
             ),
         }
 
-        self.assertNotIn(("status", "--json"), harness_commands)
+        self.assertIn(("status", "--json"), harness_commands)
         self.assertNotIn(("healthcheck", "--json"), harness_commands)

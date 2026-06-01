@@ -32,6 +32,7 @@ COMMAND_PACKET_REQUIRED_FIELDS = {
 
 READ_COMPATIBILITY_COMMANDS = {
     "mode get --json": ("mode", "get", "--json"),
+    "status --json": ("status", "--json"),
     "accounts list --json": ("accounts", "list", "--json"),
     "external-models credentials status --provider openrouter --json": (
         "external-models",
@@ -57,6 +58,63 @@ EXPECTED_COMPATIBILITY_SNAPSHOTS: dict[str, dict[str, Any]] = {
         "effect": "read",
         "desired_mode": "stable",
         "effective_mode": "stable",
+    },
+    "status --json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Runtime status snapshot is available.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "unknown",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "effect": "read",
+        "desired_mode": "stable",
+        "effective_mode": "stable",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "configured_model": "gpt-5.4",
+        "requested_model": "gpt-5.4",
+        "configured_proxy_url": "",
+        "current_proxy_url": "",
+        "pool_summary": {
+            "active": 1,
+            "reserve": 0,
+            "retired": 0,
+            "healthy": 0,
+            "degraded": 0,
+            "down": 0,
+            "selected_backend_ids": ["backend-a"],
+            "backend_count": 1,
+        },
+        "auth_pool_hygiene": {
+            "status": "launch_capable_available",
+            "machine_error_code": "OK",
+            "blocking_reason": "",
+            "launch_capable_backend_count": 1,
+            "selected_backend_ids_observed": ["backend-a"],
+            "delegated_from_status": False,
+        },
+        "launch_readiness": {
+            "status": "not_evaluated",
+            "owner_command_surface": "status --json",
+            "delegated_from_status": False,
+            "gate_passed": False,
+            "blocking_reason": "live_attestation_not_run_by_status",
+            "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+        },
+        "runtime_guardrails": {
+            "owner_command_surface": "status --json",
+            "delegated_from_status": False,
+            "status": "clear",
+            "blocking_reason": "",
+        },
+        "attestation_summary": {
+            "status": "not_run",
+            "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+            "attestation_source": "status --json",
+            "observed_at_utc": "",
+        },
     },
     "accounts list --json": {
         "status": "ok",
@@ -378,7 +436,7 @@ class ReadCompatibilitySnapshotTests(unittest.TestCase):
                 )
 
     def test_repair_adjacent_commands_are_not_snapshot_members(self) -> None:
-        self.assertNotIn(("status", "--json"), set(READ_COMPATIBILITY_COMMANDS.values()))
+        self.assertIn(("status", "--json"), set(READ_COMPATIBILITY_COMMANDS.values()))
         self.assertNotIn(
             ("healthcheck", "--json"),
             set(READ_COMPATIBILITY_COMMANDS.values()),

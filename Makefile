@@ -21,6 +21,7 @@ test-core:
 		tests/test_repo_hygiene.py \
 		tests/test_external_models.py \
 		tests/test_owner_surface_effect_inventory.py \
+		tests/test_status_read_snapshot_contract.py \
 		tests/test_read_compatibility_snapshots.py \
 		tests/test_repair_adjacent_packet_shape_snapshots.py \
 		tests/test_read_effect_no_write.py \

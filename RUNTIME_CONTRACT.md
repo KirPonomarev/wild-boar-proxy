@@ -37,8 +37,8 @@
   snapshot evidence alone must not flip effective stable runtime consumer truth
 - deterministic stable recovery entry is owned by the live attestation and
   fallback-reconciliation path exposed through `healthcheck --json`
-- `status --json` may delegate to that owner path and must report its outcome
-  honestly; it is not a separate recovery owner
+- `status --json` must not delegate to that owner path; it is a read-only
+  snapshot surface and must mark live attestation as not run by status
 - the current stable-runtime activation implementation is limited to the
   `launch smoke` seam
 - `launch client --json` may exist as a separate bounded external host-client
@@ -126,10 +126,11 @@
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
-- `status --json` may report the same current-proxy adoption contract only as
-  delegated readout
-- `status --json` may report the same nested `proxy_reprobe_adoption_result`
-  only as delegated readout
+- `status --json` may report static current-proxy adoption contracts only as
+  read-only snapshot data
+- `status --json` must not report a fresh nested
+  `proxy_reprobe_adoption_result`; any such field must come only from already
+  persisted/cached snapshot evidence
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
 - current bounded candidate discovery remains
@@ -139,10 +140,10 @@
   runtime reproof through `healthcheck.attestation`
 - no separate control-layer deep-probing surface is active by default; deeper
   runtime validation remains delegated to the live reproof surface above
-- `status --json` may report the same last-known-good proxy surface only as
-  delegated readout
-- delegated `status --json` must propagate those owner-path writes honestly in
-  `changed_files`
+- `status --json` may report the same last-known-good proxy surface only as a
+  persisted-state snapshot
+- `status --json` must not report owner-path writes and must emit
+  `changed_files=[]`
 - `current_proxy_url` is current live outbound proxy truth and remains separate
   from nested `proxy_reprobe.working_candidate`
 - ambient shell proxy env must not become the authoritative control-layer truth
@@ -195,7 +196,8 @@ Required attestation fields:
 Primary truth surface for runtime attestation:
 
 - live attestation is owned by `healthcheck --json`
-- `status --json` may expose a summary but must not replace live attestation
+- `status --json` may expose a read-only snapshot summary but must not run or
+  replace live attestation
 - `supervisor-state.json` may cache the latest attestation result as snapshot
   evidence, but cached attestation must not override live command truth
 

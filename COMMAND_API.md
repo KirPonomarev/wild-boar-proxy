@@ -144,6 +144,7 @@ liveness, severity, readiness, or attestation quality.
 Current `read` surfaces:
 
 - `invariant-check --json`
+- `status --json`
 - `mode get --json`
 - `accounts list --json`
 - `external-models credentials status --provider <provider> --json`
@@ -151,10 +152,14 @@ Current `read` surfaces:
 When `effect=read`, `changed_files` must be `[]` and the command must not write
 runtime truth state.
 
-`status --json` and `healthcheck --json` must not be labeled `read` merely
-because they are observational. Their current runtime contract allows delegated
-owner-path readout, live attestation, fallback reconciliation, recovery, and
-write reporting through `changed_files`.
+`status --json` is a read-only snapshot surface. It may summarize persisted
+state, registry, config, and cached contract surfaces, but it must not delegate
+to live healthcheck, recovery, launcher, or owner-path mutation. Its
+`changed_files` value must be `[]`.
+
+`healthcheck --json` must not be labeled `read` merely because it is
+observational. Its current runtime contract allows live attestation, fallback
+reconciliation, recovery, and write reporting through `changed_files`.
 
 ## Severity classes
 
@@ -615,7 +620,7 @@ Canonical launch-client outcomes include:
 `launch client --json` remains separate from:
 
 - runtime health ownership in `healthcheck --json`
-- delegated runtime readout in `status --json`
+- read-only runtime snapshot readout in `status --json`
 - runtime smoke activation truth in `launch smoke --json`
 
 ## Additional staged pool-policy owner surface
@@ -1584,8 +1589,8 @@ Field meaning rules:
   truth surface
 - deterministic stable recovery entry is owned by the live attestation and
   fallback-reconciliation path exposed through `healthcheck --json`
-- `status --json` may delegate to that owner path and must report its outcome
-  honestly; it must not pretend to be a separate recovery owner
+- `status --json` must not delegate to that owner path; it may report only a
+  read-only snapshot and must mark live attestation as not run by status
 - silent fallback from approved target to observed source is forbidden
 - when desired source is the approved repair target, `launch smoke --json` may:
   - materialize `stable-runtime-config.generated.yaml`
@@ -1607,8 +1612,9 @@ Field meaning rules:
   `deterministic_stable_recovery_contract`
 - `healthcheck --json` may expose top-level
   `deterministic_stable_recovery_result`
-- `status --json` may expose nested
-  `stable_runtime_consumer.deterministic_stable_recovery_result`
+- `status --json` must not expose a fresh nested
+  `stable_runtime_consumer.deterministic_stable_recovery_result` unless it was
+  already present as persisted/cached snapshot evidence
 - owner-path packets now emit `deterministic_stable_recovery_result.entry_lane`
 - top-level `STABLE_SERVICE_DISABLED` may be emitted only when:
   - the same packet proves `entry_lane = stable_service_disabled`
@@ -1667,10 +1673,12 @@ Field meaning rules:
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
-- `status --json` may expose the same `current_proxy_adoption_contract` only as
-  delegated reporting
-- `status --json` may expose the same nested `proxy_reprobe_adoption_result`
-  only as delegated reporting
+- `status --json` may expose static owner-path contracts as read-only snapshot
+  data, but it must not report delegated current-proxy adoption results as if
+  it had run healthcheck
+- `status --json` must not expose a fresh nested
+  `proxy_reprobe_adoption_result`; any such field must come only from already
+  persisted/cached snapshot evidence
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
 - current bounded candidate discovery remains
@@ -1680,10 +1688,10 @@ Field meaning rules:
   runtime reproof through `healthcheck.attestation`
 - no separate control-layer deep-probing surface is active by default; deeper
   runtime validation remains delegated to the live reproof surface above
-- `status --json` may expose the same `last_known_good_proxy` readout only as
-  delegated reporting
-- delegated `status --json` must propagate those owner-path writes honestly in
-  `changed_files`
+- `status --json` may expose the same `last_known_good_proxy` readout only as a
+  persisted-state snapshot
+- `status --json` must not report owner-path writes and must emit
+  `changed_files=[]`
 - `current_proxy_url` is current live outbound proxy truth and remains separate
   from nested `proxy_reprobe.working_candidate`
 - `current_proxy_url` remains separate from persisted

@@ -120,8 +120,8 @@ OWNER_SURFACES = {
     "summarize_status": Surface(
         RUNTIME,
         "summarize_status",
-        WRITE_ADJACENT,
-        frozenset({"build_command_payload", "run_healthcheck"}),
+        READ,
+        frozenset({"build_status_snapshot_payload"}),
     ),
     "run_healthcheck": Surface(
         RUNTIME,
@@ -243,13 +243,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
         self.assertTrue(calls & WRITE_PRIMITIVES)
 
-    def test_status_and_healthcheck_remain_write_adjacent_not_read(self) -> None:
+    def test_status_is_read_snapshot_and_healthcheck_remains_repair(self) -> None:
         status_surface = OWNER_SURFACES["summarize_status"]
         status_calls = _call_names(_function(status_surface.path, status_surface.function))
         status_source = _function_source(status_surface.path, status_surface.function)
-        self.assertEqual(WRITE_ADJACENT, status_surface.expected_class)
+        self.assertEqual(READ, status_surface.expected_class)
         self.assertTrue(status_surface.required_calls <= status_calls)
-        self.assertIn("changed_files", status_source)
+        self.assertNotIn("run_healthcheck", status_calls)
+        self.assertNotIn("run_healthcheck(", status_source)
 
         health_surface = OWNER_SURFACES["run_healthcheck"]
         health_calls = _call_names(_function(health_surface.path, health_surface.function))
