@@ -2823,7 +2823,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
 
-    def test_status_reloads_reconciled_state_after_healthcheck(self) -> None:
+    def test_status_reads_state_after_healthcheck_repair_without_delegation(self) -> None:
         stable_port = free_port()
         ProbeHandler.response_text = "OK"
         (self.stable_dir / "config.yaml").write_text(
@@ -2834,17 +2834,38 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            repair_result = self.run_cli("healthcheck", "--repair", "--json")
+            before_status = self.state_snapshot()
             result = self.run_cli("status", "--json")
+            after_status = self.state_snapshot()
         finally:
             server.shutdown()
             thread.join()
             server.server_close()
+        self.assertEqual(repair_result.returncode, 0, repair_result.stderr)
+        repair_payload = json.loads(repair_result.stdout)
+        self.assertEqual(repair_payload["effect"], "repair")
+        self.assertEqual(repair_payload["status"], "ok")
+        self.assertEqual(repair_payload["machine_error_code"], "OK")
+        self.assertEqual(repair_payload["effective_mode"], "stable")
+        self.assertIsInstance(repair_payload["changed_files"], list)
+        temp_root = Path(self.temp_dir.name).resolve()
+        for changed_file in repair_payload["changed_files"]:
+            changed_path = Path(changed_file).resolve()
+            self.assertTrue(
+                changed_path.is_relative_to(temp_root),
+                f"repair changed file outside temp root: {changed_file}",
+            )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(before_status, after_status)
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
-        self.assertEqual(payload["last_error"], "")
+        self.assertIn("reconciled to", payload["last_error"])
         self.assertEqual(payload["pool_summary"]["selected_backend_ids"], [])
 
     def test_status_reports_registry_lifecycle_counts_when_state_is_stale(self) -> None:
