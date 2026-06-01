@@ -23,7 +23,8 @@ from .runtime import (
     run_accounts_login_complete,
     run_accounts_login_start,
     run_demote,
-    run_healthcheck,
+    run_healthcheck_probe,
+    run_healthcheck_repair,
     run_invariant_check,
     run_installer_init,
     run_hold,
@@ -60,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     healthcheck = subparsers.add_parser("healthcheck")
     healthcheck.add_argument("--json", action="store_true", required=True)
+    healthcheck.add_argument("--repair", action="store_true")
     healthcheck.add_argument("--model")
 
     status = subparsers.add_parser("status")
@@ -375,7 +377,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "healthcheck":
-            return emit_json(run_healthcheck(paths, args.model))
+            if args.repair:
+                return emit_json(run_healthcheck_repair(paths, args.model))
+            return emit_json(run_healthcheck_probe(paths, args.model))
         if args.command == "status":
             return emit_json(summarize_status(paths))
         if args.command == "invariant-check":

@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .command_effects import EFFECT_READ, validate_effect
+from .command_effects import EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR, validate_effect
 
 
 class RuntimeErrorInfo(Exception):
@@ -3144,8 +3144,8 @@ def build_deterministic_stable_recovery_contract(
     return {
         "status": "contract_ready",
         "entry_owner": "healthcheck_live_attestation_path",
-        "owner_command_surface": "healthcheck --json",
-        "status_delegates_to_owner": True,
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
         "sync_hidden_owner_forbidden": True,
         "new_generic_cli_default": False,
         "eligible_failure_lanes": [
@@ -3172,7 +3172,7 @@ def build_deterministic_stable_recovery_contract(
             "generated_config_file": str(paths.stable_runtime_generated_config_file),
             "handoff_env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
             "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
-            "owner_paths": ["healthcheck --json", "launch smoke --json"],
+            "owner_paths": ["healthcheck --repair --json", "launch smoke --json"],
         },
         "generated_config_regeneration_status": "owner_path_emitted",
         "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
@@ -3180,14 +3180,17 @@ def build_deterministic_stable_recovery_contract(
             "current_baseline_stable_config_plus_current_approved_target_reference"
         ),
         "generated_config_regeneration_owner_paths": [
-            "healthcheck --json",
+            "healthcheck --repair --json",
             "launch smoke --json",
         ],
         "stale_generated_config_authoritative": False,
         "generated_config_existence_alone_sufficient": False,
         "snapshot_refresh_status": "owner_path_emitted",
         "snapshot_refresh_after_stable_live_outcome": True,
-        "snapshot_refresh_owner_paths": ["healthcheck --json", "launch smoke --json"],
+        "snapshot_refresh_owner_paths": [
+            "healthcheck --repair --json",
+            "launch smoke --json",
+        ],
         "snapshot_schema_widening_required": False,
         "new_persisted_recovery_metadata_required": False,
         "stable_service_disabled_classification": {
@@ -3210,7 +3213,7 @@ def build_deterministic_stable_recovery_contract(
         "re_enable_method_contract": {
             "status": "owner_path_emitted",
             "owner_path_scope": "bounded_control_layer_recovery_action",
-            "owner_command_surface": "healthcheck --json",
+            "owner_command_surface": "healthcheck --repair --json",
             "reuse_private_launch_smoke_helper_allowed": True,
             "launcher_protocol_widening_required": False,
             "launchd_integration_forbidden": True,
@@ -3251,8 +3254,8 @@ def build_deterministic_stable_recovery_contract(
 def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
     return {
         "status": "contract_ready",
-        "owner_command_surface": "healthcheck --json",
-        "status_delegates_to_owner": True,
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
         "launcher_lane_ineligible_sync_owner_recovery_surface": {
@@ -3399,8 +3402,8 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
     }
     return {
         "status": "contract_ready",
-        "owner_command_surface": "healthcheck --json",
-        "status_delegates_to_owner": True,
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
         "launcher_lane_ineligible_sync_owner_recovery_surface": {
@@ -4310,6 +4313,7 @@ def run_stable_runtime_launcher_attempt(
 
 def build_deterministic_stable_recovery_result(
     *,
+    owner_command_surface: str = "healthcheck --repair --json",
     delegated_from_status: bool,
     attempted: bool,
     entry_lane: str,
@@ -4338,7 +4342,7 @@ def build_deterministic_stable_recovery_result(
         guardrail_status = "observation_only"
     return {
         "status": status,
-        "owner_command_surface": "healthcheck --json",
+        "owner_command_surface": owner_command_surface,
         "delegated_from_status": delegated_from_status,
         "attempted": attempted,
         "entry_lane": entry_lane,
@@ -7599,9 +7603,15 @@ def run_healthcheck(
     allow_last_known_good_proxy_write: bool = True,
     allow_current_proxy_auto_adoption: bool = True,
     allow_stable_fallback_write: bool = True,
+    allow_stale_pid_cleanup: bool = True,
+    effect: str | None = None,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
-    clear_stale_managed_pid_if_needed(paths)
+    owner_command_surface = (
+        "healthcheck --repair --json" if effect == EFFECT_REPAIR else "healthcheck --json"
+    )
+    if allow_stale_pid_cleanup:
+        clear_stale_managed_pid_if_needed(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -7651,6 +7661,7 @@ def run_healthcheck(
     recovery_result: dict[str, Any] | None = None
     if allow_recovery:
         recovery_result = build_deterministic_stable_recovery_result(
+            owner_command_surface=owner_command_surface,
             delegated_from_status=False,
             attempted=False,
             entry_lane="not_invoked",
@@ -8081,6 +8092,7 @@ def run_healthcheck(
             )
             confirmation_basis = "live_runtime_observation_not_confirmed"
         recovery_result = build_deterministic_stable_recovery_result(
+            owner_command_surface=owner_command_surface,
             delegated_from_status=False,
             attempted=True,
             entry_lane=recovery_entry_lane,
@@ -8147,10 +8159,10 @@ def run_healthcheck(
         "selected_backends_digest": get_selected_backends_digest(state),
         "observed_at_utc": now_iso(),
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
-        "attestation_source": "healthcheck --json",
+        "attestation_source": owner_command_surface,
     }
     launch_readiness = build_launch_readiness_surface(
-        owner_command_surface="healthcheck --json",
+        owner_command_surface=owner_command_surface,
         delegated_from_status=False,
         listener_ok=listener_ok,
         models_ok=models_ok,
@@ -8187,6 +8199,7 @@ def run_healthcheck(
         auth_pool_hygiene=auth_pool_hygiene,
         recovery_result=recovery_result,
     )
+    runtime_guardrails["owner_command_surface"] = owner_command_surface
     reported_last_error = (
         successful_reconcile_detail
         if ok and successful_reconcile_detail
@@ -8242,6 +8255,37 @@ def run_healthcheck(
         operator_action=operator_action,
         changed_files=changed_files,
         extra=extra,
+        effect=effect,
+    )
+
+
+def run_healthcheck_probe(
+    paths: RuntimePaths, model: str | None = None
+) -> dict[str, Any]:
+    return run_healthcheck(
+        paths,
+        model,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=False,
+        allow_stale_pid_cleanup=False,
+        effect=EFFECT_PROBE,
+    )
+
+
+def run_healthcheck_repair(
+    paths: RuntimePaths, model: str | None = None
+) -> dict[str, Any]:
+    return run_healthcheck(
+        paths,
+        model,
+        allow_recovery=True,
+        allow_last_known_good_proxy_write=True,
+        allow_current_proxy_auto_adoption=True,
+        allow_stable_fallback_write=True,
+        allow_stale_pid_cleanup=True,
+        effect=EFFECT_REPAIR,
     )
 
 
@@ -9428,14 +9472,16 @@ def summarize_stable_10_rollback_readiness(
 
     recovery_contract_ready = (
         recovery_contract.get("status") == "contract_ready"
-        and recovery_contract.get("owner_command_surface") == "healthcheck --json"
+        and recovery_contract.get("owner_command_surface")
+        == "healthcheck --repair --json"
         and recovery_contract.get("entry_owner") == "healthcheck_live_attestation_path"
-        and bool(recovery_contract.get("status_delegates_to_owner"))
+        and recovery_contract.get("status_delegates_to_owner") is False
     )
     last_known_good_ready = (
         last_known_good_contract.get("status") == "contract_ready"
-        and last_known_good_contract.get("owner_command_surface") == "healthcheck --json"
-        and bool(last_known_good_contract.get("status_delegates_to_owner"))
+        and last_known_good_contract.get("owner_command_surface")
+        == "healthcheck --repair --json"
+        and last_known_good_contract.get("status_delegates_to_owner") is False
         and bool(last_known_good_contract.get("changed_files_visibility_required"))
     )
     fallback_contract_ready = (

@@ -20,6 +20,7 @@ All operator commands must support `--json`.
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
+- `healthcheck --repair --json`
 - `mode get --json`
 - `mode set stable --json`
 - `mode set managed --json`
@@ -158,8 +159,15 @@ to live healthcheck, recovery, launcher, or owner-path mutation. Its
 `changed_files` value must be `[]`.
 
 `healthcheck --json` must not be labeled `read` merely because it is
-observational. Its current runtime contract allows live attestation, fallback
-reconciliation, recovery, and write reporting through `changed_files`.
+observational. It is a `probe` surface: it may run live attestation but must not
+write runtime truth state, clean stale pid files, run fallback reconciliation,
+launch recovery, adopt current proxy, refresh last-known-good proxy, or report
+repair writes. Its `changed_files` value must be `[]`.
+
+`healthcheck --repair --json` is the explicit `repair` surface for bounded
+healthcheck owner-path recovery, fallback reconciliation, current-proxy
+adoption, last-known-good refresh, and stale pid cleanup. Any real mutation must
+be reported through `changed_files`.
 
 ## Severity classes
 
@@ -1588,7 +1596,7 @@ Field meaning rules:
 - `stable-runtime-config.generated.yaml` is a generated control artifact, not a
   truth surface
 - deterministic stable recovery entry is owned by the live attestation and
-  fallback-reconciliation path exposed through `healthcheck --json`
+  fallback-reconciliation path exposed through `healthcheck --repair --json`
 - `status --json` must not delegate to that owner path; it may report only a
   read-only snapshot and must mark live attestation as not run by status
 - silent fallback from approved target to observed source is forbidden
@@ -1602,15 +1610,15 @@ Field meaning rules:
   `observed_source_selected`
 - approved-target activation success and observed-source fallback must remain
   separately distinguishable in machine-readable output
-- deterministic stable recovery in the owner path now reuses the same generated
+- deterministic stable recovery in the repair owner path now reuses the same generated
   config path, `WBP_STABLE_CONFIG` handoff, and snapshot topic through
-  `healthcheck --json`
+  `healthcheck --repair --json`
 - deterministic stable recovery in the owner path must regenerate generated
   config per approved-target attempt and must not treat a stale generated
   config artifact as authoritative truth
-- `healthcheck --json` may expose top-level
+- `healthcheck --repair --json` may expose top-level
   `deterministic_stable_recovery_contract`
-- `healthcheck --json` may expose top-level
+- `healthcheck --repair --json` may expose top-level
   `deterministic_stable_recovery_result`
 - `status --json` must not expose a fresh nested
   `stable_runtime_consumer.deterministic_stable_recovery_result` unless it was
@@ -1670,7 +1678,7 @@ Field meaning rules:
   env keys for the managed runtime child process only
 - any such derived proxy env keys remain engine-local routing inputs, not
   control-plane truth surfaces
-- owner-path healthcheck writes may materialize or refresh
+- owner-path `healthcheck --repair --json` writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
 - `status --json` may expose static owner-path contracts as read-only snapshot

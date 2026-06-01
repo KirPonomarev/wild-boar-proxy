@@ -14,6 +14,7 @@ CLI = ROOT / "wild_boar_proxy" / "cli.py"
 
 
 READ = "READ"
+PROBE = "PROBE"
 MUTATE = "MUTATE"
 REPAIR = "REPAIR"
 WRITE_ADJACENT = "WRITE_ADJACENT"
@@ -137,6 +138,18 @@ OWNER_SURFACES = {
             }
         ),
     ),
+    "run_healthcheck_probe": Surface(
+        RUNTIME,
+        "run_healthcheck_probe",
+        PROBE,
+        frozenset({"run_healthcheck"}),
+    ),
+    "run_healthcheck_repair": Surface(
+        RUNTIME,
+        "run_healthcheck_repair",
+        REPAIR,
+        frozenset({"run_healthcheck"}),
+    ),
     "_run_credentials_command": Surface(
         EXTERNAL_MODELS,
         "_run_credentials_command",
@@ -147,7 +160,9 @@ OWNER_SURFACES = {
         CLI,
         "main",
         DEFERRED_UNCLASSIFIED,
-        frozenset({"emit_json", "run_healthcheck", "summarize_status"}),
+        frozenset(
+            {"emit_json", "run_healthcheck_probe", "run_healthcheck_repair", "summarize_status"}
+        ),
     ),
 }
 
@@ -209,6 +224,8 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "run_sync"),
                 (RUNTIME, "summarize_status"),
                 (RUNTIME, "run_healthcheck"),
+                (RUNTIME, "run_healthcheck_probe"),
+                (RUNTIME, "run_healthcheck_repair"),
                 (EXTERNAL_MODELS, "_run_credentials_command"),
                 (CLI, "main"),
             },
@@ -257,6 +274,35 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertEqual(REPAIR, health_surface.expected_class)
         self.assertTrue(health_surface.required_calls <= health_calls)
         self.assertTrue(health_calls & (WRITE_PRIMITIVES | LOCK_PRIMITIVES))
+
+    def test_healthcheck_probe_wrapper_disables_repair_writes_and_stale_pid_cleanup(
+        self,
+    ) -> None:
+        probe_surface = OWNER_SURFACES["run_healthcheck_probe"]
+        probe_calls = _call_names(_function(probe_surface.path, probe_surface.function))
+        probe_source = _function_source(probe_surface.path, probe_surface.function)
+        self.assertEqual(PROBE, probe_surface.expected_class)
+        self.assertTrue(probe_surface.required_calls <= probe_calls)
+        self.assertNotIn("allow_recovery=True", probe_source)
+        self.assertIn("allow_recovery=False", probe_source)
+        self.assertIn("allow_last_known_good_proxy_write=False", probe_source)
+        self.assertIn("allow_current_proxy_auto_adoption=False", probe_source)
+        self.assertIn("allow_stable_fallback_write=False", probe_source)
+        self.assertIn("allow_stale_pid_cleanup=False", probe_source)
+        self.assertIn("effect=EFFECT_PROBE", probe_source)
+
+    def test_healthcheck_repair_wrapper_declares_repair_enabled_path(self) -> None:
+        repair_surface = OWNER_SURFACES["run_healthcheck_repair"]
+        repair_calls = _call_names(_function(repair_surface.path, repair_surface.function))
+        repair_source = _function_source(repair_surface.path, repair_surface.function)
+        self.assertEqual(REPAIR, repair_surface.expected_class)
+        self.assertTrue(repair_surface.required_calls <= repair_calls)
+        self.assertIn("allow_recovery=True", repair_source)
+        self.assertIn("allow_last_known_good_proxy_write=True", repair_source)
+        self.assertIn("allow_current_proxy_auto_adoption=True", repair_source)
+        self.assertIn("allow_stable_fallback_write=True", repair_source)
+        self.assertIn("allow_stale_pid_cleanup=True", repair_source)
+        self.assertIn("effect=EFFECT_REPAIR", repair_source)
 
     def test_dispatch_surfaces_do_not_own_raw_primitives(
         self,

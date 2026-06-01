@@ -261,7 +261,7 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
 
     def assert_common_repair_adjacent_packet(self, payload: dict[str, Any]) -> None:
         self.assertTrue(COMMAND_PACKET_REQUIRED_FIELDS <= set(payload))
-        self.assertNotIn("effect", payload)
+        self.assertEqual(payload["effect"], "repair")
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["exit_code"], 1)
         self.assertNotEqual(payload["machine_error_code"], "OK")
@@ -279,8 +279,8 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
         self.assertNotIn(SECRET_SENTINEL, serialized)
         self.assertNotIn("sk-wbp-repair-adjacent-secret", serialized)
 
-    def test_healthcheck_absent_listener_packet_shape_is_repair_adjacent(self) -> None:
-        result = self.run_cli("healthcheck", "--json")
+    def test_healthcheck_repair_absent_listener_packet_shape_is_repair_adjacent(self) -> None:
+        result = self.run_cli("healthcheck", "--repair", "--json")
         self.assertEqual(result.stderr, "")
         payload = _strict_json_object(result.stdout)
         self.assertEqual(result.returncode, payload["exit_code"])
@@ -298,7 +298,7 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
                 "effective_mode": "stable",
                 "endpoint": "<ENDPOINT>",
                 "attestation": {
-                    "attestation_source": "healthcheck --json",
+                    "attestation_source": "healthcheck --repair --json",
                     "listener_ok": False,
                     "models_ok": False,
                     "responses_ok": False,
@@ -308,7 +308,7 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
                     "observed_at_utc": "<TIMESTAMP>",
                 },
                 "launch_readiness": {
-                    "owner_command_surface": "healthcheck --json",
+                    "owner_command_surface": "healthcheck --repair --json",
                     "delegated_from_status": False,
                     "status": "blocked",
                     "gate_passed": False,
@@ -316,13 +316,13 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
                     "machine_error_code": "STABLE_SERVICE_DISABLED",
                 },
                 "runtime_guardrails": {
-                    "owner_command_surface": "healthcheck --json",
+                    "owner_command_surface": "healthcheck --repair --json",
                     "status": "blocked",
                     "recovery_effectful_claim_allowed": False,
                     "recovery_guardrail_status": "blocked",
                 },
                 "deterministic_stable_recovery_result": {
-                    "owner_command_surface": "healthcheck --json",
+                    "owner_command_surface": "healthcheck --repair --json",
                     "status": "failed",
                     "attempted": True,
                     "entry_lane": "stable_service_disabled",
