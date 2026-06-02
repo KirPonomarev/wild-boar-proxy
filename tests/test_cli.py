@@ -9163,6 +9163,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["selected_backend_id"], "backend-from-codex-device-login")
         self.assertTrue(onboarding["reserve_first_enforced"])
         self.assertFalse(onboarding["active_routing_changed"])
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "blocked")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "status_proof_failed"
+        )
         self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
 
     def test_accounts_login_cancel_codex_only_kills_session_owned_pid(self) -> None:
@@ -9559,7 +9565,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
         self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
 
-    def test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success(
+    def test_accounts_onboard_detected_new_auth_no_sync_snapshot_does_not_claim_ready(
         self,
     ) -> None:
         port = free_port()
@@ -9600,11 +9606,10 @@ class CliTests(unittest.TestCase):
             server.shutdown()
             thread.join()
             server.server_close()
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "ONBOARD_STATUS_FAILED")
-        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["input_mode"], "detected_new_auth")
         self.assertEqual(onboarding["selected_backend_id"], "backend-detected-status-fail")
@@ -9614,8 +9619,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["validate_outcome"], "ok")
         self.assertFalse(onboarding["sync_attempted"])
         self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
-        self.assertIsNone(onboarding["status_observed"])
-        self.assertEqual(onboarding["final_outcome"], "status_failed")
+        self.assertIsNotNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "blocked")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "status_proof_failed"
+        )
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
 
     def test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof(
         self,

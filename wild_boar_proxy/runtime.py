@@ -13486,7 +13486,7 @@ def run_accounts_login_complete(
             auth_ref=str(session.get("auth_ref", "")),
             loop=False,
             skip_login=True,
-            no_sync=False,
+            no_sync=True,
             non_interactive=True,
         )
         if onboard_payload.get("status") == "ok":
@@ -15809,6 +15809,8 @@ def summarize_onboarding_lifecycle_admission(
     active_routing_changed: bool,
     after_registry: dict[str, Any],
     status_payload: dict[str, Any],
+    sync_attempted: bool = False,
+    sync_outcome: str = "not_attempted",
 ) -> dict[str, Any]:
     observed = summarize_owner_path_status_observation(status_payload)
     auth_pool_hygiene = status_payload.get("auth_pool_hygiene")
@@ -15839,7 +15841,11 @@ def summarize_onboarding_lifecycle_admission(
     }
     lifecycle_status = "blocked"
     lifecycle_reason = "status_proof_failed"
-    if observed["command_status"] == "ok":
+    if (
+        observed["command_status"] == "ok"
+        and sync_attempted
+        and sync_outcome == "ok"
+    ):
         lifecycle_status = "ready"
         lifecycle_reason = "post_onboard_status_ok"
     elif (
@@ -15871,6 +15877,8 @@ def summarize_onboarding_lifecycle_admission(
         "auth_pool_hygiene_blocking_reason": str(
             auth_pool_hygiene.get("blocking_reason", "")
         ),
+        "sync_attempted": sync_attempted,
+        "sync_outcome": sync_outcome,
     }
 
 
@@ -16286,6 +16294,8 @@ def run_onboard(
                 active_routing_changed=active_routing_changed,
                 after_registry=after_registry,
                 status_payload=status_payload,
+                sync_attempted=bool(onboarding_result["sync_attempted"]),
+                sync_outcome=str(onboarding_result["sync_outcome"]),
             )
         )
     except RuntimeErrorInfo as exc:
