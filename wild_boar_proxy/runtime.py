@@ -94,6 +94,8 @@ SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 PROCESS_PROBE_TIMEOUT_SECONDS = 2.0
 OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS = 120.0
 OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
+OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS = 120.0
+OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS = 120.0
 OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -374,6 +376,7 @@ class StableRuntimeLaunchAttempt:
     launcher_exit_code: int
     stdout: str
     stderr: str
+    process_result: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -4776,6 +4779,7 @@ def run_stable_runtime_launcher_attempt(
                 selected_source_kind = "approved_repair_target"
                 selected_source_path = str(paths.repair_target_inventory_dir)
         if not paths.launcher_script.exists():
+            stderr = f"Missing launcher script: {paths.launcher_script}\n"
             return StableRuntimeLaunchAttempt(
                 desired_kind=desired_kind,
                 observed_path=observed_path,
@@ -4787,14 +4791,32 @@ def run_stable_runtime_launcher_attempt(
                 selected_source_path=selected_source_path,
                 launcher_exit_code=127,
                 stdout="",
-                stderr=f"Missing launcher script: {paths.launcher_script}\n",
+                stderr=stderr,
+                process_result={
+                    "status": "error",
+                    "machine_error_code": PROCESS_NOT_FOUND,
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": stderr,
+                    "stdout_truncated": False,
+                    "stderr_truncated": False,
+                    "timed_out": False,
+                    "duration_seconds": 0.0,
+                },
             )
-        result = subprocess.run(
+        process_result = run_bounded_process(
             [str(paths.launcher_script), "smoke"],
-            capture_output=True,
-            text=True,
             env=launcher_env,
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_payload = process_result.to_dict()
+        launcher_exit_code = (
+            process_result.exit_code
+            if isinstance(process_result.exit_code, int)
+            and process_result.exit_code >= 0
+            else 1
         )
     return StableRuntimeLaunchAttempt(
         desired_kind=desired_kind,
@@ -4805,9 +4827,10 @@ def run_stable_runtime_launcher_attempt(
         selected_config_file=selected_config_file,
         selected_source_kind=selected_source_kind,
         selected_source_path=selected_source_path,
-        launcher_exit_code=result.returncode,
-        stdout=result.stdout,
-        stderr=result.stderr,
+        launcher_exit_code=launcher_exit_code,
+        stdout=process_result.stdout,
+        stderr=process_result.stderr,
+        process_result=process_payload,
     )
 
 
@@ -4827,6 +4850,7 @@ def build_deterministic_stable_recovery_result(
     live_runtime_observation_confirmed: bool,
     confirmation_basis: str,
     effectful_claim_allowed: bool,
+    process_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not attempted:
         status = "not_invoked"
@@ -4840,7 +4864,7 @@ def build_deterministic_stable_recovery_result(
     else:
         status = "completed"
         guardrail_status = "observation_only"
-    return {
+    result = {
         "status": status,
         "owner_command_surface": owner_command_surface,
         "delegated_from_status": delegated_from_status,
@@ -4858,6 +4882,9 @@ def build_deterministic_stable_recovery_result(
         "effectful_claim_allowed": effectful_claim_allowed,
         "guardrail_status": guardrail_status,
     }
+    if process_result is not None:
+        result["process_result"] = process_result
+    return result
 
 
 def build_startup_contract_repair_result(
@@ -9069,6 +9096,7 @@ def run_healthcheck(
             live_runtime_observation_confirmed=live_runtime_observation_confirmed,
             confirmation_basis=confirmation_basis,
             effectful_claim_allowed=effectful_claim_allowed,
+            process_result=recovery_attempt.process_result,
         )
         if (
             not live_runtime_observation_confirmed
@@ -9569,6 +9597,7 @@ def run_launch_smoke(
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",
             "launcher_exit_code": attempt.launcher_exit_code,
+            "process_result": attempt.process_result,
             "stabilization_seconds": stabilization_seconds,
         },
         exit_code=(

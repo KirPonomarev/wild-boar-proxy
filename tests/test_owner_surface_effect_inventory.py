@@ -47,7 +47,6 @@ WRITE_PRIMITIVES = {
 SUBPROCESS_PRIMITIVES = {
     "Popen",
     "run_current_proxy_owner_path_activation",
-    "run_stable_runtime_launcher_attempt",
     "subprocess.Popen",
     "subprocess.run",
 }
@@ -356,6 +355,18 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
     def test_sync_owner_path_uses_bounded_runner_without_raw_subprocess(self) -> None:
         calls = _call_names(_function(RUNTIME, "run_sync_for_owner_path_under_lock"))
         self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_stable_runtime_launcher_attempt_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(RUNTIME, "run_stable_runtime_launcher_attempt"))
+        source = _function_source(RUNTIME, "run_stable_runtime_launcher_attempt")
+        self.assertIn("launcher_procedure_lock", calls)
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS", source)
+        self.assertIn("OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES", source)
+        self.assertNotIn("result.returncode", source)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_protective_lifecycle_uses_bounded_runner_without_raw_subprocess(

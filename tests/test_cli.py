@@ -4680,6 +4680,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["outcome"], "approved_target_recovered")
         self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
         self.assertEqual(
+            recovery["process_result"]["machine_error_code"], runtime_mod.PROCESS_OK
+        )
+        self.assertEqual(
             recovery["selected_source_path"],
             str(self.managed_dir / "stable-repair-target"),
         )
@@ -4766,6 +4769,10 @@ class CliTests(unittest.TestCase):
             recovery["selected_source_kind"], "observed_stable_inventory_source"
         )
         self.assertEqual(recovery["fallback_reason"], "launcher_exit_nonzero")
+        self.assertEqual(
+            recovery["process_result"]["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(recovery["process_result"]["exit_code"], 9)
         self.assertTrue(recovery["generated_config_regenerated"])
         self.assertTrue(recovery["snapshot_refreshed"])
         self.assertTrue(recovery["live_runtime_observation_confirmed"])
@@ -4834,6 +4841,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "recovery_failed_before_stable_healthy")
         self.assertEqual(recovery["fallback_reason"], "launcher_exit_nonzero")
+        self.assertEqual(
+            recovery["process_result"]["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(recovery["process_result"]["exit_code"], 9)
         self.assertTrue(recovery["generated_config_regenerated"])
         self.assertFalse(recovery["snapshot_refreshed"])
         self.assertFalse(recovery["live_runtime_observation_confirmed"])
@@ -4889,6 +4900,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["status"], "failed")
         self.assertTrue(recovery["attempted"])
+        self.assertEqual(
+            recovery["process_result"]["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
         self.assertFalse(recovery["live_runtime_observation_confirmed"])
 
     def test_healthcheck_owner_path_emits_stable_service_disabled_lane_on_successful_stable_reenable(
@@ -19358,26 +19372,7 @@ class CliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, self.env(), clear=False):
             paths = runtime_mod.RuntimePaths.from_env()
 
-            def subprocess_side_effect(
-                command: list[str],
-                *,
-                capture_output: bool,
-                text: bool,
-                env: dict[str, str],
-                check: bool,
-            ) -> subprocess.CompletedProcess[str]:
-                executable = str(command[0])
-                if executable == str(paths.launcher_script):
-                    launcher_started.set()
-                    self.assertEqual(
-                        env[runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV],
-                        str(paths.stable_runtime_generated_config_file),
-                    )
-                    release_launcher.wait(timeout=5)
-                    return subprocess.CompletedProcess(command, 0, "", "")
-                raise AssertionError(f"unexpected subprocess command: {command!r}")
-
-            def sync_runner_side_effect(
+            def bounded_process_side_effect(
                 command: list[str],
                 *,
                 env: dict[str, str],
@@ -19385,29 +19380,62 @@ class CliTests(unittest.TestCase):
                 timeout_seconds: float,
                 output_cap_bytes: int,
             ) -> BoundedProcessResult:
-                self.assertEqual(command, [str(paths.sync_script), runtime_mod.get_model(paths)])
-                self.assertIn("WBP_PROFILE_DIR", env)
-                self.assertEqual(cwd, paths.profile_dir)
-                self.assertEqual(
-                    timeout_seconds,
-                    runtime_mod.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
-                )
-                self.assertEqual(
-                    output_cap_bytes,
-                    runtime_mod.OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
-                )
-                sync_subprocess_called.set()
-                return BoundedProcessResult(
-                    status="ok",
-                    machine_error_code=runtime_mod.PROCESS_OK,
-                    exit_code=0,
-                    stdout="",
-                    stderr="",
-                    stdout_truncated=False,
-                    stderr_truncated=False,
-                    timed_out=False,
-                    duration_seconds=0.0,
-                )
+                executable = str(command[0])
+                if executable == str(paths.launcher_script):
+                    self.assertEqual(command, [str(paths.launcher_script), "smoke"])
+                    launcher_started.set()
+                    self.assertEqual(
+                        env[runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV],
+                        str(paths.stable_runtime_generated_config_file),
+                    )
+                    self.assertEqual(cwd, paths.profile_dir)
+                    self.assertEqual(
+                        timeout_seconds,
+                        runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+                    )
+                    self.assertEqual(
+                        output_cap_bytes,
+                        runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+                    )
+                    release_launcher.wait(timeout=5)
+                    return BoundedProcessResult(
+                        status="ok",
+                        machine_error_code=runtime_mod.PROCESS_OK,
+                        exit_code=0,
+                        stdout="",
+                        stderr="",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.0,
+                    )
+                if executable == str(paths.sync_script):
+                    self.assertEqual(
+                        command, [str(paths.sync_script), runtime_mod.get_model(paths)]
+                    )
+                    self.assertIn("WBP_PROFILE_DIR", env)
+                    self.assertEqual(cwd, paths.profile_dir)
+                    self.assertEqual(
+                        timeout_seconds,
+                        runtime_mod.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+                    )
+                    self.assertEqual(
+                        output_cap_bytes,
+                        runtime_mod.OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
+                    )
+                    sync_subprocess_called.set()
+                    return BoundedProcessResult(
+                        status="ok",
+                        machine_error_code=runtime_mod.PROCESS_OK,
+                        exit_code=0,
+                        stdout="",
+                        stderr="",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.0,
+                    )
+                raise AssertionError(f"unexpected subprocess command: {command!r}")
 
             def run_attempt() -> None:
                 attempt_result["attempt"] = runtime_mod.run_stable_runtime_launcher_attempt(
@@ -19415,11 +19443,8 @@ class CliTests(unittest.TestCase):
                 )
 
             with mock.patch(
-                "wild_boar_proxy.runtime.subprocess.run",
-                side_effect=subprocess_side_effect,
-            ), mock.patch(
                 "wild_boar_proxy.runtime.run_bounded_process",
-                side_effect=sync_runner_side_effect,
+                side_effect=bounded_process_side_effect,
             ), mock.patch(
                 "wild_boar_proxy.runtime.socket_is_listening", return_value=False
             ):
@@ -19440,6 +19465,9 @@ class CliTests(unittest.TestCase):
         self.assertIsInstance(attempt, runtime_mod.StableRuntimeLaunchAttempt)
         self.assertTrue(attempt.activation_attempted)
         self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_OK
+        )
+        self.assertEqual(
             attempt.selected_config_file,
             str(self.managed_dir / "stable-runtime-config.generated.yaml"),
         )
@@ -19458,27 +19486,48 @@ class CliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, self.env(), clear=False):
             paths = runtime_mod.RuntimePaths.from_env()
 
-            def subprocess_side_effect(
+            def bounded_process_side_effect(
                 command: list[str],
                 *,
-                capture_output: bool,
-                text: bool,
                 env: dict[str, str],
-                check: bool,
-            ) -> subprocess.CompletedProcess[str]:
+                cwd: Path,
+                timeout_seconds: float,
+                output_cap_bytes: int,
+            ) -> BoundedProcessResult:
                 executable = str(command[0])
                 if executable != str(paths.launcher_script):
                     raise AssertionError(f"unexpected subprocess command: {command!r}")
+                self.assertEqual(command, [str(paths.launcher_script), "smoke"])
+                self.assertIn(runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV, env)
+                self.assertEqual(cwd, paths.profile_dir)
+                self.assertEqual(
+                    timeout_seconds,
+                    runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+                )
+                self.assertEqual(
+                    output_cap_bytes,
+                    runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+                )
                 launcher_started.set()
                 release_launcher.wait(timeout=5)
-                return subprocess.CompletedProcess(command, 0, "", "")
+                return BoundedProcessResult(
+                    status="ok",
+                    machine_error_code=runtime_mod.PROCESS_OK,
+                    exit_code=0,
+                    stdout="",
+                    stderr="",
+                    stdout_truncated=False,
+                    stderr_truncated=False,
+                    timed_out=False,
+                    duration_seconds=0.0,
+                )
 
             def run_first_attempt() -> None:
                 runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
 
             with mock.patch(
-                "wild_boar_proxy.runtime.subprocess.run",
-                side_effect=subprocess_side_effect,
+                "wild_boar_proxy.runtime.run_bounded_process",
+                side_effect=bounded_process_side_effect,
             ):
                 launcher_thread = threading.Thread(target=run_first_attempt, daemon=True)
                 launcher_thread.start()
@@ -19496,6 +19545,135 @@ class CliTests(unittest.TestCase):
         self.assertFalse(launcher_thread.is_alive())
         self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
         self.assertIn("Launcher procedure lock", str(concurrent_result["message"]))
+
+    def test_stable_runtime_launcher_attempt_reports_bounded_process_result_on_nonzero(
+        self,
+    ) -> None:
+        self.launcher_script.write_text(
+            "#!/bin/sh\n"
+            "[ \"$1\" = smoke ] || exit 7\n"
+            "echo stable-launcher-failed >&2\n"
+            "exit 9\n",
+            encoding="utf-8",
+        )
+        self.launcher_script.chmod(0o755)
+        selection = {
+            "desired_kind": "observed_stable_inventory_source",
+            "observed_path": str(self.stable_dir),
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            attempt = runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+
+        self.assertFalse(attempt.activation_attempted)
+        self.assertEqual(attempt.launcher_exit_code, 9)
+        self.assertIn("stable-launcher-failed", attempt.stderr)
+        process_result = attempt.process_result
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(
+            process_result["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(process_result["exit_code"], 9)
+        self.assertIn("stable-launcher-failed", process_result["stderr"])
+        self.assertFalse(process_result["stderr_truncated"])
+
+    def test_stable_runtime_launcher_attempt_reports_bounded_process_timeout(
+        self,
+    ) -> None:
+        self.launcher_script.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+        self.launcher_script.chmod(0o755)
+        selection = {
+            "desired_kind": "observed_stable_inventory_source",
+            "observed_path": str(self.stable_dir),
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS",
+                0.2,
+            ):
+                attempt = runtime_mod.run_stable_runtime_launcher_attempt(
+                    paths, selection
+                )
+
+        self.assertEqual(attempt.launcher_exit_code, 1)
+        process_result = attempt.process_result
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(
+            process_result["machine_error_code"], runtime_mod.PROCESS_TIMEOUT
+        )
+        self.assertTrue(process_result["timed_out"])
+
+    def test_stable_runtime_launcher_attempt_reports_missing_launcher_process_result(
+        self,
+    ) -> None:
+        self.launcher_script.unlink()
+        selection = {
+            "desired_kind": "observed_stable_inventory_source",
+            "observed_path": str(self.stable_dir),
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            attempt = runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+
+        self.assertEqual(attempt.launcher_exit_code, 127)
+        self.assertIn("Missing launcher script", attempt.stderr)
+        process_result = attempt.process_result
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(
+            process_result["machine_error_code"], runtime_mod.PROCESS_NOT_FOUND
+        )
+        self.assertEqual(process_result["exit_code"], 127)
+
+    def test_stable_runtime_launcher_attempt_passes_profile_cwd_env_timeout_and_cap(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        process_result = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="launcher-ok\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_bounded_process",
+                return_value=process_result,
+            ) as runner:
+                attempt = runtime_mod.run_stable_runtime_launcher_attempt(
+                    paths, selection
+                )
+
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], [str(paths.launcher_script), "smoke"])
+        self.assertEqual(kwargs["cwd"], paths.profile_dir)
+        self.assertEqual(
+            kwargs["env"][runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV],
+            str(paths.stable_runtime_generated_config_file),
+        )
+        self.assertEqual(
+            kwargs["timeout_seconds"],
+            runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            kwargs["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(attempt.launcher_exit_code, 0)
+        self.assertEqual(attempt.stdout, "launcher-ok\n")
+        self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_OK
+        )
 
     def test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces(
         self,
@@ -19828,6 +20006,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["desired_mode"], "managed")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["launcher_exit_code"], 0)
+        self.assertEqual(payload["process_result"]["machine_error_code"], runtime_mod.PROCESS_OK)
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertIn(
             str(self.profile_dir / "runtime-effective-mode.txt"), payload["changed_files"]
@@ -20380,6 +20559,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["launcher_exit_code"], 9)
+        self.assertEqual(
+            payload["process_result"]["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(payload["process_result"]["exit_code"], 9)
         self.assertNotIn("current_proxy_adoption_contract", payload)
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
 
