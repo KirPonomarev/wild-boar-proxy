@@ -964,10 +964,76 @@ def ensure_capacity_data_consistency(
         )
 
 
-def load_runtime_snapshot(runner: JsonCommandRunner) -> RuntimeSnapshot:
+def build_live_runtime_status_payload(
+    *,
+    status_payload: dict[str, Any],
+    health_payload: dict[str, Any],
+) -> dict[str, Any]:
+    require_fields(
+        health_payload,
+        (
+            "status",
+            "exit_code",
+            "human_message",
+            "machine_error_code",
+            "next_action",
+            "liveness",
+            "severity",
+            "operator_action",
+            "desired_mode",
+            "effective_mode",
+            "endpoint",
+        ),
+        "healthcheck payload",
+    )
+    attestation = health_payload.get("attestation")
+    if not isinstance(attestation, dict):
+        raise UiShellError("healthcheck payload attestation must be an object")
+    require_fields(
+        attestation,
+        ("attestation_source", "observed_at_utc"),
+        "healthcheck attestation",
+    )
+    merged = dict(status_payload)
+    for field in (
+        "status",
+        "exit_code",
+        "human_message",
+        "machine_error_code",
+        "next_action",
+        "liveness",
+        "severity",
+        "operator_action",
+        "desired_mode",
+        "effective_mode",
+        "endpoint",
+        "current_proxy_url",
+        "last_error",
+    ):
+        if field in health_payload:
+            merged[field] = health_payload[field]
+    merged["attestation_summary"] = {
+        "status": health_payload["status"],
+        "machine_error_code": health_payload["machine_error_code"],
+        "attestation_source": str(attestation["attestation_source"]),
+        "observed_at_utc": str(attestation["observed_at_utc"]),
+    }
+    return merged
+
+
+def load_runtime_snapshot(
+    runner: JsonCommandRunner, *, live_probe: bool = False
+) -> RuntimeSnapshot:
+    status_payload = runner.run("status", "--json").payload
+    mode_payload = runner.run("mode", "get", "--json").payload
+    if live_probe:
+        status_payload = build_live_runtime_status_payload(
+            status_payload=status_payload,
+            health_payload=runner.run("healthcheck", "--json").payload,
+        )
     return build_runtime_snapshot(
-        status_payload=runner.run("status", "--json").payload,
-        mode_payload=runner.run("mode", "get", "--json").payload,
+        status_payload=status_payload,
+        mode_payload=mode_payload,
     )
 
 
@@ -3303,7 +3369,7 @@ def run_packaged_continuity_smoke_json() -> tuple[dict[str, Any], int]:
         root.withdraw()
         runner = JsonCommandRunner()
         shell = MinimalCompanionShell(root, runner)
-        runtime_snapshot = load_runtime_snapshot(runner)
+        runtime_snapshot = load_runtime_snapshot(runner, live_probe=True)
         account_snapshot = load_account_pool_snapshot(runner)
         ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
         external_snapshot = load_external_models_snapshot(runner)

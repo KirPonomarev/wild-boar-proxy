@@ -523,6 +523,60 @@ class RuntimeSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(UiShellError, "effective mode"):
             load_runtime_snapshot(runner)
 
+    def test_load_runtime_snapshot_live_probe_uses_healthcheck_truth(self) -> None:
+        runner = FakeRunner(
+            {
+                ("status", "--json"): status_payload(
+                    liveness="unknown",
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 1,
+                        "retired": 0,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    },
+                    attestation_summary={
+                        "status": "not_run",
+                        "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+                        "attestation_source": "status --json",
+                        "observed_at_utc": "",
+                    },
+                ),
+                ("mode", "get", "--json"): mode_payload(),
+                ("healthcheck", "--json"): command_payload(
+                    human_message="Runtime attestation passed.",
+                    liveness="healthy",
+                    severity="recoverable",
+                    operator_action="none",
+                    desired_mode="managed",
+                    effective_mode="managed",
+                    endpoint="127.0.0.1:9999",
+                    current_proxy_url="",
+                    attestation={
+                        "attestation_source": "healthcheck --json",
+                        "observed_at_utc": "2026-05-05T10:00:00+00:00",
+                    },
+                    last_error="",
+                ),
+            }
+        )
+
+        snapshot = load_runtime_snapshot(runner, live_probe=True)
+
+        self.assertEqual(snapshot.liveness, "healthy")
+        self.assertEqual(snapshot.attestation_source, "healthcheck --json")
+        self.assertEqual(snapshot.active_count, 0)
+        self.assertEqual(snapshot.reserve_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("healthcheck", "--json"),
+            ],
+        )
+
 
 class AccountPoolSnapshotTests(unittest.TestCase):
     def test_build_account_pool_snapshot_maps_account_truth(self) -> None:

@@ -1917,6 +1917,8 @@ class CliTests(unittest.TestCase):
         if runtime_executable is None:
             self.skipTest("no tkinter-capable runtime is available for packaged continuity smoke")
 
+        managed_dir = self.managed_dir
+
         class PackagedHandler(BaseHTTPRequestHandler):
             request_paths: list[str] = []
 
@@ -1924,6 +1926,36 @@ class CliTests(unittest.TestCase):
                 PackagedHandler.request_paths.append(self.path)
                 if self.path == "/v1/models":
                     body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if self.path == "/v1/wbp/runtime-identity":
+                    state_path = managed_dir / "supervisor-state.json"
+                    managed_config_path = managed_dir / "managed-config.yaml"
+                    state = json.loads(state_path.read_text(encoding="utf-8"))
+                    body = json.dumps(
+                        {
+                            "schema_version": runtime_mod.RUNTIME_IDENTITY_SCHEMA_VERSION,
+                            "runtime_marker": "wbp-test-runtime-marker",
+                            "managed_config_identity": hashlib.sha256(
+                                managed_config_path.read_bytes()
+                            ).hexdigest(),
+                            "selected_backends_digest": (
+                                runtime_mod.get_selected_backends_digest(state)
+                            ),
+                            "runtime_version": str(
+                                state.get(
+                                    "version",
+                                    state.get("schema_version", "unknown"),
+                                )
+                            ),
+                            "issued_for_endpoint": f"http://127.0.0.1:{port}/v1",
+                            "issued_at_utc": "2026-06-01T00:00:00+00:00",
+                        }
+                    ).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(body)))
