@@ -3962,6 +3962,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(adoption_result["launcher_lane_eligibility"], "eligible_recognized_repo_owned_default_lane")
         self.assertEqual(adoption_result["launcher_readiness_status"], "default_path_provisioned_repo_managed")
         self.assertEqual(adoption_result["adoption_outcome"], "candidate_adopted")
+        self.assertEqual(
+            adoption_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_OK,
+        )
+        self.assertEqual(adoption_result["process_result"]["exit_code"], 0)
         self.assertTrue(adoption_result["current_proxy_url_rewritten"])
         self.assertTrue(adoption_result["live_runtime_observation_confirmed"])
         self.assertTrue(adoption_result["last_known_good_refreshed"])
@@ -4448,6 +4453,11 @@ class CliTests(unittest.TestCase):
         self.assertTrue(adoption_result["attempted"])
         self.assertEqual(adoption_result["activation_exit_code"], 0)
         self.assertEqual(adoption_result["adoption_outcome"], "live_reproof_failed")
+        self.assertEqual(
+            adoption_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_OK,
+        )
+        self.assertEqual(adoption_result["process_result"]["exit_code"], 0)
         self.assertFalse(adoption_result["current_proxy_url_rewritten"])
         self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
@@ -19545,6 +19555,213 @@ class CliTests(unittest.TestCase):
         self.assertFalse(launcher_thread.is_alive())
         self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
         self.assertIn("Launcher procedure lock", str(concurrent_result["message"]))
+
+    def test_current_proxy_owner_path_activation_reports_bounded_process_success(
+        self,
+    ) -> None:
+        working_candidate = "http://127.0.0.1:19999"
+        process_result = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="activation-ok\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        lane_status = {
+            "eligible": True,
+            "eligibility": "eligible_recognized_repo_owned_default_lane",
+            "launcher_readiness_status": "default_path_provisioned_repo_managed",
+            "path_kind": "default_owned_provisioning_target",
+            "prerequisite_materialized": True,
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with (
+                mock.patch.object(
+                    runtime_mod,
+                    "get_current_proxy_launcher_lane_status",
+                    return_value=lane_status,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.runtime.run_bounded_process",
+                    return_value=process_result,
+                ) as runner,
+            ):
+                attempt = runtime_mod.run_current_proxy_owner_path_activation(
+                    paths, working_candidate
+                )
+
+        args, kwargs = runner.call_args
+        self.assertEqual(
+            args[0],
+            [
+                str(paths.launcher_script),
+                runtime_mod.CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE,
+            ],
+        )
+        self.assertEqual(kwargs["cwd"], paths.profile_dir)
+        self.assertEqual(
+            kwargs["env"][runtime_mod.CURRENT_PROXY_URL_HANDOFF_ENV],
+            working_candidate,
+        )
+        self.assertEqual(
+            kwargs["timeout_seconds"],
+            runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            kwargs["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(attempt.activation_exit_code, 0)
+        self.assertEqual(attempt.prior_current_proxy_url, "http://127.0.0.1:10808")
+        self.assertEqual(attempt.working_candidate, working_candidate)
+        self.assertEqual(
+            set(attempt.rollback_surface_snapshots),
+            {"state_file", "config_toml", "runtime_effective_mode_file"},
+        )
+        self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_OK
+        )
+
+    def test_current_proxy_owner_path_activation_preserves_nonzero_exit_code(
+        self,
+    ) -> None:
+        process_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_FAILED,
+            exit_code=9,
+            stdout="",
+            stderr="activation failed\n",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        lane_status = {
+            "eligible": True,
+            "eligibility": "eligible_recognized_repo_owned_default_lane",
+            "launcher_readiness_status": "default_path_provisioned_repo_managed",
+            "path_kind": "default_owned_provisioning_target",
+            "prerequisite_materialized": True,
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with (
+                mock.patch.object(
+                    runtime_mod,
+                    "get_current_proxy_launcher_lane_status",
+                    return_value=lane_status,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.runtime.run_bounded_process",
+                    return_value=process_result,
+                ),
+            ):
+                attempt = runtime_mod.run_current_proxy_owner_path_activation(
+                    paths, "http://127.0.0.1:19999"
+                )
+
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(attempt.activation_exit_code, 9)
+        self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(attempt.process_result["exit_code"], 9)
+
+    def test_current_proxy_owner_path_activation_maps_timeout_without_exit_to_legacy_failure(
+        self,
+    ) -> None:
+        process_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="activation timed out\n",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        lane_status = {
+            "eligible": True,
+            "eligibility": "eligible_recognized_repo_owned_default_lane",
+            "launcher_readiness_status": "default_path_provisioned_repo_managed",
+            "path_kind": "default_owned_provisioning_target",
+            "prerequisite_materialized": True,
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with (
+                mock.patch.object(
+                    runtime_mod,
+                    "get_current_proxy_launcher_lane_status",
+                    return_value=lane_status,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.runtime.run_bounded_process",
+                    return_value=process_result,
+                ),
+            ):
+                attempt = runtime_mod.run_current_proxy_owner_path_activation(
+                    paths, "http://127.0.0.1:19999"
+                )
+
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(attempt.activation_exit_code, 1)
+        self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_TIMEOUT
+        )
+        self.assertTrue(attempt.process_result["timed_out"])
+
+    def test_current_proxy_owner_path_activation_maps_runner_failure_without_exit_to_legacy_failure(
+        self,
+    ) -> None:
+        process_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_FAILED,
+            exit_code=None,
+            stdout="",
+            stderr="exec format error\n",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        lane_status = {
+            "eligible": True,
+            "eligibility": "eligible_recognized_repo_owned_default_lane",
+            "launcher_readiness_status": "default_path_provisioned_repo_managed",
+            "path_kind": "default_owned_provisioning_target",
+            "prerequisite_materialized": True,
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with (
+                mock.patch.object(
+                    runtime_mod,
+                    "get_current_proxy_launcher_lane_status",
+                    return_value=lane_status,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.runtime.run_bounded_process",
+                    return_value=process_result,
+                ),
+            ):
+                attempt = runtime_mod.run_current_proxy_owner_path_activation(
+                    paths, "http://127.0.0.1:19999"
+                )
+
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(attempt.activation_exit_code, 1)
+        self.assertEqual(
+            attempt.process_result["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertIsNone(attempt.process_result["exit_code"])
 
     def test_stable_runtime_launcher_attempt_reports_bounded_process_result_on_nonzero(
         self,

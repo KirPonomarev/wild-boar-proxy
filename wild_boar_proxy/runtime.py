@@ -389,6 +389,7 @@ class CurrentProxyOwnerPathActivationAttempt:
     prior_current_proxy_url: str
     working_candidate: str
     rollback_surface_snapshots: dict[str, dict[str, Any]]
+    process_result: dict[str, Any] | None
 
 
 def now_iso() -> str:
@@ -1712,27 +1713,36 @@ def run_current_proxy_owner_path_activation(
                 prior_current_proxy_url="",
                 working_candidate=working_candidate,
                 rollback_surface_snapshots={},
+                process_result=None,
             )
         prior_state = read_json(paths.state_file, required=False)
         rollback_surface_snapshots = snapshot_current_proxy_owner_path_runtime_surfaces(
             paths
         )
-        result = subprocess.run(
+        process_result = run_bounded_process(
             [str(paths.launcher_script), CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE],
-            capture_output=True,
-            text=True,
             env=launcher_env,
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_LAUNCHER_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_payload = process_result.to_dict()
+        activation_exit_code = (
+            process_result.exit_code
+            if isinstance(process_result.exit_code, int)
+            and process_result.exit_code >= 0
+            else 1
         )
     return CurrentProxyOwnerPathActivationAttempt(
         launcher_lane_eligibility=str(lane_status["eligibility"]),
         launcher_readiness_status=str(lane_status["launcher_readiness_status"]),
         prerequisite_materialized=bool(lane_status["prerequisite_materialized"]),
         activation_attempted=True,
-        activation_exit_code=result.returncode,
+        activation_exit_code=activation_exit_code,
         prior_current_proxy_url=str(prior_state.get("current_proxy_url", "")),
         working_candidate=working_candidate,
         rollback_surface_snapshots=rollback_surface_snapshots,
+        process_result=process_payload,
     )
 
 
@@ -8886,6 +8896,10 @@ def run_healthcheck(
                 "live_runtime_observation_confirmed": False,
                 "last_known_good_refreshed": False,
             }
+            if activation_attempt.process_result is not None:
+                proxy_reprobe_adoption_result["process_result"] = (
+                    activation_attempt.process_result
+                )
             if (
                 activation_attempt.activation_attempted
                 and activation_attempt.activation_exit_code == 0
