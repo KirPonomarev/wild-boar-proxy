@@ -4823,6 +4823,7 @@ def build_startup_contract_repair_result(
     delegated_from_status: bool,
     attempted: bool,
     live_runtime_observation_confirmed: bool,
+    repairable_blocker_resolved: bool = False,
 ) -> dict[str, Any]:
     if not attempted:
         status = "not_invoked"
@@ -4830,6 +4831,7 @@ def build_startup_contract_repair_result(
     elif (
         core_result.startup_contract_outcome
         == state_startup_contract.STARTUP_CONTRACT_BLOCKED
+        and not repairable_blocker_resolved
     ):
         status = "blocked"
         guardrail_status = "blocked"
@@ -4841,8 +4843,11 @@ def build_startup_contract_repair_result(
         guardrail_status = "observation_only"
     effectful_claim_allowed = (
         live_runtime_observation_confirmed
-        and core_result.startup_contract_outcome
-        != state_startup_contract.STARTUP_CONTRACT_BLOCKED
+        and (
+            core_result.startup_contract_outcome
+            != state_startup_contract.STARTUP_CONTRACT_BLOCKED
+            or repairable_blocker_resolved
+        )
     )
     return {
         "status": status,
@@ -4864,6 +4869,34 @@ def build_startup_contract_repair_result(
         "effectful_claim_allowed": effectful_claim_allowed,
         "guardrail_status": guardrail_status,
     }
+
+
+def _startup_effective_mode_blocker_resolved(
+    core_result: state_startup_contract.StartupContractCoreResult,
+    *,
+    live_runtime_observation_confirmed: bool,
+    effective_mode_match: bool,
+    reported_effective_mode: str,
+) -> bool:
+    if (
+        core_result.startup_contract_outcome
+        != state_startup_contract.STARTUP_CONTRACT_BLOCKED
+    ):
+        return False
+    if not live_runtime_observation_confirmed or not effective_mode_match:
+        return False
+    if reported_effective_mode != "stable":
+        return False
+    if core_result.blocking_reasons != (
+        state_startup_truth.TRUTH_SLICE_CONTRADICTED,
+    ):
+        return False
+    if (
+        core_result.truth_assessment.truth_slice_outcome
+        != state_startup_truth.TRUTH_SLICE_CONTRADICTED
+    ):
+        return False
+    return core_result.truth_assessment.contradiction_fields == ("effective_mode",)
 
 
 def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
@@ -9092,9 +9125,18 @@ def run_healthcheck(
     startup_contract_repair_result: dict[str, Any] | None = None
     if startup_contract_owner_result is not None:
         startup_core_result = startup_contract_owner_result.core_result
+        startup_effective_mode_blocker_resolved = (
+            _startup_effective_mode_blocker_resolved(
+                startup_core_result,
+                live_runtime_observation_confirmed=ok,
+                effective_mode_match=effective_mode_match,
+                reported_effective_mode=reported_effective_mode,
+            )
+        )
         if (
             startup_core_result.startup_contract_outcome
             == state_startup_contract.STARTUP_CONTRACT_BLOCKED
+            and not startup_effective_mode_blocker_resolved
         ):
             ok = False
             machine_error_code = startup_core_result.machine_error_code
@@ -9112,6 +9154,7 @@ def run_healthcheck(
             delegated_from_status=False,
             attempted=True,
             live_runtime_observation_confirmed=ok,
+            repairable_blocker_resolved=startup_effective_mode_blocker_resolved,
         )
         runtime_guardrails["startup_contract_guardrail_status"] = startup_contract_repair_result[
             "guardrail_status"

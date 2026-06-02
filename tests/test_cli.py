@@ -3921,7 +3921,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(adoption_result["live_runtime_observation_confirmed"])
         self.assertTrue(adoption_result["last_known_good_refreshed"])
         self.assertIn(str(self.default_launcher_script), payload["changed_files"])
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"),
+            payload["changed_files"],
+        )
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertIn(
             str(self.profile_dir / "runtime-effective-mode.txt"),
@@ -4443,6 +4446,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertTrue(payload["attestation"]["effective_mode_match"])
+        startup_repair = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_repair["status"], "completed")
+        self.assertEqual(startup_repair["guardrail_status"], "confirmed")
+        self.assertTrue(startup_repair["live_runtime_observation_confirmed"])
+        self.assertTrue(startup_repair["effectful_claim_allowed"])
+        self.assertIn(
+            runtime_mod.state_startup_truth.TRUTH_SLICE_CONTRADICTED,
+            startup_repair["blocking_reasons"],
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["effective_mode"], "stable")
         self.assertEqual(state["selected_backend_ids"], [])
@@ -4555,6 +4568,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertTrue(payload["attestation"]["effective_mode_match"])
         self.assertTrue(payload["attestation"]["base_url_match"])
+        startup_repair = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_repair["status"], "completed")
+        self.assertEqual(startup_repair["guardrail_status"], "confirmed")
+        self.assertTrue(startup_repair["live_runtime_observation_confirmed"])
+        self.assertTrue(startup_repair["effectful_claim_allowed"])
+        self.assertIn(
+            runtime_mod.state_startup_truth.TRUTH_SLICE_CONTRADICTED,
+            startup_repair["blocking_reasons"],
+        )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["effective_mode"], "stable")
         self.assertEqual(state["selected_backend_ids"], [])
