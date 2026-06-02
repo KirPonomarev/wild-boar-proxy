@@ -4380,7 +4380,6 @@ class CliTests(unittest.TestCase):
             original_config_toml,
             encoding="utf-8",
         )
-        (self.profile_dir / "runtime-effective-mode.txt").unlink()
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["current_proxy_url"] = "http://127.0.0.1:10808"
@@ -4424,7 +4423,12 @@ class CliTests(unittest.TestCase):
             (self.profile_dir / "config.toml").read_text(encoding="utf-8"),
             original_config_toml,
         )
-        self.assertFalse((self.profile_dir / "runtime-effective-mode.txt").exists())
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(
+                encoding="utf-8"
+            ),
+            "managed\n",
+        )
 
     def test_healthcheck_reconciles_effective_mode_mismatch_to_stable(self) -> None:
         stable_port = free_port()
