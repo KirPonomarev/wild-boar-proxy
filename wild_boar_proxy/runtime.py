@@ -84,6 +84,7 @@ REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX = (
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
+PROCESS_PROBE_TIMEOUT_SECONDS = 2.0
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
@@ -2868,26 +2869,58 @@ def _normalize_ps_text(text: str) -> str:
     return " ".join(text.split())
 
 
+def _system_ps_bin() -> str | None:
+    ps_bin = shutil.which("ps", path=DETERMINISTIC_RUNTIME_PATH)
+    if not ps_bin:
+        return None
+    candidate = Path(ps_bin)
+    if (
+        not candidate.is_absolute()
+        or not candidate.is_file()
+        or not os.access(candidate, os.X_OK)
+    ):
+        return None
+    return str(candidate)
+
+
+def _run_process_probe_ps(*args: str) -> subprocess.CompletedProcess[str] | None:
+    ps_bin = _system_ps_bin()
+    if ps_bin is None:
+        return None
+    command = [ps_bin, *args]
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=sanitized_env(),
+        )
+        stdout, stderr = process.communicate(timeout=PROCESS_PROBE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout or "",
+            stderr or "",
+        )
+    except OSError:
+        return None
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
 def _probe_process_uid(pid: int) -> int | None:
-    result = subprocess.run(
-        ["ps", "-o", "uid=", "-p", str(pid)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    result = _run_process_probe_ps("-o", "uid=", "-p", str(pid))
+    if result is None or result.returncode != 0:
         return None
     return _parse_positive_pid(result.stdout)
 
 
 def _probe_process_create_time(pid: int) -> float | None:
-    result = subprocess.run(
-        ["ps", "-o", "lstart=", "-p", str(pid)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    result = _run_process_probe_ps("-o", "lstart=", "-p", str(pid))
+    if result is None or result.returncode != 0:
         return None
     value = _normalize_ps_text(result.stdout.strip())
     if not value:

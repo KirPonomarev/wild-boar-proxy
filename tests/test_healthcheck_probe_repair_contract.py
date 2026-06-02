@@ -497,6 +497,23 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         self.assertTrue(payload["command"])
         self.assertFalse(lock_file.exists())
 
+    def test_lock_file_owner_path_degrades_when_process_probe_tool_is_missing(
+        self,
+    ) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+
+        with mock.patch.object(runtime_mod.shutil, "which", return_value=None):
+            with mock.patch.object(
+                runtime_mod.subprocess,
+                "run",
+                side_effect=AssertionError("metadata probe must not use subprocess.run"),
+            ):
+                with runtime_mod.lock_file_owner_path(lock_file):
+                    raw_payload = lock_file.read_text(encoding="utf-8")
+
+        self.assertEqual(raw_payload, f"{os.getpid()}\n")
+        self.assertFalse(lock_file.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

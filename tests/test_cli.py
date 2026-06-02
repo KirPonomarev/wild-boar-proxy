@@ -19611,9 +19611,14 @@ class CliTests(unittest.TestCase):
                 status_payload = json.loads(status_result.stdout)
                 self.assertEqual(status_payload["status"], "ok")
                 self.assertEqual(status_payload["machine_error_code"], "OK")
+                self.assertEqual(status_payload["effect"], "read")
+                self.assertEqual(status_payload["changed_files"], [])
                 self.assertEqual(status_payload["desired_mode"], "managed")
                 self.assertEqual(status_payload["effective_mode"], "stable")
-                self.assertEqual(status_payload["attestation_summary"]["status"], "ok")
+                self.assertEqual(
+                    status_payload["attestation_summary"]["status"],
+                    "not_run",
+                )
         finally:
             server.shutdown()
             thread.join()
