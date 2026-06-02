@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import signal
 import sys
 import tempfile
 import time
 import unittest
 from io import StringIO
+from unittest import mock
 
 from wild_boar_proxy.process_runner import (
     PROCESS_FAILED,
@@ -14,6 +16,7 @@ from wild_boar_proxy.process_runner import (
     PROCESS_OK,
     PROCESS_TIMEOUT,
     BoundedProcessRunner,
+    start_detached_process,
 )
 
 
@@ -211,6 +214,48 @@ class BoundedProcessRunnerTests(unittest.TestCase):
                 env=os.environ,
                 shell=True,
             )
+
+    def test_detached_start_reports_pid_and_uses_process_group(self) -> None:
+        result = start_detached_process(
+            [sys.executable, "-c", "import time; time.sleep(10)"],
+            env=os.environ,
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertTrue(result.launch_observed)
+        self.assertIsInstance(result.pid, int)
+        self.assertGreater(int(result.pid or 0), 0)
+        try:
+            os.killpg(int(result.pid or 0), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    def test_detached_start_missing_binary_is_structured(self) -> None:
+        result = start_detached_process(
+            ["/definitely/missing/wbp-detached-process-runner-binary"],
+            env=os.environ,
+        )
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_NOT_FOUND)
+        self.assertIsNone(result.pid)
+        self.assertFalse(result.launch_observed)
+
+    def test_detached_start_oserror_is_structured_failure(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.process_runner.subprocess.Popen",
+            side_effect=PermissionError("no launch"),
+        ):
+            result = start_detached_process([sys.executable], env=os.environ)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_FAILED)
+        self.assertIsNone(result.pid)
+        self.assertFalse(result.launch_observed)
+        self.assertIn("no launch", result.error)
+
+    def test_detached_start_shell_true_is_forbidden(self) -> None:
+        with self.assertRaises(ValueError):
+            start_detached_process(["echo", "nope"], env=os.environ, shell=True)
 
 
 if __name__ == "__main__":

@@ -51,6 +51,26 @@ class BoundedProcessResult:
         }
 
 
+@dataclass(frozen=True)
+class DetachedProcessStartResult:
+    status: str
+    machine_error_code: str
+    pid: int | None
+    launch_observed: bool
+    error: str
+    duration_seconds: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "machine_error_code": self.machine_error_code,
+            "pid": self.pid,
+            "launch_observed": self.launch_observed,
+            "error": self.error,
+            "duration_seconds": self.duration_seconds,
+        }
+
+
 def _read_capped(handle, cap_bytes: int) -> tuple[str, bool]:
     handle.flush()
     handle.seek(0)
@@ -92,6 +112,74 @@ def _kill_process_group(pid: int) -> None:
         os.killpg(pid, signal.SIGKILL)
     except ProcessLookupError:
         return
+
+
+def start_detached_process(
+    command: Sequence[str | Path],
+    *,
+    env: Mapping[str, str],
+    cwd: Path | str | None = None,
+    stdout: Any = subprocess.DEVNULL,
+    stderr: Any = subprocess.DEVNULL,
+    text: bool = False,
+    shell: bool = False,
+) -> DetachedProcessStartResult:
+    if shell:
+        raise ValueError("shell=True is forbidden for detached process execution")
+    argv = [str(item) for item in command]
+    if not argv:
+        raise ValueError("command must not be empty")
+
+    started = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=stderr,
+            env=dict(env),
+            cwd=str(cwd) if cwd is not None else None,
+            start_new_session=True,
+            text=text,
+            shell=False,
+        )
+    except FileNotFoundError as exc:
+        return DetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_NOT_FOUND,
+            pid=None,
+            launch_observed=False,
+            error=str(exc),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+    except OSError as exc:
+        return DetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_FAILED,
+            pid=None,
+            launch_observed=False,
+            error=str(exc),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+
+    pid = int(getattr(process, "pid", 0) or 0)
+    if pid <= 0:
+        return DetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_FAILED,
+            pid=None,
+            launch_observed=False,
+            error="detached process started without a valid pid",
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+    return DetachedProcessStartResult(
+        status="ok",
+        machine_error_code=PROCESS_OK,
+        pid=pid,
+        launch_observed=True,
+        error="",
+        duration_seconds=round(time.monotonic() - started, 3),
+    )
 
 
 class BoundedProcessRunner:

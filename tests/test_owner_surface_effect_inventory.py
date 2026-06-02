@@ -429,6 +429,16 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertNotIn("result.returncode", source)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_accounts_login_start_uses_detached_adapter_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(RUNTIME, "run_accounts_login_start"))
+        source = _function_source(RUNTIME, "run_accounts_login_start")
+        self.assertIn("start_detached_process", calls)
+        self.assertIn("process_result", source)
+        self.assertIn("LOGIN_DEVICE_PROCESS_START_FAILED", source)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:

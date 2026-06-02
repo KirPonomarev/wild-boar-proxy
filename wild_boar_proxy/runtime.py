@@ -49,6 +49,7 @@ from .process_runner import (
     PROCESS_OK,
     PROCESS_TIMEOUT,
     run_bounded_process,
+    start_detached_process,
 )
 
 
@@ -4551,18 +4552,24 @@ def terminate_login_session_pid(pid: int) -> bool:
     if pid <= 0:
         return False
     try:
-        os.kill(pid, signal.SIGTERM)
+        os.killpg(pid, signal.SIGTERM)
     except OSError:
-        return False
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return False
     deadline = time.time() + login_session_cancel_grace_seconds()
     while time.time() < deadline:
         if not login_session_pid_is_running(pid):
             return True
         time.sleep(0.05)
     try:
-        os.kill(pid, signal.SIGKILL)
+        os.killpg(pid, signal.SIGKILL)
     except OSError:
-        return not login_session_pid_is_running(pid)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            return not login_session_pid_is_running(pid)
     deadline = time.time() + login_session_cancel_grace_seconds()
     while time.time() < deadline:
         if not login_session_pid_is_running(pid):
@@ -13293,15 +13300,46 @@ def run_accounts_login_start(
         with stdout_path.open("a", encoding="utf-8") as stdout_handle, stderr_path.open(
             "a", encoding="utf-8"
         ) as stderr_handle:
-            process = subprocess.Popen(  # noqa: S603
+            launch_result = start_detached_process(
                 command,
+                env=env,
+                cwd=paths.profile_dir,
                 stdout=stdout_handle,
                 stderr=stderr_handle,
                 text=True,
-                env=env,
-                start_new_session=True,
             )
-        session["pid"] = int(process.pid)
+        launch_payload = launch_result.to_dict()
+        if (
+            launch_result.status != "ok"
+            or not launch_result.launch_observed
+            or not launch_result.pid
+        ):
+            session["state"] = "failed"
+            session["failure_reason"] = "device_process_start_failed"
+            session["process_result"] = launch_payload
+            write_json_atomic(session_path, session)
+            changed_files = detect_changed_files_by_state(
+                before, [session_dir, session_path, stdout_path, stderr_path]
+            )
+            return build_command_payload(
+                ok=False,
+                human_message="Codex device login process could not be started.",
+                machine_error_code="LOGIN_DEVICE_PROCESS_START_FAILED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=changed_files,
+                extra={
+                    "provider": "codex",
+                    "mode": "device",
+                    "session_id": login_session_id,
+                    "login_session_id": login_session_id,
+                    "process_result": launch_payload,
+                    "login_result": codex_login_session_payload(session),
+                },
+            )
+        session["pid"] = int(launch_result.pid)
+        session["process_result"] = launch_payload
         write_json_atomic(session_path, session)
 
         deadline = time.time() + codex_device_login_handoff_timeout_seconds()

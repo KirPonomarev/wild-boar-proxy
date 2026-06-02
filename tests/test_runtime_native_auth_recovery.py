@@ -9,8 +9,10 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 
 from wild_boar_proxy import runtime
+from wild_boar_proxy.process_runner import DetachedProcessStartResult
 
 
 class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
@@ -443,14 +445,11 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
                 / "stable-runtime-config.generated.yaml",
             )
 
-            popen_kwargs: dict[str, object] = {}
+            start_kwargs: dict[str, object] = {}
 
-            class FakeProcess:
-                pid = os.getpid() + 1000
-
-            def fake_popen(*args, **kwargs):
-                nonlocal popen_kwargs
-                popen_kwargs = kwargs
+            def fake_start_detached_process(*args, **kwargs):
+                nonlocal start_kwargs
+                start_kwargs = kwargs
                 stdout_handle = kwargs["stdout"]
                 assert isinstance(stdout_handle, io.TextIOBase)
                 stdout_handle.write(
@@ -458,7 +457,14 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
                     "Codex device code: TEST-DETACH\n"
                 )
                 stdout_handle.flush()
-                return FakeProcess()
+                return DetachedProcessStartResult(
+                    status="ok",
+                    machine_error_code=runtime.PROCESS_OK,
+                    pid=os.getpid() + 1000,
+                    launch_observed=True,
+                    error="",
+                    duration_seconds=0.01,
+                )
 
             with (
                 unittest.mock.patch(
@@ -466,8 +472,8 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
                     return_value=fake_cli,
                 ),
                 unittest.mock.patch(
-                    "wild_boar_proxy.runtime.subprocess.Popen",
-                    side_effect=fake_popen,
+                    "wild_boar_proxy.runtime.start_detached_process",
+                    side_effect=fake_start_detached_process,
                 ),
                 unittest.mock.patch(
                     "wild_boar_proxy.runtime.login_session_pid_is_running",
@@ -478,7 +484,158 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["device_code"], "TEST-DETACH")
-        self.assertTrue(popen_kwargs["start_new_session"])
+        self.assertEqual(start_kwargs["cwd"], paths.profile_dir)
+        self.assertTrue(start_kwargs["text"])
+
+    def test_run_accounts_login_start_reports_detached_launch_failure_without_ready_claim(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            stable_dir = root / "stable"
+            auth_dir = stable_dir
+            (managed_dir / "login-sessions").mkdir(parents=True, exist_ok=True)
+            (managed_dir / "bin").mkdir(parents=True, exist_ok=True)
+            stable_dir.mkdir(parents=True, exist_ok=True)
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            stable_config = stable_dir / "config.yaml"
+            stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+                encoding="utf-8",
+            )
+            fake_cli = managed_dir / "bin" / "fake-cli-proxy"
+            fake_cli.write_text("", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            paths = runtime.RuntimePaths(
+                profile_dir=profile_dir,
+                managed_dir=managed_dir,
+                stable_config=stable_config,
+                auth_file=profile_dir / "auth.json",
+                config_toml=profile_dir / "config.toml",
+                runtime_mode_file=profile_dir / "runtime-mode.txt",
+                runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+                registry_file=managed_dir / "backend-registry.json",
+                state_file=managed_dir / "supervisor-state.json",
+                managed_config_file=managed_dir / "managed-config.yaml",
+                launcher_script=profile_dir / "codex-custom-launch.sh",
+                sync_script=managed_dir / "supervisor-sync.sh",
+                accounts_bin=managed_dir / "bin" / "codex-accounts",
+                onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+                lock_file=managed_dir / "wild-boar-proxy.lock",
+                launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+                repair_target_inventory_dir=managed_dir / "stable-repair-target",
+                repair_target_reference_file=managed_dir / "approved-repair-target.json",
+                target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+                stable_runtime_generated_config_file=managed_dir
+                / "stable-runtime-config.generated.yaml",
+            )
+
+            failed_start = DetachedProcessStartResult(
+                status="error",
+                machine_error_code=runtime.PROCESS_FAILED,
+                pid=None,
+                launch_observed=False,
+                error="launch failed",
+                duration_seconds=0.01,
+            )
+            with (
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.resolve_cli_proxy_bin",
+                    return_value=fake_cli,
+                ),
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.start_detached_process",
+                    return_value=failed_start,
+                ),
+            ):
+                payload = runtime.run_accounts_login_start(paths, "codex", mode="device")
+            session_id = payload["session_id"]
+            session_path = managed_dir / "login-sessions" / f"{session_id}.json"
+            self.assertTrue(session_path.is_file())
+            session = json.loads(session_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_DEVICE_PROCESS_START_FAILED")
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["process_result"]["machine_error_code"], runtime.PROCESS_FAILED)
+        self.assertFalse(payload["process_result"]["launch_observed"])
+        self.assertEqual(payload["login_result"]["status"], "failed")
+        self.assertFalse(payload["login_result"]["device_code_present"])
+        self.assertEqual(session["state"], "failed")
+        self.assertEqual(session["failure_reason"], "device_process_start_failed")
+
+    def test_terminate_login_session_pid_prefers_process_group_with_pid_fallback(
+        self,
+    ) -> None:
+        calls: list[tuple[str, int, int]] = []
+        running_checks = [True, False]
+
+        def fake_killpg(pid: int, sig: int) -> None:
+            calls.append(("killpg", pid, sig))
+
+        def fake_kill(pid: int, sig: int) -> None:
+            calls.append(("kill", pid, sig))
+
+        def fake_is_running(pid: int) -> bool:
+            return running_checks.pop(0) if running_checks else False
+
+        with (
+            unittest.mock.patch("wild_boar_proxy.runtime.os.killpg", side_effect=fake_killpg),
+            unittest.mock.patch("wild_boar_proxy.runtime.os.kill", side_effect=fake_kill),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_pid_is_running",
+                side_effect=fake_is_running,
+            ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_cancel_grace_seconds",
+                return_value=0.2,
+            ),
+        ):
+            terminated = runtime.terminate_login_session_pid(12345)
+
+        self.assertTrue(terminated)
+        self.assertEqual(calls, [("killpg", 12345, runtime.signal.SIGTERM)])
+
+    def test_terminate_login_session_pid_falls_back_when_process_group_missing(
+        self,
+    ) -> None:
+        calls: list[tuple[str, int, int]] = []
+        running_checks = [True, False]
+
+        def fake_killpg(pid: int, sig: int) -> None:
+            calls.append(("killpg", pid, sig))
+            raise ProcessLookupError
+
+        def fake_kill(pid: int, sig: int) -> None:
+            calls.append(("kill", pid, sig))
+
+        def fake_is_running(pid: int) -> bool:
+            return running_checks.pop(0) if running_checks else False
+
+        with (
+            unittest.mock.patch("wild_boar_proxy.runtime.os.killpg", side_effect=fake_killpg),
+            unittest.mock.patch("wild_boar_proxy.runtime.os.kill", side_effect=fake_kill),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_pid_is_running",
+                side_effect=fake_is_running,
+            ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_cancel_grace_seconds",
+                return_value=0.2,
+            ),
+        ):
+            terminated = runtime.terminate_login_session_pid(12345)
+
+        self.assertTrue(terminated)
+        self.assertEqual(
+            calls,
+            [
+                ("killpg", 12345, runtime.signal.SIGTERM),
+                ("kill", 12345, runtime.signal.SIGTERM),
+            ],
+        )
 
 
 if __name__ == "__main__":
