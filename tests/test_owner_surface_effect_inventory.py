@@ -12,6 +12,7 @@ EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
 CREDENTIALS = ROOT / "wild_boar_proxy" / "external_models" / "credentials.py"
 CLI = ROOT / "wild_boar_proxy" / "cli.py"
 CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
+KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 
 
 READ = "READ"
@@ -445,6 +446,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         calls = _call_names(_function(RUNTIME, "dispatch_external_client"))
         self.assertIn("run_bounded_process", calls)
         self.assertIn("start_detached_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_keychain_preflight_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(KEYCHAIN_PREFLIGHT, "_run_security"))
+        self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(

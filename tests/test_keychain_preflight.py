@@ -3,21 +3,41 @@
 
 from __future__ import annotations
 
-import subprocess
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from wild_boar_proxy.keychain_preflight import prepare_isolated_home_keychain
+from wild_boar_proxy.process_runner import BoundedProcessResult
 
 
-def completed(*, returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        args=["security"],
-        returncode=returncode,
+def completed(*, returncode: int = 0, stdout: str = "", stderr: str = "") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="ok" if returncode == 0 else "error",
+        machine_error_code="OK" if returncode == 0 else "PROCESS_FAILED",
+        exit_code=returncode,
         stdout=stdout,
         stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=False,
+        duration_seconds=0.01,
+    )
+
+
+def timeout_result(*, stderr: str = "timed out") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="error",
+        machine_error_code="PROCESS_TIMEOUT",
+        exit_code=None,
+        stdout="",
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=True,
+        duration_seconds=10.0,
     )
 
 
@@ -49,7 +69,7 @@ class KeychainPreflightTests(unittest.TestCase):
             mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
             mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
             mock.patch(
-                "wild_boar_proxy.keychain_preflight.subprocess.run",
+                "wild_boar_proxy.keychain_preflight.run_bounded_process",
                 return_value=completed(returncode=1, stderr="missing"),
             ),
         ):
@@ -58,11 +78,59 @@ class KeychainPreflightTests(unittest.TestCase):
         self.assertEqual(packet["status"], "skipped")
         self.assertEqual(packet["machine_error_code"], "KEYCHAIN_PREFLIGHT_NO_DEFAULT_KEYCHAIN")
 
+    def test_security_bounded_call_removes_hostile_ambient_env(self) -> None:
+        observed_envs: list[dict[str, str]] = []
+
+        def fake_run(
+            args: list[str],
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_envs.append(dict(env))
+            self.assertEqual(cwd, Path("/"))
+            return completed(returncode=1, stderr="missing")
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://example.invalid:1",
+                    "HTTPS_PROXY": "http://example.invalid:2",
+                    "ALL_PROXY": "http://example.invalid:3",
+                    "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                    "CODEX_HOME": "/tmp/ambient-codex-home",
+                    "OPENAI_API_KEY": "ambient-secret",
+                    "PATH": "/definitely/missing",
+                    "HOME": "/tmp/ambient-home",
+                },
+                clear=True,
+            ),
+            mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
+            mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
+            mock.patch("wild_boar_proxy.keychain_preflight.run_bounded_process", side_effect=fake_run),
+        ):
+            packet = prepare_isolated_home_keychain(isolated_home=Path("/tmp/test-home"))
+
+        self.assertEqual(packet["status"], "skipped")
+        self.assertEqual(packet["machine_error_code"], "KEYCHAIN_PREFLIGHT_NO_DEFAULT_KEYCHAIN")
+        self.assertEqual(len(observed_envs), 1)
+        env = observed_envs[0]
+        self.assertEqual(env["PATH"], "/usr/bin:/bin:/usr/sbin:/sbin")
+        self.assertNotIn("HTTP_PROXY", env)
+        self.assertNotIn("HTTPS_PROXY", env)
+        self.assertNotIn("ALL_PROXY", env)
+        self.assertNotIn("WBP_CURRENT_PROXY_URL", env)
+        self.assertNotIn("CODEX_HOME", env)
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("HOME", env)
+
     def test_blocks_when_isolated_home_is_not_absolute_without_invoking_security(self) -> None:
         with (
             mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
             mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
-            mock.patch("wild_boar_proxy.keychain_preflight.subprocess.run") as run,
+            mock.patch("wild_boar_proxy.keychain_preflight.run_bounded_process") as run,
         ):
             packet = prepare_isolated_home_keychain(isolated_home=Path("relative-home"))
 
@@ -84,7 +152,7 @@ class KeychainPreflightTests(unittest.TestCase):
                 mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
                 mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
                 mock.patch(
-                    "wild_boar_proxy.keychain_preflight.subprocess.run",
+                    "wild_boar_proxy.keychain_preflight.run_bounded_process",
                     side_effect=results,
                 ),
             ):
@@ -106,20 +174,30 @@ class KeychainPreflightTests(unittest.TestCase):
             default_keychain.write_text("", encoding="utf-8")
             system_keychain.write_text("", encoding="utf-8")
             recorded_commands: list[tuple[str, ...]] = []
+            recorded_homes: list[str | None] = []
 
             def fake_run(
                 args: list[str],
-                text: bool,
-                capture_output: bool,
-                check: bool,
                 env: dict[str, str],
-            ) -> subprocess.CompletedProcess[str]:
-                self.assertTrue(text)
-                self.assertTrue(capture_output)
-                self.assertFalse(check)
+                cwd: Path,
+                timeout_seconds: float,
+                output_cap_bytes: int,
+            ) -> BoundedProcessResult:
+                self.assertEqual(cwd, Path("/"))
+                self.assertEqual(timeout_seconds, 10.0)
+                self.assertEqual(output_cap_bytes, 16 * 1024)
+                self.assertEqual(env["PATH"], "/usr/bin:/bin:/usr/sbin:/sbin")
+                self.assertNotIn("HTTP_PROXY", env)
+                self.assertNotIn("HTTPS_PROXY", env)
+                self.assertNotIn("ALL_PROXY", env)
+                self.assertNotIn("WBP_CURRENT_PROXY_URL", env)
+                self.assertNotIn("CODEX_HOME", env)
+                self.assertNotIn("OPENAI_API_KEY", env)
                 command = tuple(args[1:])
                 recorded_commands.append(command)
-                home = Path(env["HOME"]) if env.get("HOME") == str(isolated_home) else None
+                home_value = env.get("HOME")
+                recorded_homes.append(home_value)
+                home = Path(home_value) if home_value == str(isolated_home) else None
                 if command == ("default-keychain", "-d", "user"):
                     stdout = f'"{default_keychain}"\n' if home is None else f'"{default_keychain}"\n'
                     return completed(stdout=stdout)
@@ -145,7 +223,7 @@ class KeychainPreflightTests(unittest.TestCase):
             with (
                 mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
                 mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
-                mock.patch("wild_boar_proxy.keychain_preflight.subprocess.run", side_effect=fake_run),
+                mock.patch("wild_boar_proxy.keychain_preflight.run_bounded_process", side_effect=fake_run),
             ):
                 packet = prepare_isolated_home_keychain(isolated_home=isolated_home)
 
@@ -178,6 +256,42 @@ class KeychainPreflightTests(unittest.TestCase):
                     for command in recorded_commands
                 )
             )
+            self.assertEqual(recorded_homes[:2], [None, None])
+            self.assertEqual(recorded_homes[2:], [str(isolated_home)] * 4)
+
+    def test_failed_when_set_default_times_out_without_stronger_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            isolated_home = root / "isolated-home"
+            default_keychain = root / "login.keychain-db"
+            system_keychain = root / "System.keychain"
+            default_keychain.write_text("", encoding="utf-8")
+            system_keychain.write_text("", encoding="utf-8")
+            results = [
+                completed(stdout=f'"{default_keychain}"\n'),
+                completed(stdout=f'"{default_keychain}"\n"{system_keychain}"\n'),
+                timeout_result(),
+            ]
+            with (
+                mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
+                mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
+                mock.patch(
+                    "wild_boar_proxy.keychain_preflight.run_bounded_process",
+                    side_effect=results,
+                ),
+            ):
+                packet = prepare_isolated_home_keychain(isolated_home=isolated_home)
+
+        self.assertEqual(packet["status"], "failed")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "KEYCHAIN_PREFLIGHT_SET_DEFAULT_FAILED",
+        )
+        self.assertFalse(packet["isolated_home_keychain_preferences_written"])
+        self.assertFalse(packet["isolated_default_keychain_verified"])
+        self.assertFalse(packet["isolated_search_list_verified"])
+        self.assertFalse(packet["real_user_keychain_modified"])
+        self.assertFalse(packet["keychain_item_read"])
 
     def test_failed_when_isolated_default_verification_mismatches(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -192,11 +306,12 @@ class KeychainPreflightTests(unittest.TestCase):
 
             def fake_run(
                 args: list[str],
-                text: bool,
-                capture_output: bool,
-                check: bool,
                 env: dict[str, str],
-            ) -> subprocess.CompletedProcess[str]:
+                cwd: Path,
+                timeout_seconds: float,
+                output_cap_bytes: int,
+            ) -> BoundedProcessResult:
+                self.assertEqual(cwd, Path("/"))
                 command = tuple(args[1:])
                 home = Path(env["HOME"]) if env.get("HOME") == str(isolated_home) else None
                 if command == ("default-keychain", "-d", "user"):
@@ -224,7 +339,7 @@ class KeychainPreflightTests(unittest.TestCase):
             with (
                 mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
                 mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
-                mock.patch("wild_boar_proxy.keychain_preflight.subprocess.run", side_effect=fake_run),
+                mock.patch("wild_boar_proxy.keychain_preflight.run_bounded_process", side_effect=fake_run),
             ):
                 packet = prepare_isolated_home_keychain(isolated_home=isolated_home)
 
@@ -249,11 +364,12 @@ class KeychainPreflightTests(unittest.TestCase):
 
             def fake_run(
                 args: list[str],
-                text: bool,
-                capture_output: bool,
-                check: bool,
                 env: dict[str, str],
-            ) -> subprocess.CompletedProcess[str]:
+                cwd: Path,
+                timeout_seconds: float,
+                output_cap_bytes: int,
+            ) -> BoundedProcessResult:
+                self.assertEqual(cwd, Path("/"))
                 command = tuple(args[1:])
                 home = Path(env["HOME"]) if env.get("HOME") == str(isolated_home) else None
                 if command == ("default-keychain", "-d", "user"):
@@ -281,7 +397,7 @@ class KeychainPreflightTests(unittest.TestCase):
             with (
                 mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
                 mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
-                mock.patch("wild_boar_proxy.keychain_preflight.subprocess.run", side_effect=fake_run),
+                mock.patch("wild_boar_proxy.keychain_preflight.run_bounded_process", side_effect=fake_run),
             ):
                 packet = prepare_isolated_home_keychain(isolated_home=isolated_home)
 
@@ -330,7 +446,7 @@ class KeychainPreflightTests(unittest.TestCase):
                 mock.patch("wild_boar_proxy.keychain_preflight.sys.platform", "darwin"),
                 mock.patch("wild_boar_proxy.keychain_preflight.shutil.which", return_value="/usr/bin/security"),
                 mock.patch(
-                    "wild_boar_proxy.keychain_preflight.subprocess.run",
+                    "wild_boar_proxy.keychain_preflight.run_bounded_process",
                     side_effect=results,
                 ),
             ):

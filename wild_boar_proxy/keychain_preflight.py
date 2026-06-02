@@ -10,15 +10,19 @@ owner actions.
 
 from __future__ import annotations
 
-import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from .process_runner import BoundedProcessResult, run_bounded_process
+
 
 REAL_HOME = Path.home().resolve()
+KEYCHAIN_PREFLIGHT_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+KEYCHAIN_PREFLIGHT_TIMEOUT_SECONDS = 10.0
+KEYCHAIN_PREFLIGHT_OUTPUT_CAP_BYTES = 16 * 1024
+KEYCHAIN_PREFLIGHT_CWD = Path("/")
 
 
 def _packet(
@@ -65,16 +69,24 @@ def _normalize_security_paths(stdout: str) -> list[str]:
     return paths
 
 
-def _run_security(args: list[str], *, home: Path | None = None) -> subprocess.CompletedProcess[str]:
-    env = dict(os.environ)
+def _security_env(*, home: Path | None = None) -> dict[str, str]:
+    env: dict[str, str] = {
+        "PATH": KEYCHAIN_PREFLIGHT_RUNTIME_PATH,
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+        "no_proxy": "127.0.0.1,localhost,::1",
+    }
     if home is not None:
         env["HOME"] = str(home)
-    return subprocess.run(
+    return env
+
+
+def _run_security(args: list[str], *, home: Path | None = None) -> BoundedProcessResult:
+    return run_bounded_process(
         args,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
+        env=_security_env(home=home),
+        cwd=KEYCHAIN_PREFLIGHT_CWD,
+        timeout_seconds=KEYCHAIN_PREFLIGHT_TIMEOUT_SECONDS,
+        output_cap_bytes=KEYCHAIN_PREFLIGHT_OUTPUT_CAP_BYTES,
     )
 
 
@@ -117,7 +129,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         )
 
     default_result = _run_security([security_bin, "default-keychain", "-d", "user"])
-    if default_result.returncode != 0:
+    if default_result.exit_code != 0:
         return _packet(
             status="skipped",
             machine_error_code="KEYCHAIN_PREFLIGHT_NO_DEFAULT_KEYCHAIN",
@@ -139,7 +151,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         )
 
     search_result = _run_security([security_bin, "list-keychains", "-d", "user"])
-    if search_result.returncode != 0:
+    if search_result.exit_code != 0:
         return _packet(
             status="skipped",
             machine_error_code="KEYCHAIN_PREFLIGHT_NO_SEARCH_LIST",
@@ -195,7 +207,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         [security_bin, "default-keychain", "-d", "user", "-s", str(real_default_keychain)],
         home=isolated_home,
     )
-    if set_default.returncode != 0:
+    if set_default.exit_code != 0:
         return _packet(
             status="failed",
             machine_error_code="KEYCHAIN_PREFLIGHT_SET_DEFAULT_FAILED",
@@ -209,7 +221,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         [security_bin, "list-keychains", "-d", "user", "-s", *[str(path) for path in search_paths]],
         home=isolated_home,
     )
-    if set_search.returncode != 0:
+    if set_search.exit_code != 0:
         return _packet(
             status="failed",
             machine_error_code="KEYCHAIN_PREFLIGHT_SET_SEARCH_LIST_FAILED",
@@ -235,7 +247,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         [security_bin, "default-keychain", "-d", "user"],
         home=isolated_home,
     )
-    if verify_default.returncode != 0:
+    if verify_default.exit_code != 0:
         return _packet(
             status="failed",
             machine_error_code="KEYCHAIN_PREFLIGHT_VERIFY_DEFAULT_FAILED",
@@ -265,7 +277,7 @@ def prepare_isolated_home_keychain(*, isolated_home: Path) -> dict[str, Any]:
         [security_bin, "list-keychains", "-d", "user"],
         home=isolated_home,
     )
-    if verify_search.returncode != 0:
+    if verify_search.exit_code != 0:
         return _packet(
             status="failed",
             machine_error_code="KEYCHAIN_PREFLIGHT_VERIFY_SEARCH_LIST_FAILED",
