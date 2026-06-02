@@ -17732,6 +17732,35 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(payload["machine_error_code"], "LOCK_HELD")
         self.assertFalse(lock_file.exists())
 
+    def test_sync_blocks_invalid_structured_lock_without_mutation(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": runtime_mod.RUNTIME_LOCK_CARRIER_SCHEMA_VERSION,
+                    "carrier_kind": runtime_mod.RUNTIME_LOCK_CARRIER_KIND,
+                    "pid": "not-a-pid",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        before = self.state_snapshot()
+
+        result = self.run_cli("sync", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], runtime_mod.state_lock.STATE_LOCK_INVALID
+        )
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "user_action")
+        self.assertEqual(payload["operator_action"], "user_action")
+        self.assertEqual(before, after)
+        self.assertTrue(lock_file.exists())
+
     def test_sync_materializes_selected_backend_snapshot_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]

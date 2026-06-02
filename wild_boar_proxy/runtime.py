@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import state_lock
 from .command_effects import (
     EFFECT_MUTATE,
     EFFECT_PROBE,
@@ -116,6 +117,8 @@ SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
 ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
 BACKEND_REGISTRY_SCHEMA_VERSION = 2
+RUNTIME_LOCK_CARRIER_SCHEMA_VERSION = 1
+RUNTIME_LOCK_CARRIER_KIND = "runtime_lock_owner_metadata"
 VALID_BACKEND_REGISTRY_POOLS = {"active", "reserve", "retired"}
 PROXY_REPROBE_MAX_CANDIDATES = 8
 PROXY_REPROBE_CONCURRENCY_LIMIT = 1
@@ -1002,6 +1005,8 @@ def build_runtime_guardrail_surface(
         failed_checks.append("mutation_lock_held")
     elif lock_status == "stale":
         failed_checks.append("mutation_lock_stale")
+    elif lock_status == "invalid":
+        failed_checks.append("mutation_lock_invalid")
 
     launch_status = ""
     launch_blocking_reason = ""
@@ -1051,7 +1056,6 @@ def build_runtime_guardrail_surface(
         "failed_checks": failed_checks,
         "blocking_reason": "" if not failed_checks else failed_checks[0],
     }
-
 
 def default_launcher_script_path(profile_dir: Path) -> Path:
     return profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME
@@ -2799,16 +2803,307 @@ def get_claim_gate(
     }
 
 
-def get_lock_preflight(paths: RuntimePaths) -> dict[str, Any]:
-    if not paths.lock_file.exists():
-        return {"status": "available", "machine_error_code": "OK", "holder_pid": None}
+@dataclass(frozen=True)
+class RuntimeLockCarrierRecord:
+    carrier_kind: str
+    holder_pid: str | None
+    metadata: dict[str, Any] | None
+    raw_text: str
+    reason: str
 
-    holder = read_text(paths.lock_file)
-    alive = bool(holder and process_is_alive(holder))
+
+@dataclass(frozen=True)
+class RuntimeLockEvaluation:
+    status: str
+    machine_error_code: str
+    holder_pid: str | None
+    carrier_kind: str
+    reason: str
+    metadata: dict[str, Any] | None = None
+    probe: state_lock.ProcessProbeResult | None = None
+    owner_classification: state_lock.LockOwnerClassification | None = None
+
+
+def _runtime_lock_evaluation(
+    status: str,
+    machine_error_code: str,
+    *,
+    holder_pid: str | None,
+    carrier_kind: str,
+    reason: str,
+    metadata: dict[str, Any] | None = None,
+    probe: state_lock.ProcessProbeResult | None = None,
+    owner_classification: state_lock.LockOwnerClassification | None = None,
+) -> RuntimeLockEvaluation:
+    return RuntimeLockEvaluation(
+        status=status,
+        machine_error_code=machine_error_code,
+        holder_pid=holder_pid,
+        carrier_kind=carrier_kind,
+        reason=reason,
+        metadata=metadata,
+        probe=probe,
+        owner_classification=owner_classification,
+    )
+
+
+def _parse_positive_pid(value: object) -> int | None:
+    try:
+        candidate = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if candidate <= 0:
+        return None
+    return candidate
+
+
+def _normalize_ps_text(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _probe_process_uid(pid: int) -> int | None:
+    result = subprocess.run(
+        ["ps", "-o", "uid=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return _parse_positive_pid(result.stdout)
+
+
+def _probe_process_create_time(pid: int) -> float | None:
+    result = subprocess.run(
+        ["ps", "-o", "lstart=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    value = _normalize_ps_text(result.stdout.strip())
+    if not value:
+        return None
+    try:
+        started_at = datetime.strptime(value, "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return None
+    return float(int(time.mktime(started_at.timetuple())))
+
+
+def _probe_process_result(pid: int) -> state_lock.ProcessProbeResult:
+    if pid <= 0 or not process_is_alive(str(pid)):
+        return state_lock.ProcessProbeResult(
+            pid_exists=False,
+            uid=None,
+            hostname=None,
+            process_create_time=None,
+        )
+    return state_lock.ProcessProbeResult(
+        pid_exists=True,
+        uid=_probe_process_uid(pid),
+        hostname=socket.gethostname(),
+        process_create_time=_probe_process_create_time(pid),
+    )
+
+
+def _current_process_lock_metadata() -> dict[str, Any] | None:
+    pid = os.getpid()
+    probe = _probe_process_result(pid)
+    if not probe.pid_exists or probe.uid is None or probe.process_create_time is None:
+        return None
+    command = " ".join(part for part in [sys.executable, *sys.argv] if part).strip()
+    if not command:
+        command = Path(sys.executable).name or "python"
     return {
-        "status": "held" if alive else "stale",
-        "machine_error_code": "LOCK_HELD" if alive else "STALE_LOCK_FILE",
-        "holder_pid": holder or None,
+        "schema_version": RUNTIME_LOCK_CARRIER_SCHEMA_VERSION,
+        "carrier_kind": RUNTIME_LOCK_CARRIER_KIND,
+        "pid": pid,
+        "uid": probe.uid,
+        "hostname": probe.hostname or socket.gethostname(),
+        "process_create_time": probe.process_create_time,
+        "started_at_utc": now_iso(),
+        "command": command,
+    }
+
+
+def _serialize_runtime_lock_carrier() -> str:
+    metadata = _current_process_lock_metadata()
+    if metadata is None:
+        return f"{os.getpid()}\n"
+    return json.dumps(metadata) + "\n"
+
+
+def _read_runtime_lock_carrier(lock_file: Path) -> RuntimeLockCarrierRecord:
+    raw_text = read_text(lock_file)
+    stripped = raw_text.strip()
+    if not stripped:
+        return RuntimeLockCarrierRecord(
+            carrier_kind="malformed",
+            holder_pid=None,
+            metadata=None,
+            raw_text=raw_text,
+            reason="lock carrier is empty",
+        )
+    if stripped.startswith("{"):
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return RuntimeLockCarrierRecord(
+                carrier_kind="malformed",
+                holder_pid=None,
+                metadata=None,
+                raw_text=raw_text,
+                reason="lock carrier JSON is malformed",
+            )
+        if not isinstance(payload, dict):
+            return RuntimeLockCarrierRecord(
+                carrier_kind="malformed",
+                holder_pid=None,
+                metadata=None,
+                raw_text=raw_text,
+                reason="lock carrier JSON must be an object",
+            )
+        carrier_kind = payload.get("carrier_kind")
+        if carrier_kind not in (None, RUNTIME_LOCK_CARRIER_KIND):
+            return RuntimeLockCarrierRecord(
+                carrier_kind="malformed",
+                holder_pid=str(payload.get("pid") or "").strip() or None,
+                metadata=None,
+                raw_text=raw_text,
+                reason="lock carrier kind is not admitted for runtime mutation locks",
+            )
+        return RuntimeLockCarrierRecord(
+            carrier_kind="structured",
+            holder_pid=str(payload.get("pid") or "").strip() or None,
+            metadata=payload,
+            raw_text=raw_text,
+            reason="structured runtime lock carrier parsed",
+        )
+
+    return RuntimeLockCarrierRecord(
+        carrier_kind="legacy_pid",
+        holder_pid=stripped,
+        metadata=None,
+        raw_text=raw_text,
+        reason="legacy pid-only runtime lock carrier parsed",
+    )
+
+
+def _evaluate_runtime_lock_file(lock_file: Path) -> RuntimeLockEvaluation:
+    if not lock_file.exists():
+        return _runtime_lock_evaluation(
+            "available",
+            "OK",
+            holder_pid=None,
+            carrier_kind="absent",
+            reason="runtime mutation lock is absent",
+        )
+    if lock_file.is_symlink():
+        return _runtime_lock_evaluation(
+            "invalid",
+            state_lock.STATE_LOCK_INVALID,
+            holder_pid=None,
+            carrier_kind="malformed",
+            reason="runtime mutation lock path must not be a symlink",
+        )
+    if not lock_file.is_file():
+        return _runtime_lock_evaluation(
+            "invalid",
+            state_lock.STATE_LOCK_INVALID,
+            holder_pid=None,
+            carrier_kind="malformed",
+            reason="runtime mutation lock path must be a regular file",
+        )
+
+    carrier = _read_runtime_lock_carrier(lock_file)
+    if carrier.carrier_kind == "legacy_pid":
+        holder_pid = carrier.holder_pid
+        if holder_pid and process_is_alive(holder_pid):
+            return _runtime_lock_evaluation(
+                "held",
+                "LOCK_HELD",
+                holder_pid=holder_pid,
+                carrier_kind=carrier.carrier_kind,
+                reason="legacy pid-only runtime mutation lock is held by a live pid",
+            )
+        return _runtime_lock_evaluation(
+            "stale",
+            "STALE_LOCK_FILE",
+            holder_pid=holder_pid,
+            carrier_kind=carrier.carrier_kind,
+            reason="legacy pid-only runtime mutation lock refers to a dead pid",
+        )
+
+    if carrier.carrier_kind == "structured" and carrier.metadata is not None:
+        pid = _parse_positive_pid(carrier.metadata.get("pid"))
+        if pid is None:
+            return _runtime_lock_evaluation(
+                "invalid",
+                state_lock.STATE_LOCK_INVALID,
+                holder_pid=carrier.holder_pid,
+                carrier_kind=carrier.carrier_kind,
+                reason="structured runtime lock carrier does not expose a valid pid",
+                metadata=carrier.metadata,
+            )
+        probe = _probe_process_result(pid)
+        classification = state_lock.classify_lock_owner(
+            carrier.metadata,
+            probe,
+            now_utc=datetime.now(timezone.utc),
+            stale_after_seconds=0.0,
+        )
+        if classification.status == state_lock.LOCK_ACTIVE:
+            return _runtime_lock_evaluation(
+                "held",
+                "LOCK_HELD",
+                holder_pid=str(pid),
+                carrier_kind=carrier.carrier_kind,
+                reason=classification.reason,
+                metadata=carrier.metadata,
+                probe=probe,
+                owner_classification=classification,
+            )
+        if classification.status == state_lock.LOCK_STALE:
+            return _runtime_lock_evaluation(
+                "stale",
+                "STALE_LOCK_FILE",
+                holder_pid=str(pid),
+                carrier_kind=carrier.carrier_kind,
+                reason=classification.reason,
+                metadata=carrier.metadata,
+                probe=probe,
+                owner_classification=classification,
+            )
+        return _runtime_lock_evaluation(
+            "invalid",
+            classification.machine_error_code,
+            holder_pid=str(pid),
+            carrier_kind=carrier.carrier_kind,
+            reason=classification.reason,
+            metadata=carrier.metadata,
+            probe=probe,
+            owner_classification=classification,
+        )
+
+    return _runtime_lock_evaluation(
+        "invalid",
+        state_lock.STATE_LOCK_INVALID,
+        holder_pid=carrier.holder_pid,
+        carrier_kind=carrier.carrier_kind,
+        reason=carrier.reason,
+    )
+
+
+def get_lock_preflight(paths: RuntimePaths) -> dict[str, Any]:
+    evaluation = _evaluate_runtime_lock_file(paths.lock_file)
+    return {
+        "status": evaluation.status,
+        "machine_error_code": evaluation.machine_error_code,
+        "holder_pid": evaluation.holder_pid,
+        "carrier_kind": evaluation.carrier_kind,
+        "reason": evaluation.reason,
     }
 
 
@@ -4488,7 +4783,8 @@ def build_deterministic_stable_recovery_result(
 
 def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
     lock_preflight = get_lock_preflight(paths)
-    if lock_preflight.get("status") == "held":
+    lock_status = lock_preflight.get("status")
+    if lock_status == "held":
         return build_command_payload(
             ok=False,
             human_message="Target switch apply blocked by mutation lock.",
@@ -4508,7 +4804,7 @@ def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
                 "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
             },
         )
-    if lock_preflight.get("status") == "stale":
+    if lock_status == "stale":
         return build_command_payload(
             ok=False,
             human_message="Target switch apply blocked by stale mutation lock.",
@@ -4519,6 +4815,26 @@ def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
             changed_files=[],
             extra={
                 "next_action": "inspect_stale_lock",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+    if lock_status == "invalid":
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply blocked by invalid mutation lock.",
+            machine_error_code="TARGET_SWITCH_APPLY_BLOCKED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_invalid_lock",
                 "command_mode": "apply",
                 "target_surface": build_target_switch_surface_context(paths),
                 "write_surface_declared": True,
@@ -5924,7 +6240,8 @@ def build_stable_repair_transaction_plan(
     ]
 
     blocked_reasons = []
-    if lock_preflight.get("status") == "held":
+    lock_status = lock_preflight.get("status")
+    if lock_status == "held":
         blocked_reasons.append(
             {
                 "machine_error_code": "LOCK_HELD",
@@ -5932,7 +6249,7 @@ def build_stable_repair_transaction_plan(
                 "holder_pid": lock_preflight.get("holder_pid"),
             }
         )
-    elif lock_preflight.get("status") == "stale":
+    elif lock_status == "stale":
         blocked_reasons.append(
             {
                 "machine_error_code": (
@@ -5941,6 +6258,14 @@ def build_stable_repair_transaction_plan(
                     else "STABLE_REPAIR_DRY_RUN_BLOCKED"
                 ),
                 "reason": "stale_lock_file_present",
+                "holder_pid": lock_preflight.get("holder_pid"),
+            }
+        )
+    elif lock_status == "invalid":
+        blocked_reasons.append(
+            {
+                "machine_error_code": lock_preflight.get("machine_error_code"),
+                "reason": "invalid_lock_file_present",
                 "holder_pid": lock_preflight.get("holder_pid"),
             }
         )
@@ -6048,7 +6373,8 @@ def run_stable_repair_apply(paths: RuntimePaths) -> dict[str, Any]:
             },
         )
 
-    if lock_preflight.get("status") == "held":
+    lock_status = lock_preflight.get("status")
+    if lock_status == "held":
         return build_command_payload(
             ok=False,
             human_message="Stable repair apply blocked by mutation lock.",
@@ -6065,7 +6391,7 @@ def run_stable_repair_apply(paths: RuntimePaths) -> dict[str, Any]:
             },
         )
 
-    if lock_preflight.get("status") == "stale":
+    if lock_status == "stale":
         return build_command_payload(
             ok=False,
             human_message="Stable repair apply blocked by stale mutation lock.",
@@ -6079,6 +6405,22 @@ def run_stable_repair_apply(paths: RuntimePaths) -> dict[str, Any]:
                 "would_change": False,
                 "transaction_plan": transaction_plan,
                 "next_action": "inspect_stale_lock",
+            },
+        )
+    if lock_status == "invalid":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by invalid mutation lock.",
+            machine_error_code=str(lock_preflight.get("machine_error_code") or "LOCK_INVALID"),
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_invalid_lock",
             },
         )
 
@@ -6294,7 +6636,8 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
             },
         )
 
-    if lock_preflight.get("status") == "held":
+    lock_status = lock_preflight.get("status")
+    if lock_status == "held":
         return build_command_payload(
             ok=False,
             human_message="Stable repair dry-run blocked by mutation lock.",
@@ -6310,7 +6653,7 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
             },
         )
 
-    if lock_preflight.get("status") == "stale":
+    if lock_status == "stale":
         return build_command_payload(
             ok=False,
             human_message="Stable repair dry-run blocked by stale mutation lock.",
@@ -6321,6 +6664,21 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
             changed_files=[],
             extra={
                 "next_action": "inspect_stale_lock",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+    if lock_status == "invalid":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair dry-run blocked by invalid mutation lock.",
+            machine_error_code=str(lock_preflight.get("machine_error_code") or "LOCK_INVALID"),
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_invalid_lock",
                 "would_change": False,
                 "transaction_plan": transaction_plan,
             },
@@ -6690,18 +7048,26 @@ def lock_file_owner_path(
             created_lock_file = True
             break
         except FileExistsError:
-            holder = read_text(lock_file)
-            if holder and process_is_alive(holder):
+            evaluation = _evaluate_runtime_lock_file(lock_file)
+            if evaluation.status == "held":
+                holder_pid = str(evaluation.holder_pid or "").strip()
                 raise RuntimeErrorInfo(
-                    f"{human_label} is held by pid {holder}.",
+                    f"{human_label} is held by pid {holder_pid}.",
                     machine_error_code="LOCK_HELD",
                     severity="recoverable",
                     operator_action="retry",
                 )
+            if evaluation.status == "invalid":
+                raise RuntimeErrorInfo(
+                    f"{human_label} is blocked by an invalid lock carrier.",
+                    machine_error_code=evaluation.machine_error_code,
+                    severity="recoverable",
+                    operator_action="user_action",
+                )
             lock_file.unlink(missing_ok=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(f"{os.getpid()}\n")
+            handle.write(_serialize_runtime_lock_carrier())
         with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
             SERIALIZED_LOCK_LOCAL_OWNERS[lock_key] = {
                 "pid": owner_pid,

@@ -287,6 +287,27 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         )
         self.assertIsInstance(payload["changed_files"], list)
 
+    def test_lock_file_owner_path_materializes_structured_lock_carrier(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+
+        with runtime_mod.lock_file_owner_path(lock_file):
+            payload = json.loads(lock_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            payload["schema_version"],
+            runtime_mod.RUNTIME_LOCK_CARRIER_SCHEMA_VERSION,
+        )
+        self.assertEqual(payload["carrier_kind"], runtime_mod.RUNTIME_LOCK_CARRIER_KIND)
+        self.assertEqual(payload["pid"], os.getpid())
+        self.assertEqual(payload["uid"], os.getuid())
+        self.assertEqual(payload["hostname"], socket.gethostname())
+        self.assertIsInstance(payload["process_create_time"], (int, float))
+        self.assertIsInstance(payload["started_at_utc"], str)
+        self.assertTrue(payload["started_at_utc"])
+        self.assertIsInstance(payload["command"], str)
+        self.assertTrue(payload["command"])
+        self.assertFalse(lock_file.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
