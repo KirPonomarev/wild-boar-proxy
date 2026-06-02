@@ -13,6 +13,7 @@ from pathlib import Path
 from wild_boar_proxy.external_models import contracts, routes
 from wild_boar_proxy.external_models import lifecycle
 from wild_boar_proxy.external_models import transforms
+from wild_boar_proxy.external_models import validate as validate_mod
 from wild_boar_proxy.external_models.integration import ensure_installed_layout
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
 from wild_boar_proxy.external_models.state import capture_local_evidence, load_state_file
@@ -58,6 +59,39 @@ class ExternalModelContractTests(unittest.TestCase):
         with self.assertRaises(RuntimeErrorInfo) as ctx:
             routes.validate_route_schema(route)
         self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+
+    def test_validate_route_schema_accepts_canonical_route_ids(self) -> None:
+        valid_ids = [
+            "wbp-a",
+            "wbp-AZ09",
+            "wbp-a_b.c-d",
+            "wbp-" + "a" * 128,
+        ]
+        for route_id in valid_ids:
+            with self.subTest(route_id=route_id):
+                validated = routes.validate_route_schema(
+                    sample_route() | {"route_id": route_id}
+                )
+                self.assertEqual(validated["route_id"], route_id)
+
+    def test_validate_route_schema_rejects_unsafe_route_ids(self) -> None:
+        invalid_ids = [
+            "foo-a",
+            "wbp-",
+            "wbp-/../../escape",
+            "wbp-a/../b",
+            "wbp-a\\b",
+            "wbp-a\nb",
+            "wbp-a..b",
+            "wbp-é",
+            "ｗbp-a",
+            "wbp-" + "a" * 129,
+        ]
+        for route_id in invalid_ids:
+            with self.subTest(route_id=route_id):
+                with self.assertRaises(RuntimeErrorInfo) as ctx:
+                    routes.validate_route_schema(sample_route() | {"route_id": route_id})
+                self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
 
     def test_validate_route_schema_rejects_unknown_transform_profile(self) -> None:
         route = sample_route() | {"transform_profile": "python_eval"}
@@ -238,6 +272,8 @@ class ExternalModelContractTests(unittest.TestCase):
                 route=route,
                 packet=packet,
             )
+            self.assertTrue(path.resolve().is_relative_to(evidence_dir.resolve()))
+            self.assertTrue(path.name.startswith("wbp-deepseek-v3-"))
             payload = json.loads(path.read_text(encoding="utf-8"))
             artifact_sha = payload.pop("artifact_sha256")
             canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode(
@@ -246,6 +282,53 @@ class ExternalModelContractTests(unittest.TestCase):
             import hashlib
 
             self.assertEqual(artifact_sha, hashlib.sha256(canonical).hexdigest())
+
+    def test_capture_local_evidence_blocks_unvalidated_traversal_route_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            evidence_dir = root / "evidence"
+            route = sample_route() | {"route_id": "wbp-/../../escape"}
+            packet = contracts.build_external_models_payload(
+                ok=False,
+                human_message="blocked",
+                machine_error_code="schema_invalid",
+            )
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                capture_local_evidence(
+                    evidence_dir=evidence_dir,
+                    route=route,
+                    packet=packet,
+                )
+
+            self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+            self.assertFalse((root / "escape").exists())
+            self.assertEqual(list(evidence_dir.glob("*")) if evidence_dir.exists() else [], [])
+
+    def test_network_evidence_blocks_unvalidated_traversal_route_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = ExternalModelsPaths.from_root(root / "external-models")
+            route = sample_route() | {"route_id": "wbp-/../../escape"}
+            result = {
+                "status": "error",
+                "machine_error_code": "schema_invalid",
+            }
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                validate_mod._write_network_evidence(
+                    paths=paths,
+                    route=route,
+                    command_context="external-models check",
+                    result=result,
+                )
+
+            self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+            self.assertFalse((paths.root_dir / "escape").exists())
+            self.assertEqual(
+                list(paths.evidence_dir.glob("*")) if paths.evidence_dir.exists() else [],
+                [],
+            )
 
     def test_load_state_file_returns_default_when_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

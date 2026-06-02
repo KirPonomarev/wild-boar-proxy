@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
+import unicodedata
 from typing import Any
 
 from wild_boar_proxy.command_effects import validate_effect
@@ -11,6 +13,7 @@ from wild_boar_proxy.runtime import build_command_payload
 ROUTE_SCHEMA_VERSION = 1
 STATE_SCHEMA_VERSION = 2
 EVIDENCE_SCHEMA_VERSION = 1
+ROUTE_ID_PATTERN = re.compile(r"^wbp-[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 ROUTES_TOP_LEVEL_FIELDS = frozenset({"schema_version", "routes"})
 ROUTE_ALLOWED_FIELDS = frozenset(
@@ -105,6 +108,18 @@ def sanitize_observed_routes(routes_payload: Any) -> dict[str, dict[str, Any]]:
         if bounded:
             sanitized[route_id] = bounded
     return sanitized
+
+
+def route_id_validation_error(route_id: object) -> str | None:
+    if not isinstance(route_id, str):
+        return "route_id is required."
+    if unicodedata.normalize("NFKC", route_id) != route_id:
+        return "route_id must use canonical ASCII characters."
+    if ".." in route_id:
+        return "route_id must not contain parent-directory markers."
+    if not ROUTE_ID_PATTERN.fullmatch(route_id):
+        return "route_id must match ^wbp-[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$."
+    return None
 
 
 def utc_now_iso() -> str:

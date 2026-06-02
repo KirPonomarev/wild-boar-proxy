@@ -135,15 +135,10 @@ def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:
             operator_action="user_action",
         )
     route_id = route.get("route_id")
-    if not isinstance(route_id, str) or not route_id.strip():
+    route_id_error = contracts.route_id_validation_error(route_id)
+    if route_id_error:
         raise RuntimeErrorInfo(
-            "route_id is required.",
-            machine_error_code=errors.SCHEMA_INVALID,
-            operator_action="user_action",
-        )
-    if not route_id.startswith("wbp-"):
-        raise RuntimeErrorInfo(
-            "route_id must use the wbp- prefix.",
+            route_id_error,
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )

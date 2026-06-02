@@ -16,6 +16,9 @@ from . import contracts, errors
 
 LOCK_TIMEOUT_SECONDS = 5.0
 STALE_LOCK_SECONDS = 60.0
+EVIDENCE_SUFFIX_SAFE_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -131,6 +134,38 @@ def write_state_file(state_file: Path, payload: dict[str, Any]) -> None:
     atomic_write_json(state_file, payload)
 
 
+def build_evidence_artifact_path(
+    *,
+    evidence_dir: Path,
+    route_id: object,
+    suffix: str,
+) -> Path:
+    route_id_error = contracts.route_id_validation_error(route_id)
+    if route_id_error:
+        raise RuntimeErrorInfo(
+            route_id_error,
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    if not suffix or any(char not in EVIDENCE_SUFFIX_SAFE_CHARS for char in suffix):
+        raise RuntimeErrorInfo(
+            "Evidence artifact suffix is invalid.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    evidence_root = evidence_dir.resolve()
+    path = evidence_dir / f"{route_id}-{suffix}.json"
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(evidence_root):
+        raise RuntimeErrorInfo(
+            "Evidence artifact path must stay within evidence_dir.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    return path
+
+
 def ensure_secrets_permissions(secrets_file: Path) -> None:
     if not secrets_file.exists():
         return
@@ -149,28 +184,32 @@ def capture_local_evidence(
     route: dict[str, Any],
     packet: dict[str, Any],
 ) -> Path:
-    evidence_dir.mkdir(parents=True, exist_ok=True)
+    route_id = route.get("route_id")
     stamp = contracts.utc_now_iso().replace(":", "").replace("-", "")
     payload = {
         "schema_version": contracts.EVIDENCE_SCHEMA_VERSION,
         "captured_at_utc": contracts.utc_now_iso(),
-        "route_id": route["route_id"],
+        "route_id": route_id,
         "command_context": "external-models evidence capture",
         "network_dependent_evidence": False,
         "result": {
             "status": packet["status"],
             "machine_error_code": packet["machine_error_code"],
-            "requested_model": route["route_id"],
+            "requested_model": route_id,
             "effective_model": None,
             "provider": route["provider"],
             "fallback_used": False,
-            "fallback_chain": [route["route_id"]],
+            "fallback_chain": [route_id],
             "cost_class": route["cost_class"],
             "latency_ms": None,
         },
     }
     canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
     payload["artifact_sha256"] = hashlib.sha256(canonical).hexdigest()
-    path = evidence_dir / f"{route['route_id']}-{stamp}.json"
+    path = build_evidence_artifact_path(
+        evidence_dir=evidence_dir,
+        route_id=route_id,
+        suffix=stamp,
+    )
     atomic_write_json(path, payload)
     return path

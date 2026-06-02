@@ -15,6 +15,7 @@ from .paths import ExternalModelsPaths
 from .routes import find_route, load_routes_file
 from .state import (
     atomic_write_json,
+    build_evidence_artifact_path,
     dual_lock,
     ensure_secrets_permissions,
     load_state_file,
@@ -108,7 +109,11 @@ def _write_network_evidence(
     canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
     payload["artifact_sha256"] = hashlib.sha256(canonical).hexdigest()
     stamp = contracts.utc_now_iso().replace(":", "").replace("-", "")
-    path = paths.evidence_dir / f"{route['route_id']}-{command_context.replace(' ', '_')}-{stamp}.json"
+    path = build_evidence_artifact_path(
+        evidence_dir=paths.evidence_dir,
+        route_id=route.get("route_id"),
+        suffix=f"{command_context.replace(' ', '_')}-{stamp}",
+    )
     atomic_write_json(path, payload)
     return path
 
