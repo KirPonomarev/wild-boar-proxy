@@ -13091,23 +13091,27 @@ def run_accounts_command(
         )
     before = snapshot_known_files(paths)
     with serialized_lock(paths):
-        result = subprocess.run(
+        process_result = run_bounded_process(
             [str(paths.accounts_bin), *arguments],
-            capture_output=True,
-            text=True,
             env=build_launcher_subprocess_env(paths),
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
         )
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-    if result.stdout:
-        sys.stderr.write(result.stdout)
+    process_payload = process_result.to_dict()
+    emit_subprocess_output(stdout=process_result.stdout, stderr=process_result.stderr)
 
     changed_files = detect_changed_files(
         before,
         [paths.registry_file, paths.state_file, paths.runtime_effective_mode_file],
     )
-    ok = result.returncode == 0
+    ok = process_result.status == "ok"
+    process_exit_code = (
+        process_result.exit_code
+        if isinstance(process_result.exit_code, int)
+        and process_result.exit_code >= 0
+        else 1
+    )
     return build_command_payload(
         ok=ok,
         human_message=success_message if ok else failure_message,
@@ -13116,8 +13120,8 @@ def run_accounts_command(
         severity="recoverable",
         operator_action="none" if ok else "retry",
         changed_files=changed_files,
-        extra={"command": arguments},
-        exit_code=result.returncode if not ok else 0,
+        extra={"command": arguments, "process_result": process_payload},
+        exit_code=0 if ok else process_exit_code,
     )
 
 

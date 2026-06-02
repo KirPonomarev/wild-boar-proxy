@@ -415,6 +415,19 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertNotIn("result.returncode", source)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_run_accounts_command_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(RUNTIME, "run_accounts_command"))
+        source = _function_source(RUNTIME, "run_accounts_command")
+        self.assertIn("serialized_lock", calls)
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("build_launcher_subprocess_env", calls)
+        self.assertIn("OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS", source)
+        self.assertIn("OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES", source)
+        self.assertNotIn("result.returncode", source)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (
             "run_onboard",

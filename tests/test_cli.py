@@ -733,6 +733,129 @@ class CliTests(unittest.TestCase):
             command_path="accounts login cancel",
         )
 
+    def test_accounts_validate_success_reports_bounded_process_result(self) -> None:
+        result = self.run_cli("accounts", "validate", "backend-a", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("validate-ok", result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["exit_code"], 0)
+        self.assertEqual(payload["command"], ["validate", "backend-a"])
+        self.assertEqual(payload["changed_files"], [])
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "ok")
+        self.assertEqual(process_result["machine_error_code"], runtime_mod.PROCESS_OK)
+        self.assertEqual(process_result["exit_code"], 0)
+        self.assertIn("validate-ok", process_result["stderr"])
+
+    def test_accounts_validate_nonzero_reports_bounded_process_result(self) -> None:
+        result = self.run_cli_with_env(
+            {"WBP_TEST_VALIDATE_FAIL_BACKEND_ID": "backend-a"},
+            "accounts",
+            "validate",
+            "backend-a",
+            "--json",
+        )
+
+        self.assertEqual(result.returncode, 9, result.stderr)
+        self.assertIn("validate-failed", result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ACCOUNTS_COMMAND_FAILED")
+        self.assertEqual(payload["exit_code"], 9)
+        self.assertEqual(payload["command"], ["validate", "backend-a"])
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(
+            process_result["machine_error_code"], runtime_mod.PROCESS_FAILED
+        )
+        self.assertEqual(process_result["exit_code"], 9)
+        self.assertIn("validate-failed", process_result["stderr"])
+
+    def test_run_accounts_command_timeout_uses_bounded_process_contract(self) -> None:
+        captured: dict[str, object] = {}
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="validate timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            captured["lock_held"] = (
+                self.managed_dir / "wild-boar-proxy.lock"
+            ).exists()
+            return timeout_result
+
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "OPENAI_API_KEY": "should-not-leak"},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_accounts_command(
+                    paths,
+                    ["validate", "backend-a"],
+                    success_message="Account validation completed.",
+                    failure_message="Account validation failed.",
+                )
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ACCOUNTS_COMMAND_FAILED")
+        self.assertEqual(payload["exit_code"], 1)
+        self.assertEqual(captured["command"], [str(self.accounts_bin), "validate", "backend-a"])
+        self.assertEqual(captured["cwd"], self.profile_dir)
+        self.assertTrue(captured["lock_held"])
+        captured_env = captured["env"]
+        self.assertIsInstance(captured_env, dict)
+        self.assertEqual(captured_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertEqual(
+            captured["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_result = payload["process_result"]
+        self.assertEqual(
+            process_result["machine_error_code"], runtime_mod.PROCESS_TIMEOUT
+        )
+        self.assertTrue(process_result["timed_out"])
+
+    def test_run_accounts_command_missing_binary_preflight_skips_bounded_runner(
+        self,
+    ) -> None:
+        self.accounts_bin.unlink()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(runtime_mod, "run_bounded_process") as runner:
+                with self.assertRaises(runtime_mod.RuntimeErrorInfo) as raised:
+                    runtime_mod.run_accounts_command(
+                        paths,
+                        ["validate", "backend-a"],
+                        success_message="Account validation completed.",
+                        failure_message="Account validation failed.",
+                    )
+
+        self.assertEqual(raised.exception.machine_error_code, "MISSING_ACCOUNTS_BIN")
+        runner.assert_not_called()
+
     def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
         status_bin = self.bin_dir / "codex-managed-status"
         for candidate in (
