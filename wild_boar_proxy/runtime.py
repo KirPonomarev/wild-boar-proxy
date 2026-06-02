@@ -831,7 +831,7 @@ def probe_runtime_identity_payload(
         if exc.code == 404:
             return None, "missing_runtime_identity"
         return None, "runtime_identity_probe_failed"
-    except (urllib.error.URLError, http.client.HTTPException):
+    except (urllib.error.URLError, http.client.HTTPException, OSError):
         return None, "runtime_identity_probe_failed"
     except json.JSONDecodeError:
         return None, "invalid_runtime_identity"
