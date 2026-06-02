@@ -25,6 +25,7 @@ from tools.truth_tree_harness import (
     snapshot_truth_tree,
 )
 from wild_boar_proxy import runtime as runtime_mod
+from wild_boar_proxy.process_runner import BoundedProcessResult
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16399,6 +16400,60 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_hold_external_nonzero_with_verified_state_still_succeeds(
+        self,
+    ) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-hold-nonzero.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-hold-nonzero",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_HOLD_EXIT_CODE": "7",
+                },
+                "accounts",
+                "hold",
+                "backend-a",
+                "suspicious",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["external_command_exit_code"], 7)
+        self.assertEqual(hold["external_command_status"], "nonzero")
+        self.assertEqual(
+            hold["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
+        self.assertEqual(hold["final_outcome"], "backend_held")
+
     def test_accounts_hold_already_held_backend_returns_owner_noop(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -16793,6 +16848,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "HOLD_COMMAND_EXEC_FAILED")
         hold = payload["hold_result"]
         self.assertEqual(hold["external_command_status"], "exec_error")
+        self.assertEqual(
+            hold["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_NOT_FOUND,
+        )
         self.assertEqual(hold["final_outcome"], "hold_command_failed")
 
     def test_accounts_release_exec_failure_returns_single_json_owner_packet(
@@ -16819,7 +16878,173 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_EXEC_FAILED")
         release = payload["release_result"]
         self.assertEqual(release["external_command_status"], "exec_error")
+        self.assertEqual(
+            release["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_NOT_FOUND,
+        )
         self.assertEqual(release["final_outcome"], "release_command_failed")
+
+    def test_accounts_hold_timeout_rolls_back_with_bounded_process_evidence(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "run_bounded_process", return_value=timeout_result
+            ):
+                payload = runtime_mod.run_hold(paths, "backend-a", "timeout-proof")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "HOLD_COMMAND_FAILED")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["external_command_status"], "timeout")
+        self.assertEqual(
+            hold["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(hold["rollback_attempted"])
+        self.assertEqual(hold["rollback_outcome"], "completed")
+        self.assertEqual(
+            hold["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_release_timeout_rolls_back_with_bounded_process_evidence(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "run_bounded_process", return_value=timeout_result
+            ):
+                payload = runtime_mod.run_release(paths, "backend-a")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_FAILED")
+        release = payload["release_result"]
+        self.assertEqual(release["external_command_status"], "timeout")
+        self.assertEqual(
+            release["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(release["rollback_attempted"])
+        self.assertEqual(release["rollback_outcome"], "completed")
+        self.assertEqual(
+            release["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_hold_bounded_process_uses_profile_cwd_and_sanitized_env(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-cwd",
+                auth_ref="/tmp/codex-reserve-cwd.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        captured: dict[str, object] = {}
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            current = json.loads(registry_path.read_text(encoding="utf-8"))
+            for backend in current["backends"]:
+                if backend["id"] == "backend-reserve-cwd":
+                    backend["manual_hold"] = True
+            registry_path.write_text(json.dumps(current) + "\n", encoding="utf-8")
+            return BoundedProcessResult(
+                status="ok",
+                machine_error_code=runtime_mod.PROCESS_OK,
+                exit_code=0,
+                stdout="",
+                stderr="hold-ran",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.001,
+            )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_hold(
+                    paths, "backend-reserve-cwd", "cwd-proof"
+                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            captured["command"],
+            [str(self.accounts_bin), "hold", "backend-reserve-cwd", "cwd-proof"],
+        )
+        self.assertEqual(captured["cwd"], self.profile_dir)
+        captured_env = captured["env"]
+        self.assertIsInstance(captured_env, dict)
+        self.assertEqual(captured_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertEqual(
+            captured["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
 
     def test_accounts_release_never_returns_backend_directly_to_active(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
@@ -16938,6 +17163,10 @@ class CliTests(unittest.TestCase):
         release = payload["release_result"]
         self.assertEqual(release["external_command_exit_code"], 7)
         self.assertEqual(release["external_command_status"], "nonzero")
+        self.assertEqual(
+            release["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
         self.assertEqual(release["final_outcome"], "backend_released_to_reserve")
 
     def test_accounts_retire_retires_active_backend_with_verified_terminal_routing_removal(

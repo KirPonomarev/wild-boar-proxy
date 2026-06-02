@@ -42,7 +42,13 @@ from .command_effects import (
     EFFECT_REPAIR,
     validate_effect,
 )
-from .process_runner import run_bounded_process
+from .process_runner import (
+    PROCESS_FAILED,
+    PROCESS_NOT_FOUND,
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+    run_bounded_process,
+)
 
 
 class RuntimeErrorInfo(Exception):
@@ -88,6 +94,8 @@ SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 PROCESS_PROBE_TIMEOUT_SECONDS = 2.0
 OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS = 120.0
 OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
+OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS = 120.0
+OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
@@ -15091,15 +15099,23 @@ def run_protective_lifecycle_owner_path(
     with serialized_lock(paths):
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
         transition_result["rollback_point_captured"] = True
-        try:
-            result = subprocess.run(
-                [str(paths.accounts_bin), *command],
-                capture_output=True,
-                text=True,
-                env=sanitized_env(),
-                check=False,
-            )
-        except OSError as exc:
+        process_result = run_bounded_process(
+            [str(paths.accounts_bin), *command],
+            env=sanitized_env(),
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_payload = process_result.to_dict()
+        transition_result["external_process_result"] = process_payload
+        emit_subprocess_output(
+            stdout=process_result.stdout, stderr=process_result.stderr
+        )
+        external_exit_code = process_result.exit_code
+        transition_result["external_command_exit_code"] = external_exit_code
+        if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+            external_exit_code is None
+        ):
             transition_result["external_command_status"] = "exec_error"
             transition_result["final_outcome"] = (
                 "hold_command_failed"
@@ -15112,12 +15128,26 @@ def run_protective_lifecycle_owner_path(
                 machine_error_code=f"{failure_prefix}_COMMAND_EXEC_FAILED",
                 operator_action="user_action",
                 exit_code=1,
-                extra={"command_error": str(exc)},
+                extra={"command_error": process_result.stderr},
             )
-        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
-        transition_result["external_command_exit_code"] = int(result.returncode)
+        if process_result.machine_error_code == PROCESS_TIMEOUT:
+            transition_result["external_command_status"] = "timeout"
+            transition_result["final_outcome"] = (
+                "hold_command_failed"
+                if action == "hold"
+                else "release_command_failed"
+            )
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Protective lifecycle command timed out after possible partial mutation."
+                ),
+                machine_error_code=f"{failure_prefix}_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="retry",
+                exit_code=1,
+            )
         transition_result["external_command_status"] = (
-            "ok" if result.returncode == 0 else "nonzero"
+            "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
         )
 
         after_command_registry = read_json(paths.registry_file)
@@ -15179,7 +15209,7 @@ def run_protective_lifecycle_owner_path(
                 machine_error_code=f"{failure_prefix}_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         after_command_hold = bool(after_command_backend.get("manual_hold", False))
@@ -15204,7 +15234,7 @@ def run_protective_lifecycle_owner_path(
                 machine_error_code=f"{failure_prefix}_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         sync_payload: dict[str, Any] | None = None
@@ -15342,7 +15372,7 @@ def run_protective_lifecycle_owner_path(
                 if transition_result["routing_change_attempted"]
                 else "Release completed and backend remains reserve-only."
             )
-            if result.returncode == 0
+            if process_result.machine_error_code == PROCESS_OK
             else (
                 "Protective hold completed after external hold exit non-zero."
                 if action == "hold"
