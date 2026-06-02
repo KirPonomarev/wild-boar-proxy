@@ -15543,6 +15543,196 @@ class CliTests(unittest.TestCase):
         self.assertEqual(promotion["precondition_status"], "backend_retired")
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 
+    def test_accounts_promote_validate_failure_returns_pre_mutation_owner_packet(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-validate-fail",
+                auth_ref="/tmp/codex-validate-fail.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        result = self.run_cli_with_env(
+            {"WBP_TEST_VALIDATE_FAIL_BACKEND_ID": "backend-validate-fail"},
+            "accounts",
+            "promote",
+            "backend-validate-fail",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_VALIDATE_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["validate_attempted"])
+        self.assertEqual(promotion["validate_outcome"], "failed")
+        self.assertFalse(promotion["rollback_point_captured"])
+        self.assertFalse(promotion["rollback_attempted"])
+        self.assertEqual(promotion["final_outcome"], "validate_failed")
+        validate_result = payload["validate_result"]
+        self.assertEqual(validate_result["command_status"], "error")
+        self.assertEqual(validate_result["machine_error_code"], "ACCOUNTS_COMMAND_FAILED")
+        self.assertEqual(validate_result["exit_code"], 9)
+        self.assertEqual(
+            validate_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
+        self.assertEqual(validate_result["process_result"]["exit_code"], 9)
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_promote_validate_timeout_uses_bounded_process_contract(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-validate-timeout",
+                auth_ref="/tmp/codex-validate-timeout.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        captured: dict[str, object] = {}
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="validate timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            return timeout_result
+
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "OPENAI_API_KEY": "should-not-leak"},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_promote(paths, "backend-validate-timeout")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_VALIDATE_FAILED")
+        self.assertEqual(
+            captured["command"],
+            [str(self.accounts_bin), "validate", "backend-validate-timeout"],
+        )
+        self.assertEqual(captured["cwd"], self.profile_dir)
+        captured_env = captured["env"]
+        self.assertIsInstance(captured_env, dict)
+        self.assertEqual(captured_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertEqual(
+            captured["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["validate_attempted"])
+        self.assertEqual(promotion["validate_outcome"], "failed")
+        self.assertFalse(promotion["rollback_point_captured"])
+        self.assertFalse(promotion["rollback_attempted"])
+        validate_result = payload["validate_result"]
+        self.assertEqual(
+            validate_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(validate_result["process_result"]["timed_out"])
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_promote_timeout_rolls_back_with_bounded_process_evidence(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-promote-timeout",
+                auth_ref="/tmp/codex-promote-timeout.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        validate_ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="",
+            stderr="validate-ok",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="promote timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=[validate_ok, timeout_result],
+            ):
+                payload = runtime_mod.run_promote(paths, "backend-promote-timeout")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_COMMAND_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["rollback_point_captured"])
+        self.assertTrue(promotion["rollback_attempted"])
+        self.assertEqual(promotion["rollback_outcome"], "completed")
+        self.assertEqual(promotion["external_command_status"], "timeout")
+        self.assertEqual(
+            promotion["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
     def test_accounts_promote_sync_failure_rolls_back_control_state(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -15586,6 +15776,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             promotion["final_outcome"], "rollback_completed_after_failed_verification"
         )
+        sync_result = payload["sync_result"]
+        self.assertEqual(sync_result["command_status"], "error")
+        self.assertEqual(sync_result["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(sync_result["exit_code"], 5)
+        self.assertEqual(
+            sync_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
+        self.assertEqual(sync_result["process_result"]["exit_code"], 5)
         self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
         self.assertEqual(
             (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
@@ -15845,6 +16044,10 @@ class CliTests(unittest.TestCase):
         promotion = payload["promotion_result"]
         self.assertEqual(promotion["external_command_exit_code"], 7)
         self.assertEqual(promotion["external_command_status"], "nonzero")
+        self.assertEqual(
+            promotion["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
         self.assertEqual(promotion["final_outcome"], "promoted_to_active")
 
     def test_accounts_demote_demotes_active_backend_with_verified_reserve_only_proof(

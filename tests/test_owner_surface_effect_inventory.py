@@ -160,7 +160,14 @@ OWNER_SURFACES = {
         RUNTIME,
         "run_promote",
         SUBPROCESS_ADJACENT,
-        frozenset({"serialized_lock", "subprocess.run", "detect_changed_files"}),
+        frozenset(
+            {
+                "serialized_lock",
+                "run_bounded_process",
+                "run_sync_for_owner_path_under_lock",
+                "detect_changed_files",
+            }
+        ),
     ),
     "run_demote": Surface(
         RUNTIME,
@@ -361,6 +368,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertIn("run_bounded_process", calls)
                 self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_promote_uses_bounded_runner_without_raw_subprocess(self) -> None:
+        calls = _call_names(_function(RUNTIME, "run_promote"))
+        self.assertIn("serialized_lock", calls)
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("run_sync_for_owner_path_under_lock", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (
             "run_onboard",
@@ -376,7 +390,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
 
-        for name in ("run_onboard", "run_promote"):
+        for name in ("run_onboard",):
             surface = OWNER_SURFACES[name]
             with self.subTest(function=f"{surface.function}_raw_effects"):
                 calls = _call_names(_function(surface.path, surface.function))

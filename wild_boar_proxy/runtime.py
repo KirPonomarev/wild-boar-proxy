@@ -15548,6 +15548,16 @@ def run_promote(
                 extra=payload_extra,
             )
 
+    def summarize_promotion_sync_result(sync_payload: dict[str, Any]) -> dict[str, Any]:
+        sync_result = {
+            "command_status": sync_payload["status"],
+            "machine_error_code": sync_payload["machine_error_code"],
+            "exit_code": sync_payload["exit_code"],
+        }
+        if "process_result" in sync_payload:
+            sync_result["process_result"] = sync_payload["process_result"]
+        return sync_result
+
     mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
     with mutation_lock:
         before_registry = read_json(paths.registry_file)
@@ -15652,22 +15662,38 @@ def run_promote(
             )
 
         promotion_result["precondition_status"] = "eligible_reserve_backend"
-        validate_result = subprocess.run(
+        validate_process_result = run_bounded_process(
             [str(paths.accounts_bin), "validate", backend_id],
-            capture_output=True,
-            text=True,
             env=sanitized_env(),
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
         )
+        validate_process_payload = validate_process_result.to_dict()
         emit_subprocess_output(
-            stdout=validate_result.stdout, stderr=validate_result.stderr
+            stdout=validate_process_result.stdout,
+            stderr=validate_process_result.stderr,
         )
+        validate_exit_code = validate_process_result.exit_code
         validate_payload = {
-            "status": "ok" if validate_result.returncode == 0 else "error",
-            "machine_error_code": (
-                "OK" if validate_result.returncode == 0 else "ACCOUNTS_COMMAND_FAILED"
+            "status": (
+                "ok"
+                if validate_process_result.machine_error_code == PROCESS_OK
+                else "error"
             ),
-            "exit_code": 0 if validate_result.returncode == 0 else validate_result.returncode,
+            "machine_error_code": (
+                "OK"
+                if validate_process_result.machine_error_code == PROCESS_OK
+                else "ACCOUNTS_COMMAND_FAILED"
+            ),
+            "exit_code": (
+                0
+                if validate_process_result.machine_error_code == PROCESS_OK
+                else validate_exit_code
+                if isinstance(validate_exit_code, int) and validate_exit_code >= 0
+                else 1
+            ),
+            "process_result": validate_process_payload,
         }
         promotion_result["validate_attempted"] = True
         promotion_result["validate_outcome"] = (
@@ -15686,23 +15712,53 @@ def run_promote(
                         "command_status": validate_payload["status"],
                         "machine_error_code": validate_payload["machine_error_code"],
                         "exit_code": validate_payload["exit_code"],
+                        "process_result": validate_payload["process_result"],
                     }
                 },
             )
 
         rollback_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
         promotion_result["rollback_point_captured"] = True
-        result = subprocess.run(
+        process_result = run_bounded_process(
             [str(paths.accounts_bin), *command],
-            capture_output=True,
-            text=True,
             env=sanitized_env(),
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
         )
-        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
-        promotion_result["external_command_exit_code"] = int(result.returncode)
+        process_payload = process_result.to_dict()
+        promotion_result["external_process_result"] = process_payload
+        emit_subprocess_output(stdout=process_result.stdout, stderr=process_result.stderr)
+        external_exit_code = process_result.exit_code
+        promotion_result["external_command_exit_code"] = external_exit_code
+        if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+            external_exit_code is None
+        ):
+            promotion_result["external_command_status"] = "exec_error"
+            promotion_result["final_outcome"] = "promotion_command_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion command could not be executed.",
+                machine_error_code="PROMOTION_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=1,
+                extra={"command_error": process_result.stderr},
+            )
+        if process_result.machine_error_code == PROCESS_TIMEOUT:
+            promotion_result["external_command_status"] = "timeout"
+            promotion_result["final_outcome"] = "promotion_command_failed"
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Promotion command timed out after possible partial mutation."
+                ),
+                machine_error_code="PROMOTION_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="retry",
+                exit_code=1,
+            )
         promotion_result["external_command_status"] = (
-            "ok" if result.returncode == 0 else "nonzero"
+            "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
         )
 
         after_command_registry = read_json(paths.registry_file)
@@ -15736,7 +15792,7 @@ def run_promote(
                 machine_error_code="PROMOTION_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         if bool(after_command_backend.get("manual_hold", False)) or str(
@@ -15748,66 +15804,12 @@ def run_promote(
                 machine_error_code="PROMOTION_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         promotion_result["sync_attempted"] = True
         try:
-            ensure_repo_owned_default_sync_helper(paths)
-            if not paths.sync_script.exists():
-                raise RuntimeErrorInfo(
-                    f"Missing sync script: {paths.sync_script}",
-                    machine_error_code="MISSING_SYNC_SCRIPT",
-                    operator_action="user_action",
-                )
-            sync_result = subprocess.run(
-                [str(paths.sync_script), get_model(paths)],
-                capture_output=True,
-                text=True,
-                env=sanitized_env(),
-                check=False,
-            )
-            emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
-            sync_state = read_json(paths.state_file, required=False)
-            sync_effective_mode = get_effective_mode(paths, sync_state)
-            sync_host, sync_port, _ = get_endpoint(paths, sync_effective_mode)
-            sync_listener_ok = socket_is_listening(sync_host, sync_port)
-            sync_reported_effective_mode = reconcile_effective_mode_for_reporting(
-                sync_effective_mode, listener_ok=sync_listener_ok
-            )
-            _, _, sync_reported_endpoint = get_endpoint(
-                paths, sync_reported_effective_mode
-            )
-            if sync_result.returncode != 0:
-                sync_payload = {
-                    "status": "error",
-                    "machine_error_code": "SYNC_FAILED",
-                    "exit_code": sync_result.returncode,
-                    "liveness": "down" if not sync_listener_ok else "degraded",
-                    "operator_action": "retry",
-                    "effective_mode": sync_reported_effective_mode,
-                    "endpoint": sync_reported_endpoint,
-                }
-            elif not sync_listener_ok:
-                sync_payload = {
-                    "status": "error",
-                    "machine_error_code": "SYNC_HEALTHCHECK_FAILED",
-                    "exit_code": 1,
-                    "liveness": "down",
-                    "operator_action": "retry",
-                    "effective_mode": sync_reported_effective_mode,
-                    "endpoint": sync_reported_endpoint,
-                }
-            else:
-                sync_payload = {
-                    "status": "ok",
-                    "machine_error_code": "OK",
-                    "exit_code": 0,
-                    "liveness": "healthy",
-                    "operator_action": "none",
-                    "effective_mode": sync_reported_effective_mode,
-                    "endpoint": sync_reported_endpoint,
-                }
+            sync_payload = run_sync_for_owner_path_under_lock(paths)
             promotion_result["sync_outcome"] = (
                 "ok" if sync_payload["status"] == "ok" else "failed"
             )
@@ -15821,13 +15823,7 @@ def run_promote(
                     liveness=str(sync_payload.get("liveness", "unknown")),
                     operator_action=str(sync_payload.get("operator_action", "retry")),
                     exit_code=int(sync_payload.get("exit_code", 1) or 1),
-                    extra={
-                        "sync_result": {
-                            "command_status": sync_payload["status"],
-                            "machine_error_code": sync_payload["machine_error_code"],
-                            "exit_code": sync_payload["exit_code"],
-                        }
-                    },
+                    extra={"sync_result": summarize_promotion_sync_result(sync_payload)},
                 )
 
             health_payload = run_healthcheck(
@@ -15887,13 +15883,7 @@ def run_promote(
                     liveness=str(status_payload.get("liveness", "unknown")),
                     operator_action=str(status_payload.get("operator_action", "retry")),
                     exit_code=int(status_payload.get("exit_code", 1) or 1),
-                    extra={
-                        "sync_result": {
-                            "command_status": sync_payload["status"],
-                            "machine_error_code": sync_payload["machine_error_code"],
-                            "exit_code": sync_payload["exit_code"],
-                        }
-                    },
+                    extra={"sync_result": summarize_promotion_sync_result(sync_payload)},
                 )
         except RuntimeErrorInfo as exc:
             return rollback_after_failed_verification(
@@ -15920,7 +15910,7 @@ def run_promote(
             ok=True,
             human_message=(
                 "Account promotion completed with rollback-safe active proof."
-                if result.returncode == 0
+                if process_result.machine_error_code == PROCESS_OK
                 else "Account promotion completed with rollback-safe active proof after external promote exit non-zero."
             ),
             machine_error_code="OK",
@@ -15932,12 +15922,9 @@ def run_promote(
                     "command_status": validate_payload["status"],
                     "machine_error_code": validate_payload["machine_error_code"],
                     "exit_code": validate_payload["exit_code"],
+                    "process_result": validate_payload["process_result"],
                 },
-                "sync_result": {
-                    "command_status": sync_payload["status"],
-                    "machine_error_code": sync_payload["machine_error_code"],
-                    "exit_code": sync_payload["exit_code"],
-                },
+                "sync_result": summarize_promotion_sync_result(sync_payload),
             },
         )
 
