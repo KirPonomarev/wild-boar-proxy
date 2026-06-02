@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -20,6 +19,12 @@ from .codex_model_registry import (
     model_lane_classification_from_registry,
 )
 from .operator_surface import DEFAULT_ENDPOINT, OperatorSurfaceSession, WbpTraceObserver, clean_env, stat_hash
+from .process_runner import (
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+    BoundedProcessResult,
+    run_bounded_process,
+)
 from .runtime import RuntimePaths, build_command_payload, build_launcher_subprocess_env
 
 
@@ -133,42 +138,38 @@ def _run_wbp_cli_prompt(
     env = _build_runner_env(paths, home=home, codex_home=codex_home, auth_stamp=auth_stamp)
     config_path = codex_home / "config.toml"
     config_text = ""
-    completed: subprocess.CompletedProcess[str] | None = None
+    process_result: BoundedProcessResult | None = None
     trace_packet: dict[str, Any] = {}
     started = time.time()
-    try:
-        with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
-            config_text = build_codex_auth_command_config(
-                base_url=trace.listen_endpoint,
-                auth_command_path=str(auth_command_path),
-                model_id=model_id,
-            )
-            config_path.write_text(config_text, encoding="utf-8")
-            completed = subprocess.run(
-                [
-                    str(codex_bin),
-                    "exec",
-                    "--skip-git-repo-check",
-                    "--ephemeral",
-                    "--ignore-rules",
-                    "--sandbox",
-                    "read-only",
-                    "-C",
-                    str(workdir),
-                    "--json",
-                    "-o",
-                    str(output_file),
-                    "-",
-                ],
-                input=prompt,
-                text=True,
-                capture_output=True,
-                timeout=timeout_seconds,
-                check=False,
-                env=env,
-            )
-            trace_packet = trace.packet()
-    except subprocess.TimeoutExpired as exc:
+    with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
+        config_text = build_codex_auth_command_config(
+            base_url=trace.listen_endpoint,
+            auth_command_path=str(auth_command_path),
+            model_id=model_id,
+        )
+        config_path.write_text(config_text, encoding="utf-8")
+        process_result = run_bounded_process(
+            [
+                str(codex_bin),
+                "exec",
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--ignore-rules",
+                "--sandbox",
+                "read-only",
+                "-C",
+                str(workdir),
+                "--json",
+                "-o",
+                str(output_file),
+                "-",
+            ],
+            env=env,
+            stdin_text=prompt,
+            timeout_seconds=timeout_seconds,
+        )
+        trace_packet = trace.packet()
+    if process_result.timed_out or process_result.machine_error_code == PROCESS_TIMEOUT:
         cleanup_packet = remove_tree(tmp_root)
         return {
             "status": "failed",
@@ -196,19 +197,20 @@ def _run_wbp_cli_prompt(
             "independent_wbp_trace_observed": False,
             "trace_observer_packet": trace_packet,
             "process_network_observation_packet": _default_process_network_observation(),
-            "warning_classes": _runner_warning_classes(str(exc.stderr or "")),
+            "warning_classes": _runner_warning_classes(process_result.stderr),
             "auth_command_invoked": auth_stamp.exists(),
         }
 
-    stdout = completed.stdout if completed is not None else ""
-    stderr = completed.stderr if completed is not None else ""
+    stdout = process_result.stdout if process_result is not None else ""
+    stderr = process_result.stderr if process_result is not None else ""
     final_message = output_file.read_text(encoding="utf-8", errors="replace").strip() if output_file.exists() else ""
     auth_command_invoked = auth_stamp.exists()
     cleanup_packet = remove_tree(tmp_root)
+    process_ok = process_result is not None and process_result.machine_error_code == PROCESS_OK
     return {
-        "status": "ok" if completed is not None and completed.returncode == 0 and bool(final_message) else "failed",
-        "machine_error_code": "OK" if completed is not None and completed.returncode == 0 and bool(final_message) else str(trace_packet.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
-        "human_message": "Codex CLI runner prompt completed." if completed is not None and completed.returncode == 0 and bool(final_message) else "Codex CLI runner prompt failed.",
+        "status": "ok" if process_ok and bool(final_message) else "failed",
+        "machine_error_code": "OK" if process_ok and bool(final_message) else str(trace_packet.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
+        "human_message": "Codex CLI runner prompt completed." if process_ok and bool(final_message) else "Codex CLI runner prompt failed.",
         "final_message": final_message,
         "duration_seconds": round(time.time() - started, 3),
         "stdin_prompt_used": True,

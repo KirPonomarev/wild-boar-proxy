@@ -11,6 +11,7 @@ RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
 EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
 CREDENTIALS = ROOT / "wild_boar_proxy" / "external_models" / "credentials.py"
 CLI = ROOT / "wild_boar_proxy" / "cli.py"
+CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
 
 
 READ = "READ"
@@ -448,6 +449,16 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         managed_pid_calls = _call_names(_function(RUNTIME, "managed_pid_matches_expected"))
         self.assertIn("_run_process_probe_ps", managed_pid_calls)
         self.assertEqual(set(), managed_pid_calls & SUBPROCESS_PRIMITIVES)
+
+    def test_cli_runner_prompt_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(CLI_RUNNER, "_run_wbp_cli_prompt"))
+        source = _function_source(CLI_RUNNER, "_run_wbp_cli_prompt")
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("stdin_text=prompt", source)
+        self.assertIn("PROCESS_TIMEOUT", source)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (

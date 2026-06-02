@@ -86,6 +86,7 @@ class BoundedProcessRunner:
         *,
         env: Mapping[str, str],
         cwd: Path | str | None = None,
+        stdin_text: str | None = None,
         shell: bool = False,
     ) -> BoundedProcessResult:
         if shell:
@@ -96,10 +97,17 @@ class BoundedProcessRunner:
 
         started = time.monotonic()
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+            stdin_file = None
             try:
+                stdin = subprocess.DEVNULL
+                if stdin_text is not None:
+                    stdin_file = tempfile.TemporaryFile()
+                    stdin_file.write(stdin_text.encode("utf-8"))
+                    stdin_file.seek(0)
+                    stdin = stdin_file
                 process = subprocess.Popen(
                     argv,
-                    stdin=subprocess.DEVNULL,
+                    stdin=stdin,
                     stdout=stdout_file,
                     stderr=stderr_file,
                     env=dict(env),
@@ -108,6 +116,9 @@ class BoundedProcessRunner:
                     text=False,
                     shell=False,
                 )
+                if stdin_file is not None:
+                    stdin_file.close()
+                    stdin_file = None
             except FileNotFoundError as exc:
                 return BoundedProcessResult(
                     status="error",
@@ -132,6 +143,9 @@ class BoundedProcessRunner:
                     timed_out=False,
                     duration_seconds=round(time.monotonic() - started, 3),
                 )
+            finally:
+                if stdin_file is not None:
+                    stdin_file.close()
 
             timed_out = False
             try:
@@ -176,10 +190,11 @@ def run_bounded_process(
     *,
     env: Mapping[str, str],
     cwd: Path | str | None = None,
+    stdin_text: str | None = None,
     timeout_seconds: float = DEFAULT_PROCESS_TIMEOUT_SECONDS,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
 ) -> BoundedProcessResult:
     return BoundedProcessRunner(
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
-    ).run(command, env=env, cwd=cwd)
+    ).run(command, env=env, cwd=cwd, stdin_text=stdin_text)

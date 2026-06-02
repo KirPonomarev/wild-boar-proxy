@@ -57,6 +57,21 @@ class BoundedProcessRunnerTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 7)
         self.assertEqual(result.stderr.strip(), "bad")
 
+    def test_stdin_text_is_delivered_as_utf8_without_shell(self) -> None:
+        result = BoundedProcessRunner(timeout_seconds=5).run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; data = sys.stdin.read(); print(data.upper())",
+            ],
+            env=os.environ,
+            stdin_text="hello stdin",
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertEqual(result.stdout.strip(), "HELLO STDIN")
+
     def test_missing_binary_returns_process_not_found(self) -> None:
         result = BoundedProcessRunner(timeout_seconds=5).run(
             ["/definitely/missing/wbp-process-runner-binary"],
@@ -94,6 +109,21 @@ class BoundedProcessRunnerTests(unittest.TestCase):
             self.assertEqual(result.status, "error")
             self.assertEqual(result.machine_error_code, PROCESS_TIMEOUT)
             self.assertTrue(result.timed_out)
+
+    def test_timeout_with_stdin_remains_structured_timeout(self) -> None:
+        result = BoundedProcessRunner(timeout_seconds=0.2).run(
+            [
+                sys.executable,
+                "-c",
+                "import sys, time; sys.stdin.read(); time.sleep(10)",
+            ],
+            env=os.environ,
+            stdin_text="prompt\n",
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_TIMEOUT)
+        self.assertTrue(result.timed_out)
 
     def test_large_stdout_and_stderr_are_capped(self) -> None:
         result = BoundedProcessRunner(
