@@ -428,6 +428,27 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertNotIn("result.returncode", source)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        for name in (
+            "_run_process_probe_ps",
+            "probe_runtime_tk_support",
+            "discover_dynamic_local_proxy_candidates",
+            "get_repo_commit_hash",
+        ):
+            with self.subTest(function=name):
+                calls = _call_names(_function(RUNTIME, name))
+                source = _function_source(RUNTIME, name)
+                self.assertIn("run_bounded_process", calls)
+                self.assertIn("PROCESS_PROBE_TIMEOUT_SECONDS", source)
+                self.assertIn("PROCESS_PROBE_OUTPUT_CAP_BYTES", source)
+                self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+        managed_pid_calls = _call_names(_function(RUNTIME, "managed_pid_matches_expected"))
+        self.assertIn("_run_process_probe_ps", managed_pid_calls)
+        self.assertEqual(set(), managed_pid_calls & SUBPROCESS_PRIMITIVES)
+
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (
             "run_onboard",

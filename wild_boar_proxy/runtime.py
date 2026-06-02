@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import process_runner as _process_runner
 from . import (
     state_lock,
     state_startup_contract,
@@ -92,6 +93,7 @@ CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 PROCESS_PROBE_TIMEOUT_SECONDS = 2.0
+PROCESS_PROBE_OUTPUT_CAP_BYTES = 16 * 1024
 OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS = 120.0
 OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 OWNER_PATH_LAUNCHER_PROCESS_TIMEOUT_SECONDS = 120.0
@@ -2912,27 +2914,27 @@ def _run_process_probe_ps(*args: str) -> subprocess.CompletedProcess[str] | None
     if ps_bin is None:
         return None
     command = [ps_bin, *args]
-    try:
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=sanitized_env(),
-        )
-        stdout, stderr = process.communicate(timeout=PROCESS_PROBE_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        stdout, stderr = process.communicate()
+    process_result = _process_runner.run_bounded_process(
+        command,
+        env=sanitized_env(),
+        timeout_seconds=PROCESS_PROBE_TIMEOUT_SECONDS,
+        output_cap_bytes=PROCESS_PROBE_OUTPUT_CAP_BYTES,
+    )
+    if process_result.machine_error_code == PROCESS_TIMEOUT:
         return subprocess.CompletedProcess(
             command,
             124,
-            stdout or "",
-            stderr or "",
+            process_result.stdout,
+            process_result.stderr,
         )
-    except OSError:
+    if process_result.exit_code is None:
         return None
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    return subprocess.CompletedProcess(
+        command,
+        process_result.exit_code,
+        process_result.stdout,
+        process_result.stderr,
+    )
 
 
 def _probe_process_uid(pid: int) -> int | None:
@@ -3362,12 +3364,10 @@ def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
         pid = int(pid_text.strip())
     except ValueError:
         return False
-    command_line = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "command="],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
+    result = _run_process_probe_ps("-p", str(pid), "-o", "command=")
+    if result is None or result.returncode != 0:
+        return False
+    command_line = result.stdout.strip()
     expected = f"{paths.managed_config_file}"
     return bool(command_line) and expected in command_line
 
@@ -5482,28 +5482,30 @@ def resolve_launchable_package_runtime_executable(
 
 
 def probe_runtime_tk_support(runtime_executable: Path) -> dict[str, Any]:
-    try:
-        result = subprocess.run(
-            [str(runtime_executable), "-c", "import tkinter"],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=sanitized_env(),
-        )
-    except OSError as exc:
+    process_result = _process_runner.run_bounded_process(
+        [str(runtime_executable), "-c", "import tkinter"],
+        env=sanitized_env(),
+        timeout_seconds=PROCESS_PROBE_TIMEOUT_SECONDS,
+        output_cap_bytes=PROCESS_PROBE_OUTPUT_CAP_BYTES,
+    )
+    if (
+        process_result.timed_out
+        or process_result.machine_error_code == PROCESS_TIMEOUT
+        or process_result.exit_code is None
+    ):
         return {
             "status": "probe_failed",
             "runtime_executable": str(runtime_executable),
             "tkinter_available": False,
-            "probe_exit_code": None,
-            "probe_stderr": str(exc),
+            "probe_exit_code": process_result.exit_code,
+            "probe_stderr": process_result.stderr.strip(),
         }
     return {
         "status": "probed",
         "runtime_executable": str(runtime_executable),
-        "tkinter_available": result.returncode == 0,
-        "probe_exit_code": result.returncode,
-        "probe_stderr": result.stderr.strip(),
+        "tkinter_available": process_result.exit_code == 0,
+        "probe_exit_code": process_result.exit_code,
+        "probe_stderr": process_result.stderr.strip(),
     }
 
 
@@ -7030,19 +7032,15 @@ def discover_dynamic_local_proxy_candidates() -> list[str]:
     lsof_bin = shutil.which("lsof")
     if not lsof_bin:
         return []
-    try:
-        result = subprocess.run(
-            [lsof_bin, "-nP", "-iTCP", "-sTCP:LISTEN"],
-            capture_output=True,
-            text=True,
-            env=sanitized_env(),
-            check=False,
-        )
-    except OSError:
+    process_result = _process_runner.run_bounded_process(
+        [lsof_bin, "-nP", "-iTCP", "-sTCP:LISTEN"],
+        env=sanitized_env(),
+        timeout_seconds=PROCESS_PROBE_TIMEOUT_SECONDS,
+        output_cap_bytes=PROCESS_PROBE_OUTPUT_CAP_BYTES,
+    )
+    if process_result.status != "ok":
         return []
-    if result.returncode != 0:
-        return []
-    return parse_dynamic_local_listener_candidates(result.stdout)
+    return parse_dynamic_local_listener_candidates(process_result.stdout)
 
 
 def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
@@ -10687,19 +10685,16 @@ def summarize_stable_10_rollback_readiness(
 
 def get_repo_commit_hash() -> str:
     repo_root = Path(__file__).resolve().parents[1]
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
+    process_result = _process_runner.run_bounded_process(
+        ["git", "rev-parse", "HEAD"],
+        env=sanitized_env(),
+        cwd=repo_root,
+        timeout_seconds=PROCESS_PROBE_TIMEOUT_SECONDS,
+        output_cap_bytes=PROCESS_PROBE_OUTPUT_CAP_BYTES,
+    )
+    if process_result.status != "ok":
         return ""
-    if result.returncode != 0:
-        return ""
-    commit_hash = result.stdout.strip()
+    commit_hash = process_result.stdout.strip()
     return commit_hash if re.fullmatch(r"[0-9a-fA-F]{40}", commit_hash) else ""
 
 

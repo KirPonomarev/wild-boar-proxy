@@ -856,6 +856,287 @@ class CliTests(unittest.TestCase):
         self.assertEqual(raised.exception.machine_error_code, "MISSING_ACCOUNTS_BIN")
         runner.assert_not_called()
 
+    def test_process_probe_ps_uses_bounded_runner_and_preserves_timeout_and_nonzero(
+        self,
+    ) -> None:
+        captured: list[dict[str, object]] = []
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="partial ps output",
+            stderr="ps timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=2.0,
+        )
+        nonzero_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_FAILED,
+            exit_code=1,
+            stdout="",
+            stderr="ps failed",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured.append({"command": [str(item) for item in command], **kwargs})
+            return timeout_result if len(captured) == 1 else nonzero_result
+
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "OPENAI_API_KEY": "should-not-leak"},
+            clear=False,
+        ):
+            with (
+                mock.patch.object(runtime_mod, "_system_ps_bin", return_value="/bin/ps"),
+                mock.patch.object(
+                    runtime_mod._process_runner,
+                    "run_bounded_process",
+                    side_effect=fake_run_bounded_process,
+                ),
+            ):
+                timeout_payload = runtime_mod._run_process_probe_ps("-p", "123")
+                nonzero_payload = runtime_mod._run_process_probe_ps("-p", "456")
+
+        self.assertIsNotNone(timeout_payload)
+        self.assertEqual(timeout_payload.returncode, 124)
+        self.assertEqual(timeout_payload.stdout, "partial ps output")
+        self.assertEqual(timeout_payload.stderr, "ps timed out")
+        self.assertIsNotNone(nonzero_payload)
+        self.assertEqual(nonzero_payload.returncode, 1)
+        self.assertEqual(nonzero_payload.stderr, "ps failed")
+        first_call = captured[0]
+        self.assertEqual(first_call["command"], ["/bin/ps", "-p", "123"])
+        self.assertEqual(
+            first_call["timeout_seconds"], runtime_mod.PROCESS_PROBE_TIMEOUT_SECONDS
+        )
+        self.assertEqual(
+            first_call["output_cap_bytes"], runtime_mod.PROCESS_PROBE_OUTPUT_CAP_BYTES
+        )
+        probe_env = first_call["env"]
+        self.assertIsInstance(probe_env, dict)
+        self.assertNotIn("OPENAI_API_KEY", probe_env)
+
+    def test_managed_pid_matches_expected_consumes_bounded_process_probe(
+        self,
+    ) -> None:
+        command = ["/bin/ps", "-p", "123", "-o", "command="]
+        matching = subprocess.CompletedProcess(
+            command,
+            0,
+            f"python -m wild_boar_proxy --config {self.managed_dir / 'managed-config.yaml'}\n",
+            "",
+        )
+        timeout = subprocess.CompletedProcess(command, 124, "", "timed out")
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "_run_process_probe_ps", return_value=matching
+            ):
+                self.assertTrue(runtime_mod.managed_pid_matches_expected(paths, "123"))
+            with mock.patch.object(
+                runtime_mod, "_run_process_probe_ps", return_value=timeout
+            ):
+                self.assertFalse(runtime_mod.managed_pid_matches_expected(paths, "123"))
+            with mock.patch.object(
+                runtime_mod, "_run_process_probe_ps", return_value=None
+            ):
+                self.assertFalse(runtime_mod.managed_pid_matches_expected(paths, "123"))
+            self.assertFalse(
+                runtime_mod.managed_pid_matches_expected(paths, "not-a-pid")
+            )
+
+    def test_dynamic_local_proxy_candidates_use_bounded_lsof_probe(
+        self,
+    ) -> None:
+        captured: dict[str, object] = {}
+        success = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="node 1 user TCP 127.0.0.1:12345 (LISTEN)\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            return success
+
+        with (
+            mock.patch.object(runtime_mod.shutil, "which", return_value="/usr/sbin/lsof"),
+            mock.patch.object(
+                runtime_mod._process_runner,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ),
+        ):
+            candidates = runtime_mod.discover_dynamic_local_proxy_candidates()
+
+        self.assertEqual(
+            candidates,
+            ["http://127.0.0.1:12345", "socks5h://127.0.0.1:12345"],
+        )
+        self.assertEqual(
+            captured["command"],
+            ["/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN"],
+        )
+        self.assertEqual(
+            captured["timeout_seconds"], runtime_mod.PROCESS_PROBE_TIMEOUT_SECONDS
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"], runtime_mod.PROCESS_PROBE_OUTPUT_CAP_BYTES
+        )
+        failure = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="lsof timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=2.0,
+        )
+        with (
+            mock.patch.object(runtime_mod.shutil, "which", return_value="/usr/sbin/lsof"),
+            mock.patch.object(
+                runtime_mod._process_runner,
+                "run_bounded_process",
+                return_value=failure,
+            ),
+        ):
+            self.assertEqual(runtime_mod.discover_dynamic_local_proxy_candidates(), [])
+        with mock.patch.object(runtime_mod.shutil, "which", return_value=None):
+            self.assertEqual(runtime_mod.discover_dynamic_local_proxy_candidates(), [])
+
+    def test_tk_support_probe_preserves_bounded_success_nonzero_and_failure_shape(
+        self,
+    ) -> None:
+        runtime_executable = self.profile_dir / "python"
+        ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+        nonzero = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_FAILED,
+            exit_code=2,
+            stdout="",
+            stderr="no tkinter",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+        timeout = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=-9,
+            stdout="",
+            stderr="tk probe timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=2.0,
+        )
+
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=ok
+        ):
+            ok_payload = runtime_mod.probe_runtime_tk_support(runtime_executable)
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=nonzero
+        ):
+            nonzero_payload = runtime_mod.probe_runtime_tk_support(runtime_executable)
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=timeout
+        ):
+            timeout_payload = runtime_mod.probe_runtime_tk_support(runtime_executable)
+
+        self.assertEqual(ok_payload["status"], "probed")
+        self.assertTrue(ok_payload["tkinter_available"])
+        self.assertEqual(ok_payload["probe_exit_code"], 0)
+        self.assertEqual(nonzero_payload["status"], "probed")
+        self.assertFalse(nonzero_payload["tkinter_available"])
+        self.assertEqual(nonzero_payload["probe_exit_code"], 2)
+        self.assertEqual(nonzero_payload["probe_stderr"], "no tkinter")
+        self.assertEqual(timeout_payload["status"], "probe_failed")
+        self.assertFalse(timeout_payload["tkinter_available"])
+        self.assertEqual(timeout_payload["probe_exit_code"], -9)
+        self.assertEqual(timeout_payload["probe_stderr"], "tk probe timed out")
+
+    def test_repo_commit_hash_returns_only_valid_bounded_success_hash(self) -> None:
+        valid_hash = "a" * 40
+        ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout=f"{valid_hash}\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+        invalid = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="not-a-hash\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+        timeout = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="git timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=2.0,
+        )
+
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=ok
+        ) as runner:
+            self.assertEqual(runtime_mod.get_repo_commit_hash(), valid_hash)
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], ["git", "rev-parse", "HEAD"])
+        self.assertEqual(kwargs["timeout_seconds"], runtime_mod.PROCESS_PROBE_TIMEOUT_SECONDS)
+        self.assertEqual(kwargs["output_cap_bytes"], runtime_mod.PROCESS_PROBE_OUTPUT_CAP_BYTES)
+        self.assertEqual(kwargs["cwd"], ROOT)
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=invalid
+        ):
+            self.assertEqual(runtime_mod.get_repo_commit_hash(), "")
+        with mock.patch.object(
+            runtime_mod._process_runner, "run_bounded_process", return_value=timeout
+        ):
+            self.assertEqual(runtime_mod.get_repo_commit_hash(), "")
+
     def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
         status_bin = self.bin_dir / "codex-managed-status"
         for candidate in (
