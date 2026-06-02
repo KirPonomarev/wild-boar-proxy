@@ -59,6 +59,7 @@ class DetachedProcessStartResult:
     launch_observed: bool
     error: str
     duration_seconds: float
+    process_observed_running: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +69,7 @@ class DetachedProcessStartResult:
             "launch_observed": self.launch_observed,
             "error": self.error,
             "duration_seconds": self.duration_seconds,
+            "process_observed_running": self.process_observed_running,
         }
 
 
@@ -123,9 +125,12 @@ def start_detached_process(
     stderr: Any = subprocess.DEVNULL,
     text: bool = False,
     shell: bool = False,
+    observe_after_seconds: float | None = None,
 ) -> DetachedProcessStartResult:
     if shell:
         raise ValueError("shell=True is forbidden for detached process execution")
+    if observe_after_seconds is not None and observe_after_seconds < 0:
+        raise ValueError("observe_after_seconds must be non-negative")
     argv = [str(item) for item in command]
     if not argv:
         raise ValueError("command must not be empty")
@@ -172,6 +177,11 @@ def start_detached_process(
             error="detached process started without a valid pid",
             duration_seconds=round(time.monotonic() - started, 3),
         )
+    process_observed_running: bool | None = None
+    if observe_after_seconds is not None:
+        if observe_after_seconds:
+            time.sleep(observe_after_seconds)
+        process_observed_running = process.poll() is None
     return DetachedProcessStartResult(
         status="ok",
         machine_error_code=PROCESS_OK,
@@ -179,6 +189,7 @@ def start_detached_process(
         launch_observed=True,
         error="",
         duration_seconds=round(time.monotonic() - started, 3),
+        process_observed_running=process_observed_running,
     )
 
 

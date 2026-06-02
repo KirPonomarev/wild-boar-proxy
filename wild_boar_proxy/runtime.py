@@ -500,52 +500,48 @@ def dispatch_external_client(
                 severity="recoverable",
                 operator_action="user_action",
             )
-        try:
-            result = subprocess.run(
-                [open_bin, "-a", str(client_path)],
-                capture_output=True,
-                text=True,
-                env=sanitized_env(),
-                check=False,
-            )
-        except OSError as exc:
+        process_result = run_bounded_process(
+            [open_bin, "-a", str(client_path)],
+            env=sanitized_env(),
+        )
+        if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+            process_result.exit_code is None
+        ):
             raise RuntimeErrorInfo(
-                f"Host-client dispatch failed: {exc}",
+                f"Host-client dispatch failed: {process_result.stderr}",
                 machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
                 severity="recoverable",
                 operator_action="retry",
-            ) from exc
+            )
         return {
             "dispatch_method": "macos_open_app_bundle",
-            "dispatch_observed": result.returncode == 0,
-            "dispatch_exit_code": result.returncode,
-            "stderr": result.stderr,
+            "dispatch_observed": process_result.machine_error_code == PROCESS_OK,
+            "dispatch_exit_code": process_result.exit_code,
+            "stderr": process_result.stderr,
         }
 
-    try:
-        process = subprocess.Popen(
-            [str(client_path)],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=sanitized_env(),
-            cwd=str(paths.profile_dir),
-            start_new_session=True,
-            text=False,
-        )
-    except OSError as exc:
+    launch_result = start_detached_process(
+        [str(client_path)],
+        env=sanitized_env(),
+        cwd=paths.profile_dir,
+        observe_after_seconds=0.5,
+    )
+    if (
+        launch_result.status != "ok"
+        or not launch_result.launch_observed
+        or not launch_result.pid
+    ):
         raise RuntimeErrorInfo(
-            f"Host-client dispatch failed: {exc}",
+            f"Host-client dispatch failed: {launch_result.error}",
             machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
             severity="recoverable",
             operator_action="retry",
-        ) from exc
-    time.sleep(0.5)
+        )
     return {
         "dispatch_method": "detached_executable_spawn",
         "dispatch_observed": True,
         "dispatch_exit_code": None,
-        "process_observed_running": process.poll() is None,
+        "process_observed_running": launch_result.process_observed_running is True,
         "stderr": "",
     }
 
@@ -9878,22 +9874,12 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             "process_observed_running": bool(
                 dispatch_result.get("process_observed_running", False)
             ),
-            "real_codex_app_launched": bool(
-                dispatch_result.get("process_observed_running", False)
-            ),
-            "launch_claim_scope": (
-                "bounded_executable_launch_with_process_observation"
-                if dispatch_result.get("process_observed_running", False)
-                else "os_dispatch_only"
-            ),
+            "real_codex_app_launched": False,
+            "launch_claim_scope": "os_dispatch_only",
             "final_outcome": (
-                "app_process_observed"
-                if dispatch_result.get("process_observed_running", False)
-                else (
-                    "dispatch_requested"
-                    if dispatch_result["dispatch_observed"]
-                    else "dispatch_failed"
-                )
+                "dispatch_requested"
+                if dispatch_result["dispatch_observed"]
+                else "dispatch_failed"
             ),
         }
     )

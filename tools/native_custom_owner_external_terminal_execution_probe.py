@@ -34,13 +34,18 @@ from wild_boar_proxy.native_filesystem_probe import (
 )
 
 
-EXPECTED_SHELL_COMMAND = (
-    "cd /Volumes/Work/wild-boar-proxy && python3 "
-    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py "
-    "--repo-root /Volumes/Work/wild-boar-proxy "
-    "--evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/"
+EXTERNAL_EVIDENCE_DIR_NAME = (
     "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
 )
+
+
+def expected_shell_command(repo_root: Path) -> str:
+    target_tool = repo_root / "tools/native_custom_quiescent_safety_retry_probe.py"
+    evidence_dir = repo_root / "audit_results" / EXTERNAL_EVIDENCE_DIR_NAME
+    return (
+        f"cd {repo_root} && python3 {target_tool} "
+        f"--repo-root {repo_root} --evidence-dir {evidence_dir}"
+    )
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
@@ -249,7 +254,7 @@ def main() -> int:
     current_thread_boundary = build_current_thread_boundary_packet()
     command_reverification = build_owner_command_reverification_packet(
         handoff_command_packet=handoff_command,
-        expected_shell_command=EXPECTED_SHELL_COMMAND,
+        expected_shell_command=expected_shell_command(repo_root),
         external_evidence_dir=external_evidence_dir,
         repo_root=repo_root,
     )

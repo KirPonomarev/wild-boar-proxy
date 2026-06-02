@@ -230,6 +230,18 @@ class BoundedProcessRunnerTests(unittest.TestCase):
         except ProcessLookupError:
             pass
 
+    def test_detached_start_observes_fast_exit_without_running_claim(self) -> None:
+        result = start_detached_process(
+            [sys.executable, "-c", "pass"],
+            env=os.environ,
+            observe_after_seconds=0.5,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertTrue(result.launch_observed)
+        self.assertFalse(result.process_observed_running)
+
     def test_detached_start_missing_binary_is_structured(self) -> None:
         result = start_detached_process(
             ["/definitely/missing/wbp-detached-process-runner-binary"],
@@ -256,6 +268,14 @@ class BoundedProcessRunnerTests(unittest.TestCase):
     def test_detached_start_shell_true_is_forbidden(self) -> None:
         with self.assertRaises(ValueError):
             start_detached_process(["echo", "nope"], env=os.environ, shell=True)
+
+    def test_detached_start_negative_observation_window_is_forbidden(self) -> None:
+        with self.assertRaises(ValueError):
+            start_detached_process(
+                ["echo", "nope"],
+                env=os.environ,
+                observe_after_seconds=-0.1,
+            )
 
 
 if __name__ == "__main__":

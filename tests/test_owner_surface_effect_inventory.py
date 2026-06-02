@@ -439,6 +439,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("LOGIN_DEVICE_PROCESS_START_FAILED", source)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_dispatch_external_client_uses_repo_owned_process_adapters_only(
+        self,
+    ) -> None:
+        calls = _call_names(_function(RUNTIME, "dispatch_external_client"))
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("start_detached_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:

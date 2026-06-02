@@ -21414,19 +21414,9 @@ class CliTests(unittest.TestCase):
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
         self.assertIsInstance(launch_result["process_observed_running"], bool)
-        self.assertEqual(
-            launch_result["real_codex_app_launched"],
-            launch_result["process_observed_running"],
-        )
-        if launch_result["process_observed_running"]:
-            self.assertEqual(
-                launch_result["launch_claim_scope"],
-                "bounded_executable_launch_with_process_observation",
-            )
-            self.assertEqual(launch_result["final_outcome"], "app_process_observed")
-        else:
-            self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
-            self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
+        self.assertFalse(launch_result["real_codex_app_launched"])
+        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
         self.assertEqual(payload["status_observed"]["exit_code"], 0)
         for _ in range(50):
             if trace_file.exists():
@@ -21506,7 +21496,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_file.exists())
         self.assertEqual(before, self.state_snapshot())
 
-    def test_launch_client_marks_real_app_launch_when_process_stays_alive(
+    def test_launch_client_keeps_app_launch_unclaimed_when_process_stays_alive(
         self,
     ) -> None:
         port = free_port()
@@ -21565,10 +21555,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
         self.assertTrue(launch_result["process_observed_running"])
-        self.assertTrue(launch_result["real_codex_app_launched"])
+        self.assertFalse(launch_result["real_codex_app_launched"])
         self.assertIsNone(launch_result["dispatch_exit_code"])
-        self.assertEqual(launch_result["launch_claim_scope"], "bounded_executable_launch_with_process_observation")
-        self.assertEqual(launch_result["final_outcome"], "app_process_observed")
+        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
 
     def test_launch_client_reports_exec_format_failure_as_json_packet(self) -> None:
         port = free_port()
@@ -21753,12 +21743,17 @@ class CliTests(unittest.TestCase):
             ):
                 paths = runtime_mod.RuntimePaths.from_env()
                 with mock.patch.object(runtime_mod, "SYSTEM_OPEN_BIN", Path("/usr/bin/open")):
-                    with mock.patch.object(runtime_mod.subprocess, "run") as run_mock:
-                        run_mock.return_value = subprocess.CompletedProcess(
-                            ["/usr/bin/open", "-a", str(app_bundle)],
-                            0,
-                            "",
-                            "",
+                    with mock.patch.object(runtime_mod, "run_bounded_process") as run_mock:
+                        run_mock.return_value = BoundedProcessResult(
+                            status="ok",
+                            machine_error_code="OK",
+                            exit_code=0,
+                            stdout="",
+                            stderr="",
+                            stdout_truncated=False,
+                            stderr_truncated=False,
+                            timed_out=False,
+                            duration_seconds=0.01,
                         )
                         payload = runtime_mod.run_launch_client(paths, str(app_bundle))
         finally:
@@ -21768,8 +21763,58 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
         args, kwargs = run_mock.call_args
-        self.assertEqual(args[0][0], "/usr/bin/open")
+        self.assertEqual(args[0], ["/usr/bin/open", "-a", str(app_bundle)])
         self.assertEqual(kwargs["env"]["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
+
+    def test_dispatch_external_client_uses_detached_adapter_with_sanitized_env(self) -> None:
+        client_script = self.profile_dir / "fake-host-client-dispatch.sh"
+        client_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        client_script.chmod(0o755)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                **self.env(),
+                "HTTP_PROXY": "http://example.invalid:1",
+                "HTTPS_PROXY": "http://example.invalid:2",
+                "ALL_PROXY": "http://example.invalid:3",
+                "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                "CODEX_HOME": str(self.profile_dir / "ambient-codex-home"),
+                "OPENAI_API_KEY": "ambient-secret",
+                "PATH": "/definitely/missing",
+            },
+            clear=True,
+        ):
+            launch_result = mock.Mock(
+                status="ok",
+                launch_observed=True,
+                pid=4321,
+                error="",
+                process_observed_running=True,
+            )
+            with mock.patch.object(
+                runtime_mod, "start_detached_process", return_value=launch_result
+            ) as start_mock:
+                payload = runtime_mod.dispatch_external_client(
+                    mock.Mock(profile_dir=self.profile_dir),
+                    client_script,
+                    "executable",
+                )
+
+        self.assertEqual(payload["dispatch_method"], "detached_executable_spawn")
+        self.assertTrue(payload["dispatch_observed"])
+        self.assertTrue(payload["process_observed_running"])
+        args, kwargs = start_mock.call_args
+        self.assertEqual(args[0], [str(client_script)])
+        self.assertEqual(kwargs["cwd"], self.profile_dir)
+        self.assertEqual(kwargs["observe_after_seconds"], 0.5)
+        self.assertEqual(kwargs["env"]["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
+        self.assertNotIn("HTTP_PROXY", kwargs["env"])
+        self.assertNotIn("HTTPS_PROXY", kwargs["env"])
+        self.assertNotIn("ALL_PROXY", kwargs["env"])
+        self.assertNotIn("WBP_CURRENT_PROXY_URL", kwargs["env"])
+        self.assertNotIn("CODEX_HOME", kwargs["env"])
+        self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
 
     def test_launch_smoke_repo_owned_default_launcher_is_deterministic_under_hostile_path(
         self,
