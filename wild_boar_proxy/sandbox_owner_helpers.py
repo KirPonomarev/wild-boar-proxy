@@ -7,11 +7,11 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from .process_runner import PROCESS_OK, PROCESS_TIMEOUT, run_bounded_process
 from .runtime import (
     RuntimePaths,
     get_launch_capable_backend_ids,
@@ -24,6 +24,9 @@ from .runtime import (
 )
 
 SCHEMA_VERSION = 2
+SANDBOX_LOGIN_PROCESS_TIMEOUT_SECONDS = 120.0
+SANDBOX_LOGIN_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
+SANDBOX_LOGIN_TIMEOUT_EXIT_CODE = 124
 
 
 def load_registry(paths: RuntimePaths) -> dict[str, Any]:
@@ -246,6 +249,38 @@ def choose_auth_candidate(
     raise SystemExit("No new auth file detected after login flow.")
 
 
+def emit_bounded_login_process_notices(
+    *,
+    stderr: str,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    machine_error_code: str,
+) -> None:
+    notices: list[str] = []
+    if stdout_truncated:
+        notices.append(
+            "sandbox login subprocess stdout truncated "
+            f"at {SANDBOX_LOGIN_PROCESS_OUTPUT_CAP_BYTES} bytes"
+        )
+    if stderr_truncated:
+        notices.append(
+            "sandbox login subprocess stderr truncated "
+            f"at {SANDBOX_LOGIN_PROCESS_OUTPUT_CAP_BYTES} bytes"
+        )
+    if machine_error_code == PROCESS_TIMEOUT:
+        notices.append(
+            "sandbox login subprocess timed out "
+            f"after {SANDBOX_LOGIN_PROCESS_TIMEOUT_SECONDS:g} seconds"
+        )
+
+    if notices and stderr and not stderr.endswith("\n"):
+        sys.stderr.write("\n")
+    for notice in notices:
+        sys.stderr.write(f"{notice}\n")
+    if notices:
+        sys.stderr.flush()
+
+
 def run_login_flow(paths: RuntimePaths, args: argparse.Namespace) -> int:
     auth_dir = auth_source_dir(paths)
     if os.environ.get("WBP_REQUIRE_SANDBOX_AUTH_DIR") == "1" and not auth_dir_is_sandbox_scoped(paths, auth_dir):
@@ -273,8 +308,37 @@ def run_login_flow(paths: RuntimePaths, args: argparse.Namespace) -> int:
     command.append("-codex-device-login" if use_device else "-codex-login")
     if bool(getattr(args, "no_browser", False)):
         command.append("-no-browser")
-    result = subprocess.run(command, env=env, check=False)
-    return int(result.returncode)
+    result = run_bounded_process(
+        command,
+        env=env,
+        stdout_passthrough=sys.stdout,
+        stderr_passthrough=sys.stderr,
+        timeout_seconds=SANDBOX_LOGIN_PROCESS_TIMEOUT_SECONDS,
+        output_cap_bytes=SANDBOX_LOGIN_PROCESS_OUTPUT_CAP_BYTES,
+    )
+    emit_bounded_login_process_notices(
+        stderr=result.stderr,
+        stdout_truncated=result.stdout_truncated,
+        stderr_truncated=result.stderr_truncated,
+        machine_error_code=result.machine_error_code,
+    )
+    if result.machine_error_code == PROCESS_TIMEOUT:
+        return SANDBOX_LOGIN_TIMEOUT_EXIT_CODE
+    if result.machine_error_code != PROCESS_OK:
+        if result.exit_code is not None and int(result.exit_code) != 0:
+            return int(result.exit_code)
+        if result.stderr:
+            sys.stderr.write("\n" if not result.stderr.endswith("\n") else "")
+        sys.stderr.write(f"sandbox login subprocess failed: {result.machine_error_code}\n")
+        sys.stderr.flush()
+        return 1
+    if result.exit_code is None:
+        if result.stderr:
+            sys.stderr.write("\n" if not result.stderr.endswith("\n") else "")
+        sys.stderr.write(f"sandbox login subprocess failed: {result.machine_error_code}\n")
+        sys.stderr.flush()
+        return 1
+    return int(result.exit_code)
 
 
 def normalize_auth_type(payload: dict[str, Any]) -> str | None:

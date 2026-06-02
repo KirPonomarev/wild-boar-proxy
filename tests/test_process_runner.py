@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+from io import StringIO
 
 from wild_boar_proxy.process_runner import (
     PROCESS_FAILED,
@@ -147,6 +148,61 @@ class BoundedProcessRunnerTests(unittest.TestCase):
         self.assertEqual(result.stderr, "e" * 12)
         self.assertTrue(result.stdout_truncated)
         self.assertTrue(result.stderr_truncated)
+
+    def test_passthrough_stdout_and_stderr_are_capped(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        result = BoundedProcessRunner(
+            timeout_seconds=5,
+            output_cap_bytes=6,
+        ).run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; "
+                    "sys.stdout.write('o' * 20); "
+                    "sys.stderr.write('e' * 20)"
+                ),
+            ],
+            env=os.environ,
+            stdout_passthrough=stdout,
+            stderr_passthrough=stderr,
+        )
+
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertEqual(result.stdout, "o" * 6)
+        self.assertEqual(result.stderr, "e" * 6)
+        self.assertEqual(stdout.getvalue(), "o" * 6)
+        self.assertEqual(stderr.getvalue(), "e" * 6)
+        self.assertTrue(result.stdout_truncated)
+        self.assertTrue(result.stderr_truncated)
+
+    def test_passthrough_open_grandchild_pipe_is_not_false_green(self) -> None:
+        stdout = StringIO()
+        script = (
+            "import subprocess, sys, time; "
+            "print('parent ready', flush=True); "
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(10)']); "
+            "sys.exit(0)"
+        )
+
+        result = BoundedProcessRunner(
+            timeout_seconds=5,
+            output_cap_bytes=64,
+        ).run(
+            [sys.executable, "-c", script],
+            env=os.environ,
+            stdout_passthrough=stdout,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_FAILED)
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("parent ready", result.stdout)
+        self.assertIn("parent ready", stdout.getvalue())
+        self.assertIn("output streams did not close", result.stderr)
 
     def test_shell_true_is_forbidden(self) -> None:
         with self.assertRaises(ValueError):

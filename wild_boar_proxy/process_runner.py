@@ -11,8 +11,9 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import threading
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, TextIO
 
 PROCESS_NOT_FOUND = "PROCESS_NOT_FOUND"
 PROCESS_TIMEOUT = "PROCESS_TIMEOUT"
@@ -21,6 +22,7 @@ PROCESS_OK = "OK"
 
 DEFAULT_PROCESS_TIMEOUT_SECONDS = 120.0
 DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024
+PIPE_DRAIN_TIMEOUT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,32 @@ def _read_capped(handle, cap_bytes: int) -> tuple[str, bool]:
     return data.decode("utf-8", errors="replace"), truncated
 
 
+def _read_pipe_capped(
+    handle,
+    cap_bytes: int,
+    passthrough: TextIO | None,
+) -> tuple[str, bool]:
+    captured = bytearray()
+    truncated = False
+    read_chunk = getattr(handle, "read1", handle.read)
+    while True:
+        # read1() preserves already-available output even when a descendant keeps
+        # the pipe open; read() can block waiting for EOF or a full buffer.
+        chunk = read_chunk(8192)
+        if not chunk:
+            break
+        remaining = max(0, cap_bytes - len(captured))
+        if remaining:
+            visible = chunk[:remaining]
+            captured.extend(visible)
+            if passthrough is not None:
+                passthrough.write(visible.decode("utf-8", errors="replace"))
+                passthrough.flush()
+        if len(chunk) > remaining:
+            truncated = True
+    return captured.decode("utf-8", errors="replace"), truncated
+
+
 def _kill_process_group(pid: int) -> None:
     try:
         os.killpg(pid, signal.SIGKILL)
@@ -87,6 +115,8 @@ class BoundedProcessRunner:
         env: Mapping[str, str],
         cwd: Path | str | None = None,
         stdin_text: str | None = None,
+        stdout_passthrough: TextIO | None = None,
+        stderr_passthrough: TextIO | None = None,
         shell: bool = False,
     ) -> BoundedProcessResult:
         if shell:
@@ -96,6 +126,17 @@ class BoundedProcessRunner:
             raise ValueError("command must not be empty")
 
         started = time.monotonic()
+        if stdout_passthrough is not None or stderr_passthrough is not None:
+            return self._run_with_pipe_passthrough(
+                argv,
+                env=env,
+                cwd=cwd,
+                stdin_text=stdin_text,
+                stdout_passthrough=stdout_passthrough,
+                stderr_passthrough=stderr_passthrough,
+                started=started,
+            )
+
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
             stdin_file = None
             try:
@@ -184,6 +225,154 @@ class BoundedProcessRunner:
                 duration_seconds=round(time.monotonic() - started, 3),
             )
 
+    def _run_with_pipe_passthrough(
+        self,
+        argv: list[str],
+        *,
+        env: Mapping[str, str],
+        cwd: Path | str | None,
+        stdin_text: str | None,
+        stdout_passthrough: TextIO | None,
+        stderr_passthrough: TextIO | None,
+        started: float,
+    ) -> BoundedProcessResult:
+        stdin_file = None
+        try:
+            stdin = subprocess.DEVNULL
+            if stdin_text is not None:
+                stdin_file = tempfile.TemporaryFile()
+                stdin_file.write(stdin_text.encode("utf-8"))
+                stdin_file.seek(0)
+                stdin = stdin_file
+            process = subprocess.Popen(
+                argv,
+                stdin=stdin,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=dict(env),
+                cwd=str(cwd) if cwd is not None else None,
+                start_new_session=True,
+                text=False,
+                shell=False,
+            )
+            if stdin_file is not None:
+                stdin_file.close()
+                stdin_file = None
+        except FileNotFoundError as exc:
+            return BoundedProcessResult(
+                status="error",
+                machine_error_code=PROCESS_NOT_FOUND,
+                exit_code=None,
+                stdout="",
+                stderr=str(exc),
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=round(time.monotonic() - started, 3),
+            )
+        except OSError as exc:
+            return BoundedProcessResult(
+                status="error",
+                machine_error_code=PROCESS_FAILED,
+                exit_code=None,
+                stdout="",
+                stderr=str(exc),
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=round(time.monotonic() - started, 3),
+            )
+        finally:
+            if stdin_file is not None:
+                stdin_file.close()
+
+        stdout_result: dict[str, object] = {"text": "", "truncated": False}
+        stderr_result: dict[str, object] = {"text": "", "truncated": False}
+
+        def read_stdout() -> None:
+            try:
+                assert process.stdout is not None
+                text, truncated = _read_pipe_capped(
+                    process.stdout,
+                    self.output_cap_bytes,
+                    stdout_passthrough,
+                )
+                stdout_result["text"] = text
+                stdout_result["truncated"] = truncated
+            except (OSError, ValueError) as exc:
+                stdout_result["text"] = str(stdout_result["text"])
+                stdout_result["truncated"] = True
+                stdout_result["error"] = str(exc)
+
+        def read_stderr() -> None:
+            try:
+                assert process.stderr is not None
+                text, truncated = _read_pipe_capped(
+                    process.stderr,
+                    self.output_cap_bytes,
+                    stderr_passthrough,
+                )
+                stderr_result["text"] = text
+                stderr_result["truncated"] = truncated
+            except (OSError, ValueError) as exc:
+                stderr_result["text"] = str(stderr_result["text"])
+                stderr_result["truncated"] = True
+                stderr_result["error"] = str(exc)
+
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+
+        timed_out = False
+        try:
+            process.wait(timeout=self.timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_process_group(process.pid)
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                pass
+
+        stdout_thread.join(timeout=PIPE_DRAIN_TIMEOUT_SECONDS)
+        stderr_thread.join(timeout=PIPE_DRAIN_TIMEOUT_SECONDS)
+        stream_incomplete = stdout_thread.is_alive() or stderr_thread.is_alive()
+        if stream_incomplete:
+            _kill_process_group(process.pid)
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
+            stdout_thread.join(timeout=PIPE_DRAIN_TIMEOUT_SECONDS)
+            stderr_thread.join(timeout=PIPE_DRAIN_TIMEOUT_SECONDS)
+        exit_code = process.returncode
+        machine_error_code = (
+            PROCESS_TIMEOUT
+            if timed_out
+            else PROCESS_FAILED
+            if stream_incomplete
+            else PROCESS_OK
+            if exit_code == 0
+            else PROCESS_FAILED
+        )
+        stderr_text = str(stderr_result["text"])
+        if stream_incomplete:
+            if stderr_text and not stderr_text.endswith("\n"):
+                stderr_text += "\n"
+            stderr_text += "process output streams did not close before bounded drain completed"
+        return BoundedProcessResult(
+            status="ok" if machine_error_code == PROCESS_OK else "error",
+            machine_error_code=machine_error_code,
+            exit_code=exit_code,
+            stdout=str(stdout_result["text"]),
+            stderr=stderr_text,
+            stdout_truncated=bool(stdout_result["truncated"]),
+            stderr_truncated=bool(stderr_result["truncated"]),
+            timed_out=timed_out,
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+
 
 def run_bounded_process(
     command: Sequence[str | Path],
@@ -191,10 +380,19 @@ def run_bounded_process(
     env: Mapping[str, str],
     cwd: Path | str | None = None,
     stdin_text: str | None = None,
+    stdout_passthrough: TextIO | None = None,
+    stderr_passthrough: TextIO | None = None,
     timeout_seconds: float = DEFAULT_PROCESS_TIMEOUT_SECONDS,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
 ) -> BoundedProcessResult:
     return BoundedProcessRunner(
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
-    ).run(command, env=env, cwd=cwd, stdin_text=stdin_text)
+    ).run(
+        command,
+        env=env,
+        cwd=cwd,
+        stdin_text=stdin_text,
+        stdout_passthrough=stdout_passthrough,
+        stderr_passthrough=stderr_passthrough,
+    )
