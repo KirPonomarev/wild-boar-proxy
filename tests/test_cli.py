@@ -12635,6 +12635,47 @@ class CliTests(unittest.TestCase):
                 "status": "ok",
                 "deterministic_stable_recovery_contract": {
                     "status": "contract_ready",
+                    "owner_command_surface": "healthcheck --repair --json",
+                    "entry_owner": "healthcheck_live_attestation_path",
+                    "status_delegates_to_owner": False,
+                },
+                "last_known_good_proxy_contract": {
+                    "status": "contract_ready",
+                    "owner_command_surface": "healthcheck --repair --json",
+                    "status_delegates_to_owner": False,
+                    "changed_files_visibility_required": True,
+                },
+            },
+            {
+                "effective_mode": "managed",
+                "stable_runtime_consumer": {
+                    "fallback_contract": {
+                        "status": "contract_ready",
+                        "fallback_allowed": True,
+                        "silent_fallback_forbidden": True,
+                        "desired_source_remains_visible": True,
+                        "effective_source_must_report_fallback": True,
+                    },
+                    "consumer_activation_readiness": {
+                        "status": "activation_pending",
+                        "machine_error_code": (
+                            "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+                        ),
+                    },
+                },
+            },
+        )
+        self.assertEqual(readiness["status"], "ready")
+        self.assertEqual(readiness["machine_error_code"], "OK")
+
+    def test_rollout_rollback_readiness_rejects_activation_pending_read_only_contract_surface(
+        self,
+    ) -> None:
+        readiness = runtime_mod.summarize_stable_10_rollback_readiness(
+            {
+                "status": "ok",
+                "deterministic_stable_recovery_contract": {
+                    "status": "contract_ready",
                     "owner_command_surface": "healthcheck --json",
                     "entry_owner": "healthcheck_live_attestation_path",
                     "status_delegates_to_owner": True,
@@ -12665,8 +12706,14 @@ class CliTests(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(readiness["status"], "ready")
-        self.assertEqual(readiness["machine_error_code"], "OK")
+        self.assertEqual(readiness["status"], "failed")
+        self.assertEqual(
+            readiness["machine_error_code"],
+            "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+        )
+        self.assertEqual(
+            readiness["reason"], "deterministic_recovery_contract_not_ready"
+        )
 
     def test_rollout_evidence_capture_16_reports_complete_packet(self) -> None:
         self.configure_scale_evidence_fixture()
