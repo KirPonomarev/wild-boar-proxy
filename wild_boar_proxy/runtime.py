@@ -14145,15 +14145,23 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         demote_result["precondition_status"] = "eligible_active_backend_for_demote"
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
         demote_result["rollback_point_captured"] = True
-        try:
-            result = subprocess.run(
-                [str(paths.accounts_bin), *command],
-                capture_output=True,
-                text=True,
-                env=sanitized_env(),
-                check=False,
-            )
-        except OSError as exc:
+        process_result = run_bounded_process(
+            [str(paths.accounts_bin), *command],
+            env=sanitized_env(),
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_payload = process_result.to_dict()
+        demote_result["external_process_result"] = process_payload
+        emit_subprocess_output(
+            stdout=process_result.stdout, stderr=process_result.stderr
+        )
+        external_exit_code = process_result.exit_code
+        demote_result["external_command_exit_code"] = external_exit_code
+        if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+            external_exit_code is None
+        ):
             demote_result["external_command_status"] = "exec_error"
             demote_result["final_outcome"] = "demote_command_failed"
             return build_demote_payload(
@@ -14162,12 +14170,22 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="DEMOTE_COMMAND_EXEC_FAILED",
                 operator_action="user_action",
                 exit_code=1,
-                extra={"command_error": str(exc)},
+                extra={"command_error": process_result.stderr},
             )
-        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
-        demote_result["external_command_exit_code"] = int(result.returncode)
+        if process_result.machine_error_code == PROCESS_TIMEOUT:
+            demote_result["external_command_status"] = "timeout"
+            demote_result["final_outcome"] = "demote_command_failed"
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Demotion command timed out after possible partial mutation."
+                ),
+                machine_error_code="DEMOTE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="retry",
+                exit_code=1,
+            )
         demote_result["external_command_status"] = (
-            "ok" if result.returncode == 0 else "nonzero"
+            "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
         )
 
         try:
@@ -14182,7 +14200,7 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="DEMOTE_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
                 extra={"command_error": str(exc)},
             )
 
@@ -14233,7 +14251,7 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="DEMOTE_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         after_command_hold = bool(after_command_backend.get("manual_hold", False))
@@ -14245,7 +14263,7 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="DEMOTE_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
         if not demote_result["routing_change_attempted"]:
             demote_result["reserve_return_confirmed"] = bool(
@@ -14369,9 +14387,10 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             ok=True,
             human_message=(
                 "Account demotion completed with rollback-safe reserve-only proof."
-                if result.returncode == 0 and demote_result["routing_change_attempted"]
+                if process_result.machine_error_code == PROCESS_OK
+                and demote_result["routing_change_attempted"]
                 else "Account demotion completed."
-                if result.returncode == 0
+                if process_result.machine_error_code == PROCESS_OK
                 else "Account demotion completed with reserve-only proof after external demote exit non-zero."
             ),
             machine_error_code="OK",
@@ -14569,15 +14588,23 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     with serialized_lock(paths):
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
         retire_result["rollback_point_captured"] = True
-        try:
-            result = subprocess.run(
-                [str(paths.accounts_bin), *command],
-                capture_output=True,
-                text=True,
-                env=sanitized_env(),
-                check=False,
-            )
-        except OSError as exc:
+        process_result = run_bounded_process(
+            [str(paths.accounts_bin), *command],
+            env=sanitized_env(),
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        process_payload = process_result.to_dict()
+        retire_result["external_process_result"] = process_payload
+        emit_subprocess_output(
+            stdout=process_result.stdout, stderr=process_result.stderr
+        )
+        external_exit_code = process_result.exit_code
+        retire_result["external_command_exit_code"] = external_exit_code
+        if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+            external_exit_code is None
+        ):
             retire_result["external_command_status"] = "exec_error"
             retire_result["final_outcome"] = "retire_command_failed"
             return build_retire_payload(
@@ -14586,12 +14613,22 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="RETIRE_COMMAND_EXEC_FAILED",
                 operator_action="user_action",
                 exit_code=1,
-                extra={"command_error": str(exc)},
+                extra={"command_error": process_result.stderr},
             )
-        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
-        retire_result["external_command_exit_code"] = int(result.returncode)
+        if process_result.machine_error_code == PROCESS_TIMEOUT:
+            retire_result["external_command_status"] = "timeout"
+            retire_result["final_outcome"] = "retire_command_failed"
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Retirement command timed out after possible partial mutation."
+                ),
+                machine_error_code="RETIRE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="retry",
+                exit_code=1,
+            )
         retire_result["external_command_status"] = (
-            "ok" if result.returncode == 0 else "nonzero"
+            "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
         )
 
         after_command_registry = read_json(paths.registry_file)
@@ -14643,7 +14680,7 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="RETIRE_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         after_command_hold = bool(after_command_backend.get("manual_hold", False))
@@ -14667,7 +14704,7 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 machine_error_code="RETIRE_COMMAND_FAILED",
                 liveness="unknown",
                 operator_action="user_action",
-                exit_code=result.returncode if result.returncode != 0 else 1,
+                exit_code=external_exit_code if external_exit_code else 1,
             )
 
         sync_payload: dict[str, Any] | None = None
@@ -14786,9 +14823,10 @@ def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             ok=True,
             human_message=(
                 "Account retirement completed with rollback-safe terminal proof."
-                if result.returncode == 0 and retire_result["routing_change_attempted"]
+                if process_result.machine_error_code == PROCESS_OK
+                and retire_result["routing_change_attempted"]
                 else "Account retirement completed."
-                if result.returncode == 0
+                if process_result.machine_error_code == PROCESS_OK
                 else "Account retirement completed with terminal proof after external retire exit non-zero."
             ),
             machine_error_code="OK",

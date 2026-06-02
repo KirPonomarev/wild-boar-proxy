@@ -16259,6 +16259,10 @@ class CliTests(unittest.TestCase):
         demote = payload["demote_result"]
         self.assertEqual(demote["external_command_exit_code"], 7)
         self.assertEqual(demote["external_command_status"], "nonzero")
+        self.assertEqual(
+            demote["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
         self.assertTrue(demote["reserve_return_confirmed"])
         self.assertEqual(demote["final_outcome"], "backend_demoted_to_reserve")
         registry = json.loads(registry_path.read_text())
@@ -16285,8 +16289,139 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "DEMOTE_COMMAND_EXEC_FAILED")
         demote = payload["demote_result"]
         self.assertEqual(demote["external_command_status"], "exec_error")
+        self.assertEqual(
+            demote["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_NOT_FOUND,
+        )
         self.assertEqual(demote["final_outcome"], "demote_command_failed")
         self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_demote_timeout_rolls_back_with_bounded_process_evidence(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "run_bounded_process", return_value=timeout_result
+            ):
+                payload = runtime_mod.run_demote(paths, "backend-a")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_COMMAND_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["external_command_status"], "timeout")
+        self.assertEqual(
+            demote["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(demote["rollback_attempted"])
+        self.assertEqual(demote["rollback_outcome"], "completed")
+        self.assertEqual(
+            demote["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_demote_bounded_process_uses_profile_cwd_and_sanitized_env(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        captured: dict[str, object] = {}
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            for backend in registry["backends"]:
+                if backend["id"] == "backend-a":
+                    backend["pool"] = "reserve"
+                    backend["manual_hold"] = False
+            registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["selected_backend_ids"] = []
+            state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+            return BoundedProcessResult(
+                status="ok",
+                machine_error_code=runtime_mod.PROCESS_OK,
+                exit_code=0,
+                stdout="",
+                stderr="demote-ran",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.001,
+            )
+
+        status_payload = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "liveness": "healthy",
+            "operator_action": "none",
+            "exit_code": 0,
+        }
+        sync_payload = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "exit_code": 0,
+            "liveness": "healthy",
+            "operator_action": "none",
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ), mock.patch.object(
+                runtime_mod,
+                "run_sync_for_owner_path_under_lock",
+                return_value=sync_payload,
+            ), mock.patch.object(
+                runtime_mod,
+                "observe_status_proof_for_owner_path_under_lock",
+                return_value=(status_payload, {"status": "ok"}),
+            ):
+                payload = runtime_mod.run_demote(paths, "backend-a")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(captured["command"], [str(self.accounts_bin), "demote", "backend-a"])
+        self.assertEqual(captured["cwd"], self.profile_dir)
+        captured_env = captured["env"]
+        self.assertIsInstance(captured_env, dict)
+        self.assertEqual(captured_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertEqual(
+            captured["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
 
     def test_accounts_demote_unreadable_post_command_state_rolls_back_with_owner_packet(
         self,
@@ -17569,6 +17704,10 @@ class CliTests(unittest.TestCase):
         retire = payload["retire_result"]
         self.assertEqual(retire["external_command_exit_code"], 7)
         self.assertEqual(retire["external_command_status"], "nonzero")
+        self.assertEqual(
+            retire["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
         self.assertTrue(retire["terminal_no_return_confirmed"])
         self.assertEqual(retire["final_outcome"], "backend_retired")
 
@@ -17590,8 +17729,126 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "RETIRE_COMMAND_EXEC_FAILED")
         retire = payload["retire_result"]
         self.assertEqual(retire["external_command_status"], "exec_error")
+        self.assertEqual(
+            retire["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_NOT_FOUND,
+        )
         self.assertEqual(retire["final_outcome"], "retire_command_failed")
         self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_retire_timeout_rolls_back_with_bounded_process_evidence(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "run_bounded_process", return_value=timeout_result
+            ):
+                payload = runtime_mod.run_retire(paths, "backend-a")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RETIRE_COMMAND_FAILED")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["external_command_status"], "timeout")
+        self.assertEqual(
+            retire["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(retire["rollback_attempted"])
+        self.assertEqual(retire["rollback_outcome"], "completed")
+        self.assertEqual(
+            retire["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_retire_bounded_process_uses_profile_cwd_and_sanitized_env(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-retire-cwd",
+                auth_ref="/tmp/codex-reserve-retire-cwd.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        captured: dict[str, object] = {}
+
+        def fake_run_bounded_process(command, **kwargs):
+            captured["command"] = [str(item) for item in command]
+            captured.update(kwargs)
+            current = json.loads(registry_path.read_text(encoding="utf-8"))
+            for backend in current["backends"]:
+                if backend["id"] == "backend-reserve-retire-cwd":
+                    backend["pool"] = "retired"
+                    backend["manual_hold"] = False
+                    backend["status"] = "retired"
+            registry_path.write_text(json.dumps(current) + "\n", encoding="utf-8")
+            return BoundedProcessResult(
+                status="ok",
+                machine_error_code=runtime_mod.PROCESS_OK,
+                exit_code=0,
+                stdout="",
+                stderr="retire-ran",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.001,
+            )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_retire(paths, "backend-reserve-retire-cwd")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            captured["command"],
+            [str(self.accounts_bin), "retire", "backend-reserve-retire-cwd"],
+        )
+        self.assertEqual(captured["cwd"], self.profile_dir)
+        captured_env = captured["env"]
+        self.assertIsInstance(captured_env, dict)
+        self.assertEqual(captured_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        self.assertEqual(
+            captured["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            captured["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
 
     def test_accounts_retire_rejects_illegal_terminal_state_with_hold_still_set(
         self,
