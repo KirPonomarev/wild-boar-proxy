@@ -111,7 +111,7 @@ OWNER_SURFACES = {
             {
                 "serialized_lock",
                 "materialize_selected_backend_snapshot_for_sync",
-                "subprocess.run",
+                "run_bounded_process",
                 "write_json_atomic",
                 "write_text_atomic",
                 "write_toml_string_atomic",
@@ -343,13 +343,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertTrue(surface.required_calls <= calls)
                 self.assertTrue(calls & WRITE_PRIMITIVES)
 
-    def test_run_sync_keeps_declared_lock_subprocess_and_write_adjacency(self) -> None:
+    def test_run_sync_uses_bounded_runner_with_lock_and_write_adjacency(self) -> None:
         surface = OWNER_SURFACES["run_sync"]
         calls = _call_names(_function(surface.path, surface.function))
         self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
         self.assertTrue(surface.required_calls <= calls)
         self.assertTrue(calls & LOCK_PRIMITIVES)
-        self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
         self.assertTrue(calls & WRITE_PRIMITIVES)
 
     def test_sync_owner_path_uses_bounded_runner_without_raw_subprocess(self) -> None:

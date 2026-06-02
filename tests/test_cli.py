@@ -18892,6 +18892,117 @@ class CliTests(unittest.TestCase):
         helper_text = self.sync_script.read_text(encoding="utf-8")
         self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
         self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "ok")
+        self.assertEqual(process_result["machine_error_code"], "OK")
+
+    def test_sync_reports_bounded_process_result_on_sync_failure(self) -> None:
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-command-bounded-fail.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 1,
+                "reserve_count": 0,
+                "last_error": "bounded sync command failed",
+            },
+            stderr_text="sync-command-bounded-fail",
+            exit_code=7,
+        )
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            payload = runtime_mod.run_sync(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["exit_code"], 7)
+        self.assertEqual(payload["last_error"], "bounded sync command failed")
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(process_result["machine_error_code"], "PROCESS_FAILED")
+        self.assertEqual(process_result["exit_code"], 7)
+        self.assertIn("sync-command-bounded-fail", process_result["stderr"])
+        self.assertFalse(process_result["stderr_truncated"])
+
+    def test_sync_reports_bounded_process_timeout(self) -> None:
+        sync_script = self.profile_dir / "sync-command-timeout.sh"
+        sync_script.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+        sync_script.chmod(0o755)
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS",
+                0.2,
+            ):
+                payload = runtime_mod.run_sync(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["exit_code"], 1)
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(process_result["machine_error_code"], "PROCESS_TIMEOUT")
+        self.assertTrue(process_result["timed_out"])
+
+    def test_sync_passes_profile_cwd_env_timeout_and_cap_to_bounded_runner(
+        self,
+    ) -> None:
+        sync_script = self.profile_dir / "sync-command-cwd.sh"
+        sync_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        sync_script.chmod(0o755)
+        process_result = mock.Mock(
+            status="ok",
+            stdout="",
+            stderr="",
+            exit_code=0,
+        )
+        process_result.to_dict.return_value = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "stdout_truncated": False,
+            "stderr_truncated": False,
+            "timed_out": False,
+            "duration_seconds": 0.0,
+        }
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_bounded_process",
+                return_value=process_result,
+            ) as runner, mock.patch(
+                "wild_boar_proxy.runtime.socket_is_listening",
+                return_value=False,
+            ):
+                payload = runtime_mod.run_sync(paths)
+
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], [str(sync_script), runtime_mod.get_model(paths)])
+        self.assertEqual(kwargs["cwd"], paths.profile_dir)
+        self.assertIn("WBP_PROFILE_DIR", kwargs["env"])
+        self.assertEqual(
+            kwargs["timeout_seconds"],
+            runtime_mod.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            kwargs["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["process_result"]["machine_error_code"], "OK")
 
     def test_sync_rejects_socket_only_managed_listener_without_runtime_identity(
         self,
@@ -19264,10 +19375,39 @@ class CliTests(unittest.TestCase):
                     )
                     release_launcher.wait(timeout=5)
                     return subprocess.CompletedProcess(command, 0, "", "")
-                if executable == str(paths.sync_script):
-                    sync_subprocess_called.set()
-                    return subprocess.CompletedProcess(command, 0, "", "")
                 raise AssertionError(f"unexpected subprocess command: {command!r}")
+
+            def sync_runner_side_effect(
+                command: list[str],
+                *,
+                env: dict[str, str],
+                cwd: Path,
+                timeout_seconds: float,
+                output_cap_bytes: int,
+            ) -> BoundedProcessResult:
+                self.assertEqual(command, [str(paths.sync_script), runtime_mod.get_model(paths)])
+                self.assertIn("WBP_PROFILE_DIR", env)
+                self.assertEqual(cwd, paths.profile_dir)
+                self.assertEqual(
+                    timeout_seconds,
+                    runtime_mod.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+                )
+                self.assertEqual(
+                    output_cap_bytes,
+                    runtime_mod.OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
+                )
+                sync_subprocess_called.set()
+                return BoundedProcessResult(
+                    status="ok",
+                    machine_error_code=runtime_mod.PROCESS_OK,
+                    exit_code=0,
+                    stdout="",
+                    stderr="",
+                    stdout_truncated=False,
+                    stderr_truncated=False,
+                    timed_out=False,
+                    duration_seconds=0.0,
+                )
 
             def run_attempt() -> None:
                 attempt_result["attempt"] = runtime_mod.run_stable_runtime_launcher_attempt(
@@ -19277,6 +19417,9 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "wild_boar_proxy.runtime.subprocess.run",
                 side_effect=subprocess_side_effect,
+            ), mock.patch(
+                "wild_boar_proxy.runtime.run_bounded_process",
+                side_effect=sync_runner_side_effect,
             ), mock.patch(
                 "wild_boar_proxy.runtime.socket_is_listening", return_value=False
             ):

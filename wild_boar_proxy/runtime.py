@@ -9942,13 +9942,14 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             pre_sync_effective_mode == "stable"
             and snapshot_confirms_approved_target_activation(paths, pre_sync_state)
         )
-        result = subprocess.run(
+        process_result = run_bounded_process(
             command,
-            capture_output=True,
-            text=True,
             env=build_launcher_subprocess_env(paths),
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
         )
+        process_payload = process_result.to_dict()
         state = read_json(paths.state_file, required=False)
         if pre_sync_has_stable_activation_evidence:
             stable_endpoint = get_endpoint(paths, "stable")[2]
@@ -9965,10 +9966,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 write_text_atomic(paths.runtime_effective_mode_file, "stable")
                 write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
                 state = read_json(paths.state_file, required=False)
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-    if result.stdout:
-        sys.stderr.write(result.stdout)
+    emit_subprocess_output(stdout=process_result.stdout, stderr=process_result.stderr)
 
     changed_surface_candidates = [
         paths.registry_file,
@@ -9987,8 +9985,14 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
 
-    if result.returncode != 0:
+    if process_result.status != "ok":
         changed_files = detect_changed_files(before, changed_surface_candidates)
+        process_exit_code = (
+            process_result.exit_code
+            if isinstance(process_result.exit_code, int)
+            and process_result.exit_code >= 0
+            else 1
+        )
         return build_command_payload(
             ok=False,
             human_message="Managed sync failed.",
@@ -10001,9 +10005,10 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 "desired_mode": desired_mode,
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
-                "last_error": state.get("last_error", result.stderr.strip()),
+                "last_error": state.get("last_error", process_result.stderr.strip()),
+                "process_result": process_payload,
             },
-            exit_code=result.returncode,
+            exit_code=process_exit_code,
         )
 
     if not listener_ok:
@@ -10021,6 +10026,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
                 "last_error": state.get("last_error", ""),
+                "process_result": process_payload,
             },
             exit_code=1,
         )
@@ -10059,6 +10065,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 "healthcheck_machine_error_code": str(
                     post_sync_probe.get("machine_error_code", "")
                 ),
+                "process_result": process_payload,
                 "post_sync_proof": {
                     "status": str(post_sync_probe.get("status", "")),
                     "machine_error_code": str(
@@ -10101,6 +10108,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             "effective_mode": reported_effective_mode,
             "endpoint": reported_endpoint,
             "last_error": state.get("last_error", ""),
+            "process_result": process_payload,
         },
     )
 
