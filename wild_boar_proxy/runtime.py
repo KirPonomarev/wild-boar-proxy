@@ -16218,17 +16218,16 @@ def run_onboard(
     if non_interactive:
         command.append("--non-interactive")
     with serialized_lock(paths):
-        result = subprocess.run(
+        process_result = run_bounded_process(
             command,
-            capture_output=True,
-            text=True,
             env=build_launcher_subprocess_env(paths),
-            check=False,
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
         )
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-    if result.stdout:
-        sys.stderr.write(result.stdout)
+    process_payload = process_result.to_dict()
+    emit_subprocess_output(stdout=process_result.stdout, stderr=process_result.stderr)
+    external_exit_code = process_result.exit_code
     after_registry = read_json(paths.registry_file)
     after_state = read_json(paths.state_file, required=False)
     input_mode = "explicit_auth_ref" if auth_ref else "detected_new_auth"
@@ -16280,11 +16279,13 @@ def run_onboard(
         "sync_outcome": "not_attempted",
         "status_observed": None,
         "lifecycle_admission": None,
-        "external_command_exit_code": int(result.returncode),
-        "external_command_status": "ok" if result.returncode == 0 else "nonzero",
+        "external_command_exit_code": external_exit_code,
+        "external_command_status": "not_invoked",
+        "external_process_result": process_payload,
         "active_routing_changed": active_routing_changed,
         "final_outcome": "pending_post_proof",
     }
+
     def build_onboard_payload(
         *,
         ok: bool,
@@ -16316,24 +16317,149 @@ def run_onboard(
             exit_code=exit_code,
         )
 
+    def bounded_onboard_exit_code(default: int = 1) -> int:
+        return (
+            external_exit_code
+            if isinstance(external_exit_code, int) and external_exit_code != 0
+            else default
+        )
+
+    def summarize_onboard_sync_result(sync_payload: dict[str, Any]) -> dict[str, Any]:
+        sync_result = {
+            "command_status": sync_payload["status"],
+            "machine_error_code": sync_payload["machine_error_code"],
+            "exit_code": sync_payload["exit_code"],
+        }
+        if "process_result" in sync_payload:
+            sync_result["process_result"] = sync_payload["process_result"]
+        if "post_sync_proof" in sync_payload:
+            sync_result["post_sync_proof"] = sync_payload["post_sync_proof"]
+        if "healthcheck_machine_error_code" in sync_payload:
+            sync_result["healthcheck_machine_error_code"] = sync_payload[
+                "healthcheck_machine_error_code"
+            ]
+        return sync_result
+
+    def run_onboard_sync_with_post_probe() -> dict[str, Any]:
+        with serialized_lock(paths):
+            sync_payload = run_sync_for_owner_path_under_lock(paths)
+        if sync_payload.get("status") != "ok":
+            return sync_payload
+        post_sync_probe = run_healthcheck_probe(paths)
+        if post_sync_probe.get("status") != "ok":
+            probe_attestation = post_sync_probe.get("attestation")
+            if not isinstance(probe_attestation, dict):
+                probe_attestation = {}
+            probe_launch_readiness = post_sync_probe.get("launch_readiness")
+            if not isinstance(probe_launch_readiness, dict):
+                probe_launch_readiness = {}
+            failed_payload = dict(sync_payload)
+            failed_payload.update(
+                {
+                    "status": "error",
+                    "machine_error_code": "SYNC_HEALTHCHECK_FAILED",
+                    "exit_code": 1,
+                    "liveness": str(
+                        post_sync_probe.get("liveness", "degraded") or "degraded"
+                    ),
+                    "operator_action": str(
+                        post_sync_probe.get("operator_action", "retry") or "retry"
+                    ),
+                    "effective_mode": str(
+                        post_sync_probe.get(
+                            "effective_mode",
+                            sync_payload.get("effective_mode", "unknown"),
+                        )
+                    ),
+                    "endpoint": str(
+                        post_sync_probe.get(
+                            "endpoint", sync_payload.get("endpoint", "")
+                        )
+                    ),
+                    "healthcheck_machine_error_code": str(
+                        post_sync_probe.get("machine_error_code", "")
+                    ),
+                    "post_sync_proof": {
+                        "status": str(post_sync_probe.get("status", "")),
+                        "machine_error_code": str(
+                            post_sync_probe.get("machine_error_code", "")
+                        ),
+                        "liveness": str(post_sync_probe.get("liveness", "")),
+                        "identity_proof_required": bool(
+                            probe_attestation.get("identity_proof_required")
+                        ),
+                        "identity_proof_ok": bool(
+                            probe_attestation.get("identity_proof_ok")
+                        ),
+                        "identity_failure_reason": str(
+                            probe_attestation.get("identity_failure_reason", "")
+                        ),
+                        "launch_readiness_status": str(
+                            probe_launch_readiness.get("status", "")
+                        ),
+                        "launch_readiness_gate_passed": bool(
+                            probe_launch_readiness.get("gate_passed")
+                        ),
+                    },
+                }
+            )
+            return failed_payload
+        materialize_selected_backend_snapshot_for_sync(paths)
+        return sync_payload
+
+    if process_result.machine_error_code in {PROCESS_NOT_FOUND, PROCESS_FAILED} and (
+        external_exit_code is None
+    ):
+        onboarding_result["external_command_status"] = "exec_error"
+        onboarding_result["final_outcome"] = "onboard_command_failed"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Account onboarding command could not be executed.",
+            machine_error_code="ONBOARD_FAILED",
+            operator_action="user_action",
+            exit_code=1,
+            extra={"command_error": process_result.stderr},
+        )
+    if process_result.machine_error_code == PROCESS_TIMEOUT:
+        onboarding_result["external_command_status"] = "timeout"
+        onboarding_result["final_outcome"] = "onboard_command_timeout"
+        return build_onboard_payload(
+            ok=False,
+            human_message=(
+                "Account onboarding command timed out after possible partial mutation."
+            ),
+            machine_error_code="ONBOARD_FAILED",
+            operator_action="retry",
+            exit_code=1,
+        )
+    onboarding_result["external_command_status"] = (
+        "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
+    )
+
     if selection_status == "no_new_backend_detected":
         onboarding_result["final_outcome"] = (
-            "import_failed" if result.returncode != 0 else "no_new_auth_detected"
+            "import_failed"
+            if process_result.machine_error_code != PROCESS_OK
+            else "no_new_auth_detected"
         )
         return build_onboard_payload(
             ok=False,
             human_message=(
                 "Account onboarding failed without producing a detectable new backend."
-                if result.returncode != 0
+                if process_result.machine_error_code != PROCESS_OK
                 else "Onboarding did not produce a uniquely detectable new backend."
             ),
             machine_error_code=(
                 "ONBOARD_FAILED"
-                if result.returncode != 0
+                if process_result.machine_error_code != PROCESS_OK
                 else "ONBOARD_NO_NEW_BACKEND"
             ),
             operator_action="user_action",
-            exit_code=result.returncode if result.returncode != 0 else None,
+            exit_code=(
+                bounded_onboard_exit_code()
+                if process_result.machine_error_code != PROCESS_OK
+                else None
+            ),
         )
 
     if selection_status not in {"selected_unique_backend", "selected_existing_backend"}:
@@ -16365,12 +16491,38 @@ def run_onboard(
             operator_action="stop",
         )
 
-    validate_payload = run_accounts_command(
-        paths,
-        ["validate", selected_backend_id],
-        success_message="Account validation completed.",
-        failure_message="Account validation failed.",
+    with serialized_lock(paths):
+        validate_process_result = run_bounded_process(
+            [str(paths.accounts_bin), "validate", selected_backend_id],
+            env=build_launcher_subprocess_env(paths),
+            cwd=paths.profile_dir,
+            timeout_seconds=OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            output_cap_bytes=OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+    validate_process_payload = validate_process_result.to_dict()
+    emit_subprocess_output(
+        stdout=validate_process_result.stdout,
+        stderr=validate_process_result.stderr,
     )
+    validate_exit_code = validate_process_result.exit_code
+    validate_payload = {
+        "status": (
+            "ok" if validate_process_result.machine_error_code == PROCESS_OK else "error"
+        ),
+        "machine_error_code": (
+            "OK"
+            if validate_process_result.machine_error_code == PROCESS_OK
+            else "ACCOUNTS_COMMAND_FAILED"
+        ),
+        "exit_code": (
+            0
+            if validate_process_result.machine_error_code == PROCESS_OK
+            else validate_exit_code
+            if isinstance(validate_exit_code, int) and validate_exit_code >= 0
+            else 1
+        ),
+        "process_result": validate_process_payload,
+    }
     onboarding_result["validate_attempted"] = True
     onboarding_result["validate_outcome"] = (
         "ok" if validate_payload["status"] == "ok" else "failed"
@@ -16388,6 +16540,7 @@ def run_onboard(
                     "command_status": validate_payload["status"],
                     "machine_error_code": validate_payload["machine_error_code"],
                     "exit_code": validate_payload["exit_code"],
+                    "process_result": validate_payload["process_result"],
                 }
             },
         )
@@ -16397,7 +16550,7 @@ def run_onboard(
         onboarding_result["sync_outcome"] = "skipped_by_flag"
     else:
         onboarding_result["sync_attempted"] = True
-        sync_payload = run_sync(paths)
+        sync_payload = run_onboard_sync_with_post_probe()
         onboarding_result["sync_outcome"] = (
             "ok" if sync_payload["status"] == "ok" else "failed"
         )
@@ -16417,13 +16570,7 @@ def run_onboard(
                 liveness=str(sync_payload.get("liveness", "unknown")),
                 operator_action=str(sync_payload.get("operator_action", "retry")),
                 exit_code=int(sync_payload.get("exit_code", 1) or 1),
-                extra={
-                    "sync_result": {
-                        "command_status": sync_payload["status"],
-                        "machine_error_code": sync_payload["machine_error_code"],
-                        "exit_code": sync_payload["exit_code"],
-                    }
-                },
+                extra={"sync_result": summarize_onboard_sync_result(sync_payload)},
             )
 
     try:
@@ -16466,7 +16613,7 @@ def run_onboard(
         ok=True,
         human_message=(
             "Account onboarding completed with reserve-first proof."
-            if result.returncode == 0
+            if process_result.machine_error_code == PROCESS_OK
             else "Account onboarding completed with reserve-first proof after external onboard exit non-zero."
         ),
         machine_error_code="OK",
@@ -16478,13 +16625,10 @@ def run_onboard(
                 "command_status": validate_payload["status"],
                 "machine_error_code": validate_payload["machine_error_code"],
                 "exit_code": validate_payload["exit_code"],
+                "process_result": validate_payload["process_result"],
             },
             "sync_result": (
-                {
-                    "command_status": sync_payload["status"],
-                    "machine_error_code": sync_payload["machine_error_code"],
-                    "exit_code": sync_payload["exit_code"],
-                }
+                summarize_onboard_sync_result(sync_payload)
                 if sync_payload is not None
                 else {
                     "command_status": "skipped",

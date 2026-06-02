@@ -10352,9 +10352,301 @@ class CliTests(unittest.TestCase):
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["external_command_exit_code"], 7)
         self.assertEqual(onboarding["external_command_status"], "nonzero")
+        self.assertEqual(
+            onboarding["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
         self.assertTrue(onboarding["validate_attempted"])
         self.assertEqual(
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+
+    def test_accounts_onboard_timeout_returns_bounded_error_without_greenwash(
+        self,
+    ) -> None:
+        timeout_result = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="onboard timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "run_bounded_process", return_value=timeout_result
+            ):
+                payload = runtime_mod.run_onboard(
+                    paths,
+                    auth_ref=None,
+                    loop=False,
+                    skip_login=False,
+                    no_sync=True,
+                    non_interactive=True,
+                )
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_FAILED")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["external_command_status"], "timeout")
+        self.assertEqual(onboarding["final_outcome"], "onboard_command_timeout")
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(
+            onboarding["external_process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(onboarding["external_process_result"]["timed_out"])
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_onboard_validate_timeout_uses_bounded_process_contract(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-validate-timeout-auth.json"
+        registry_path = self.managed_dir / "backend-registry.json"
+        captured: list[dict[str, object]] = []
+        main_ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="",
+            stderr="onboard-ok",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        validate_timeout = BoundedProcessResult(
+            status="error",
+            machine_error_code=runtime_mod.PROCESS_TIMEOUT,
+            exit_code=None,
+            stdout="",
+            stderr="validate timed out",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=True,
+            duration_seconds=120.0,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            command_parts = [str(item) for item in command]
+            captured.append(
+                {
+                    "command": command_parts,
+                    "kwargs": kwargs,
+                    "lock_held": (self.managed_dir / "wild-boar-proxy.lock").exists(),
+                }
+            )
+            if command_parts[0] == str(self.onboard_bin):
+                registry = json.loads(registry_path.read_text(encoding="utf-8"))
+                registry["backends"].append(
+                    self.build_backend(
+                        backend_id="backend-validate-timeout-onboard",
+                        auth_ref=auth_ref,
+                    )
+                )
+                registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+                return main_ok
+            return validate_timeout
+
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "OPENAI_API_KEY": "should-not-leak"},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_onboard(
+                    paths,
+                    auth_ref=auth_ref,
+                    loop=False,
+                    skip_login=False,
+                    no_sync=True,
+                    non_interactive=True,
+                )
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_VALIDATE_FAILED")
+        self.assertEqual(len(captured), 2)
+        validate_call = captured[1]
+        self.assertEqual(
+            validate_call["command"],
+            [
+                str(self.accounts_bin),
+                "validate",
+                "backend-validate-timeout-onboard",
+            ],
+        )
+        self.assertTrue(validate_call["lock_held"])
+        validate_kwargs = validate_call["kwargs"]
+        self.assertEqual(validate_kwargs["cwd"], self.profile_dir)
+        validate_env = validate_kwargs["env"]
+        self.assertIsInstance(validate_env, dict)
+        self.assertEqual(validate_env["WBP_PROFILE_DIR"], str(self.profile_dir))
+        self.assertNotIn("OPENAI_API_KEY", validate_env)
+        self.assertEqual(
+            validate_kwargs["timeout_seconds"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            validate_kwargs["output_cap_bytes"],
+            runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+        )
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "failed")
+        validate_result = payload["validate_result"]
+        self.assertEqual(
+            validate_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_TIMEOUT,
+        )
+        self.assertTrue(validate_result["process_result"]["timed_out"])
+
+    def test_accounts_onboard_bounded_process_and_sync_helper_hold_lock(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-onboard-bounded-auth.json"
+        registry_path = self.managed_dir / "backend-registry.json"
+        process_calls: list[dict[str, object]] = []
+
+        def ok_result(stderr: str) -> BoundedProcessResult:
+            return BoundedProcessResult(
+                status="ok",
+                machine_error_code=runtime_mod.PROCESS_OK,
+                exit_code=0,
+                stdout="",
+                stderr=stderr,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.001,
+            )
+
+        def fake_run_bounded_process(command, **kwargs):
+            command_parts = [str(item) for item in command]
+            process_calls.append(
+                {
+                    "command": command_parts,
+                    "kwargs": kwargs,
+                    "lock_held": (self.managed_dir / "wild-boar-proxy.lock").exists(),
+                }
+            )
+            if command_parts[0] == str(self.onboard_bin):
+                registry = json.loads(registry_path.read_text(encoding="utf-8"))
+                registry["backends"].append(
+                    self.build_backend(
+                        backend_id="backend-onboard-bounded",
+                        auth_ref=auth_ref,
+                    )
+                )
+                registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+                return ok_result("onboard-ok")
+            return ok_result("validate-ok")
+
+        sync_observation: dict[str, object] = {}
+
+        def fake_sync_under_lock(paths):
+            sync_observation["lock_held"] = paths.lock_file.exists()
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "exit_code": 0,
+                "liveness": "healthy",
+                "operator_action": "none",
+                "effective_mode": "stable",
+                "endpoint": "http://127.0.0.1:9999/v1",
+                "process_result": {
+                    "status": "ok",
+                    "machine_error_code": runtime_mod.PROCESS_OK,
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "sync-ok",
+                    "stdout_truncated": False,
+                    "stderr_truncated": False,
+                    "timed_out": False,
+                    "duration_seconds": 0.001,
+                },
+            }
+
+        status_payload = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "exit_code": 0,
+            "liveness": "healthy",
+            "operator_action": "none",
+        }
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ), mock.patch.object(
+                runtime_mod,
+                "run_sync_for_owner_path_under_lock",
+                side_effect=fake_sync_under_lock,
+            ), mock.patch.object(
+                runtime_mod,
+                "run_healthcheck_probe",
+                return_value=status_payload,
+            ), mock.patch.object(
+                runtime_mod,
+                "summarize_status",
+                return_value=status_payload,
+            ):
+                payload = runtime_mod.run_onboard(
+                    paths,
+                    auth_ref=auth_ref,
+                    loop=False,
+                    skip_login=False,
+                    no_sync=False,
+                    non_interactive=True,
+                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(len(process_calls), 2)
+        self.assertEqual(
+            process_calls[0]["command"],
+            [
+                str(self.onboard_bin),
+                "--once",
+                "--auth-ref",
+                auth_ref,
+                "--non-interactive",
+            ],
+        )
+        self.assertEqual(
+            process_calls[1]["command"],
+            [str(self.accounts_bin), "validate", "backend-onboard-bounded"],
+        )
+        for call in process_calls:
+            self.assertTrue(call["lock_held"])
+            kwargs = call["kwargs"]
+            self.assertEqual(kwargs["cwd"], self.profile_dir)
+            self.assertEqual(
+                kwargs["timeout_seconds"],
+                runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_TIMEOUT_SECONDS,
+            )
+            self.assertEqual(
+                kwargs["output_cap_bytes"],
+                runtime_mod.OWNER_PATH_ACCOUNTS_PROCESS_OUTPUT_CAP_BYTES,
+            )
+            env = kwargs["env"]
+            self.assertIsInstance(env, dict)
+            self.assertEqual(env["WBP_PROFILE_DIR"], str(self.profile_dir))
+            self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertTrue(sync_observation["lock_held"])
+        self.assertEqual(
+            payload["sync_result"]["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_OK,
         )
 
     def test_accounts_onboard_validate_failure_does_not_overclaim_success(self) -> None:
@@ -10384,6 +10676,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["validate_outcome"], "failed")
         self.assertEqual(onboarding["final_outcome"], "validate_failed")
         self.assertFalse(onboarding["sync_attempted"])
+        validate_result = payload["validate_result"]
+        self.assertEqual(
+            validate_result["process_result"]["machine_error_code"],
+            runtime_mod.PROCESS_FAILED,
+        )
+        self.assertEqual(validate_result["process_result"]["exit_code"], 9)
 
     def test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success(
         self,
@@ -10418,6 +10716,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["sync_outcome"], "failed")
         self.assertEqual(onboarding["final_outcome"], "sync_failed")
         self.assertIsNotNone(onboarding["status_observed"])
+        sync_result = payload["sync_result"]
+        self.assertIn("process_result", sync_result)
 
     def test_accounts_onboard_blocks_selected_backend_active_routing_change(self) -> None:
         result = self.run_cli_with_env(

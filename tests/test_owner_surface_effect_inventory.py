@@ -154,7 +154,13 @@ OWNER_SURFACES = {
         RUNTIME,
         "run_onboard",
         SUBPROCESS_ADJACENT,
-        frozenset({"serialized_lock", "subprocess.run", "run_accounts_command"}),
+        frozenset(
+            {
+                "serialized_lock",
+                "run_bounded_process",
+                "run_sync_for_owner_path_under_lock",
+            }
+        ),
     ),
     "run_promote": Surface(
         RUNTIME,
@@ -375,6 +381,16 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("run_sync_for_owner_path_under_lock", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_onboard_uses_bounded_runner_without_raw_subprocess(self) -> None:
+        calls = _call_names(_function(RUNTIME, "run_onboard"))
+        source = _function_source(RUNTIME, "run_onboard")
+        self.assertIn("serialized_lock", calls)
+        self.assertIn("run_bounded_process", calls)
+        self.assertIn("run_sync_for_owner_path_under_lock", calls)
+        self.assertNotIn("run_accounts_command", calls)
+        self.assertNotIn("result.returncode", source)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (
             "run_onboard",
@@ -389,13 +405,6 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 calls = _call_names(_function(surface.path, surface.function))
                 self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
-
-        for name in ("run_onboard",):
-            surface = OWNER_SURFACES[name]
-            with self.subTest(function=f"{surface.function}_raw_effects"):
-                calls = _call_names(_function(surface.path, surface.function))
-                self.assertTrue(calls & LOCK_PRIMITIVES)
-                self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
 
         for name in ("run_hold", "run_release"):
             surface = OWNER_SURFACES[name]
