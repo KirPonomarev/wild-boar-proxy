@@ -5099,8 +5099,10 @@ class CliTests(unittest.TestCase):
                 with mock.patch(
                     "wild_boar_proxy.runtime.now_iso",
                     side_effect=[
-                        "2026-05-05T00:00:01+00:00",
-                        "2026-05-05T00:00:02+00:00",
+                        "2026-06-02T00:00:00+00:00",
+                        "2026-06-02T00:00:01+00:00",
+                        "2026-06-02T00:00:01.500000+00:00",
+                        "2026-06-02T00:00:02+00:00",
                     ],
                 ):
                     payload = runtime_mod.run_healthcheck(paths)
@@ -5109,19 +5111,75 @@ class CliTests(unittest.TestCase):
             thread.join()
             server.server_close()
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertTrue(payload["attestation"]["identity_proof_ok"])
         self.assertEqual(
             payload["last_known_good_proxy"]["observed_at_utc"],
-            "2026-05-05T00:00:01+00:00",
+            "2026-06-02T00:00:01+00:00",
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
             state["last_known_good_proxy_observed_at"],
-            "2026-05-05T00:00:01+00:00",
+            "2026-06-02T00:00:01+00:00",
         )
         self.assertEqual(
-            payload["attestation"]["observed_at_utc"], "2026-05-05T00:00:02+00:00"
+            payload["attestation"]["observed_at_utc"], "2026-06-02T00:00:02+00:00"
         )
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_healthcheck_does_not_refresh_last_known_good_proxy_without_runtime_identity(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        ProbeHandler.runtime_identity_state_file = None
+        ProbeHandler.runtime_identity_managed_config_path = None
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch(
+                    "wild_boar_proxy.runtime.now_iso",
+                    return_value="2026-06-02T00:00:03+00:00",
+                ):
+                    payload = runtime_mod.run_healthcheck(paths)
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_IDENTITY_UNPROVEN")
+        self.assertFalse(payload["attestation"]["identity_proof_ok"])
+        self.assertEqual(
+            payload["attestation"]["identity_failure_reason"],
+            "missing_runtime_identity",
+        )
+        self.assertEqual(
+            payload["last_known_good_proxy"]["observed_at_utc"],
+            "2026-05-05T00:00:00+00:00",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["last_known_good_proxy_observed_at"],
+            "2026-05-05T00:00:00+00:00",
+        )
+        self.assertEqual(payload["changed_files"], [])
 
     def test_healthcheck_proxy_reprobe_uses_last_known_good_before_current_proxy(
         self,
