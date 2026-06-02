@@ -27,7 +27,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import state_lock
+from . import (
+    state_lock,
+    state_startup_contract,
+    state_startup_lock,
+    state_startup_recovery,
+    state_startup_schema,
+    state_startup_truth,
+)
 from .command_effects import (
     EFFECT_MUTATE,
     EFFECT_PROBE,
@@ -3672,6 +3679,34 @@ def build_deterministic_stable_recovery_contract(
     }
 
 
+def build_startup_contract_repair_contract() -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "entry_owner": "healthcheck_startup_contract_repair_path",
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
+        "healthcheck_probe_owner_forbidden": True,
+        "status_second_owner_forbidden": True,
+        "stable_recovery_surface_redefinition_forbidden": True,
+        "same_source_lock_invariant_required": True,
+        "schema_auto_migrate_forbidden": True,
+        "truth_file_rewrite_forbidden": True,
+        "covered_startup_slices": [
+            "temp_recovery",
+            "lock_slice_recovery",
+            "schema_slice_assessment",
+            "truth_slice_assessment",
+        ],
+        "top_level_truth_boundaries": {
+            "status": "contract_ready",
+            "nested_recovery_surface": "startup_contract_repair_result",
+            "final_live_truth_separate": True,
+            "startup_cleanup_alone_sufficient": False,
+            "top_level_ok_requires_live_attestation": True,
+        },
+    }
+
+
 def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
     return {
         "status": "contract_ready",
@@ -4776,6 +4811,56 @@ def build_deterministic_stable_recovery_result(
         "fallback_reason": fallback_reason,
         "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
         "confirmation_basis": confirmation_basis,
+        "effectful_claim_allowed": effectful_claim_allowed,
+        "guardrail_status": guardrail_status,
+    }
+
+
+def build_startup_contract_repair_result(
+    core_result: state_startup_contract.StartupContractCoreResult,
+    *,
+    owner_command_surface: str = "healthcheck --repair --json",
+    delegated_from_status: bool,
+    attempted: bool,
+    live_runtime_observation_confirmed: bool,
+) -> dict[str, Any]:
+    if not attempted:
+        status = "not_invoked"
+        guardrail_status = "not_invoked"
+    elif (
+        core_result.startup_contract_outcome
+        == state_startup_contract.STARTUP_CONTRACT_BLOCKED
+    ):
+        status = "blocked"
+        guardrail_status = "blocked"
+    elif live_runtime_observation_confirmed:
+        status = "completed"
+        guardrail_status = "confirmed"
+    else:
+        status = "completed"
+        guardrail_status = "observation_only"
+    effectful_claim_allowed = (
+        live_runtime_observation_confirmed
+        and core_result.startup_contract_outcome
+        != state_startup_contract.STARTUP_CONTRACT_BLOCKED
+    )
+    return {
+        "status": status,
+        "owner_command_surface": owner_command_surface,
+        "delegated_from_status": delegated_from_status,
+        "attempted": attempted,
+        "startup_contract_outcome": core_result.startup_contract_outcome,
+        "machine_error_code": core_result.machine_error_code,
+        "cleanup_performed": core_result.cleanup_performed,
+        "blocking_reasons": list(core_result.blocking_reasons),
+        "temp_recovery_outcome": core_result.temp_recovery.temp_recovery_outcome,
+        "lock_slice_recovery_outcome": (
+            core_result.lock_recovery.lock_slice_recovery_outcome
+        ),
+        "schema_slice_outcome": core_result.schema_assessment.schema_slice_outcome,
+        "truth_slice_outcome": core_result.truth_assessment.truth_slice_outcome,
+        "live_runtime_observation_required": True,
+        "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
         "effectful_claim_allowed": effectful_claim_allowed,
         "guardrail_status": guardrail_status,
     }
@@ -7108,6 +7193,212 @@ def launcher_procedure_lock(paths: RuntimePaths):
         yield
 
 
+@dataclass(frozen=True)
+class StartupContractRepairOwnerPathResult:
+    core_result: state_startup_contract.StartupContractCoreResult
+    changed_files: tuple[str, ...]
+    runtime_followup_safe: bool
+
+
+def _absolute_path_no_follow(path: Path) -> Path:
+    return Path(os.path.abspath(os.path.normpath(os.fspath(path))))
+
+
+def _append_unique_string(values: list[str], value: str) -> None:
+    if value and value not in values:
+        values.append(value)
+
+
+def _merge_changed_files(
+    changed_files: list[str], extra_paths: tuple[str, ...] | list[str]
+) -> list[str]:
+    merged = list(changed_files)
+    for path in extra_paths:
+        if path not in merged:
+            merged.append(path)
+    return merged
+
+
+def _startup_contract_cleanup_changed_files(
+    core_result: state_startup_contract.StartupContractCoreResult,
+) -> tuple[str, ...]:
+    changed_files: list[str] = []
+    for path in core_result.temp_recovery.transaction_cleanup.deleted_artifact_paths:
+        _append_unique_string(changed_files, path)
+    for path in core_result.temp_recovery.prefix_cleanup.deleted_paths:
+        _append_unique_string(changed_files, path)
+    if core_result.lock_recovery.deleted_lock_path:
+        _append_unique_string(changed_files, core_result.lock_recovery.deleted_lock_path)
+    return tuple(changed_files)
+
+
+def _legacy_startup_lock_assessment(
+    *,
+    lock_slice_outcome: str,
+    machine_error_code: str,
+    reason: str,
+) -> state_startup_lock.StartupLockSliceAssessment:
+    return state_startup_lock.StartupLockSliceAssessment(
+        lock_slice_outcome=lock_slice_outcome,
+        machine_error_code=machine_error_code,
+        reason=reason,
+        owner_classification=None,
+    )
+
+
+def _legacy_startup_lock_recovery_result(
+    *,
+    recovery_outcome: str,
+    machine_error_code: str,
+    cleanup_performed: bool,
+    reason: str,
+    assessment: state_startup_lock.StartupLockSliceAssessment | None,
+    deleted_lock_path: str | None = None,
+) -> state_startup_lock.StartupLockSliceRecoveryResult:
+    return state_startup_lock.StartupLockSliceRecoveryResult(
+        lock_slice_recovery_outcome=recovery_outcome,
+        machine_error_code=machine_error_code,
+        cleanup_performed=cleanup_performed,
+        reason=reason,
+        assessment=assessment,
+        deleted_lock_path=deleted_lock_path,
+    )
+
+
+def run_runtime_startup_lock_slice_recovery(
+    paths: RuntimePaths,
+) -> state_startup_lock.StartupLockSliceRecoveryResult:
+    evaluation = _evaluate_runtime_lock_file(paths.lock_file)
+    if evaluation.carrier_kind == "legacy_pid":
+        if evaluation.status == "held":
+            assessment = _legacy_startup_lock_assessment(
+                lock_slice_outcome=state_startup_lock.LOCK_SLICE_SUSPICIOUS,
+                machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_SUSPICIOUS,
+                reason=evaluation.reason,
+            )
+            return _legacy_startup_lock_recovery_result(
+                recovery_outcome=state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED,
+                machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_RECOVERY_BLOCKED,
+                cleanup_performed=False,
+                reason=evaluation.reason,
+                assessment=assessment,
+            )
+        if evaluation.status == "stale":
+            assessment = _legacy_startup_lock_assessment(
+                lock_slice_outcome=state_startup_lock.LOCK_SLICE_STALE,
+                machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_STALE,
+                reason=evaluation.reason,
+            )
+            lock_file = _absolute_path_no_follow(paths.lock_file)
+            deleted_lock_path = str(lock_file)
+            try:
+                lock_file.unlink()
+            except FileNotFoundError:
+                return _legacy_startup_lock_recovery_result(
+                    recovery_outcome=state_startup_lock.LOCK_SLICE_RECOVERY_CLEAN,
+                    machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_RECOVERY_CLEAN,
+                    cleanup_performed=False,
+                    reason="stale legacy lock file was already absent",
+                    assessment=assessment,
+                )
+            except OSError as exc:
+                blocked_assessment = _legacy_startup_lock_assessment(
+                    lock_slice_outcome=state_startup_lock.LOCK_SLICE_INVALID,
+                    machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_INVALID,
+                    reason=f"failed to delete stale legacy lock file: {exc}",
+                )
+                return _legacy_startup_lock_recovery_result(
+                    recovery_outcome=state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED,
+                    machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_RECOVERY_BLOCKED,
+                    cleanup_performed=False,
+                    reason=blocked_assessment.reason,
+                    assessment=blocked_assessment,
+                )
+            return _legacy_startup_lock_recovery_result(
+                recovery_outcome=state_startup_lock.LOCK_SLICE_RECOVERY_RECOVERED,
+                machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_RECOVERY_RECOVERED,
+                cleanup_performed=True,
+                reason="stale legacy lock file was deleted",
+                assessment=assessment,
+                deleted_lock_path=deleted_lock_path,
+            )
+    if evaluation.carrier_kind == "malformed":
+        assessment = _legacy_startup_lock_assessment(
+            lock_slice_outcome=state_startup_lock.LOCK_SLICE_INVALID,
+            machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_INVALID,
+            reason=evaluation.reason,
+        )
+        return _legacy_startup_lock_recovery_result(
+            recovery_outcome=state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED,
+            machine_error_code=state_startup_lock.STATE_STARTUP_LOCK_SLICE_RECOVERY_BLOCKED,
+            cleanup_performed=False,
+            reason=evaluation.reason,
+            assessment=assessment,
+        )
+
+    lock_metadata = evaluation.metadata if evaluation.metadata is not None else None
+    probe = evaluation.probe if lock_metadata is not None else None
+    assessment_source_lock_path = paths.lock_file if lock_metadata is not None else None
+    return state_startup_lock.run_startup_lock_slice_recovery(
+        paths.lock_file,
+        lock_metadata,
+        probe,
+        assessment_source_lock_path=assessment_source_lock_path,
+        now_utc=datetime.now(timezone.utc),
+        stale_after_seconds=0.0,
+    )
+
+
+def _startup_contract_runtime_followup_safe(
+    core_result: state_startup_contract.StartupContractCoreResult,
+) -> bool:
+    if (
+        core_result.schema_assessment.schema_slice_outcome
+        == state_startup_schema.SCHEMA_SLICE_BLOCKED
+    ):
+        return False
+    if (
+        core_result.truth_assessment.truth_slice_outcome
+        == state_startup_truth.TRUTH_SLICE_BLOCKED
+    ):
+        return False
+    return True
+
+
+def run_startup_contract_repair_owner_path(
+    paths: RuntimePaths,
+) -> StartupContractRepairOwnerPathResult:
+    temp_recovery = state_startup_recovery.run_startup_temp_recovery(
+        paths.managed_dir,
+        (paths.managed_dir, paths.profile_dir),
+    )
+    lock_recovery = run_runtime_startup_lock_slice_recovery(paths)
+    schema_assessment = state_startup_schema.assess_startup_schema_slice(
+        paths.state_file,
+        target_schema_version=2,
+        migrations=(),
+        legacy_bootstrap=False,
+    )
+    truth_assessment = state_startup_truth.assess_startup_truth_slice(
+        state_startup_truth.StartupRuntimeTruthPaths(
+            registry_path=paths.registry_file,
+            supervisor_state_path=paths.state_file,
+            runtime_effective_mode_path=paths.runtime_effective_mode_file,
+        )
+    )
+    core_result = state_startup_contract.aggregate_startup_contract_core(
+        temp_recovery=temp_recovery,
+        lock_recovery=lock_recovery,
+        schema_assessment=schema_assessment,
+        truth_assessment=truth_assessment,
+    )
+    return StartupContractRepairOwnerPathResult(
+        core_result=core_result,
+        changed_files=_startup_contract_cleanup_changed_files(core_result),
+        runtime_followup_safe=_startup_contract_runtime_followup_safe(core_result),
+    )
+
+
 def build_command_payload(
     *,
     ok: bool,
@@ -8168,6 +8459,9 @@ def run_healthcheck(
     )
     if allow_stale_pid_cleanup:
         clear_stale_managed_pid_if_needed(paths)
+    startup_contract_owner_result: StartupContractRepairOwnerPathResult | None = None
+    if effect == EFFECT_REPAIR:
+        startup_contract_owner_result = run_startup_contract_repair_owner_path(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -8795,13 +9089,67 @@ def run_healthcheck(
         recovery_result=recovery_result,
     )
     runtime_guardrails["owner_command_surface"] = owner_command_surface
+    startup_contract_repair_result: dict[str, Any] | None = None
+    if startup_contract_owner_result is not None:
+        startup_core_result = startup_contract_owner_result.core_result
+        if (
+            startup_core_result.startup_contract_outcome
+            == state_startup_contract.STARTUP_CONTRACT_BLOCKED
+        ):
+            ok = False
+            machine_error_code = startup_core_result.machine_error_code
+            severity = "recoverable"
+            operator_action = "user_action"
+            blocking_detail = ", ".join(startup_core_result.blocking_reasons)
+            human_message = (
+                "Startup contract repair is blocked."
+                if not blocking_detail
+                else f"Startup contract repair is blocked: {blocking_detail}."
+            )
+        startup_contract_repair_result = build_startup_contract_repair_result(
+            startup_core_result,
+            owner_command_surface=owner_command_surface,
+            delegated_from_status=False,
+            attempted=True,
+            live_runtime_observation_confirmed=ok,
+        )
+        runtime_guardrails["startup_contract_guardrail_status"] = startup_contract_repair_result[
+            "guardrail_status"
+        ]
+        runtime_guardrails["startup_contract_effectful_claim_allowed"] = (
+            startup_contract_repair_result["effectful_claim_allowed"]
+        )
+        if startup_contract_repair_result["guardrail_status"] == "blocked":
+            failed_checks = list(runtime_guardrails.get("failed_checks", []))
+            if "startup_contract_blocked" not in failed_checks:
+                failed_checks.append("startup_contract_blocked")
+            runtime_guardrails["failed_checks"] = failed_checks
+            runtime_guardrails["status"] = "blocked"
+            runtime_guardrails["blocking_reason"] = failed_checks[0]
+        elif (
+            runtime_guardrails.get("status") == "clear"
+            and startup_contract_repair_result["guardrail_status"] == "observation_only"
+        ):
+            runtime_guardrails["status"] = "caution"
+        native_auth_recovery_hint = build_native_auth_recovery_hint(
+            machine_error_code=machine_error_code,
+            auth_pool_hygiene=auth_pool_hygiene,
+        )
     reported_last_error = (
         successful_reconcile_detail
         if ok and successful_reconcile_detail
         else (
             ""
             if ok
-            else error_detail
+            else (
+                ", ".join(startup_contract_owner_result.core_result.blocking_reasons)
+                if (
+                    startup_contract_owner_result is not None
+                    and startup_contract_owner_result.core_result.startup_contract_outcome
+                    == state_startup_contract.STARTUP_CONTRACT_BLOCKED
+                )
+                else error_detail
+            )
             or (
                 "Missing or invalid runtime-effective-mode.txt"
                 if not effective_mode_artifact
@@ -8838,8 +9186,15 @@ def run_healthcheck(
     )
     if recovery_result is not None:
         extra["deterministic_stable_recovery_result"] = recovery_result
+    if startup_contract_repair_result is not None:
+        extra["startup_contract_repair_contract"] = build_startup_contract_repair_contract()
+        extra["startup_contract_repair_result"] = startup_contract_repair_result
 
     changed_files = detect_changed_files(before, runtime_write_surface_candidates(paths))
+    if startup_contract_owner_result is not None:
+        changed_files = _merge_changed_files(
+            changed_files, startup_contract_owner_result.changed_files
+        )
 
     return build_command_payload(
         ok=ok,

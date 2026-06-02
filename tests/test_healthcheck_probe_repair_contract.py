@@ -111,6 +111,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
                     "version": 2,
                     "status": "healthy",
                     "effective_mode": "stable",
+                    "stable_default_backend_id": "default-backend",
                     "selected_backend_ids": ["backend-a"],
                     "managed_port": 9999,
                     "last_error": "",
@@ -202,6 +203,24 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             }
         )
 
+    def read_registry(self) -> dict[str, Any]:
+        return json.loads((self.managed_dir / "backend-registry.json").read_text())
+
+    def write_registry(self, payload: dict[str, Any]) -> None:
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(payload, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def read_state(self) -> dict[str, Any]:
+        return json.loads((self.managed_dir / "supervisor-state.json").read_text())
+
+    def write_state(self, payload: dict[str, Any]) -> None:
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(payload, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "wild_boar_proxy", *args],
@@ -269,6 +288,11 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
                 "write_stable_runtime_consumer_snapshot",
                 side_effect=AssertionError("probe must not write snapshots"),
             ),
+            mock.patch.object(
+                runtime_mod,
+                "run_startup_contract_repair_owner_path",
+                side_effect=AssertionError("probe must not invoke startup contract repair"),
+            ),
         ):
             payload = runtime_mod.run_healthcheck_probe(self.paths)
 
@@ -286,6 +310,171 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             "healthcheck --repair --json",
         )
         self.assertIsInstance(payload["changed_files"], list)
+
+    def test_runtime_startup_lock_recovery_preserves_same_source_lock_path(self) -> None:
+        captured: dict[str, Any] = {}
+        real = runtime_mod.state_startup_lock.run_startup_lock_slice_recovery
+
+        def capture(*args: Any, **kwargs: Any) -> Any:
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return real(*args, **kwargs)
+
+        with runtime_mod.lock_file_owner_path(self.paths.lock_file):
+            with mock.patch.object(
+                runtime_mod.state_startup_lock,
+                "run_startup_lock_slice_recovery",
+                side_effect=capture,
+            ):
+                result = runtime_mod.run_runtime_startup_lock_slice_recovery(self.paths)
+
+        self.assertEqual(
+            result.lock_slice_recovery_outcome,
+            runtime_mod.state_startup_lock.LOCK_SLICE_RECOVERY_CLEAN,
+        )
+        self.assertIsNotNone(result.assessment)
+        self.assertEqual(
+            result.assessment.lock_slice_outcome,
+            runtime_mod.state_startup_lock.LOCK_SLICE_CLEAR,
+        )
+        self.assertEqual(captured["args"][0], self.paths.lock_file)
+        self.assertEqual(
+            captured["kwargs"]["assessment_source_lock_path"],
+            self.paths.lock_file,
+        )
+        self.assertIsNotNone(captured["args"][1])
+        self.assertIsNotNone(captured["args"][2])
+
+    def test_startup_contract_owner_path_reports_temp_cleanup_changed_files(self) -> None:
+        stale = self.managed_dir / ".wbp-tmp-state.json"
+        stale.write_text("old\n", encoding="utf-8")
+        os.utime(stale, (1, 1))
+
+        result = runtime_mod.run_startup_contract_repair_owner_path(self.paths)
+
+        self.assertEqual(
+            result.core_result.startup_contract_outcome,
+            runtime_mod.state_startup_contract.STARTUP_CONTRACT_AUTO_RECOVERED,
+        )
+        self.assertEqual(
+            result.core_result.temp_recovery.temp_recovery_outcome,
+            runtime_mod.state_startup_recovery.TEMP_RECOVERY_RECOVERED,
+        )
+        self.assertIn(str(stale), result.changed_files)
+        self.assertFalse(stale.exists())
+
+    def test_startup_contract_owner_path_reports_legacy_lock_cleanup_changed_files(self) -> None:
+        self.paths.lock_file.write_text("999999\n", encoding="utf-8")
+
+        result = runtime_mod.run_startup_contract_repair_owner_path(self.paths)
+
+        self.assertEqual(
+            result.core_result.startup_contract_outcome,
+            runtime_mod.state_startup_contract.STARTUP_CONTRACT_AUTO_RECOVERED,
+        )
+        self.assertEqual(
+            result.core_result.lock_recovery.lock_slice_recovery_outcome,
+            runtime_mod.state_startup_lock.LOCK_SLICE_RECOVERY_RECOVERED,
+        )
+        self.assertIn(str(self.paths.lock_file), result.changed_files)
+        self.assertFalse(self.paths.lock_file.exists())
+
+    def test_healthcheck_repair_exposes_separate_startup_contract_owner_surface(self) -> None:
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        self.assertEqual(payload["effect"], "repair")
+        self.assertIn("startup_contract_repair_contract", payload)
+        self.assertIn("startup_contract_repair_result", payload)
+        self.assertEqual(
+            payload["startup_contract_repair_contract"]["owner_command_surface"],
+            "healthcheck --repair --json",
+        )
+        self.assertEqual(
+            payload["startup_contract_repair_result"]["owner_command_surface"],
+            "healthcheck --repair --json",
+        )
+        self.assertEqual(payload["startup_contract_repair_result"]["status"], "completed")
+        self.assertEqual(
+            payload["startup_contract_repair_result"]["startup_contract_outcome"],
+            runtime_mod.state_startup_contract.STARTUP_CONTRACT_CLEAN,
+        )
+        self.assertFalse(
+            payload["startup_contract_repair_result"]["live_runtime_observation_confirmed"]
+        )
+        self.assertFalse(payload["startup_contract_repair_result"]["effectful_claim_allowed"])
+        self.assertEqual(
+            payload["startup_contract_repair_result"]["guardrail_status"],
+            "observation_only",
+        )
+        if "deterministic_stable_recovery_result" in payload:
+            self.assertNotIn(
+                "startup_contract_outcome",
+                payload["deterministic_stable_recovery_result"],
+            )
+        self.assertNotIn("entry_lane", payload["startup_contract_repair_result"])
+
+    def test_summarize_status_does_not_expose_startup_contract_repair_surface(self) -> None:
+        health_payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        status_payload = runtime_mod.summarize_status(self.paths, health_payload=health_payload)
+
+        self.assertNotIn("startup_contract_repair_contract", status_payload)
+        self.assertNotIn("startup_contract_repair_result", status_payload)
+        self.assertNotIn(
+            "startup_contract_repair_contract",
+            status_payload["stable_runtime_consumer"],
+        )
+        self.assertNotIn(
+            "startup_contract_repair_result",
+            status_payload["stable_runtime_consumer"],
+        )
+        self.assertEqual(
+            status_payload["runtime_guardrails"]["owner_command_surface"],
+            "status --json",
+        )
+
+    def test_healthcheck_repair_truth_contradiction_blocks_without_false_green(self) -> None:
+        state = self.read_state()
+        state["stable_default_backend_id"] = "other-backend"
+        self.write_state(state)
+
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
+        self.assertIn(
+            "startup_contract_blocked",
+            payload["runtime_guardrails"]["failed_checks"],
+        )
+        self.assertEqual(payload["startup_contract_repair_result"]["status"], "blocked")
+        self.assertIn(
+            runtime_mod.state_startup_truth.TRUTH_SLICE_CONTRADICTED,
+            payload["startup_contract_repair_result"]["blocking_reasons"],
+        )
+        self.assertFalse(payload["startup_contract_repair_result"]["effectful_claim_allowed"])
+
+    def test_healthcheck_repair_schema_blocked_stays_non_green(self) -> None:
+        state = self.read_state()
+        state["schema_version"] = 99
+        self.write_state(state)
+
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["startup_contract_repair_result"]["status"], "blocked")
+        self.assertIn(
+            runtime_mod.state_startup_schema.SCHEMA_SLICE_BLOCKED,
+            payload["startup_contract_repair_result"]["blocking_reasons"],
+        )
+        self.assertEqual(payload["startup_contract_repair_result"]["guardrail_status"], "blocked")
 
     def test_lock_file_owner_path_materializes_structured_lock_carrier(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
