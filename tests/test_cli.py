@@ -2875,25 +2875,30 @@ class CliTests(unittest.TestCase):
             "stable",
         )
 
-    def test_status_reports_listener_down_when_managed_port_is_absent(self) -> None:
+    def test_status_reports_snapshot_when_managed_listener_is_not_probed(self) -> None:
         stable_port = free_port()
         (self.stable_dir / "config.yaml").write_text(
             f"host: 127.0.0.1\nport: {stable_port}\n",
             encoding="utf-8",
         )
         result = self.run_cli("status", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
-        self.assertNotIn("effect", payload)
-        self.assertEqual(payload["liveness"], "down")
-        recovery = payload["stable_runtime_consumer"][
-            "deterministic_stable_recovery_result"
-        ]
-        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
-        self.assertEqual(payload["next_action"], "retry")
-        self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["liveness"], "unknown")
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
+        self.assertEqual(
+            payload["attestation_summary"]["machine_error_code"],
+            "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+        )
+        self.assertEqual(payload["launch_readiness"]["status"], "not_evaluated")
+        self.assertNotIn(
+            "deterministic_stable_recovery_result",
+            payload["stable_runtime_consumer"],
+        )
 
     def test_status_reads_state_after_healthcheck_repair_without_delegation(self) -> None:
         stable_port = free_port()
@@ -2985,7 +2990,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["pool_summary"]["down"], 0)
         self.assertEqual(payload["pool_summary"]["backend_count"], 3)
 
-    def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
+    def test_status_reports_snapshot_when_stable_listener_is_not_probed(self) -> None:
         stable_port = free_port()
         (self.profile_dir / "runtime-effective-mode.txt").write_text("stable\n", encoding="utf-8")
         (self.stable_dir / "config.yaml").write_text(
@@ -2998,14 +3003,21 @@ class CliTests(unittest.TestCase):
             json.dumps(state) + "\n", encoding="utf-8"
         )
         result = self.run_cli("status", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
-        self.assertEqual(payload["liveness"], "down")
-        recovery = payload["stable_runtime_consumer"][
-            "deterministic_stable_recovery_result"
-        ]
-        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["liveness"], "unknown")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
+        self.assertEqual(payload["launch_readiness"]["status"], "not_evaluated")
+        self.assertNotIn(
+            "deterministic_stable_recovery_result",
+            payload["stable_runtime_consumer"],
+        )
 
     def test_healthcheck_returns_attestation(self) -> None:
         port = free_port()
@@ -5367,7 +5379,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(payload["attestation"]["effective_mode_match"])
         self.assertIn("runtime-effective-mode", payload["last_error"])
 
-    def test_status_uses_live_attestation_for_green_state(self) -> None:
+    def test_status_reports_snapshot_without_live_attestation_for_green_state(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"
         active_auth = self.stable_dir / "codex-active.json"
@@ -5405,8 +5417,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["liveness"], "healthy")
-        self.assertEqual(payload["attestation_summary"]["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["liveness"], "unknown")
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
+        self.assertEqual(
+            payload["attestation_summary"]["machine_error_code"],
+            "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+        )
+        self.assertEqual(payload["launch_readiness"]["status"], "not_evaluated")
         self.assertEqual(payload["policy_drift"]["status"], "clear")
         self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
         self.assertEqual(payload["policy_drift"]["missing_auths"], [])
@@ -5481,7 +5500,10 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
-        self.assertEqual(payload["liveness"], "healthy")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["liveness"], "unknown")
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
         drift = payload["policy_drift"]
         self.assertEqual(drift["status"], "detected")
         self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
@@ -5737,8 +5759,11 @@ class CliTests(unittest.TestCase):
             encoding="utf-8",
         )
         result = self.run_cli("status", "--json")
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         drift = payload["policy_drift"]
         self.assertEqual(drift["status"], "unknown")
         self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT_UNKNOWN")
@@ -6740,9 +6765,9 @@ class CliTests(unittest.TestCase):
             recovery_contract["entry_owner"], "healthcheck_live_attestation_path"
         )
         self.assertEqual(
-            recovery_contract["owner_command_surface"], "healthcheck --json"
+            recovery_contract["owner_command_surface"], "healthcheck --repair --json"
         )
-        self.assertTrue(recovery_contract["status_delegates_to_owner"])
+        self.assertFalse(recovery_contract["status_delegates_to_owner"])
         self.assertTrue(recovery_contract["sync_hidden_owner_forbidden"])
         self.assertFalse(recovery_contract["new_generic_cli_default"])
         self.assertEqual(
@@ -6751,7 +6776,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["shared_activation_mechanics"]["owner_paths"],
-            ["healthcheck --json", "launch smoke --json"],
+            ["healthcheck --repair --json", "launch smoke --json"],
         )
         self.assertEqual(
             recovery_contract["generated_config_regeneration_status"],
@@ -6763,7 +6788,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["generated_config_regeneration_owner_paths"],
-            ["healthcheck --json", "launch smoke --json"],
+            ["healthcheck --repair --json", "launch smoke --json"],
         )
         self.assertFalse(recovery_contract["stale_generated_config_authoritative"])
         self.assertEqual(
@@ -6785,7 +6810,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(recovery_contract["snapshot_refresh_after_stable_live_outcome"])
         self.assertEqual(
             recovery_contract["snapshot_refresh_owner_paths"],
-            ["healthcheck --json", "launch smoke --json"],
+            ["healthcheck --repair --json", "launch smoke --json"],
         )
         self.assertFalse(recovery_contract["snapshot_schema_widening_required"])
         self.assertFalse(
@@ -6883,9 +6908,9 @@ class CliTests(unittest.TestCase):
         current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
         self.assertEqual(
             current_proxy_adoption_contract["owner_command_surface"],
-            "healthcheck --json",
+            "healthcheck --repair --json",
         )
-        self.assertTrue(current_proxy_adoption_contract["status_delegates_to_owner"])
+        self.assertFalse(current_proxy_adoption_contract["status_delegates_to_owner"])
         self.assertEqual(
             current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
             "current_proxy_url",
@@ -7071,10 +7096,11 @@ class CliTests(unittest.TestCase):
             consumer["consumer_activation_readiness"]["machine_error_code"],
             "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
         )
-        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
-        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
+        self.assertEqual(payload["launch_readiness"]["status"], "not_evaluated")
+        self.assertFalse(payload["launch_readiness"]["delegated_from_status"])
         self.assertEqual(
-            payload["launch_readiness"]["blocking_reason"], "listener_unreachable"
+            payload["launch_readiness"]["blocking_reason"],
+            "live_attestation_not_run_by_status",
         )
         self.assertTrue(consumer["fallback_contract"]["fallback_allowed"])
         self.assertTrue(consumer["fallback_contract"]["silent_fallback_forbidden"])
@@ -7184,7 +7210,7 @@ class CliTests(unittest.TestCase):
             "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
         )
 
-    def test_status_delegates_deterministic_stable_recovery_result_and_changed_files(
+    def test_status_reports_recovery_contract_without_delegating_recovery_owner_path(
         self,
     ) -> None:
         source_auth = self.stable_dir / "codex-active.json"
@@ -7212,44 +7238,19 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        recovery_contract = consumer["deterministic_stable_recovery_contract"]
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertNotIn("deterministic_stable_recovery_result", payload)
-        recovery = payload["stable_runtime_consumer"][
-            "deterministic_stable_recovery_result"
-        ]
+        self.assertNotIn("deterministic_stable_recovery_result", consumer)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
-        self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(recovery["status"], "completed")
-        self.assertTrue(recovery["delegated_from_status"])
-        self.assertTrue(recovery["attempted"])
-        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
-        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
-        self.assertEqual(recovery["outcome"], "approved_target_recovered")
-        self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
-        self.assertEqual(
-            recovery["confirmation_basis"],
-            "approved_target_activation_plus_live_runtime_observation",
-        )
-        self.assertTrue(recovery["effectful_claim_allowed"])
-        self.assertEqual(recovery["guardrail_status"], "confirmed")
-        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
-        self.assertTrue(payload["runtime_guardrails"]["delegated_from_status"])
-        self.assertIn(
-            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
-            payload["changed_files"],
-        )
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
-        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
-        self.assertIn(
-            str(self.profile_dir / "runtime-effective-mode.txt"),
-            payload["changed_files"],
-        )
-        self.assertEqual(
-            payload["stable_runtime_consumer"]["effective_stable_runtime_consumer_source"][
-                "source_kind"
-            ],
-            "approved_repair_target",
-        )
+        self.assertEqual(recovery_contract["owner_command_surface"], "healthcheck --repair --json")
+        self.assertFalse(recovery_contract["status_delegates_to_owner"])
+        self.assertEqual(payload["runtime_guardrails"]["owner_command_surface"], "status --json")
+        self.assertFalse(payload["runtime_guardrails"]["delegated_from_status"])
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
         self.assertEqual(
             (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
         )
@@ -7309,9 +7310,9 @@ class CliTests(unittest.TestCase):
             consumer["deterministic_stable_recovery_contract"][
                 "owner_command_surface"
             ],
-            "healthcheck --json",
+            "healthcheck --repair --json",
         )
-        self.assertTrue(
+        self.assertFalse(
             consumer["deterministic_stable_recovery_contract"][
                 "status_delegates_to_owner"
             ]
@@ -7485,7 +7486,7 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("last_known_good_proxy_url", state)
         self.assertNotIn("last_known_good_proxy_observed_at", state)
 
-    def test_status_delegates_stable_service_disabled_lane_without_becoming_owner(
+    def test_status_reports_stable_service_disabled_snapshot_without_owner_delegation(
         self,
     ) -> None:
         stable_port = free_port()
@@ -7515,18 +7516,27 @@ class CliTests(unittest.TestCase):
         result = self.run_cli_with_env(
             {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "status", "--json"
         )
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["launch_readiness"]["status"], "not_evaluated")
+        self.assertFalse(payload["launch_readiness"]["delegated_from_status"])
         self.assertNotIn("deterministic_stable_recovery_result", payload)
-        recovery = payload["stable_runtime_consumer"][
-            "deterministic_stable_recovery_result"
-        ]
-        self.assertTrue(recovery["delegated_from_status"])
-        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
-        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
+        self.assertNotIn(
+            "deterministic_stable_recovery_result",
+            payload["stable_runtime_consumer"],
+        )
+        self.assertEqual(
+            payload["stable_runtime_consumer"]["consumer_activation_readiness"][
+                "machine_error_code"
+            ],
+            "OK",
+        )
 
-    def test_status_reports_materialized_last_known_good_proxy_without_owner_transfer(
+    def test_status_reports_last_known_good_snapshot_without_owner_transfer(
         self,
     ) -> None:
         port = free_port()
@@ -7559,12 +7569,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
         self.assertEqual(
             current_proxy_adoption_contract["owner_command_surface"],
-            "healthcheck --json",
+            "healthcheck --repair --json",
         )
+        self.assertFalse(current_proxy_adoption_contract["status_delegates_to_owner"])
         self.assertEqual(
             current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
             "current_proxy_url",
@@ -7574,20 +7587,22 @@ class CliTests(unittest.TestCase):
             "owner_path_success_only_write_available",
         )
         last_known_good = payload["last_known_good_proxy"]
-        self.assertEqual(last_known_good["status"], "materialized")
-        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10808")
-        self.assertTrue(last_known_good["matches_current_proxy_url"])
-        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertEqual(last_known_good["status"], "declared_not_materialized")
+        self.assertEqual(last_known_good["proxy_url"], "")
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertFalse(last_known_good["eligible_for_bounded_reprobe"])
         self.assertEqual(
             payload["last_known_good_proxy_contract"]["owner_command_surface"],
-            "healthcheck --json",
+            "healthcheck --repair --json",
         )
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertFalse(
+            payload["last_known_good_proxy_contract"]["status_delegates_to_owner"]
+        )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10808")
-        self.assertTrue(state["last_known_good_proxy_observed_at"])
+        self.assertNotIn("last_known_good_proxy_url", state)
+        self.assertNotIn("last_known_good_proxy_observed_at", state)
 
-    def test_status_delegates_current_proxy_adoption_result_and_changed_files(self) -> None:
+    def test_status_does_not_delegate_current_proxy_adoption_or_changed_files(self) -> None:
         port = free_port()
         candidate_port = free_port()
         expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
@@ -7634,22 +7649,16 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
-        self.assertEqual(payload["current_proxy_url"], expected_proxy_url)
-        adoption_result = payload["proxy_reprobe_adoption_result"]
-        self.assertEqual(adoption_result["status"], "owner_path_emitted")
-        self.assertEqual(adoption_result["adoption_outcome"], "candidate_adopted")
-        self.assertTrue(adoption_result["current_proxy_url_rewritten"])
-        self.assertTrue(adoption_result["live_runtime_observation_confirmed"])
-        self.assertIn(str(self.default_launcher_script), payload["changed_files"])
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
-        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
-        self.assertIn(
-            str(self.profile_dir / "runtime-effective-mode.txt"),
-            payload["changed_files"],
-        )
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertNotIn("proxy_reprobe_adoption_result", payload)
         self.assertEqual(
             payload["current_proxy_adoption_contract"]["owner_command_surface"],
-            "healthcheck --json",
+            "healthcheck --repair --json",
+        )
+        self.assertFalse(
+            payload["current_proxy_adoption_contract"]["status_delegates_to_owner"]
         )
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
@@ -7770,14 +7779,26 @@ class CliTests(unittest.TestCase):
             payload["changed_files"],
         )
         status_payload = json.loads(status_result.stdout)
+        status_consumer = status_payload["stable_runtime_consumer"]
+        status_evidence = status_consumer["activation_evidence_surface"]
         self.assertEqual(
-            status_payload["stable_runtime_consumer"][
-                "effective_stable_runtime_consumer_source"
-            ]["source_kind"],
-            "approved_repair_target",
+            status_consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertFalse(
+            status_consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertEqual(status_evidence["status"], "snapshot_present")
+        self.assertEqual(status_evidence["snapshot_freshness"], "fresh")
+        self.assertTrue(status_evidence["snapshot_references_generated_config"])
+        self.assertEqual(status_payload["attestation_summary"]["status"], "not_run")
+        self.assertFalse(
+            status_consumer["effective_truth_contract"][
+                "activation_evidence_snapshot_alone_sufficient"
+            ]
         )
 
-    def test_status_uses_approved_target_policy_drift_surface_when_live_activation_evidence_is_valid(
+    def test_status_keeps_approved_target_policy_drift_observed_without_live_claim(
         self,
     ) -> None:
         source_auth = self.profile_dir / "sources" / "codex-active.json"
@@ -7824,21 +7845,22 @@ class CliTests(unittest.TestCase):
             payload["stable_runtime_consumer"]["effective_stable_runtime_consumer_source"][
                 "status"
             ],
-            "approved_target_active_by_activation_evidence",
+            "observed_source_active",
         )
-        self.assertEqual(payload["policy_drift"]["status"], "clear")
-        self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
+        self.assertEqual(payload["policy_drift"]["status"], "detected")
+        self.assertEqual(payload["policy_drift"]["machine_error_code"], "STABLE_POLICY_DRIFT")
         self.assertEqual(
             payload["policy_drift"]["stable_auth_inventory_source"]["source"],
-            "approved_repair_target",
+            "auth-dir",
         )
         self.assertEqual(payload["policy_drift_observed"]["status"], "detected")
         self.assertEqual(
             payload["policy_drift_observed"]["stable_auth_inventory_source"]["source"],
             "auth-dir",
         )
-        self.assertEqual(payload["claim_gate"]["status"], "clear")
-        self.assertEqual(payload["claim_gate"]["sources"], [])
+        self.assertEqual(payload["claim_gate"]["status"], "blocked")
+        self.assertEqual(payload["claim_gate"]["sources"], ["policy_drift"])
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
 
     def test_launch_smoke_records_conservative_observed_source_fallback_when_launcher_exits_nonzero_during_approved_target_attempt(
         self,
@@ -8238,7 +8260,7 @@ class CliTests(unittest.TestCase):
             ["policy_drift", "registry_identity"],
         )
 
-    def test_status_does_not_greenwash_failed_attestation(self) -> None:
+    def test_status_does_not_claim_live_attestation_when_probe_would_fail(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "NOT OK"
         (self.managed_dir / "managed-config.yaml").write_text(
@@ -8267,16 +8289,22 @@ class CliTests(unittest.TestCase):
             thread.join()
             server.server_close()
             ProbeHandler.response_text = "OK"
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
-        self.assertEqual(payload["liveness"], "degraded")
-        self.assertEqual(payload["attestation_summary"]["status"], "error")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["liveness"], "unknown")
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
+        self.assertEqual(
+            payload["attestation_summary"]["machine_error_code"],
+            "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+        )
         self.assertIn("claim_gate", payload)
-        self.assertNotEqual(payload["machine_error_code"], payload["claim_gate"]["machine_error_code"])
+        self.assertNotEqual(payload["attestation_summary"]["status"], "ok")
 
-    def test_status_delegates_auth_unavailable_failure_class(self) -> None:
+    def test_status_does_not_delegate_auth_unavailable_live_failure_class(self) -> None:
         port = free_port()
         ProbeHandler.response_status = 503
         ProbeHandler.response_payload = {
@@ -8312,12 +8340,19 @@ class CliTests(unittest.TestCase):
             ProbeHandler.response_status = 200
             ProbeHandler.response_payload = None
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
-        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "AUTH_UNAVAILABLE")
-        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
-        self.assertTrue(payload["auth_pool_hygiene"]["delegated_from_status"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
+        self.assertEqual(
+            payload["launch_readiness"]["machine_error_code"],
+            "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+        )
+        self.assertFalse(payload["launch_readiness"]["delegated_from_status"])
+        self.assertFalse(payload["auth_pool_hygiene"]["delegated_from_status"])
 
-    def test_status_delegates_empty_usable_auth_pool(self) -> None:
+    def test_status_reports_empty_usable_auth_pool_snapshot_without_live_delegation(self) -> None:
         port = free_port()
         ProbeHandler.response_status = 503
         ProbeHandler.response_payload = {
@@ -8353,20 +8388,25 @@ class CliTests(unittest.TestCase):
             ProbeHandler.response_status = 200
             ProbeHandler.response_payload = None
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["attestation_summary"]["status"], "not_run")
         self.assertEqual(
             payload["auth_pool_hygiene"]["machine_error_code"], "USABLE_AUTH_POOL_EMPTY"
         )
-        self.assertTrue(payload["auth_pool_hygiene"]["delegated_from_status"])
+        self.assertFalse(payload["auth_pool_hygiene"]["delegated_from_status"])
         self.assertEqual(
-            payload["launch_readiness"]["blocking_reason"], "usable_auth_pool_empty"
+            payload["launch_readiness"]["blocking_reason"],
+            "live_attestation_not_run_by_status",
         )
         self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
         self.assertEqual(
             payload["runtime_guardrails"]["blocking_reason"],
-            "usable_auth_pool_empty",
+            "no_live_capable_active_backends",
         )
-        self.assertTrue(payload["runtime_guardrails"]["delegated_from_status"])
+        self.assertFalse(payload["runtime_guardrails"]["delegated_from_status"])
 
     def test_accounts_list_returns_registry_snapshot(self) -> None:
         result = self.run_cli("accounts", "list", "--json")
@@ -18461,9 +18501,10 @@ class CliTests(unittest.TestCase):
             ]
         )
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
 
-    def test_launch_smoke_materializes_repo_owned_default_launcher_and_status_refreshes_last_known_good_proxy_without_current_proxy_url_rewrite(
+    def test_launch_smoke_materializes_repo_owned_default_launcher_and_status_keeps_lkg_snapshot_readonly(
         self,
     ) -> None:
         stable_port = free_port()
@@ -18552,11 +18593,12 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(status_payload["current_proxy_url"], current_proxy_url)
         last_known_good = status_payload["last_known_good_proxy"]
-        self.assertEqual(last_known_good["status"], "materialized")
-        self.assertEqual(last_known_good["proxy_url"], current_proxy_url)
-        self.assertTrue(last_known_good["matches_current_proxy_url"])
-        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), status_payload["changed_files"])
+        self.assertEqual(last_known_good["status"], "declared_not_materialized")
+        self.assertEqual(last_known_good["proxy_url"], "")
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertFalse(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertEqual(status_payload["effect"], "read")
+        self.assertEqual(status_payload["changed_files"], [])
         self.assertNotIn("proxy_reprobe_adoption_result", status_payload)
 
     def test_launch_smoke_materializes_repo_owned_default_launcher_when_default_path_is_absent(
