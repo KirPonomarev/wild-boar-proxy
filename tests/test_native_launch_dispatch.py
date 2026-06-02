@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import subprocess
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,14 +25,47 @@ from wild_boar_proxy.native_launch_dispatch import (
     build_native_window_usability_packet,
 )
 from wild_boar_proxy.native_window_probe import (
+    NATIVE_AX_OSASCRIPT_CWD,
+    NATIVE_AX_OSASCRIPT_OUTPUT_CAP_BYTES,
+    NATIVE_AX_OSASCRIPT_TIMEOUT_SECONDS,
+    NATIVE_AX_RUNTIME_PATH,
     OWNER_STANDING_AUTHORIZATION_PHRASE,
     launch_custom_native_app_packet,
     native_window_probe_command,
     native_window_probe_server_plan,
     owner_authorization_phrase_present,
 )
+from wild_boar_proxy.process_runner import BoundedProcessResult
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def completed(*, returncode: int = 0, stdout: str = "", stderr: str = "") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="ok" if returncode == 0 else "error",
+        machine_error_code="OK" if returncode == 0 else "PROCESS_FAILED",
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=False,
+        duration_seconds=0.01,
+    )
+
+
+def timeout_result(*, stderr: str = "timed out") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="error",
+        machine_error_code="PROCESS_TIMEOUT",
+        exit_code=None,
+        stdout="",
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=True,
+        duration_seconds=NATIVE_AX_OSASCRIPT_TIMEOUT_SECONDS,
+    )
 
 
 def native_command() -> dict[str, object]:
@@ -125,6 +158,79 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["isolated_search_list_verified"])
         self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
 
+    def test_native_ax_osascript_uses_bounded_runner_with_deterministic_env(self) -> None:
+        script = "return 1"
+        observed_calls: list[dict[str, object]] = []
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return completed(stdout="ok\n")
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://example.invalid:1",
+                    "HTTPS_PROXY": "http://example.invalid:2",
+                    "ALL_PROXY": "http://example.invalid:3",
+                    "http_proxy": "http://example.invalid:4",
+                    "https_proxy": "http://example.invalid:5",
+                    "all_proxy": "http://example.invalid:6",
+                    "WBP_CURRENT_PROXY_URL": "http://example.invalid:7",
+                    "CODEX_HOME": "/tmp/ambient-codex-home",
+                    "OPENAI_API_KEY": "ambient-secret",
+                    "PATH": "/definitely/missing",
+                    "HOME": "/tmp/ambient-home",
+                },
+                clear=True,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ),
+        ):
+            result = native_probe._run_osascript(script)
+
+        self.assertEqual(result.stdout, "ok\n")
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(call["command"], ["osascript", "-e", script])
+        self.assertEqual(call["cwd"], NATIVE_AX_OSASCRIPT_CWD)
+        self.assertEqual(call["timeout_seconds"], NATIVE_AX_OSASCRIPT_TIMEOUT_SECONDS)
+        self.assertEqual(call["output_cap_bytes"], NATIVE_AX_OSASCRIPT_OUTPUT_CAP_BYTES)
+        env = call["env"]
+        self.assertEqual(env["PATH"], NATIVE_AX_RUNTIME_PATH)
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost,::1")
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "WBP_CURRENT_PROXY_URL",
+            "CODEX_HOME",
+            "OPENAI_API_KEY",
+            "HOME",
+        ):
+            self.assertNotIn(key, env)
+
     def test_window_observation_uses_custom_pid_and_requires_real_window_count(self) -> None:
         process_inventory = {
             "root_app_pids": [111, 222],
@@ -132,20 +238,18 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
             ],
         }
-        completed = subprocess.CompletedProcess(
-            args=["osascript"],
-            returncode=0,
+        result = completed(
             stdout="Codex\ttrue\tfalse\tfalse\t0\n",
             stderr="",
         )
-        with mock.patch("wild_boar_proxy.native_window_probe.subprocess.run", return_value=completed) as run:
+        with mock.patch("wild_boar_proxy.native_window_probe._run_osascript", return_value=result) as run:
             packet = native_probe._window_observation_via_ax(process_inventory)
 
         self.assertFalse(packet["window_observed"])
         self.assertEqual(packet["observed_pid"], 222)
         self.assertEqual(packet["window_count"], 0)
         self.assertEqual(packet["blocked_reason_class"], "pid_visible_but_accessible_window_absent")
-        self.assertIn("unix id is 222", run.call_args.args[0][2])
+        self.assertIn("unix id is 222", run.call_args.args[0])
 
     def test_window_observation_accepts_pid_bound_cg_window_when_ax_count_is_zero(self) -> None:
         process_inventory = {
@@ -154,14 +258,12 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
             ],
         }
-        completed = subprocess.CompletedProcess(
-            args=["osascript"],
-            returncode=0,
+        result = completed(
             stdout="Codex\ttrue\tfalse\tfalse\t0\n",
             stderr="",
         )
         with (
-            mock.patch("wild_boar_proxy.native_window_probe.subprocess.run", return_value=completed),
+            mock.patch("wild_boar_proxy.native_window_probe._run_osascript", return_value=result),
             mock.patch(
                 "wild_boar_proxy.native_window_probe._cg_window_presence",
                 return_value=(True, "[{'window_owner_name': 'Codex', 'window_number': 9}]"),
@@ -174,6 +276,17 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["window_query_method"], "CGWindowList pid-bound on-screen window")
         self.assertEqual(packet["ax_window_count"], 0)
         self.assertEqual(packet["window_count"], 1)
+
+    def test_ax_input_capable_by_name_timeout_does_not_green(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._run_osascript",
+            return_value=timeout_result(stderr="timed out"),
+        ) as run:
+            input_capable, result = native_probe._ax_input_capable_by_name(222)
+
+        self.assertFalse(input_capable)
+        self.assertEqual(result, "timed out")
+        self.assertIn("unix id is 222", run.call_args.args[0])
 
     def test_window_observation_does_not_fallback_to_unbound_root_pid(self) -> None:
         process_inventory = {

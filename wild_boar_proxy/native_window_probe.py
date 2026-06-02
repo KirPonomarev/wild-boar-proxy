@@ -10,7 +10,6 @@ builders, and bounded cleanup model.
 from __future__ import annotations
 
 import json
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -44,6 +43,7 @@ from .native_launch_dispatch import (
     build_native_window_observation_packet,
     build_native_window_usability_packet,
 )
+from .process_runner import BoundedProcessResult, run_bounded_process
 from .runtime import RuntimePaths
 from .token_command import emit_local_token
 
@@ -52,6 +52,10 @@ OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые за
 WINDOW_OBSERVATION_WAIT_SECONDS = 12.0
 WINDOW_OBSERVATION_POLL_SECONDS = 0.5
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
+NATIVE_AX_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+NATIVE_AX_OSASCRIPT_TIMEOUT_SECONDS = 10.0
+NATIVE_AX_OSASCRIPT_OUTPUT_CAP_BYTES = 16 * 1024
+NATIVE_AX_OSASCRIPT_CWD = Path("/")
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
     "method=model/list",
@@ -121,6 +125,24 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
     return custom_root_pids
 
 
+def _native_ax_env() -> dict[str, str]:
+    return {
+        "PATH": NATIVE_AX_RUNTIME_PATH,
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+        "no_proxy": "127.0.0.1,localhost,::1",
+    }
+
+
+def _run_osascript(script: str) -> BoundedProcessResult:
+    return run_bounded_process(
+        ["osascript", "-e", script],
+        env=_native_ax_env(),
+        cwd=NATIVE_AX_OSASCRIPT_CWD,
+        timeout_seconds=NATIVE_AX_OSASCRIPT_TIMEOUT_SECONDS,
+        output_cap_bytes=NATIVE_AX_OSASCRIPT_OUTPUT_CAP_BYTES,
+    )
+
+
 def _parse_ax_point(value: str) -> list[int]:
     parts = [part.strip() for part in value.split(",") if part.strip()]
     parsed: list[int] = []
@@ -169,12 +191,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         '  return (name of p as text) & tab & (visible of p as text) & tab & (frontmost of p as text) & tab & (background only of p as text) & tab & (windowCount as text) & tab & windowPosition & tab & windowSize\n'
         'end tell\n'
     )
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_osascript(script)
     stdout = result.stdout.strip()
     stderr = result.stderr.strip()
     parts = stdout.split("\t") if stdout else []
@@ -189,7 +206,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     window_size = parts[6].strip() if len(parts) >= 7 else ""
     window_bounds = _window_bounds_from_ax(window_position, window_size)
     window_observed = (
-        result.returncode == 0
+        result.exit_code == 0
         and bool(stdout)
         and window_count > 0
         and visible
@@ -202,7 +219,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
                 "observed_pid": observed_pid,
                 "window_query": stdout,
                 "window_query_method": "AX/System Events process window count",
-                "window_query_rc": result.returncode,
+                "window_query_rc": result.exit_code,
                 "window_query_error_class": "",
                 "window_count": window_count,
                 "window_frontmost": frontmost,
@@ -222,7 +239,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
                 "observed_pid": observed_pid,
                 "window_query": cg_result,
                 "window_query_method": "CGWindowList pid-bound on-screen window",
-                "window_query_rc": result.returncode,
+                "window_query_rc": result.exit_code,
                 "window_query_error_class": "",
                 "window_count": 1,
                 "window_frontmost": frontmost,
@@ -232,7 +249,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
                 "window_position": window_position,
                 "window_size": window_size,
                 "ax_window_query": stdout,
-                "ax_window_query_error_class": "SystemEventsInvalidIndex" if result.returncode else "",
+                "ax_window_query_error_class": "SystemEventsInvalidIndex" if result.exit_code else "",
                 "ax_window_count": window_count,
             }
         )
@@ -246,8 +263,8 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
             "observed_pid": observed_pid,
             "window_query": stdout,
             "window_query_method": "AX/System Events process window count",
-            "window_query_rc": result.returncode,
-            "window_query_error_class": "SystemEventsInvalidIndex" if result.returncode else "",
+            "window_query_rc": result.exit_code,
+            "window_query_error_class": "SystemEventsInvalidIndex" if result.exit_code else "",
             "window_count": window_count,
             "window_frontmost": frontmost,
             "window_visible": visible,
@@ -286,12 +303,7 @@ def _focus_custom_window_by_pid(
         '  return (name of p as text) & tab & (visible of p as text) & tab & (frontmost of p as text) & tab & (windowCount as text) & tab & windowPosition & tab & windowSize\n'
         'end tell\n'
     )
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_osascript(script)
     stdout = result.stdout.strip()
     parts = stdout.split("\t") if stdout else []
     visible = len(parts) >= 2 and parts[1].strip().lower() == "true"
@@ -303,13 +315,13 @@ def _focus_custom_window_by_pid(
     window_position = parts[4].strip() if len(parts) >= 5 else ""
     window_size = parts[5].strip() if len(parts) >= 6 else ""
     bounds = _window_bounds_from_ax(window_position, window_size)
-    succeeded = result.returncode == 0 and visible and frontmost and window_count > 0
+    succeeded = result.exit_code == 0 and visible and frontmost and window_count > 0
     return {
         "window_focus_action_attempted": True,
         "window_focus_action_succeeded": succeeded,
         "window_focus_query": stdout,
-        "window_focus_query_rc": result.returncode,
-        "window_focus_query_error_class": "" if result.returncode == 0 else "SystemEventsFocusFailed",
+        "window_focus_query_rc": result.exit_code,
+        "window_focus_query_error_class": "" if result.exit_code == 0 else "SystemEventsFocusFailed",
         "window_focus_stderr_bounded": result.stderr.strip()[:240],
         "window_focus_observed_pid": observed_pid,
         "window_focus_visible": visible,
@@ -422,14 +434,9 @@ def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
         '  return {name of w, hasField}\n'
         'end tell\n'
     )
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_osascript(script)
     stdout = result.stdout.strip()
-    if result.returncode != 0 or not stdout:
+    if result.exit_code != 0 or not stdout:
         return False, str(result.stderr.strip() or "ax_query_failed")
     parts = stdout.split(", ", 1)
     input_capable = len(parts) == 2 and parts[1].strip().lower() == "true"
@@ -452,14 +459,9 @@ def _ax_input_capable_by_name(
         '  return (name of p as text) & tab & (name of w as text) & tab & (hasField as text)\n'
         'end tell\n'
     )
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_osascript(script)
     stdout = result.stdout.strip()
-    if result.returncode != 0 or not stdout:
+    if result.exit_code != 0 or not stdout:
         return False, str(result.stderr.strip() or "ax_query_by_name_failed")
     parts = stdout.split("\t")
     input_capable = len(parts) >= 3 and parts[2].strip().lower() == "true"
