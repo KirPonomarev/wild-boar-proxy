@@ -22,6 +22,7 @@ test-core:
 		tests/test_truth_tree_harness.py \
 		tests/test_external_models.py \
 		tests/test_owner_surface_effect_inventory.py \
+		tests/test_process_runner.py \
 		tests/test_state_store_entry_inventory.py \
 		tests/test_state_lock_owner_policy.py \
 		tests/test_state_migration_policy.py \

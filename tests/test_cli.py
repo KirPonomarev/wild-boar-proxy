@@ -16112,6 +16112,104 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(managed_pid_file.read_text(encoding="utf-8"), "7373\n")
 
+    def test_sync_owner_path_reports_bounded_process_result_on_sync_failure(
+        self,
+    ) -> None:
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-bounded-fail.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 1,
+                "reserve_count": 0,
+                "last_error": "bounded sync failed",
+            },
+            stderr_text="sync-bounded-fail",
+            exit_code=7,
+        )
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            payload = runtime_mod.run_sync_for_owner_path_under_lock(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["exit_code"], 7)
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(process_result["machine_error_code"], "PROCESS_FAILED")
+        self.assertEqual(process_result["exit_code"], 7)
+        self.assertIn("sync-bounded-fail", process_result["stderr"])
+        self.assertFalse(process_result["stderr_truncated"])
+
+    def test_sync_owner_path_reports_bounded_process_timeout(self) -> None:
+        sync_script = self.profile_dir / "sync-timeout.sh"
+        sync_script.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+        sync_script.chmod(0o755)
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS",
+                0.2,
+            ):
+                payload = runtime_mod.run_sync_for_owner_path_under_lock(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["exit_code"], 1)
+        process_result = payload["process_result"]
+        self.assertEqual(process_result["status"], "error")
+        self.assertEqual(process_result["machine_error_code"], "PROCESS_TIMEOUT")
+        self.assertTrue(process_result["timed_out"])
+
+    def test_sync_owner_path_passes_profile_cwd_to_bounded_runner(self) -> None:
+        sync_script = self.profile_dir / "sync-cwd.sh"
+        sync_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        sync_script.chmod(0o755)
+        process_result = mock.Mock(
+            status="ok",
+            stdout="",
+            stderr="",
+            exit_code=0,
+        )
+        process_result.to_dict.return_value = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "stdout_truncated": False,
+            "stderr_truncated": False,
+            "timed_out": False,
+            "duration_seconds": 0.0,
+        }
+        with mock.patch.dict(
+            os.environ,
+            {**self.env(), "WBP_SYNC_SCRIPT": str(sync_script)},
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_bounded_process",
+                return_value=process_result,
+            ) as runner:
+                runtime_mod.run_sync_for_owner_path_under_lock(paths)
+
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], [str(sync_script), runtime_mod.get_model(paths)])
+        self.assertEqual(kwargs["cwd"], paths.profile_dir)
+        self.assertIn("WBP_PROFILE_DIR", kwargs["env"])
+        self.assertEqual(
+            kwargs["timeout_seconds"],
+            runtime_mod.OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+        )
+
     def test_accounts_demote_external_nonzero_with_verified_reserve_state_still_succeeds(
         self,
     ) -> None:

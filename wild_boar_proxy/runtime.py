@@ -42,6 +42,7 @@ from .command_effects import (
     EFFECT_REPAIR,
     validate_effect,
 )
+from .process_runner import run_bounded_process
 
 
 class RuntimeErrorInfo(Exception):
@@ -85,6 +86,8 @@ CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 PROCESS_PROBE_TIMEOUT_SECONDS = 2.0
+OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS = 120.0
+OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
@@ -13768,14 +13771,15 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
             machine_error_code="MISSING_SYNC_SCRIPT",
             operator_action="user_action",
         )
-    sync_result = subprocess.run(
+    process_result = run_bounded_process(
         [str(paths.sync_script), get_model(paths)],
-        capture_output=True,
-        text=True,
         env=build_launcher_subprocess_env(paths),
-        check=False,
+        cwd=paths.profile_dir,
+        timeout_seconds=OWNER_PATH_SYNC_PROCESS_TIMEOUT_SECONDS,
+        output_cap_bytes=OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
     )
-    emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
+    process_payload = process_result.to_dict()
+    emit_subprocess_output(stdout=process_result.stdout, stderr=process_result.stderr)
     sync_state = read_json(paths.state_file, required=False)
     sync_effective_mode = get_effective_mode(paths, sync_state)
     sync_host, sync_port, _ = get_endpoint(paths, sync_effective_mode)
@@ -13784,15 +13788,22 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         sync_effective_mode, listener_ok=sync_listener_ok
     )
     _, _, sync_reported_endpoint = get_endpoint(paths, sync_reported_effective_mode)
-    if sync_result.returncode != 0:
+    if process_result.status != "ok":
+        process_exit_code = (
+            process_result.exit_code
+            if isinstance(process_result.exit_code, int)
+            and process_result.exit_code >= 0
+            else 1
+        )
         return {
             "status": "error",
             "machine_error_code": "SYNC_FAILED",
-            "exit_code": sync_result.returncode,
+            "exit_code": process_exit_code,
             "liveness": "down" if not sync_listener_ok else "degraded",
             "operator_action": "retry",
             "effective_mode": sync_reported_effective_mode,
             "endpoint": sync_reported_endpoint,
+            "process_result": process_payload,
         }
     if not sync_listener_ok:
         return {
@@ -13803,6 +13814,7 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
             "operator_action": "retry",
             "effective_mode": sync_reported_effective_mode,
             "endpoint": sync_reported_endpoint,
+            "process_result": process_payload,
         }
     return {
         "status": "ok",
@@ -13812,6 +13824,7 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         "operator_action": "none",
         "effective_mode": sync_reported_effective_mode,
         "endpoint": sync_reported_endpoint,
+        "process_result": process_payload,
     }
 
 

@@ -339,6 +339,11 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertTrue(calls & SUBPROCESS_PRIMITIVES)
         self.assertTrue(calls & WRITE_PRIMITIVES)
 
+    def test_sync_owner_path_uses_bounded_runner_without_raw_subprocess(self) -> None:
+        calls = _call_names(_function(RUNTIME, "run_sync_for_owner_path_under_lock"))
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_account_lifecycle_surfaces_keep_declared_effect_adjacency(self) -> None:
         for name in (
             "run_onboard",
