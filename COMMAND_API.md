@@ -170,6 +170,25 @@ healthcheck owner-path recovery, fallback reconciliation, current-proxy
 adoption, last-known-good refresh, and stale pid cleanup. Any real mutation must
 be reported through `changed_files`.
 
+For Phase 1 mutation-ledger evidence, `healthcheck --repair --json` also emits
+packet-only additive fields:
+
+- `mutation_id`
+- `mutation_ledger`
+
+`changed_files` remains the compatibility field and stays `list[str]`.
+`mutation_ledger.changed_files` is the structured evidence surface with one
+record per top-level changed path. Regular files expose before/after SHA-256
+where available. Directories, missing paths, and other path kinds must not fake
+file hashes.
+
+Phase 1 does not add a persisted mutation store or rollback API. Rollback fields
+must remain non-actionable:
+
+- `rollback_available=false`
+- `rollback_id=null`
+- `rollback_phase=ledger_only`
+
 ## Severity classes
 
 - `recoverable`

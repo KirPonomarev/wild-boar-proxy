@@ -254,6 +254,8 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         )
         self.assertNotIn("deterministic_stable_recovery_result", payload)
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
+        self.assertNotIn("mutation_id", payload)
+        self.assertNotIn("mutation_ledger", payload)
         assert_no_truth_mutation(before, after)
 
     def test_healthcheck_probe_does_not_call_repair_primitives(self) -> None:
@@ -310,6 +312,83 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             "healthcheck --repair --json",
         )
         self.assertIsInstance(payload["changed_files"], list)
+        self.assertIn("mutation_id", payload)
+        self.assertIn("mutation_ledger", payload)
+        self.assertEqual(payload["mutation_ledger"]["effect"], "repair")
+        self.assertEqual(payload["mutation_ledger"]["scope"], "healthcheck_repair")
+        self.assertFalse(payload["mutation_ledger"]["rollback_available"])
+        self.assertIsNone(payload["mutation_ledger"]["rollback_id"])
+        self.assertEqual(payload["mutation_ledger"]["rollback_phase"], "ledger_only")
+
+    def test_healthcheck_repair_without_mutation_reports_not_mutated_ledger(self) -> None:
+        self.pid_file.unlink()
+
+        payload = runtime_mod.run_healthcheck(
+            self.paths,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
+            allow_stable_fallback_write=False,
+            allow_stale_pid_cleanup=False,
+            effect=runtime_mod.EFFECT_REPAIR,
+        )
+
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["mutation_ledger"]["status"], "not_mutated")
+        self.assertEqual(payload["mutation_ledger"]["changed_files"], [])
+        self.assertFalse(payload["mutation_ledger"]["rollback_available"])
+        self.assertIsNone(payload["mutation_ledger"]["rollback_id"])
+
+    def test_healthcheck_repair_temp_cleanup_ledger_reports_file_delete(self) -> None:
+        self.pid_file.unlink()
+        stale = self.managed_dir / ".wbp-tmp-state.json"
+        stale.write_text("old\n", encoding="utf-8")
+        os.utime(stale, (1, 1))
+
+        payload = runtime_mod.run_healthcheck(
+            self.paths,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
+            allow_stable_fallback_write=False,
+            allow_stale_pid_cleanup=False,
+            effect=runtime_mod.EFFECT_REPAIR,
+        )
+
+        self.assertIn(str(stale), payload["changed_files"])
+        self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
+        ledger = payload["mutation_ledger"]
+        self.assertEqual(ledger["status"], "mutated")
+        records = {
+            record["path"]: record
+            for record in ledger["changed_files"]
+        }
+        self.assertEqual(set(records), set(payload["changed_files"]))
+        record = records[str(stale)]
+        self.assertEqual(record["operation"], "delete")
+        self.assertEqual(record["before_kind"], "file")
+        self.assertEqual(record["after_kind"], "missing")
+        self.assertIsInstance(record["before_sha256"], str)
+        self.assertIsNone(record["after_sha256"])
+        self.assertFalse(stale.exists())
+
+    def test_healthcheck_repair_ledger_covers_every_top_level_changed_file(self) -> None:
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        self.assertEqual(payload["effect"], "repair")
+        ledger = payload["mutation_ledger"]
+        self.assertEqual(
+            {record["path"] for record in ledger["changed_files"]},
+            set(payload["changed_files"]),
+        )
+        if payload["changed_files"]:
+            self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
+            self.assertEqual(ledger["status"], "mutated")
+        else:
+            self.assertIsNone(payload["mutation_id"])
+            self.assertEqual(ledger["status"], "not_mutated")
 
     def test_runtime_startup_lock_recovery_preserves_same_source_lock_path(self) -> None:
         captured: dict[str, Any] = {}

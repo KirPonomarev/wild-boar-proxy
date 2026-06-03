@@ -29,12 +29,15 @@ from typing import Any
 
 from . import process_runner as _process_runner
 from . import (
+    mutation_ledger,
     state_lock,
     state_startup_contract,
     state_startup_lock,
     state_startup_recovery,
     state_startup_schema,
     state_startup_truth,
+    state_temp_prefix,
+    state_transaction,
 )
 from .command_effects import (
     EFFECT_MUTATE,
@@ -4765,6 +4768,28 @@ def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
     ]
 
 
+def healthcheck_repair_mutation_surface_candidates(paths: RuntimePaths) -> list[Path]:
+    candidates = runtime_write_surface_candidates(paths)
+    candidates.append(paths.lock_file)
+    for root in (paths.managed_dir, paths.profile_dir):
+        if not root.exists() or not root.is_dir():
+            continue
+        for child in root.iterdir():
+            if child.name.startswith(state_temp_prefix.DEFAULT_TEMP_PREFIX):
+                candidates.append(child)
+    transaction_store_dir = (
+        paths.managed_dir / state_transaction.TRANSACTION_STORE_DIRNAME
+    )
+    if transaction_store_dir.exists() and transaction_store_dir.is_dir():
+        for child in transaction_store_dir.iterdir():
+            if (
+                child.name.endswith(state_transaction.TRANSACTION_METADATA_SUFFIX)
+                or child.name.endswith(state_transaction.TRANSACTION_WORK_DIR_SUFFIX)
+            ):
+                candidates.append(child)
+    return candidates
+
+
 def run_stable_runtime_launcher_attempt(
     paths: RuntimePaths,
     selection: dict[str, Any],
@@ -8573,6 +8598,11 @@ def run_healthcheck(
     effect: str | None = None,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
+    mutation_before = (
+        mutation_ledger.snapshot_paths(healthcheck_repair_mutation_surface_candidates(paths))
+        if effect == EFFECT_REPAIR
+        else {}
+    )
     owner_command_surface = (
         "healthcheck --repair --json" if effect == EFFECT_REPAIR else "healthcheck --json"
     )
@@ -9328,6 +9358,17 @@ def run_healthcheck(
     if startup_contract_owner_result is not None:
         changed_files = _merge_changed_files(
             changed_files, startup_contract_owner_result.changed_files
+        )
+    if effect == EFFECT_REPAIR:
+        mutation_after = mutation_ledger.snapshot_paths(changed_files)
+        extra.update(
+            mutation_ledger.build_mutation_ledger_fields(
+                effect=EFFECT_REPAIR,
+                scope="healthcheck_repair",
+                changed_files=changed_files,
+                before=mutation_before,
+                after=mutation_after,
+            )
         )
 
     return build_command_payload(
