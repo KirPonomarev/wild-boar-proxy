@@ -9739,18 +9739,21 @@ def run_healthcheck_probe(
     )
 
 
+def _healthcheck_repair_dependencies() -> Any:
+    from .runtime_repair import HealthcheckRepairDependencies
+
+    return HealthcheckRepairDependencies(run_healthcheck=run_healthcheck)
+
+
 def run_healthcheck_repair(
     paths: RuntimePaths, model: str | None = None
 ) -> dict[str, Any]:
-    return run_healthcheck(
+    from .runtime_repair import run_healthcheck_repair as _run_healthcheck_repair
+
+    return _run_healthcheck_repair(
         paths,
         model,
-        allow_recovery=True,
-        allow_last_known_good_proxy_write=True,
-        allow_current_proxy_auto_adoption=True,
-        allow_stable_fallback_write=True,
-        allow_stale_pid_cleanup=True,
-        effect=EFFECT_REPAIR,
+        dependencies=_healthcheck_repair_dependencies(),
     )
 
 

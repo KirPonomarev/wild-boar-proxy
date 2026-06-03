@@ -13,6 +13,7 @@ from typing import Any
 from wild_boar_proxy import runtime as runtime_mod
 from wild_boar_proxy import runtime_health
 from wild_boar_proxy import runtime_modes
+from wild_boar_proxy import runtime_repair
 from wild_boar_proxy import runtime_status
 
 
@@ -75,6 +76,28 @@ FORBIDDEN_IMPORT_PREFIXES_BY_MODULE = {
         "wild_boar_proxy.web_design_ui",
         "wild_boar_proxy.web_ui",
     ),
+    "wild_boar_proxy.runtime_repair": (
+        "tools",
+        "wild_boar_proxy.accounts_lifecycle",
+        "wild_boar_proxy.cli",
+        "wild_boar_proxy.mutation_ledger",
+        "wild_boar_proxy.operator_surface",
+        "wild_boar_proxy.process_runner",
+        "wild_boar_proxy.runtime",
+        "wild_boar_proxy.runtime_health",
+        "wild_boar_proxy.runtime_status",
+        "wild_boar_proxy.state_startup_contract",
+        "wild_boar_proxy.state_startup_lock",
+        "wild_boar_proxy.state_startup_recovery",
+        "wild_boar_proxy.state_startup_schema",
+        "wild_boar_proxy.state_startup_truth",
+        "wild_boar_proxy.state_transaction",
+        "wild_boar_proxy.web",
+        "wild_boar_proxy.web_design_command_adapter",
+        "wild_boar_proxy.web_design_live_server",
+        "wild_boar_proxy.web_design_ui",
+        "wild_boar_proxy.web_ui",
+    ),
     "wild_boar_proxy.runtime_status": (
         "tools",
         "wild_boar_proxy.accounts_lifecycle",
@@ -104,6 +127,7 @@ RUNTIME_MODULE_PATHS = {
     "wild_boar_proxy.runtime": REPO_ROOT / "wild_boar_proxy" / "runtime.py",
     "wild_boar_proxy.runtime_health": REPO_ROOT / "wild_boar_proxy" / "runtime_health.py",
     "wild_boar_proxy.runtime_modes": REPO_ROOT / "wild_boar_proxy" / "runtime_modes.py",
+    "wild_boar_proxy.runtime_repair": REPO_ROOT / "wild_boar_proxy" / "runtime_repair.py",
     "wild_boar_proxy.runtime_status": REPO_ROOT / "wild_boar_proxy" / "runtime_status.py",
 }
 
@@ -448,6 +472,30 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ["wild_boar_proxy.mutation_ledger"],
         )
 
+    def test_detector_flags_repair_runtime_import(self) -> None:
+        source = "from . import runtime\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_repair"),
+            ["wild_boar_proxy.runtime"],
+        )
+
+    def test_detector_flags_repair_health_import(self) -> None:
+        source = "from . import runtime_health\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_repair"),
+            ["wild_boar_proxy.runtime_health"],
+        )
+
+    def test_detector_flags_repair_mutation_layer_import(self) -> None:
+        source = "from . import mutation_ledger\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_repair"),
+            ["wild_boar_proxy.mutation_ledger"],
+        )
+
     def test_runtime_split_modules_do_not_import_forbidden_layers(self) -> None:
         for module_name, path in RUNTIME_MODULE_PATHS.items():
             with self.subTest(module=module_name):
@@ -488,6 +536,59 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         }
 
         self.assertEqual(calls & forbidden, set())
+
+    def test_runtime_repair_wrapper_does_not_call_repair_primitives_directly(self) -> None:
+        source = RUNTIME_MODULE_PATHS["wild_boar_proxy.runtime_repair"].read_text(
+            encoding="utf-8"
+        )
+        calls = _call_names(source)
+        forbidden = {
+            "clear_stale_managed_pid_if_needed",
+            "reconcile_stable_fallback",
+            "refresh_last_known_good_proxy_from_healthcheck",
+            "run_current_proxy_owner_path_activation",
+            "run_stable_runtime_launcher_attempt",
+            "run_startup_contract_repair_owner_path",
+            "write_stable_runtime_consumer_snapshot",
+        }
+
+        self.assertEqual(calls & forbidden, set())
+
+    def test_runtime_repair_wrapper_passes_exact_repair_flags(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_healthcheck(*args: object, **kwargs: object) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"effect": "repair", "changed_files": ["state.json"]}
+
+        dependencies = runtime_repair.HealthcheckRepairDependencies(
+            run_healthcheck=fake_run_healthcheck
+        )
+
+        payload = runtime_repair.run_healthcheck_repair(
+            "paths-sentinel",
+            "gpt-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], ["state.json"])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "gpt-sentinel"),
+                    {
+                        "allow_recovery": True,
+                        "allow_last_known_good_proxy_write": True,
+                        "allow_current_proxy_auto_adoption": True,
+                        "allow_stable_fallback_write": True,
+                        "allow_stale_pid_cleanup": True,
+                        "effect": "repair",
+                    },
+                )
+            ],
+        )
 
     def test_runtime_health_probe_wrapper_passes_exact_probe_flags(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []

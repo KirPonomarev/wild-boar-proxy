@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
 RUNTIME_HEALTH = ROOT / "wild_boar_proxy" / "runtime_health.py"
+RUNTIME_REPAIR = ROOT / "wild_boar_proxy" / "runtime_repair.py"
 EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
 CREDENTIALS = ROOT / "wild_boar_proxy" / "external_models" / "credentials.py"
 CLI = ROOT / "wild_boar_proxy" / "cli.py"
@@ -145,7 +146,7 @@ OWNER_SURFACES = {
         frozenset({"run_healthcheck"}),
     ),
     "run_healthcheck_repair": Surface(
-        RUNTIME,
+        RUNTIME_REPAIR,
         "run_healthcheck_repair",
         REPAIR,
         frozenset({"run_healthcheck"}),
@@ -241,7 +242,7 @@ KNOWN_EFFECT_CONTRACT_GAPS = {
         '"effect"',
     ),
     "healthcheck_repair_missing_mutation_metadata": (
-        RUNTIME,
+        RUNTIME_REPAIR,
         "run_healthcheck_repair",
         "mutation_id",
     ),
@@ -311,7 +312,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "summarize_status"),
                 (RUNTIME, "run_healthcheck"),
                 (RUNTIME_HEALTH, "run_healthcheck_probe"),
-                (RUNTIME, "run_healthcheck_repair"),
+                (RUNTIME_REPAIR, "run_healthcheck_repair"),
                 (RUNTIME, "run_onboard"),
                 (RUNTIME, "run_promote"),
                 (RUNTIME, "run_demote"),
