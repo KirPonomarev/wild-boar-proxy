@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
+ACCOUNTS_LIFECYCLE = ROOT / "wild_boar_proxy" / "accounts_lifecycle.py"
 RUNTIME_HEALTH = ROOT / "wild_boar_proxy" / "runtime_health.py"
 RUNTIME_REPAIR = ROOT / "wild_boar_proxy" / "runtime_repair.py"
 EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
@@ -190,13 +191,13 @@ OWNER_SURFACES = {
         ),
     ),
     "run_hold": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_hold",
         SUBPROCESS_ADJACENT,
         frozenset({"run_protective_lifecycle_owner_path"}),
     ),
     "run_release": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_release",
         SUBPROCESS_ADJACENT,
         frozenset({"run_protective_lifecycle_owner_path"}),
@@ -316,8 +317,8 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "run_onboard"),
                 (RUNTIME, "run_promote"),
                 (RUNTIME, "run_demote"),
-                (RUNTIME, "run_hold"),
-                (RUNTIME, "run_release"),
+                (ACCOUNTS_LIFECYCLE, "run_hold"),
+                (ACCOUNTS_LIFECYCLE, "run_release"),
                 (RUNTIME, "run_retire"),
                 (EXTERNAL_MODELS, "_run_credentials_command"),
                 (CLI, "main"),

@@ -14386,6 +14386,14 @@ def observe_status_proof_for_owner_path_under_lock(
     return status_payload, summarize_owner_path_status_observation(status_payload)
 
 
+def _accounts_lifecycle_dependencies() -> Any:
+    from .accounts_lifecycle import AccountLifecycleDependencies
+
+    return AccountLifecycleDependencies(
+        run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path
+    )
+
+
 def run_hold(
     paths: RuntimePaths,
     backend_id: str,
@@ -14393,17 +14401,25 @@ def run_hold(
     *,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    return run_protective_lifecycle_owner_path(
+    from .accounts_lifecycle import run_hold as _run_hold
+
+    return _run_hold(
         paths,
         backend_id,
-        action="hold",
-        reason=reason,
+        reason,
         dry_run=dry_run,
+        dependencies=_accounts_lifecycle_dependencies(),
     )
 
 
 def run_release(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
-    return run_protective_lifecycle_owner_path(paths, backend_id, action="release")
+    from .accounts_lifecycle import run_release as _run_release
+
+    return _run_release(
+        paths,
+        backend_id,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
 
 
 def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:

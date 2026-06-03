@@ -9,7 +9,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
+from wild_boar_proxy import accounts_lifecycle
 from wild_boar_proxy import runtime as runtime_mod
 from wild_boar_proxy import runtime_health
 from wild_boar_proxy import runtime_modes
@@ -20,6 +22,21 @@ from wild_boar_proxy import runtime_status
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 FORBIDDEN_IMPORT_PREFIXES_BY_MODULE = {
+    "wild_boar_proxy.accounts_lifecycle": (
+        "tools",
+        "wild_boar_proxy.cli",
+        "wild_boar_proxy.operator_surface",
+        "wild_boar_proxy.runtime",
+        "wild_boar_proxy.runtime_health",
+        "wild_boar_proxy.runtime_modes",
+        "wild_boar_proxy.runtime_repair",
+        "wild_boar_proxy.runtime_status",
+        "wild_boar_proxy.web",
+        "wild_boar_proxy.web_design_command_adapter",
+        "wild_boar_proxy.web_design_live_server",
+        "wild_boar_proxy.web_design_ui",
+        "wild_boar_proxy.web_ui",
+    ),
     "wild_boar_proxy.runtime_errors": (
         "tools",
         "wild_boar_proxy.cli",
@@ -123,6 +140,9 @@ FORBIDDEN_IMPORT_PREFIXES_BY_MODULE = {
 }
 
 RUNTIME_MODULE_PATHS = {
+    "wild_boar_proxy.accounts_lifecycle": REPO_ROOT
+    / "wild_boar_proxy"
+    / "accounts_lifecycle.py",
     "wild_boar_proxy.runtime_errors": REPO_ROOT / "wild_boar_proxy" / "runtime_errors.py",
     "wild_boar_proxy.runtime": REPO_ROOT / "wild_boar_proxy" / "runtime.py",
     "wild_boar_proxy.runtime_health": REPO_ROOT / "wild_boar_proxy" / "runtime_health.py",
@@ -496,6 +516,14 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ["wild_boar_proxy.mutation_ledger"],
         )
 
+    def test_detector_flags_accounts_lifecycle_runtime_import(self) -> None:
+        source = "from . import runtime\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.accounts_lifecycle"),
+            ["wild_boar_proxy.runtime"],
+        )
+
     def test_runtime_split_modules_do_not_import_forbidden_layers(self) -> None:
         for module_name, path in RUNTIME_MODULE_PATHS.items():
             with self.subTest(module=module_name):
@@ -553,6 +581,149 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         }
 
         self.assertEqual(calls & forbidden, set())
+
+    def test_accounts_lifecycle_wrapper_does_not_call_owner_primitives_directly(
+        self,
+    ) -> None:
+        source = RUNTIME_MODULE_PATHS["wild_boar_proxy.accounts_lifecycle"].read_text(
+            encoding="utf-8"
+        )
+        calls = _call_names(source)
+        forbidden = {
+            "dual_lock",
+            "serialized_lock",
+            "run_bounded_process",
+            "run_sync_for_owner_path_under_lock",
+            "observe_status_proof_for_owner_path_under_lock",
+        }
+
+        self.assertEqual(calls & forbidden, set())
+
+    def test_accounts_lifecycle_hold_wrapper_passes_exact_owner_path_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_protective_owner_path(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "action": kwargs["action"],
+                "dry_run": kwargs["dry_run"],
+            }
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=fake_run_protective_owner_path
+        )
+
+        payload = accounts_lifecycle.run_hold(
+            "paths-sentinel",
+            "backend-sentinel",
+            "reason-sentinel",
+            dry_run=True,
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["action"], "hold")
+        self.assertIs(payload["dry_run"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "backend-sentinel"),
+                    {
+                        "action": "hold",
+                        "reason": "reason-sentinel",
+                        "dry_run": True,
+                    },
+                )
+            ],
+        )
+
+    def test_accounts_lifecycle_release_wrapper_passes_exact_owner_path_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_protective_owner_path(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"status": "ok", "action": kwargs["action"]}
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=fake_run_protective_owner_path
+        )
+
+        payload = accounts_lifecycle.run_release(
+            "paths-sentinel",
+            "backend-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["action"], "release")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "backend-sentinel"),
+                    {
+                        "action": "release",
+                    },
+                )
+            ],
+        )
+
+    def test_accounts_lifecycle_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_protective_owner_path(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"status": "ok", "action": kwargs["action"]}
+
+        with mock.patch.object(
+            runtime_mod,
+            "run_protective_lifecycle_owner_path",
+            side_effect=fake_run_protective_owner_path,
+        ):
+            hold_payload = runtime_mod.run_hold(
+                "paths-sentinel",
+                "backend-hold",
+                "reason-sentinel",
+                dry_run=True,
+            )
+            release_payload = runtime_mod.run_release(
+                "paths-sentinel",
+                "backend-release",
+            )
+
+        self.assertEqual(hold_payload["action"], "hold")
+        self.assertEqual(release_payload["action"], "release")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "backend-hold"),
+                    {
+                        "action": "hold",
+                        "reason": "reason-sentinel",
+                        "dry_run": True,
+                    },
+                ),
+                (
+                    ("paths-sentinel", "backend-release"),
+                    {
+                        "action": "release",
+                    },
+                ),
+            ],
+        )
 
     def test_runtime_repair_wrapper_passes_exact_repair_flags(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
