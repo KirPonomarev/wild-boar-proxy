@@ -7,7 +7,8 @@ import argparse
 import html
 import json
 import os
-import subprocess
+import shutil
+from subprocess import SubprocessError
 import sys
 from collections import deque
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from .external_models.paths import ExternalModelsPaths
+from .process_runner import PROCESS_OK, start_detached_process
 from .ui_shell import (
     AccountPoolSnapshot,
     ExternalActionResult,
@@ -41,6 +43,9 @@ from .ui_shell import (
     run_stable_repair_and_refresh,
     run_sync_and_refresh,
 )
+
+SUPPORT_OPENER_RUNTIME_PATH = "/usr/bin:/bin:/usr/local/bin"
+SUPPORT_OPENER_CWD = Path("/")
 
 
 @dataclass(frozen=True)
@@ -104,7 +109,7 @@ def load_dashboard_state(
     try:
         runtime = load_runtime_snapshot(runner)
         accounts = load_account_pool_snapshot(runner)
-    except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+    except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(
             str(exc),
             flash=flash or "Не удалось обновить панель управления.",
@@ -112,7 +117,7 @@ def load_dashboard_state(
         )
     try:
         external_models = load_external_models_snapshot(runner)
-    except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+    except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
         external_models = ExternalModelsSnapshot.integration_failure(str(exc))
         external_action = mark_external_action_stale(
             external_action,
@@ -129,16 +134,51 @@ def load_dashboard_state(
     )
 
 
-def _default_support_opener(target: Path) -> None:
+def _support_opener_env() -> dict[str, str]:
+    return {
+        "PATH": SUPPORT_OPENER_RUNTIME_PATH,
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+        "no_proxy": "127.0.0.1,localhost,::1",
+    }
+
+
+def _resolve_support_opener_binary(name: str, default_path: Path) -> str | None:
+    if default_path.is_file() and os.access(default_path, os.X_OK):
+        return str(default_path)
+    found = shutil.which(name, path=SUPPORT_OPENER_RUNTIME_PATH)
+    if not found:
+        return None
+    candidate = Path(found)
+    if not candidate.is_absolute() or not candidate.is_file() or not os.access(candidate, os.X_OK):
+        return None
+    return str(candidate)
+
+
+def _support_opener_command(target: Path) -> list[str]:
     if sys.platform == "darwin":
-        command = ["open", str(target)]
-        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return
+        open_bin = _resolve_support_opener_binary("open", Path("/usr/bin/open"))
+        if open_bin is None:
+            raise UiShellError("Support opener is unavailable: open")
+        return [open_bin, str(target)]
+    xdg_open_bin = _resolve_support_opener_binary("xdg-open", Path("/usr/bin/xdg-open"))
+    if xdg_open_bin is None:
+        raise UiShellError("Support opener is unavailable: xdg-open")
+    return [xdg_open_bin, str(target)]
+
+
+def _default_support_opener(target: Path) -> None:
     if os.name == "nt":
         os.startfile(str(target))  # type: ignore[attr-defined]
         return
-    command = ["xdg-open", str(target)]
-    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = start_detached_process(
+        _support_opener_command(target),
+        env=_support_opener_env(),
+        cwd=SUPPORT_OPENER_CWD,
+    )
+    if result.machine_error_code != PROCESS_OK:
+        raise UiShellError(
+            f"Support opener dispatch failed: {result.machine_error_code}"
+        )
 
 
 def _support_targets(
@@ -563,7 +603,7 @@ def apply_action(
                 flash=_action_flash(payload),
                 external_action=stale_external_action,
             )
-    except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+    except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(
             str(exc),
             flash=f"Действие завершилось с ошибкой: {exc}",

@@ -8,6 +8,7 @@ import socket
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
     AccountPoolSnapshot,
@@ -24,6 +25,7 @@ from wild_boar_proxy.web_ui import (
     DashboardState,
     UiEvent,
     WildBoarWebUi,
+    _default_support_opener,
     apply_action,
     build_handler,
     load_dashboard_state,
@@ -629,6 +631,86 @@ class WebUiTests(unittest.TestCase):
         assert state.external_action is not None
         self.assertTrue(state.external_action.is_stale)
         self.assertEqual(state.external_action.stale_reason, "support_action")
+
+    def test_default_support_opener_dispatches_macos_open_via_detached_runner(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake_start_detached_process(command: list[str], **kwargs: object) -> mock.Mock:
+            calls.append({"command": command, "kwargs": kwargs})
+            return mock.Mock(machine_error_code="OK")
+
+        with (
+            mock.patch("wild_boar_proxy.web_ui.sys.platform", "darwin"),
+            mock.patch(
+                "wild_boar_proxy.web_ui._resolve_support_opener_binary",
+                return_value="/usr/bin/open",
+            ),
+            mock.patch(
+                "wild_boar_proxy.web_ui.start_detached_process",
+                side_effect=fake_start_detached_process,
+            ),
+        ):
+            _default_support_opener(Path("/tmp/support-target"))
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["command"], ["/usr/bin/open", "/tmp/support-target"])
+        kwargs = calls[0]["kwargs"]
+        self.assertIn("env", kwargs)
+        env = kwargs["env"]
+        self.assertIsInstance(env, dict)
+        self.assertEqual(env["PATH"], "/usr/bin:/bin:/usr/local/bin")
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("CODEX_HOME", env)
+
+    def test_default_support_opener_dispatches_xdg_open_via_detached_runner(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake_start_detached_process(command: list[str], **kwargs: object) -> mock.Mock:
+            calls.append({"command": command, "kwargs": kwargs})
+            return mock.Mock(machine_error_code="OK")
+
+        with (
+            mock.patch("wild_boar_proxy.web_ui.sys.platform", "linux"),
+            mock.patch("wild_boar_proxy.web_ui.os.name", "posix"),
+            mock.patch(
+                "wild_boar_proxy.web_ui._resolve_support_opener_binary",
+                return_value="/usr/bin/xdg-open",
+            ),
+            mock.patch(
+                "wild_boar_proxy.web_ui.start_detached_process",
+                side_effect=fake_start_detached_process,
+            ),
+        ):
+            _default_support_opener(Path("/tmp/support-target"))
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["command"], ["/usr/bin/xdg-open", "/tmp/support-target"])
+
+    def test_apply_action_support_open_failure_does_not_return_success_flash(self) -> None:
+        with (
+            mock.patch("wild_boar_proxy.web_ui.sys.platform", "linux"),
+            mock.patch("wild_boar_proxy.web_ui.os.name", "posix"),
+            mock.patch(
+                "wild_boar_proxy.web_ui._resolve_support_opener_binary",
+                return_value="/usr/bin/xdg-open",
+            ),
+            mock.patch(
+                "wild_boar_proxy.web_ui.start_detached_process",
+                return_value=mock.Mock(machine_error_code="PROCESS_FAILED"),
+            ),
+        ):
+            state = apply_action(
+                FakeRunner(),
+                {"action": "external_open_root_dir"},
+                current_external_action=external_action(),
+            )
+
+        self.assertNotIn("Opened support target:", state.flash)
+        self.assertIn("Support opener dispatch failed", state.flash)
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "refresh_failed")
 
     def test_load_dashboard_state_preserves_stale_external_action_on_integration_failure(self) -> None:
         class BrokenRunner(FakeRunner):
