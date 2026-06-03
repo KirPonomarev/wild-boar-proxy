@@ -14390,7 +14390,9 @@ def _accounts_lifecycle_dependencies() -> Any:
     from .accounts_lifecycle import AccountLifecycleDependencies
 
     return AccountLifecycleDependencies(
-        run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path
+        run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path,
+        run_demote_impl=_run_demote_impl,
+        run_retire_impl=_run_retire_impl,
     )
 
 
@@ -14423,6 +14425,16 @@ def run_release(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
 
 
 def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    from .accounts_lifecycle import run_demote as _run_demote
+
+    return _run_demote(
+        paths,
+        backend_id,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
+
+
+def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(
             f"Missing accounts command: {paths.accounts_bin}",
@@ -14880,7 +14892,18 @@ def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             extra=success_extra or None,
         )
 
+
 def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    from .accounts_lifecycle import run_retire as _run_retire
+
+    return _run_retire(
+        paths,
+        backend_id,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
+
+
+def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(
             f"Missing accounts command: {paths.accounts_bin}",

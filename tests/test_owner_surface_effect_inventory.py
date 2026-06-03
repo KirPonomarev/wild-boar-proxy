@@ -178,17 +178,10 @@ OWNER_SURFACES = {
         ),
     ),
     "run_demote": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_demote",
         SUBPROCESS_ADJACENT,
-        frozenset(
-            {
-                "serialized_lock",
-                "run_bounded_process",
-                "run_sync_for_owner_path_under_lock",
-                "observe_status_proof_for_owner_path_under_lock",
-            }
-        ),
+        frozenset({"run_demote_impl"}),
     ),
     "run_hold": Surface(
         ACCOUNTS_LIFECYCLE,
@@ -203,17 +196,10 @@ OWNER_SURFACES = {
         frozenset({"run_protective_lifecycle_owner_path"}),
     ),
     "run_retire": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_retire",
         SUBPROCESS_ADJACENT,
-        frozenset(
-            {
-                "serialized_lock",
-                "run_bounded_process",
-                "run_sync_for_owner_path_under_lock",
-                "observe_status_proof_for_owner_path_under_lock",
-            }
-        ),
+        frozenset({"run_retire_impl"}),
     ),
     "_run_credentials_command": Surface(
         EXTERNAL_MODELS,
@@ -316,10 +302,10 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME_REPAIR, "run_healthcheck_repair"),
                 (RUNTIME, "run_onboard"),
                 (RUNTIME, "run_promote"),
-                (RUNTIME, "run_demote"),
+                (ACCOUNTS_LIFECYCLE, "run_demote"),
                 (ACCOUNTS_LIFECYCLE, "run_hold"),
                 (ACCOUNTS_LIFECYCLE, "run_release"),
-                (RUNTIME, "run_retire"),
+                (ACCOUNTS_LIFECYCLE, "run_retire"),
                 (EXTERNAL_MODELS, "_run_credentials_command"),
                 (CLI, "main"),
             },
@@ -395,7 +381,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
     def test_demote_and_retire_use_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:
-        for name in ("run_demote", "run_retire"):
+        for name in ("_run_demote_impl", "_run_retire_impl"):
             with self.subTest(function=name):
                 calls = _call_names(_function(RUNTIME, name))
                 self.assertIn("serialized_lock", calls)
@@ -488,7 +474,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
 
-        for name in ("run_hold", "run_release"):
+        for name in ("run_demote", "run_hold", "run_release", "run_retire"):
             surface = OWNER_SURFACES[name]
             with self.subTest(function=f"{surface.function}_delegates"):
                 calls = _call_names(_function(surface.path, surface.function))

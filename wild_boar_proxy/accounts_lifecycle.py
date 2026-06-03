@@ -14,6 +14,8 @@ class AccountLifecyclePaths(Protocol):
 @dataclass(frozen=True)
 class AccountLifecycleDependencies:
     run_protective_lifecycle_owner_path: Callable[..., dict[str, Any]]
+    run_demote_impl: Callable[..., dict[str, Any]]
+    run_retire_impl: Callable[..., dict[str, Any]]
 
 
 def run_hold(
@@ -44,3 +46,21 @@ def run_release(
         backend_id,
         action="release",
     )
+
+
+def run_demote(
+    paths: AccountLifecyclePaths,
+    backend_id: str,
+    *,
+    dependencies: AccountLifecycleDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_demote_impl(paths, backend_id)
+
+
+def run_retire(
+    paths: AccountLifecyclePaths,
+    backend_id: str,
+    *,
+    dependencies: AccountLifecycleDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_retire_impl(paths, backend_id)

@@ -615,7 +615,9 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             }
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
-            run_protective_lifecycle_owner_path=fake_run_protective_owner_path
+            run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_retire_impl=lambda *args, **kwargs: {},
         )
 
         payload = accounts_lifecycle.run_hold(
@@ -655,7 +657,9 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             return {"status": "ok", "action": kwargs["action"]}
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
-            run_protective_lifecycle_owner_path=fake_run_protective_owner_path
+            run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_retire_impl=lambda *args, **kwargs: {},
         )
 
         payload = accounts_lifecycle.run_release(
@@ -721,6 +725,116 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                     {
                         "action": "release",
                     },
+                ),
+            ],
+        )
+
+    def test_accounts_lifecycle_demote_wrapper_passes_exact_impl_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_demote_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"status": "ok", "transition": "demote"}
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
+            run_demote_impl=fake_run_demote_impl,
+            run_retire_impl=lambda *args, **kwargs: {},
+        )
+
+        payload = accounts_lifecycle.run_demote(
+            "paths-sentinel",
+            "backend-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["transition"], "demote")
+        self.assertEqual(calls, [(("paths-sentinel", "backend-sentinel"), {})])
+
+    def test_accounts_lifecycle_retire_wrapper_passes_exact_impl_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_retire_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"status": "ok", "transition": "retire"}
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_retire_impl=fake_run_retire_impl,
+        )
+
+        payload = accounts_lifecycle.run_retire(
+            "paths-sentinel",
+            "backend-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["transition"], "retire")
+        self.assertEqual(calls, [(("paths-sentinel", "backend-sentinel"), {})])
+
+    def test_accounts_lifecycle_demote_retire_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+        def fake_lifecycle_run_demote(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append(("demote", args, kwargs))
+            return {"status": "ok", "transition": "demote"}
+
+        def fake_lifecycle_run_retire(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append(("retire", args, kwargs))
+            return {"status": "ok", "transition": "retire"}
+
+        with (
+            mock.patch.object(
+                accounts_lifecycle,
+                "run_demote",
+                side_effect=fake_lifecycle_run_demote,
+            ),
+            mock.patch.object(
+                accounts_lifecycle,
+                "run_retire",
+                side_effect=fake_lifecycle_run_retire,
+            ),
+        ):
+            demote_payload = runtime_mod.run_demote(
+                "paths-sentinel",
+                "backend-demote",
+            )
+            retire_payload = runtime_mod.run_retire(
+                "paths-sentinel",
+                "backend-retire",
+            )
+
+        self.assertEqual(demote_payload["transition"], "demote")
+        self.assertEqual(retire_payload["transition"], "retire")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "demote",
+                    ("paths-sentinel", "backend-demote"),
+                    {"dependencies": runtime_mod._accounts_lifecycle_dependencies()},
+                ),
+                (
+                    "retire",
+                    ("paths-sentinel", "backend-retire"),
+                    {"dependencies": runtime_mod._accounts_lifecycle_dependencies()},
                 ),
             ],
         )
