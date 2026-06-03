@@ -43,7 +43,13 @@ from wild_boar_proxy.operator_surface import (
     run_process_isolation_proof,
     select_server_issued_model,
 )
-from wild_boar_proxy.process_runner import BoundedProcessResult
+from wild_boar_proxy.process_runner import (
+    BoundedProcessResult,
+    ObservedBoundedProcessResult,
+    PROCESS_FAILED,
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+)
 
 
 def bounded_completed(
@@ -76,6 +82,32 @@ def bounded_timeout(*, stderr: str = "timed out") -> BoundedProcessResult:
         stderr_truncated=False,
         timed_out=True,
         duration_seconds=OPERATOR_OBSERVATION_TIMEOUT_SECONDS,
+    )
+
+
+def observed_completed(
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    timed_out: bool = False,
+    machine_error_code: str | None = None,
+    pid: int | None = 12345,
+) -> ObservedBoundedProcessResult:
+    code = machine_error_code or (
+        PROCESS_TIMEOUT if timed_out else PROCESS_OK if returncode == 0 else PROCESS_FAILED
+    )
+    return ObservedBoundedProcessResult(
+        status="ok" if code == PROCESS_OK else "error",
+        machine_error_code=code,
+        exit_code=None if timed_out else returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=timed_out,
+        duration_seconds=0.01,
+        pid=pid,
     )
 
 
@@ -151,6 +183,153 @@ class OperatorSurfaceTests(unittest.TestCase):
             "HOME",
         ):
             self.assertNotIn(key, env)
+
+    def test_run_command_with_observation_uses_observed_runner_and_preserves_packet_shape(
+        self,
+    ) -> None:
+        started_pids: list[int] = []
+        stopped = False
+
+        class FakeObserver:
+            def __init__(
+                self,
+                *,
+                root_pid: int,
+                allowed_local_endpoints: set[str],
+            ) -> None:
+                self.root_pid = root_pid
+                self.allowed_local_endpoints = allowed_local_endpoints
+
+            def start(self) -> None:
+                started_pids.append(self.root_pid)
+
+            def stop(self) -> None:
+                nonlocal stopped
+                stopped = True
+
+            def packet(self, *, warning_classes: list[str]) -> dict[str, object]:
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 1,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": sorted(self.allowed_local_endpoints),
+                    "allowed_local_endpoint_observed": True,
+                    "peer_endpoints": [],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                    "warning_classes": warning_classes,
+                }
+
+        def fake_run_observed_bounded_process(
+            command: list[str],
+            *,
+            cwd: str,
+            env: dict[str, str],
+            stdin_text: str,
+            timeout_seconds: int,
+            on_start,
+        ) -> ObservedBoundedProcessResult:
+            self.assertEqual(command, ["/bin/echo"])
+            self.assertEqual(cwd, "/tmp/work")
+            self.assertEqual(env, {"PATH": "/usr/bin:/bin"})
+            self.assertEqual(stdin_text, "hello")
+            self.assertEqual(timeout_seconds, 7)
+            on_start(2222)
+            return observed_completed(stderr="remote sync failed")
+
+        with (
+            mock.patch(
+                "wild_boar_proxy.operator_surface.run_observed_bounded_process",
+                side_effect=fake_run_observed_bounded_process,
+            ),
+            mock.patch(
+                "wild_boar_proxy.operator_surface.OwnerSideProcessNetworkObserver",
+                FakeObserver,
+            ),
+        ):
+            packet = _run_command_with_observation(
+                ["/bin/echo"],
+                cwd="/tmp/work",
+                env={"PATH": "/usr/bin:/bin"},
+                prompt="hello",
+                timeout_seconds=7,
+                allowed_local_endpoints={"127.0.0.1:8318"},
+                warning_classes_from_stderr=lambda text: ["remote_plugin_sync_401"]
+                if "remote sync" in text
+                else [],
+            )
+
+        self.assertEqual(started_pids, [2222])
+        self.assertTrue(stopped)
+        self.assertEqual(packet["exit_code"], 0)
+        self.assertEqual(packet["stderr"], "remote sync failed")
+        self.assertFalse(packet["timed_out"])
+        self.assertEqual(packet["machine_error_code"], PROCESS_OK)
+        self.assertEqual(packet["process_runner_status"], "ok")
+        observation = packet["process_network_observation_packet"]
+        self.assertEqual(observation["status"], "ok")
+        self.assertEqual(observation["warning_classes"], ["remote_plugin_sync_401"])
+
+    def test_run_command_with_observation_reports_start_failure_without_green_observation(
+        self,
+    ) -> None:
+        with mock.patch(
+            "wild_boar_proxy.operator_surface.run_observed_bounded_process",
+            return_value=observed_completed(
+                returncode=127,
+                stderr="missing",
+                machine_error_code=PROCESS_FAILED,
+                pid=None,
+            ),
+        ):
+            packet = _run_command_with_observation(
+                ["/missing"],
+                cwd="/tmp/work",
+                env={"PATH": "/usr/bin:/bin"},
+                prompt="hello",
+                timeout_seconds=7,
+                allowed_local_endpoints={"127.0.0.1:8318"},
+            )
+
+        self.assertEqual(packet["exit_code"], 127)
+        self.assertEqual(packet["stderr"], "missing")
+        self.assertFalse(packet["timed_out"])
+        self.assertEqual(packet["machine_error_code"], PROCESS_FAILED)
+        observation = packet["process_network_observation_packet"]
+        self.assertEqual(observation["status"], "error")
+        self.assertEqual(observation["machine_error_code"], PROCESS_FAILED)
+        self.assertEqual(observation["classification"], "insufficient_observation")
+        self.assertFalse(observation["direct_non_wbp_model_egress_absent_proven"])
+        self.assertFalse(observation["raw_pid_exposed"])
+
+    def test_run_command_with_observation_reports_timeout_from_runner(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.operator_surface.run_observed_bounded_process",
+            return_value=observed_completed(
+                stderr="timed out",
+                timed_out=True,
+                machine_error_code=PROCESS_TIMEOUT,
+            ),
+        ):
+            packet = _run_command_with_observation(
+                ["/bin/sleep"],
+                cwd="/tmp/work",
+                env={"PATH": "/usr/bin:/bin"},
+                prompt="hello",
+                timeout_seconds=1,
+                allowed_local_endpoints={"127.0.0.1:8318"},
+            )
+
+        self.assertEqual(packet["exit_code"], 127)
+        self.assertEqual(packet["stderr"], "timed out")
+        self.assertTrue(packet["timed_out"])
+        self.assertEqual(packet["machine_error_code"], PROCESS_TIMEOUT)
 
     def test_run_wbp_uses_bounded_runner_with_expected_command_cwd_env_timeout_cap(
         self,

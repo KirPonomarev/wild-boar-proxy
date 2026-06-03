@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Any, Mapping, Sequence, TextIO
+from typing import Any, Callable, Mapping, Sequence, TextIO
 
 PROCESS_NOT_FOUND = "PROCESS_NOT_FOUND"
 PROCESS_TIMEOUT = "PROCESS_TIMEOUT"
@@ -48,6 +48,34 @@ class BoundedProcessResult:
             "stderr_truncated": self.stderr_truncated,
             "timed_out": self.timed_out,
             "duration_seconds": self.duration_seconds,
+        }
+
+
+@dataclass(frozen=True)
+class ObservedBoundedProcessResult:
+    status: str
+    machine_error_code: str
+    exit_code: int | None
+    stdout: str
+    stderr: str
+    stdout_truncated: bool
+    stderr_truncated: bool
+    timed_out: bool
+    duration_seconds: float
+    pid: int | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "machine_error_code": self.machine_error_code,
+            "exit_code": self.exit_code,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "stdout_truncated": self.stdout_truncated,
+            "stderr_truncated": self.stderr_truncated,
+            "timed_out": self.timed_out,
+            "duration_seconds": self.duration_seconds,
+            "pid": self.pid,
         }
 
 
@@ -292,6 +320,155 @@ def start_observable_detached_process(
         error="",
         duration_seconds=round(time.monotonic() - started, 3),
     )
+
+
+def run_observed_bounded_process(
+    command: Sequence[str | Path],
+    *,
+    env: Mapping[str, str],
+    cwd: Path | str | None = None,
+    stdin_text: str | None = None,
+    timeout_seconds: float = DEFAULT_PROCESS_TIMEOUT_SECONDS,
+    output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
+    on_start: Callable[[int], None] | None = None,
+    shell: bool = False,
+) -> ObservedBoundedProcessResult:
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+    if output_cap_bytes < 0:
+        raise ValueError("output_cap_bytes must be non-negative")
+    if shell:
+        raise ValueError("shell=True is forbidden for bounded process execution")
+    argv = [str(item) for item in command]
+    if not argv:
+        raise ValueError("command must not be empty")
+
+    started = time.monotonic()
+    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+        stdin_file = None
+        process = None
+        pid: int | None = None
+        try:
+            stdin = subprocess.DEVNULL
+            if stdin_text is not None:
+                stdin_file = tempfile.TemporaryFile()
+                stdin_file.write(stdin_text.encode("utf-8"))
+                stdin_file.seek(0)
+                stdin = stdin_file
+            process = subprocess.Popen(
+                argv,
+                stdin=stdin,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                env=dict(env),
+                cwd=str(cwd) if cwd is not None else None,
+                start_new_session=True,
+                text=False,
+                shell=False,
+            )
+            if stdin_file is not None:
+                stdin_file.close()
+                stdin_file = None
+            pid = int(getattr(process, "pid", 0) or 0)
+            if pid <= 0:
+                raise OSError("process started without a valid pid")
+            if on_start is not None:
+                on_start(pid)
+        except FileNotFoundError as exc:
+            return ObservedBoundedProcessResult(
+                status="error",
+                machine_error_code=PROCESS_NOT_FOUND,
+                exit_code=None,
+                stdout="",
+                stderr=str(exc),
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=round(time.monotonic() - started, 3),
+                pid=None,
+            )
+        except OSError as exc:
+            if process is not None and pid is not None:
+                _kill_process_group(pid)
+                try:
+                    process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    pass
+            stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
+            stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
+            stderr_text = str(exc) if not stderr else f"{stderr}\n{exc}"
+            return ObservedBoundedProcessResult(
+                status="error",
+                machine_error_code=PROCESS_FAILED,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr_text,
+                stdout_truncated=stdout_truncated,
+                stderr_truncated=stderr_truncated,
+                timed_out=False,
+                duration_seconds=round(time.monotonic() - started, 3),
+                pid=pid,
+            )
+        except Exception as exc:
+            if process is not None and pid is not None:
+                _kill_process_group(pid)
+                try:
+                    process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    pass
+            stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
+            stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
+            stderr_text = str(exc) if not stderr else f"{stderr}\n{exc}"
+            return ObservedBoundedProcessResult(
+                status="error",
+                machine_error_code=PROCESS_FAILED,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr_text,
+                stdout_truncated=stdout_truncated,
+                stderr_truncated=stderr_truncated,
+                timed_out=False,
+                duration_seconds=round(time.monotonic() - started, 3),
+                pid=pid,
+            )
+        finally:
+            if stdin_file is not None:
+                stdin_file.close()
+
+        timed_out = False
+        try:
+            process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            assert pid is not None
+            _kill_process_group(pid)
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                pass
+
+        stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
+        stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
+        exit_code = process.returncode
+        machine_error_code = (
+            PROCESS_TIMEOUT
+            if timed_out
+            else PROCESS_OK
+            if exit_code == 0
+            else PROCESS_FAILED
+        )
+        return ObservedBoundedProcessResult(
+            status="ok" if machine_error_code == PROCESS_OK else "error",
+            machine_error_code=machine_error_code,
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
+            stdout_truncated=stdout_truncated,
+            stderr_truncated=stderr_truncated,
+            timed_out=timed_out,
+            duration_seconds=round(time.monotonic() - started, 3),
+            pid=pid,
+        )
 
 
 class BoundedProcessRunner:

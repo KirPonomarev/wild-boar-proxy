@@ -19,6 +19,7 @@ from wild_boar_proxy.process_runner import (
     BoundedProcessRunner,
     start_detached_process,
     start_observable_detached_process,
+    run_observed_bounded_process,
 )
 
 
@@ -329,6 +330,94 @@ class BoundedProcessRunnerTests(unittest.TestCase):
     def test_observable_detached_start_shell_true_is_forbidden(self) -> None:
         with self.assertRaises(ValueError):
             start_observable_detached_process(["echo", "nope"], env=os.environ, shell=True)
+
+    def test_observed_bounded_process_calls_start_hook_and_delivers_stdin(self) -> None:
+        observed_pids: list[int] = []
+        result = run_observed_bounded_process(
+            [
+                sys.executable,
+                "-c",
+                "import sys; data = sys.stdin.read(); print(data.upper()); print('warn', file=sys.stderr)",
+            ],
+            env=os.environ,
+            stdin_text="hello observed",
+            timeout_seconds=5,
+            on_start=observed_pids.append,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.stdout.strip(), "HELLO OBSERVED")
+        self.assertEqual(result.stderr.strip(), "warn")
+        self.assertIsInstance(result.pid, int)
+        self.assertEqual(observed_pids, [result.pid])
+
+    def test_observed_bounded_process_missing_binary_is_structured(self) -> None:
+        observed_pids: list[int] = []
+        result = run_observed_bounded_process(
+            ["/definitely/missing/wbp-observed-process-runner-binary"],
+            env=os.environ,
+            on_start=observed_pids.append,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_NOT_FOUND)
+        self.assertIsNone(result.exit_code)
+        self.assertIsNone(result.pid)
+        self.assertEqual(observed_pids, [])
+
+    def test_observed_bounded_process_nonzero_exit_is_structured(self) -> None:
+        result = run_observed_bounded_process(
+            [sys.executable, "-c", "import sys; print('bad', file=sys.stderr); sys.exit(7)"],
+            env=os.environ,
+            timeout_seconds=5,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_FAILED)
+        self.assertEqual(result.exit_code, 7)
+        self.assertEqual(result.stderr.strip(), "bad")
+        self.assertFalse(result.timed_out)
+
+    def test_observed_bounded_process_callback_failure_kills_process_group(self) -> None:
+        def fail_on_start(_pid: int) -> None:
+            raise RuntimeError("observer failed")
+
+        result = run_observed_bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(10)"],
+            env=os.environ,
+            timeout_seconds=5,
+            on_start=fail_on_start,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_FAILED)
+        self.assertIsNone(result.exit_code)
+        self.assertIn("observer failed", result.stderr)
+        self.assertIsNotNone(result.pid)
+        assert result.pid is not None
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(result.pid, 0)
+
+    def test_observed_bounded_process_timeout_kills_process_group(self) -> None:
+        result = run_observed_bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(10)"],
+            env=os.environ,
+            timeout_seconds=0.2,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_TIMEOUT)
+        self.assertTrue(result.timed_out)
+        self.assertIsNotNone(result.pid)
+        assert result.pid is not None
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(result.pid, 0)
+
+    def test_observed_bounded_process_shell_true_is_forbidden(self) -> None:
+        with self.assertRaises(ValueError):
+            run_observed_bounded_process(["echo", "nope"], env=os.environ, shell=True)
 
 
 if __name__ == "__main__":

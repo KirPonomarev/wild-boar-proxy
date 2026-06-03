@@ -519,6 +519,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_operator_observed_prompt_command_uses_observed_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(OPERATOR_SURFACE, "_run_command_with_observation"))
+        self.assertIn("run_observed_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_review_bridge_git_head_sha_uses_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:

@@ -13,7 +13,6 @@ import re
 import shutil
 import socket
 import threading
-import subprocess
 import tempfile
 import time
 import urllib.error
@@ -27,7 +26,7 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
-from wild_boar_proxy.process_runner import run_bounded_process
+from wild_boar_proxy.process_runner import run_bounded_process, run_observed_bounded_process
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
@@ -1451,41 +1450,72 @@ def _run_command_with_observation(
     allowed_local_endpoints: set[str],
     warning_classes_from_stderr: Callable[[str], list[str]] | None = None,
 ) -> dict[str, Any]:
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=env,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    observer = OwnerSideProcessNetworkObserver(
-        root_pid=process.pid,
-        allowed_local_endpoints=allowed_local_endpoints,
-    )
-    observer.start()
-    timed_out = False
-    try:
-        _, stderr = process.communicate(
-            input=prompt,
-            timeout=timeout_seconds,
+    observer: OwnerSideProcessNetworkObserver | None = None
+
+    def start_observer(pid: int) -> None:
+        nonlocal observer
+        observer = OwnerSideProcessNetworkObserver(
+            root_pid=pid,
+            allowed_local_endpoints=allowed_local_endpoints,
         )
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        process.kill()
-        _, stderr = process.communicate()
-        stderr = stderr or exc.stderr or ""
+        observer.start()
+
+    try:
+        process_result = run_observed_bounded_process(
+            command,
+            cwd=cwd,
+            env=env,
+            stdin_text=prompt,
+            timeout_seconds=timeout_seconds,
+            on_start=start_observer,
+        )
     finally:
-        observer.stop()
+        if observer is not None:
+            observer.stop()
+    stderr = process_result.stderr
     warning_classes = (
         warning_classes_from_stderr(stderr) if warning_classes_from_stderr is not None else []
     )
+    if observer is None:
+        observation_packet = _process_start_failed_observation_packet(
+            machine_error_code=process_result.machine_error_code,
+            allowed_local_endpoints=allowed_local_endpoints,
+            warning_classes=warning_classes,
+        )
+    else:
+        observation_packet = observer.packet(warning_classes=warning_classes)
     return {
-        "exit_code": process.returncode if process.returncode is not None else 127,
+        "exit_code": process_result.exit_code if process_result.exit_code is not None else 127,
         "stderr": stderr,
-        "timed_out": timed_out,
-        "process_network_observation_packet": observer.packet(warning_classes=warning_classes),
+        "timed_out": process_result.timed_out,
+        "machine_error_code": process_result.machine_error_code,
+        "process_runner_status": process_result.status,
+        "process_network_observation_packet": observation_packet,
+    }
+
+
+def _process_start_failed_observation_packet(
+    *,
+    machine_error_code: str,
+    allowed_local_endpoints: set[str],
+    warning_classes: list[str],
+) -> dict[str, Any]:
+    return {
+        "status": "error",
+        "machine_error_code": machine_error_code,
+        "process_tree_observed": False,
+        "sample_count": 0,
+        "observed_process_count_max": 0,
+        "allowed_local_endpoints": sorted(allowed_local_endpoints),
+        "allowed_local_endpoint_observed": False,
+        "peer_endpoints": [],
+        "non_local_peer_endpoints_present": False,
+        "classification": "insufficient_observation",
+        "direct_non_wbp_model_egress_absent_proven": False,
+        "raw_pid_exposed": False,
+        "pid_not_exposed_to_browser": True,
+        "secret_value_recorded": False,
+        "warning_classes": warning_classes,
     }
 
 
