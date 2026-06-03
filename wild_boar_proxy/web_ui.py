@@ -28,6 +28,11 @@ from .web_ingress import (
     parse_content_length,
     unsafe_bind_requested,
 )
+from .web_rate_limit import (
+    DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+    WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+    WebPostRateLimiter,
+)
 from .external_models.paths import ExternalModelsPaths
 from .runtime import RuntimePaths
 from .ui_shell import (
@@ -1066,8 +1071,13 @@ class WildBoarWebUi:
 def build_handler(
     app: WildBoarWebUi,
     web_token_state: WebTokenState | None = None,
+    post_rate_limiter: WebPostRateLimiter | None = None,
+    post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
 ) -> type[BaseHTTPRequestHandler]:
     handler_web_token_state = web_token_state or create_in_memory_web_token()
+    handler_post_rate_limiter = post_rate_limiter or WebPostRateLimiter(
+        limit_per_second=post_rate_limit_per_second
+    )
 
     def render_with_web_tokens(state: DashboardState) -> str:
         return _inject_web_form_tokens(render_dashboard(state), handler_web_token_state)
@@ -1099,6 +1109,16 @@ def build_handler(
                     HTTPStatus.FORBIDDEN,
                     "WEB_INGRESS_CSRF_REJECTED",
                     "Form POST requests must include a valid Wild Boar Proxy CSRF token.",
+                )
+                return
+            if not handler_post_rate_limiter.admit(
+                client_ip=str(self.client_address[0] or ""),
+                path=self.path.split("?", 1)[0],
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+                    "Form POST request rate limit exceeded.",
                 )
                 return
             action_fields = {
@@ -1229,6 +1249,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="allow binding the web UI to a public/unspecified host",
     )
+    parser.add_argument(
+        "--post-rate-limit-per-second",
+        type=int,
+        default=DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+        help="maximum admitted local form POST requests per second per client/path",
+    )
     return parser
 
 
@@ -1240,12 +1266,18 @@ def main(argv: list[str] | None = None) -> int:
             "--host 0.0.0.0/:: is unsafe for the web UI; "
             "pass --unsafe-allow-public-bind only with an explicit operator boundary."
         )
+    if args.post_rate_limit_per_second <= 0:
+        parser.error("--post-rate-limit-per-second must be a positive integer.")
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
     server = None
     try:
         server = ThreadingHTTPServer(
             (args.host, args.port),
-            build_handler(WildBoarWebUi(), web_token_state=web_token_state),
+            build_handler(
+                WildBoarWebUi(),
+                web_token_state=web_token_state,
+                post_rate_limit_per_second=args.post_rate_limit_per_second,
+            ),
         )
         print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
         server.serve_forever()

@@ -28,6 +28,7 @@ from wild_boar_proxy.ui_shell import (
     UiShellError,
 )
 from wild_boar_proxy.web_ingress import MAX_WEB_REQUEST_BODY_BYTES
+from wild_boar_proxy.web_rate_limit import WEB_RATE_LIMIT_MACHINE_ERROR_CODE, WebPostRateLimiter
 from wild_boar_proxy.web_token import (
     WEB_FORM_CSRF_FIELD,
     WEB_FORM_TOKEN_FIELD,
@@ -76,6 +77,21 @@ def web_ui_form_body(port: int, fields: dict[str, str]) -> str:
             **fields,
         }
     )
+
+
+def post_web_ui_form(port: int, path: str, body: str) -> tuple[int, str]:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request(
+        "POST",
+        path,
+        body=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    response = conn.getresponse()
+    response_body = response.read().decode("utf-8")
+    status = int(response.status)
+    conn.close()
+    return status, response_body
 
 
 def runtime_snapshot() -> RuntimeSnapshot:
@@ -915,6 +931,108 @@ class WebUiTests(unittest.TestCase):
         self.assertIn("WEB_INGRESS_CSRF_REJECTED", bad_csrf_response_body)
         self.assertEqual(valid.status, HTTPStatus.OK)
         self.assertEqual(app.actions, [{"action": "sync"}])
+
+    def test_http_handler_rate_limits_valid_form_posts_without_action_after_limit(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(app, post_rate_limiter=limiter),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            statuses = [
+                post_web_ui_form(
+                    server.server_port,
+                    "/action",
+                    web_ui_form_body(server.server_port, {"action": "sync"}),
+                )[0]
+                for _ in range(10)
+            ]
+            limited_status, limited_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                web_ui_form_body(server.server_port, {"action": "sync"}),
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertIn(WEB_RATE_LIMIT_MACHINE_ERROR_CODE, limited_body)
+        self.assertEqual(app.actions, [{"action": "sync"}] * 10)
+
+    def test_invalid_form_tokens_do_not_consume_rate_limit_quota(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(app, post_rate_limiter=limiter),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            missing_status, missing_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                "action=sync",
+            )
+            bad_csrf_body = web_ui_form_body(server.server_port, {"action": "sync"})
+            bad_csrf_body = re.sub(
+                rf"({re.escape(WEB_FORM_CSRF_FIELD)}=)[^&]+",
+                r"\1wrong-csrf",
+                bad_csrf_body,
+            )
+            bad_csrf_status, bad_csrf_response_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                bad_csrf_body,
+            )
+            statuses = [
+                post_web_ui_form(
+                    server.server_port,
+                    "/action",
+                    web_ui_form_body(server.server_port, {"action": "sync"}),
+                )[0]
+                for _ in range(10)
+            ]
+            limited_status, limited_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                web_ui_form_body(server.server_port, {"action": "sync"}),
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(missing_status, HTTPStatus.UNAUTHORIZED)
+        self.assertIn("WEB_INGRESS_WEB_TOKEN_REJECTED", missing_body)
+        self.assertEqual(bad_csrf_status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_CSRF_REJECTED", bad_csrf_response_body)
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertIn(WEB_RATE_LIMIT_MACHINE_ERROR_CODE, limited_body)
+        self.assertEqual(app.actions, [{"action": "sync"}] * 10)
 
     def test_web_ui_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
         with self.assertRaises(SystemExit) as raised:

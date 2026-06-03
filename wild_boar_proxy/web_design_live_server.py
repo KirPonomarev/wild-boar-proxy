@@ -137,6 +137,11 @@ from wild_boar_proxy.web_ingress import (
     unsafe_bind_requested,
     web_ingress_rejection_packet,
 )
+from wild_boar_proxy.web_rate_limit import (
+    DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+    WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+    WebPostRateLimiter,
+)
 from wild_boar_proxy.web_token import (
     WEB_CSRF_META_NAME,
     WEB_TOKEN_FILENAME,
@@ -8449,6 +8454,8 @@ def build_handler(
     review_apply_context: ReviewApplyContext | None = None,
     safe_worktree_repo_root: Path | None = None,
     web_token_state: WebTokenState | None = None,
+    post_rate_limiter: WebPostRateLimiter | None = None,
+    post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -8459,6 +8466,9 @@ def build_handler(
     codex_custom_sessions = CodexCustomSessionManager()
     codex_custom_safe_worktree_repo_root = safe_worktree_repo_root or ROOT
     handler_web_token_state = web_token_state or create_in_memory_web_token()
+    handler_post_rate_limiter = post_rate_limiter or WebPostRateLimiter(
+        limit_per_second=post_rate_limit_per_second
+    )
     legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
@@ -10371,7 +10381,15 @@ def build_handler(
                     machine_error_code="WEB_INGRESS_CSRF_REJECTED",
                     human_message="Web POST requests must include a valid Wild Boar Proxy CSRF token.",
                 )
-            _ = path
+            if not handler_post_rate_limiter.admit(
+                client_ip=str(self.client_address[0] or ""),
+                path=path,
+            ):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.TOO_MANY_REQUESTS,
+                    machine_error_code=WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+                    human_message="Web POST request rate limit exceeded.",
+                )
 
         def _codex_account_commands(self) -> dict[str, dict[str, Any]]:
             return {
@@ -12709,6 +12727,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch-copy-port", type=int, default=None)
     parser.add_argument("--owner-authorization-phrase", default=None)
     parser.add_argument(
+        "--post-rate-limit-per-second",
+        type=int,
+        default=DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+        help="maximum admitted local web POST requests per second per client/path",
+    )
+    parser.add_argument(
         "--launch-copy-helper-provenance",
         default=None,
         choices=(SAFE_APP_COPY_HELPER_PROVENANCE,),
@@ -12719,6 +12743,8 @@ def main(argv: list[str] | None = None) -> int:
             "--host 0.0.0.0/:: is unsafe for the web control surface; "
             "pass --unsafe-allow-public-bind only with an explicit operator boundary."
         )
+    if args.post_rate_limit_per_second <= 0:
+        parser.error("--post-rate-limit-per-second must be a positive integer.")
     launch_copy_contract = LaunchCopyContract(
         client_path=args.launch_client_path,
         profile_dir=args.launch_copy_profile_dir,
@@ -12739,6 +12765,7 @@ def main(argv: list[str] | None = None) -> int:
                 action_phase=args.action_phase,
                 owner_authorization_phrase=args.owner_authorization_phrase,
                 web_token_state=web_token_state,
+                post_rate_limit_per_second=args.post_rate_limit_per_second,
             ),
         )
         server.serve_forever()

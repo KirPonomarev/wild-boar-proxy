@@ -62,6 +62,7 @@ from wild_boar_proxy.web_design_live_server import (
     ui_action_metadata,
     _sandbox_action_runner_env,
 )
+from wild_boar_proxy.web_rate_limit import WEB_RATE_LIMIT_MACHINE_ERROR_CODE, WebPostRateLimiter
 from wild_boar_proxy.web_token import (
     WEB_AUTH_HEADER,
     WEB_CSRF_HEADER,
@@ -4938,6 +4939,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 launch_client_path=TEST_LAUNCH_CLIENT_PATH,
                 launch_copy_contract=launch_copy_contract(),
                 action_phase=FULL_ACTION_PHASE,
+                post_rate_limit_per_second=1000,
             ),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -6193,6 +6195,134 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             created_sessions[0].run_payloads,
             [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
         )
+
+    def test_web_ingress_rate_limits_valid_operator_posts_without_secret_leak(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=mock.Mock(), post_rate_limiter=limiter),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            try:
+                token, csrf = _web_bootstrap_tokens(base)
+                statuses = [
+                    post_body_response(f"{base}/api/operator/run", body)[0]
+                    for _ in range(10)
+                ]
+                limited_status, limited_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertEqual(limited_packet["machine_error_code"], WEB_RATE_LIMIT_MACHINE_ERROR_CODE)
+        self.assertEqual(limited_packet["changed_files"], [])
+        packet_text = json.dumps(limited_packet)
+        self.assertNotIn(token, packet_text)
+        self.assertNotIn(csrf, packet_text)
+        self.assertEqual(len(created_sessions[0].run_payloads), 10)
+
+    def test_web_ingress_rate_limit_key_ignores_query_string(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=mock.Mock(), post_rate_limiter=limiter),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            try:
+                statuses = [
+                    post_body_response(f"{base}/api/operator/run?attempt={index}", body)[0]
+                    for index in range(10)
+                ]
+                limited_status, limited_packet = post_body_response(
+                    f"{base}/api/operator/run?attempt=10",
+                    body,
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertEqual(limited_packet["machine_error_code"], WEB_RATE_LIMIT_MACHINE_ERROR_CODE)
+        self.assertEqual(len(created_sessions[0].run_payloads), 10)
+
+    def test_invalid_web_post_tokens_do_not_consume_rate_limit_quota(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=mock.Mock(), post_rate_limiter=limiter),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            try:
+                bad_token_status, _bad_token_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                    token_override="wrong-web-token",
+                )
+                bad_csrf_status, _bad_csrf_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                    csrf_override="wrong-csrf-token",
+                )
+                statuses = [
+                    post_body_response(f"{base}/api/operator/run", body)[0]
+                    for _ in range(10)
+                ]
+                limited_status, limited_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(bad_token_status, HTTPStatus.UNAUTHORIZED)
+        self.assertEqual(bad_csrf_status, HTTPStatus.FORBIDDEN)
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertEqual(limited_packet["machine_error_code"], WEB_RATE_LIMIT_MACHINE_ERROR_CODE)
+        self.assertEqual(len(created_sessions[0].run_payloads), 10)
 
 
 class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
