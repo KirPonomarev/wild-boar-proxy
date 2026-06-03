@@ -11,6 +11,7 @@ RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
 EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
 CREDENTIALS = ROOT / "wild_boar_proxy" / "external_models" / "credentials.py"
 CLI = ROOT / "wild_boar_proxy" / "cli.py"
+UI_SHELL = ROOT / "wild_boar_proxy" / "ui_shell.py"
 CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
 KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 NATIVE_WINDOW_PROBE = ROOT / "wild_boar_proxy" / "native_window_probe.py"
@@ -529,6 +530,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self,
     ) -> None:
         calls = _call_names(_function(NATIVE_FILESYSTEM_PROBE, "_collect_codex_process_lines"))
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_ui_shell_json_command_runner_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        node = _class_function(UI_SHELL, "JsonCommandRunner", "run")
+        calls = _call_names(node)
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 

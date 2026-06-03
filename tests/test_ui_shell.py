@@ -9,6 +9,7 @@ import subprocess
 import unittest
 from unittest import mock
 
+from wild_boar_proxy.process_runner import BoundedProcessResult
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
     DIAGNOSTICS_RESULT_FIELDS,
@@ -21,6 +22,8 @@ from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
     MinimalCompanionShell,
     QuickStartLedgerEntry,
+    UI_SHELL_COMMAND_OUTPUT_CAP_BYTES,
+    UI_SHELL_COMMAND_TIMEOUT_SECONDS,
     UiShellError,
     build_account_pool_snapshot,
     build_external_action_result,
@@ -59,6 +62,30 @@ from wild_boar_proxy.ui_shell import (
     run_diagnostics_export_and_refresh,
     run_sync_and_refresh,
 )
+
+
+def bounded_process_result(
+    *,
+    returncode: int | None = 0,
+    stdout: str = "",
+    stderr: str = "",
+    machine_error_code: str | None = None,
+    timed_out: bool = False,
+) -> BoundedProcessResult:
+    resolved_code = machine_error_code or (
+        "OK" if returncode == 0 else "PROCESS_FAILED"
+    )
+    return BoundedProcessResult(
+        status="ok" if resolved_code == "OK" else "error",
+        machine_error_code=resolved_code,
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=timed_out,
+        duration_seconds=0.01,
+    )
 
 
 def command_payload(**overrides: object) -> dict[str, object]:
@@ -417,35 +444,160 @@ class ParseExactJsonObjectTests(unittest.TestCase):
         with self.assertRaisesRegex(UiShellError, "must be an object"):
             parse_exact_json_object('["not","an","object"]')
 
+    def test_rejects_empty_json_text(self) -> None:
+        with self.assertRaisesRegex(UiShellError, "exactly one JSON object"):
+            parse_exact_json_object("")
+
 
 class JsonCommandRunnerTests(unittest.TestCase):
-    @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
-    def test_run_parses_and_validates_command_payload(self, run_mock: mock.Mock) -> None:
-        run_mock.return_value = subprocess.CompletedProcess(
-            args=["python3", "-m", "wild_boar_proxy", "status", "--json"],
-            returncode=0,
-            stdout='{"status":"ok","exit_code":0,"human_message":"ready","machine_error_code":"OK","changed_files":[],"next_action":"none"}',
-            stderr="",
-        )
-        runner = JsonCommandRunner(base_command=["python3", "-m", "wild_boar_proxy"])
+    def test_run_uses_bounded_process_with_expected_command_cwd_env_timeout_cap(
+        self,
+    ) -> None:
+        observed_calls: list[dict[str, object]] = []
 
-        result = runner.run("status", "--json")
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: str,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_process_result(
+                stdout=json.dumps(
+                    command_payload(human_message="ready"),
+                    separators=(",", ":"),
+                ),
+                stderr="diagnostic",
+            )
+
+        runner = JsonCommandRunner(
+            base_command=["python3", "-m", "wild_boar_proxy"],
+            cwd="/tmp/wbp",
+            env={"PATH": "/usr/bin:/bin", "NO_PROXY": "127.0.0.1,localhost"},
+        )
+        with mock.patch(
+            "wild_boar_proxy.ui_shell.run_bounded_process",
+            side_effect=fake_run_bounded_process,
+        ):
+            result = runner.run("status", "--json")
 
         self.assertEqual(result.payload["human_message"], "ready")
-        run_mock.assert_called_once()
+        self.assertEqual(result.stderr, "diagnostic")
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(
+            call["command"],
+            ["python3", "-m", "wild_boar_proxy", "status", "--json"],
+        )
+        self.assertEqual(call["cwd"], "/tmp/wbp")
+        self.assertEqual(
+            call["env"],
+            {"PATH": "/usr/bin:/bin", "NO_PROXY": "127.0.0.1,localhost"},
+        )
+        self.assertEqual(call["timeout_seconds"], UI_SHELL_COMMAND_TIMEOUT_SECONDS)
+        self.assertEqual(call["output_cap_bytes"], UI_SHELL_COMMAND_OUTPUT_CAP_BYTES)
 
-    @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
-    def test_run_rejects_missing_required_command_fields(self, run_mock: mock.Mock) -> None:
-        run_mock.return_value = subprocess.CompletedProcess(
-            args=["python3", "-m", "wild_boar_proxy", "status", "--json"],
-            returncode=0,
-            stdout='{"status":"ok","exit_code":0,"human_message":"ready","machine_error_code":"OK","changed_files":[]}',
-            stderr="",
+    def test_run_rejects_missing_required_command_fields(self) -> None:
+        result = bounded_process_result(
+            stdout=json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "ready",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                },
+                separators=(",", ":"),
+            ),
         )
         runner = JsonCommandRunner(base_command=["python3", "-m", "wild_boar_proxy"])
+        with mock.patch(
+            "wild_boar_proxy.ui_shell.run_bounded_process",
+            return_value=result,
+        ):
+            with self.assertRaisesRegex(UiShellError, "next_action"):
+                runner.run("status", "--json")
 
-        with self.assertRaisesRegex(UiShellError, "next_action"):
-            runner.run("status", "--json")
+    def test_run_allows_nonzero_with_valid_structured_error_payload(self) -> None:
+        payload = command_payload(
+            status="error",
+            exit_code=1,
+            human_message="down",
+            machine_error_code="LISTENER_DOWN",
+            next_action="start_runtime",
+        )
+        runner = JsonCommandRunner(base_command=["python3", "-m", "wild_boar_proxy"])
+        with mock.patch(
+            "wild_boar_proxy.ui_shell.run_bounded_process",
+            return_value=bounded_process_result(
+                returncode=1,
+                stdout=json.dumps(payload, separators=(",", ":")),
+                stderr="structured failure",
+            ),
+        ):
+            result = runner.run("healthcheck", "--json")
+
+        self.assertEqual(result.payload["status"], "error")
+        self.assertEqual(result.payload["exit_code"], 1)
+        self.assertEqual(result.stderr, "structured failure")
+
+    def test_run_rejects_timeout_missing_process_and_runner_exception(self) -> None:
+        runner = JsonCommandRunner(base_command=["python3", "-m", "wild_boar_proxy"])
+        cases = (
+            bounded_process_result(
+                returncode=None,
+                machine_error_code="PROCESS_TIMEOUT",
+                timed_out=True,
+                stdout=json.dumps(command_payload()),
+            ),
+            bounded_process_result(
+                returncode=None,
+                machine_error_code="PROCESS_NOT_FOUND",
+                stderr="missing",
+            ),
+            bounded_process_result(
+                returncode=None,
+                machine_error_code="PROCESS_FAILED",
+                stdout=json.dumps(command_payload()),
+            ),
+        )
+        for result in cases:
+            with self.subTest(machine_error_code=result.machine_error_code):
+                with mock.patch(
+                    "wild_boar_proxy.ui_shell.run_bounded_process",
+                    return_value=result,
+                ):
+                    with self.assertRaises(UiShellError):
+                        runner.run("status", "--json")
+
+        with mock.patch(
+            "wild_boar_proxy.ui_shell.run_bounded_process",
+            side_effect=RuntimeError("runner failed"),
+        ):
+            with self.assertRaises(UiShellError):
+                runner.run("status", "--json")
+
+    def test_run_rejects_empty_stdout_and_extra_stdout_after_json(self) -> None:
+        runner = JsonCommandRunner(base_command=["python3", "-m", "wild_boar_proxy"])
+        valid_payload = json.dumps(command_payload(), separators=(",", ":"))
+        for stdout in ("", f"{valid_payload}\ntrailing"):
+            with self.subTest(stdout=stdout):
+                with mock.patch(
+                    "wild_boar_proxy.ui_shell.run_bounded_process",
+                    return_value=bounded_process_result(stdout=stdout),
+                ):
+                    with self.assertRaises(UiShellError):
+                        runner.run("status", "--json")
 
 
 class RuntimeSnapshotTests(unittest.TestCase):

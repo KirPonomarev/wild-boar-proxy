@@ -5,12 +5,19 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from subprocess import SubprocessError
 from typing import Any
+
+from wild_boar_proxy.process_runner import (
+    PROCESS_NOT_FOUND,
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+    run_bounded_process,
+)
 
 try:
     from tkinter import StringVar, Tk, messagebox
@@ -198,6 +205,8 @@ DIAGNOSTICS_RESULT_FIELDS = ("bundle_path",)
 STABLE_REPAIR_RESULT_FIELDS = ()
 ACCOUNT_CAPACITY_TARGET = 25
 DEFAULT_ACTIVE_WINDOW_TARGET = 10
+UI_SHELL_COMMAND_TIMEOUT_SECONDS = 120.0
+UI_SHELL_COMMAND_OUTPUT_CAP_BYTES = 256 * 1024
 
 
 class UiShellError(Exception):
@@ -216,7 +225,10 @@ def _require_tkinter_root() -> None:
 
 def parse_exact_json_object(stdout: str) -> dict[str, Any]:
     decoder = json.JSONDecoder()
-    payload, end = decoder.raw_decode(stdout)
+    try:
+        payload, end = decoder.raw_decode(stdout)
+    except json.JSONDecodeError as exc:
+        raise UiShellError("stdout must contain exactly one JSON object") from exc
     if not isinstance(payload, dict):
         raise UiShellError("stdout JSON must be an object")
     if stdout[end:].strip():
@@ -268,14 +280,24 @@ class JsonCommandRunner:
         self._env = env
 
     def run(self, *args: str) -> CommandResult:
-        result = subprocess.run(
-            [*self._base_command, *args],
-            cwd=self._cwd,
-            env=self._env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = run_bounded_process(
+                [*self._base_command, *args],
+                cwd=self._cwd,
+                env=self._env if self._env is not None else os.environ.copy(),
+                timeout_seconds=UI_SHELL_COMMAND_TIMEOUT_SECONDS,
+                output_cap_bytes=UI_SHELL_COMMAND_OUTPUT_CAP_BYTES,
+            )
+        except Exception as exc:
+            raise UiShellError("command execution failed before JSON payload was available") from exc
+        if result.timed_out or result.machine_error_code == PROCESS_TIMEOUT:
+            raise UiShellError("command execution timed out before JSON payload was available")
+        if result.machine_error_code == PROCESS_NOT_FOUND:
+            raise UiShellError("command executable was not found before JSON payload was available")
+        if result.exit_code is None:
+            raise UiShellError("command execution ended without an exit code")
+        if result.machine_error_code not in {PROCESS_OK, "PROCESS_FAILED"}:
+            raise UiShellError("command execution failed before JSON payload was available")
         payload = parse_exact_json_object(result.stdout)
         require_fields(
             payload,
@@ -2255,11 +2277,11 @@ class MinimalCompanionShell:
     def _refresh_worker(self) -> None:
         try:
             runtime_snapshot = load_runtime_snapshot(self.runner)
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
         try:
             account_snapshot = load_account_pool_snapshot(self.runner)
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
         if not runtime_snapshot.integration_error and not account_snapshot.integration_error:
             try:
@@ -2269,7 +2291,7 @@ class MinimalCompanionShell:
                 account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
         try:
             external_snapshot = load_external_models_snapshot(self.runner)
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
         self.root.after(
             0,
@@ -2763,7 +2785,7 @@ class MinimalCompanionShell:
             account_snapshot = load_account_pool_snapshot(self.runner)
             ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
             banner = "Operator action failed."
@@ -2783,7 +2805,7 @@ class MinimalCompanionShell:
                 self.runner
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
             banner = "Operator action failed."
@@ -2803,7 +2825,7 @@ class MinimalCompanionShell:
                 self.runner, command
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -2830,7 +2852,7 @@ class MinimalCompanionShell:
                 self.runner, route_id
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -2861,7 +2883,7 @@ class MinimalCompanionShell:
             account_snapshot = load_account_pool_snapshot(self.runner)
             ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -2911,7 +2933,7 @@ class MinimalCompanionShell:
                 api_check_payload=api_check_payload,
             )
             banner = str(bundle_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
             external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
@@ -2960,10 +2982,10 @@ class MinimalCompanionShell:
             try:
                 status_payload = self.runner.run("status", "--json").payload
                 runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
-            except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
                 runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
                 banner = "Operator action failed."
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = action_payload or {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -2990,7 +3012,7 @@ class MinimalCompanionShell:
                 run_diagnostics_export_and_refresh(self.runner)
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -3019,7 +3041,7 @@ class MinimalCompanionShell:
                 run_stable_repair_and_refresh(self.runner)
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "exit_code": 1,
@@ -3048,7 +3070,7 @@ class MinimalCompanionShell:
                 self.runner, backend_id
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
             banner = "Operator action failed."
 
@@ -3065,7 +3087,7 @@ class MinimalCompanionShell:
                 self.runner, command
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
             banner = "Operator action failed."
@@ -3328,7 +3350,7 @@ class MinimalCompanionShell:
                 self.runner, command
             )
             banner = str(action_payload["human_message"])
-        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
             action_payload = {
                 "status": "integration_failure",
                 "machine_error_code": "UI_INTEGRATION_FAILURE",
@@ -3493,7 +3515,7 @@ def run_packaged_continuity_smoke_json() -> tuple[dict[str, Any], int]:
             )
             return result, 1
         return result, 0
-    except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+    except (UiShellError, SubprocessError, OSError, json.JSONDecodeError) as exc:
         return (
             {
                 "status": "error",
