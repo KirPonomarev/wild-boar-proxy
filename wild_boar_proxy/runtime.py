@@ -10570,6 +10570,7 @@ def _rollout_dependencies() -> Any:
         run_rollout_posture_inspect_impl=_run_rollout_posture_inspect_impl,
         run_rollout_evidence_capture_impl=_run_rollout_evidence_capture_impl,
         run_rollout_stage_prove_impl=_run_rollout_stage_prove_impl,
+        run_rollout_stage_advance_impl=_run_rollout_stage_advance_impl,
     )
 
 
@@ -12767,6 +12768,19 @@ def allow_stage_advance_source_proof_with_one_explicit_reserve_candidate(
 
 
 def run_rollout_stage_advance(
+    paths: RuntimePaths, stage: str, backend_id: str
+) -> dict[str, Any]:
+    from .rollout import run_rollout_stage_advance as _run_rollout_stage_advance
+
+    return _run_rollout_stage_advance(
+        paths,
+        stage,
+        backend_id,
+        dependencies=_rollout_dependencies(),
+    )
+
+
+def _run_rollout_stage_advance_impl(
     paths: RuntimePaths, stage: str, backend_id: str
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)

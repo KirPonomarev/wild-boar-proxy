@@ -644,10 +644,14 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "export_scale_evidence_bundle",
             "get_stable_policy_drift",
             "list_accounts",
+            "materialize_rollout_stage_advance_stable_auth",
             "materialize_selected_backend_snapshot_for_sync",
             "observe_current_stage_from_pool_policy",
             "observe_status_proof_for_owner_path_under_lock",
             "read_json",
+            "restore_path_state",
+            "restore_promotion_owner_path_runtime_surfaces",
+            "restore_rollout_stage_advance_inventory_dir_state",
             "run_bounded_process",
             "run_healthcheck",
             "run_healthcheck_probe",
@@ -664,7 +668,12 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "runtime_write_surface_candidates",
             "serialized_lock",
             "snapshot_known_files",
+            "snapshot_path_state",
+            "snapshot_path_states",
             "socket_is_listening",
+            "summarize_rollout_stage_advance_postflight",
+            "summarize_rollout_stage_advance_preflight",
+            "summarize_registry_pool_counts",
             "summarize_status",
             "summarize_stable_10_rollback_readiness",
             "summarize_stage_pool_policy_mapping",
@@ -694,6 +703,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
             run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_advance_impl=lambda *args, **kwargs: {},
         )
 
         default_payload = rollout.run_rollout_rotation_inspect(
@@ -735,6 +745,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_posture_inspect_impl=fake_run_rollout_posture_inspect_impl,
             run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
             run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_advance_impl=lambda *args, **kwargs: {},
         )
 
         payload = rollout.run_rollout_posture_inspect(
@@ -765,6 +776,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_evidence_capture_impl=fake_run_rollout_evidence_capture_impl,
             run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_advance_impl=lambda *args, **kwargs: {},
         )
 
         payload = rollout.run_rollout_evidence_capture(
@@ -796,6 +808,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
             run_rollout_stage_prove_impl=fake_run_rollout_stage_prove_impl,
+            run_rollout_stage_advance_impl=lambda *args, **kwargs: {},
         )
 
         default_payload = rollout.run_rollout_stage_prove(
@@ -822,6 +835,40 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                 (("paths-sentinel", "15"), {"lock_acquired": True}),
             ],
         )
+
+    def test_rollout_stage_advance_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_rollout_stage_advance_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-stage-advance",
+                "stage": args[1],
+                "backend_id": args[2],
+            }
+
+        dependencies = rollout.RolloutDependencies(
+            run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_advance_impl=fake_run_rollout_stage_advance_impl,
+        )
+
+        payload = rollout.run_rollout_stage_advance(
+            "paths-sentinel",
+            "15",
+            "backend-01",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "rollout-stage-advance")
+        self.assertEqual(payload["stage"], "15")
+        self.assertEqual(payload["backend_id"], "backend-01")
+        self.assertEqual(calls, [(("paths-sentinel", "15", "backend-01"), {})])
 
     def test_rollout_rotation_inspect_facade_passes_runtime_dependency(
         self,
@@ -1003,6 +1050,46 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                         "dependencies": runtime_mod._rollout_dependencies(),
                     },
                 ),
+            ],
+        )
+
+    def test_rollout_stage_advance_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_rollout_stage_advance(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-stage-advance",
+                "stage": args[1],
+                "backend_id": args[2],
+            }
+
+        with mock.patch.object(
+            rollout,
+            "run_rollout_stage_advance",
+            side_effect=fake_rollout_stage_advance,
+        ):
+            payload = runtime_mod.run_rollout_stage_advance(
+                "paths-sentinel",
+                "15",
+                "backend-01",
+            )
+
+        self.assertEqual(payload["surface"], "rollout-stage-advance")
+        self.assertEqual(payload["stage"], "15")
+        self.assertEqual(payload["backend_id"], "backend-01")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "15", "backend-01"),
+                    {
+                        "dependencies": runtime_mod._rollout_dependencies(),
+                    },
+                )
             ],
         )
 

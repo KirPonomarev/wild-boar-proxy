@@ -14148,6 +14148,27 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
         advance = payload["stage_advancement_result"]
+        self.assertEqual(
+            set(advance),
+            {
+                "attempted",
+                "delegated_evidence",
+                "final_outcome",
+                "policy_transition_status",
+                "postflight_attestation_status",
+                "postflight_rotation_status",
+                "preflight_policy_status",
+                "preflight_stage10_proof_status",
+                "preflight_stage15_proof_status",
+                "promotion_status",
+                "requested_backend_id",
+                "requested_stage",
+                "rollback_attempted",
+                "rollback_outcome",
+                "rollback_readiness_status",
+                "status",
+            },
+        )
         self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
         self.assertEqual(advance["preflight_policy_status"], "matched")
         self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")

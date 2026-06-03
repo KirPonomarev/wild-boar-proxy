@@ -17,6 +17,7 @@ class RolloutDependencies:
     run_rollout_posture_inspect_impl: Callable[..., dict[str, Any]]
     run_rollout_evidence_capture_impl: Callable[..., dict[str, Any]]
     run_rollout_stage_prove_impl: Callable[..., dict[str, Any]]
+    run_rollout_stage_advance_impl: Callable[..., dict[str, Any]]
 
 
 def run_rollout_rotation_inspect(
@@ -61,3 +62,13 @@ def run_rollout_stage_prove(
         stage,
         lock_acquired=lock_acquired,
     )
+
+
+def run_rollout_stage_advance(
+    paths: RolloutPaths,
+    stage: str,
+    backend_id: str,
+    *,
+    dependencies: RolloutDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_rollout_stage_advance_impl(paths, stage, backend_id)
