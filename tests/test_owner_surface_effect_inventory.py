@@ -15,6 +15,7 @@ CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
 KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 NATIVE_WINDOW_PROBE = ROOT / "wild_boar_proxy" / "native_window_probe.py"
 CODEX_CUSTOM_SESSIONS = ROOT / "wild_boar_proxy" / "codex_custom_sessions.py"
+OPERATOR_SURFACE = ROOT / "wild_boar_proxy" / "operator_surface.py"
 
 
 READ = "READ"
@@ -481,6 +482,21 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         calls = _call_names(_function(CODEX_CUSTOM_SESSIONS, "_run_git_command"))
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_operator_observation_helpers_use_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        runner_calls = _call_names(
+            _function(OPERATOR_SURFACE, "_run_operator_observation_command")
+        )
+        self.assertIn("run_bounded_process", runner_calls)
+        self.assertEqual(set(), runner_calls & SUBPROCESS_PRIMITIVES)
+
+        for name in ("_process_tree_snapshot", "_network_sample_for_pid"):
+            with self.subTest(function=name):
+                calls = _call_names(_function(OPERATOR_SURFACE, name))
+                self.assertIn("_run_operator_observation_command", calls)
+                self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
         self,

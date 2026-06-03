@@ -27,6 +27,7 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
+from wild_boar_proxy.process_runner import run_bounded_process
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
@@ -67,6 +68,10 @@ WINDOW_SMOKE_PHRASES = (
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
+OPERATOR_OBSERVATION_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+OPERATOR_OBSERVATION_TIMEOUT_SECONDS = 5.0
+OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES = 64 * 1024
+OPERATOR_OBSERVATION_CWD = Path("/")
 BRIDGE_RESTART_ERROR_CODES = {
     "LOCAL_BRIDGE_DEAD",
     "LOCAL_BRIDGE_STREAM_DISCONNECTED",
@@ -1204,16 +1209,32 @@ def _allowed_local_endpoints(*urls: str) -> set[str]:
     return allowed
 
 
+def _operator_observation_env() -> dict[str, str]:
+    return {
+        "PATH": OPERATOR_OBSERVATION_RUNTIME_PATH,
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+        "no_proxy": "127.0.0.1,localhost,::1",
+    }
+
+
+def _run_operator_observation_command(command: list[str]):
+    return run_bounded_process(
+        command,
+        env=_operator_observation_env(),
+        cwd=OPERATOR_OBSERVATION_CWD,
+        timeout_seconds=OPERATOR_OBSERVATION_TIMEOUT_SECONDS,
+        output_cap_bytes=OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES,
+    )
+
+
 def _process_tree_snapshot(root_pid: int) -> dict[str, Any]:
     try:
-        process = subprocess.run(
+        process = _run_operator_observation_command(
             ["ps", "-Ao", "pid=,ppid=,command="],
-            text=True,
-            capture_output=True,
-            timeout=5,
-            check=False,
         )
     except Exception:
+        return {"public_entries": [], "raw_pids": []}
+    if process.exit_code != 0:
         return {"public_entries": [], "raw_pids": []}
     rows: dict[int, dict[str, Any]] = {}
     children: dict[int, list[int]] = {}
@@ -1267,14 +1288,12 @@ def _process_tree_snapshot(root_pid: int) -> dict[str, Any]:
 
 def _network_sample_for_pid(pid: int) -> dict[str, Any]:
     try:
-        process = subprocess.run(
+        process = _run_operator_observation_command(
             ["lsof", "-n", "-P", "-a", "-i", "-p", str(pid)],
-            text=True,
-            capture_output=True,
-            timeout=5,
-            check=False,
         )
     except Exception:
+        return {"peer_endpoints": [], "peer_endpoint_count": 0, "local_only": True}
+    if process.exit_code != 0:
         return {"peer_endpoints": [], "peer_endpoint_count": 0, "local_only": True}
     peer_endpoints: list[dict[str, Any]] = []
     for raw_line in process.stdout.splitlines():

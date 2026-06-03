@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 import subprocess
@@ -20,11 +21,18 @@ from unittest import mock
 from wild_boar_proxy.operator_surface import (
     ExternalRouteResponsesAdapter,
     HybridOpenAICompatAdapter,
+    OPERATOR_OBSERVATION_CWD,
+    OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES,
+    OPERATOR_OBSERVATION_RUNTIME_PATH,
+    OPERATOR_OBSERVATION_TIMEOUT_SECONDS,
     OwnerSideProcessNetworkObserver,
     OperatorSurfaceConfig,
     OperatorSurfaceSession,
     WbpTraceObserver,
+    _network_sample_for_pid,
+    _process_tree_snapshot,
     _prompt_trace_hash_and_smoke_match,
+    _run_operator_observation_command,
     _run_command_with_observation,
     build_bridge_failure_recovery_truth_packet,
     build_codex_config,
@@ -33,9 +41,179 @@ from wild_boar_proxy.operator_surface import (
     run_process_isolation_proof,
     select_server_issued_model,
 )
+from wild_boar_proxy.process_runner import BoundedProcessResult
+
+
+def bounded_completed(
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="ok" if returncode == 0 else "error",
+        machine_error_code="OK" if returncode == 0 else "PROCESS_FAILED",
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=False,
+        duration_seconds=0.01,
+    )
+
+
+def bounded_timeout(*, stderr: str = "timed out") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="error",
+        machine_error_code="PROCESS_TIMEOUT",
+        exit_code=None,
+        stdout="",
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=True,
+        duration_seconds=OPERATOR_OBSERVATION_TIMEOUT_SECONDS,
+    )
 
 
 class OperatorSurfaceTests(unittest.TestCase):
+    def test_operator_observation_command_uses_bounded_runner_with_deterministic_env(self) -> None:
+        observed_calls: list[dict[str, object]] = []
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_completed(stdout="ok\n")
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://example.invalid:1",
+                    "HTTPS_PROXY": "http://example.invalid:2",
+                    "ALL_PROXY": "http://example.invalid:3",
+                    "http_proxy": "http://example.invalid:4",
+                    "https_proxy": "http://example.invalid:5",
+                    "all_proxy": "http://example.invalid:6",
+                    "WBP_CURRENT_PROXY_URL": "http://example.invalid:7",
+                    "CODEX_HOME": "/tmp/ambient-codex-home",
+                    "OPENAI_API_KEY": "ambient-secret",
+                    "PATH": "/definitely/missing",
+                    "HOME": "/tmp/ambient-home",
+                },
+                clear=True,
+            ),
+            mock.patch(
+                "wild_boar_proxy.operator_surface.run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ),
+        ):
+            result = _run_operator_observation_command(["ps", "-Ao", "pid=,ppid=,command="])
+
+        self.assertEqual(result.stdout, "ok\n")
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(call["command"], ["ps", "-Ao", "pid=,ppid=,command="])
+        self.assertEqual(call["cwd"], OPERATOR_OBSERVATION_CWD)
+        self.assertEqual(call["timeout_seconds"], OPERATOR_OBSERVATION_TIMEOUT_SECONDS)
+        self.assertEqual(call["output_cap_bytes"], OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES)
+        env = call["env"]
+        self.assertEqual(env["PATH"], OPERATOR_OBSERVATION_RUNTIME_PATH)
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost,::1")
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "WBP_CURRENT_PROXY_URL",
+            "CODEX_HOME",
+            "OPENAI_API_KEY",
+            "HOME",
+        ):
+            self.assertNotIn(key, env)
+
+    def test_process_tree_snapshot_uses_bounded_ps_and_fails_closed(self) -> None:
+        ps_stdout = "\n".join(
+            [
+                " 100 1 /Applications/Codex.app/Contents/MacOS/Codex",
+                " 101 100 /usr/bin/git fetch",
+                " 102 101 /bin/sh -c echo ok",
+            ]
+        )
+        with mock.patch(
+            "wild_boar_proxy.operator_surface._run_operator_observation_command",
+            return_value=bounded_completed(stdout=ps_stdout),
+        ) as run:
+            packet = _process_tree_snapshot(100)
+
+        run.assert_called_once_with(["ps", "-Ao", "pid=,ppid=,command="])
+        self.assertEqual(packet["raw_pids"], [100, 101, 102])
+        self.assertEqual(len(packet["public_entries"]), 3)
+        self.assertTrue(packet["public_entries"][0]["is_root"])
+        self.assertEqual(packet["public_entries"][1]["command_basename"], "git")
+        self.assertEqual(packet["public_entries"][2]["command_basename"], "sh")
+
+        for result in (
+            bounded_completed(returncode=1, stderr="ps failed"),
+            bounded_timeout(stderr="ps timed out"),
+        ):
+            with mock.patch(
+                "wild_boar_proxy.operator_surface._run_operator_observation_command",
+                return_value=result,
+            ):
+                self.assertEqual(_process_tree_snapshot(100), {"public_entries": [], "raw_pids": []})
+
+    def test_network_sample_for_pid_uses_bounded_lsof_and_fails_closed(self) -> None:
+        lsof_stdout = "\n".join(
+            [
+                "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME",
+                "Codex 100 user 10u IPv4 0x1 0t0 TCP 127.0.0.1:55000->127.0.0.1:8318 (ESTABLISHED)",
+                "Codex 100 user 11u IPv4 0x2 0t0 TCP 127.0.0.1:55001->api.example.invalid:443 (ESTABLISHED)",
+            ]
+        )
+        with mock.patch(
+            "wild_boar_proxy.operator_surface._run_operator_observation_command",
+            return_value=bounded_completed(stdout=lsof_stdout),
+        ) as run:
+            packet = _network_sample_for_pid(100)
+
+        run.assert_called_once_with(["lsof", "-n", "-P", "-a", "-i", "-p", "100"])
+        self.assertEqual(packet["peer_endpoint_count"], 2)
+        self.assertFalse(packet["local_only"])
+        self.assertEqual(packet["peer_endpoints"][0]["host_class"], "local")
+        self.assertEqual(packet["peer_endpoints"][1]["host_class"], "non_local")
+
+        for result in (
+            bounded_completed(returncode=1, stderr="lsof failed"),
+            bounded_timeout(stderr="lsof timed out"),
+        ):
+            with mock.patch(
+                "wild_boar_proxy.operator_surface._run_operator_observation_command",
+                return_value=result,
+            ):
+                self.assertEqual(
+                    _network_sample_for_pid(100),
+                    {"peer_endpoints": [], "peer_endpoint_count": 0, "local_only": True},
+                )
+
     def test_hybrid_openai_compat_adapter_honors_explicit_listen_port(self) -> None:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
