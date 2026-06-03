@@ -60,6 +60,7 @@ from wild_boar_proxy.web_design_live_server import (
     ui_action_metadata,
     _sandbox_action_runner_env,
 )
+from wild_boar_proxy.web_token import WEB_TOKEN_FILENAME
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -360,6 +361,75 @@ class MappingRunner:
 
 
 class WebDesignLiveServerTests(unittest.TestCase):
+    def test_web_token_static_file_is_not_served_from_static_root(self) -> None:
+        with tempfile.TemporaryDirectory() as static_dir:
+            static_root = Path(static_dir)
+            (static_root / "index.html").write_text("index-ok", encoding="utf-8")
+            (static_root / WEB_TOKEN_FILENAME).write_text(
+                "secret-web-token-should-not-leak",
+                encoding="utf-8",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(static_dir=static_root),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                self.assertEqual(fetch(f"{base}/"), "index-ok")
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    fetch(f"{base}/{WEB_TOKEN_FILENAME}")
+                error_body = raised.exception.read().decode("utf-8", errors="replace")
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(raised.exception.code, HTTPStatus.NOT_FOUND)
+        self.assertNotIn("secret-web-token-should-not-leak", error_body)
+
+    def test_web_design_main_rotates_runtime_web_token_and_deletes_on_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = root / "managed"
+            observed_tokens: list[str] = []
+            observed_modes: list[int] = []
+            server_closed: list[bool] = []
+
+            class OneShotServer:
+                def __init__(self, address: tuple[str, int], handler: object) -> None:
+                    self.server_address = address
+                    self.RequestHandlerClass = handler
+
+                def serve_forever(self) -> None:
+                    token_path = managed_dir / WEB_TOKEN_FILENAME
+                    observed_tokens.append(token_path.read_text(encoding="utf-8"))
+                    observed_modes.append(token_path.stat().st_mode & 0o777)
+
+                def server_close(self) -> None:
+                    server_closed.append(True)
+
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env_updates, clear=False),
+                mock.patch.object(live_server, "ThreadingHTTPServer", OneShotServer),
+            ):
+                first_result = live_server.main(["--host", "127.0.0.1", "--port", "0"])
+                second_result = live_server.main(["--host", "127.0.0.1", "--port", "0"])
+
+            self.assertEqual(first_result, 0)
+            self.assertEqual(second_result, 0)
+            self.assertEqual(observed_modes, [0o600, 0o600])
+            self.assertEqual(len(observed_tokens), 2)
+            self.assertNotEqual(observed_tokens[0], observed_tokens[1])
+            self.assertEqual(server_closed, [True, True])
+            self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
+
     def test_onboard_adapter_spec_uses_exact_argv_template(self) -> None:
         onboard = ALLOWLIST["accounts_onboard"]
         onboard_auth_ref = ALLOWLIST["accounts_onboard_auth_ref"]

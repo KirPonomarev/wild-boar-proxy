@@ -28,6 +28,7 @@ from .web_ingress import (
     unsafe_bind_requested,
 )
 from .external_models.paths import ExternalModelsPaths
+from .runtime import RuntimePaths
 from .ui_shell import (
     AccountPoolSnapshot,
     ExternalActionResult,
@@ -50,6 +51,7 @@ from .ui_shell import (
     run_stable_repair_and_refresh,
     run_sync_and_refresh,
 )
+from .web_token import create_web_token, delete_web_token
 
 
 @dataclass(frozen=True)
@@ -1180,14 +1182,18 @@ def main(argv: list[str] | None = None) -> int:
             "--host 0.0.0.0/:: is unsafe for the web UI; "
             "pass --unsafe-allow-public-bind only with an explicit operator boundary."
         )
-    server = ThreadingHTTPServer((args.host, args.port), build_handler(WildBoarWebUi()))
-    print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
+    web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
+    server = None
     try:
+        server = ThreadingHTTPServer((args.host, args.port), build_handler(WildBoarWebUi()))
+        print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        if server is not None:
+            server.server_close()
+        delete_web_token(web_token_state)
     return 0
 
 

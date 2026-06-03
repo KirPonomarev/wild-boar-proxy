@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import http.client
+import os
 import socket
+import tempfile
 import threading
 import unittest
 from http import HTTPStatus
 from pathlib import Path
+from unittest import mock
 
 import wild_boar_proxy.web_ui as web_ui
 from wild_boar_proxy.ui_shell import (
@@ -23,6 +26,7 @@ from wild_boar_proxy.ui_shell import (
     UiShellError,
 )
 from wild_boar_proxy.web_ingress import MAX_WEB_REQUEST_BODY_BYTES
+from wild_boar_proxy.web_token import WEB_TOKEN_FILENAME
 from wild_boar_proxy.web_ui import (
     DashboardState,
     UiEvent,
@@ -808,6 +812,51 @@ class WebUiTests(unittest.TestCase):
             web_ui.main(["--host", "0.0.0.0", "--port", "0"])
 
         self.assertEqual(raised.exception.code, 2)
+
+    def test_web_ui_main_rotates_runtime_web_token_and_deletes_on_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = root / "managed"
+            observed_tokens: list[str] = []
+            observed_modes: list[int] = []
+            server_closed: list[bool] = []
+
+            class OneShotServer:
+                def __init__(self, address: tuple[str, int], handler: object) -> None:
+                    self.server_address = address
+                    self.RequestHandlerClass = handler
+
+                def serve_forever(self) -> None:
+                    token_path = managed_dir / WEB_TOKEN_FILENAME
+                    observed_tokens.append(token_path.read_text(encoding="utf-8"))
+                    observed_modes.append(token_path.stat().st_mode & 0o777)
+
+                def server_close(self) -> None:
+                    server_closed.append(True)
+
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env_updates, clear=False),
+                mock.patch.object(web_ui, "ThreadingHTTPServer", OneShotServer),
+                mock.patch("builtins.print") as print_call,
+            ):
+                first_result = web_ui.main(["--host", "127.0.0.1", "--port", "0"])
+                second_result = web_ui.main(["--host", "127.0.0.1", "--port", "0"])
+
+            printed_text = "\n".join(str(call) for call in print_call.call_args_list)
+            self.assertEqual(first_result, 0)
+            self.assertEqual(second_result, 0)
+            self.assertEqual(observed_modes, [0o600, 0o600])
+            self.assertEqual(len(observed_tokens), 2)
+            self.assertNotEqual(observed_tokens[0], observed_tokens[1])
+            self.assertEqual(server_closed, [True, True])
+            self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
+            self.assertNotIn(observed_tokens[0], printed_text)
+            self.assertNotIn(observed_tokens[1], printed_text)
 
     def test_http_handler_recovers_unknown_get_route(self) -> None:
         state = DashboardState(

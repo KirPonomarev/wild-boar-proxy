@@ -136,6 +136,11 @@ from wild_boar_proxy.web_ingress import (
     unsafe_bind_requested,
     web_ingress_rejection_packet,
 )
+from wild_boar_proxy.web_token import (
+    WEB_TOKEN_FILENAME,
+    create_web_token,
+    delete_web_token,
+)
 from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
     DEFAULT_CODEX_BIN,
@@ -10481,6 +10486,9 @@ def build_handler(
 
         def _send_static(self, request_path: str) -> None:
             relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")
+            if WEB_TOKEN_FILENAME in Path(relative).parts:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
             target = (static_root / relative).resolve()
             if static_root not in target.parents and target != static_root:
                 self.send_error(HTTPStatus.NOT_FOUND)
@@ -12681,21 +12689,25 @@ def main(argv: list[str] | None = None) -> int:
         helper_execution_provenance=args.launch_copy_helper_provenance,
     )
 
-    server = ThreadingHTTPServer(
-        (args.host, args.port),
-        build_handler(
-            launch_client_path=args.launch_client_path,
-            launch_copy_contract=launch_copy_contract,
-            action_phase=args.action_phase,
-            owner_authorization_phrase=args.owner_authorization_phrase,
-        ),
-    )
+    web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
+    server = None
     try:
+        server = ThreadingHTTPServer(
+            (args.host, args.port),
+            build_handler(
+                launch_client_path=args.launch_client_path,
+                launch_copy_contract=launch_copy_contract,
+                action_phase=args.action_phase,
+                owner_authorization_phrase=args.owner_authorization_phrase,
+            ),
+        )
         server.serve_forever()
     except KeyboardInterrupt:
         return 0
     finally:
-        server.server_close()
+        if server is not None:
+            server.server_close()
+        delete_web_token(web_token_state)
     return 0
 
 
