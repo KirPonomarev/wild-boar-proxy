@@ -16,6 +16,7 @@ KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 NATIVE_WINDOW_PROBE = ROOT / "wild_boar_proxy" / "native_window_probe.py"
 CODEX_CUSTOM_SESSIONS = ROOT / "wild_boar_proxy" / "codex_custom_sessions.py"
 OPERATOR_SURFACE = ROOT / "wild_boar_proxy" / "operator_surface.py"
+REVIEW_BRIDGE_PACKET_IMPORT = ROOT / "wild_boar_proxy" / "review_bridge_packet_import.py"
 
 
 READ = "READ"
@@ -513,6 +514,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
     ) -> None:
         node = _class_function(OPERATOR_SURFACE, "OperatorSurfaceSession", "run_wbp")
         calls = _call_names(node)
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_review_bridge_git_head_sha_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(REVIEW_BRIDGE_PACKET_IMPORT, "_git_head_sha"))
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 

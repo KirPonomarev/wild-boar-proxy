@@ -9,8 +9,14 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
-import subprocess
 from typing import Any
+
+from wild_boar_proxy.process_runner import PROCESS_OK, run_bounded_process
+
+
+REVIEW_BRIDGE_GIT_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+REVIEW_BRIDGE_GIT_TIMEOUT_SECONDS = 10.0
+REVIEW_BRIDGE_GIT_OUTPUT_CAP_BYTES = 8 * 1024
 
 
 @dataclass(frozen=True)
@@ -132,14 +138,28 @@ def adapt_review_packet(
 
 
 def _git_head_sha(repo_root: Path) -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(repo_root),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    try:
+        result = run_bounded_process(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            env={
+                "PATH": REVIEW_BRIDGE_GIT_RUNTIME_PATH,
+                "NO_PROXY": "127.0.0.1,localhost,::1",
+                "no_proxy": "127.0.0.1,localhost,::1",
+            },
+            timeout_seconds=REVIEW_BRIDGE_GIT_TIMEOUT_SECONDS,
+            output_cap_bytes=REVIEW_BRIDGE_GIT_OUTPUT_CAP_BYTES,
+        )
+    except Exception as exc:
+        raise ReviewPacketImportError(
+            "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+            "Unable to determine the current baseline for review import.",
+        ) from exc
+    if (
+        result.machine_error_code != PROCESS_OK
+        or result.timed_out
+        or result.exit_code != 0
+    ):
         raise ReviewPacketImportError(
             "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
             "Unable to determine the current baseline for review import.",

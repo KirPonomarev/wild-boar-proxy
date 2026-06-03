@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from wild_boar_proxy.review_bridge_apply_admission import (
     REVIEW_SCENE_MAP_FILENAME,
@@ -16,7 +17,15 @@ from wild_boar_proxy.review_bridge_apply_admission import (
     default_review_apply_context,
 )
 from wild_boar_proxy.review_bridge_command_bus import execute_review_command
-from wild_boar_proxy.review_bridge_packet_import import ReviewImportContext
+from wild_boar_proxy.process_runner import BoundedProcessResult
+from wild_boar_proxy.review_bridge_packet_import import (
+    REVIEW_BRIDGE_GIT_OUTPUT_CAP_BYTES,
+    REVIEW_BRIDGE_GIT_RUNTIME_PATH,
+    REVIEW_BRIDGE_GIT_TIMEOUT_SECONDS,
+    ReviewImportContext,
+    ReviewPacketImportError,
+    _git_head_sha,
+)
 from wild_boar_proxy.review_bridge_session_store import ReviewQueryBridge, ReviewSessionStore
 
 
@@ -24,6 +33,28 @@ IMPORT_CONTEXT = ReviewImportContext(
     project_id="project-alpha",
     baseline_hash="sha256:baseline-alpha",
 )
+
+
+def bounded_git_result(
+    *,
+    returncode: int | None = 0,
+    stdout: str = "",
+    stderr: str = "",
+    machine_error_code: str | None = None,
+    timed_out: bool = False,
+) -> BoundedProcessResult:
+    resolved_code = machine_error_code or ("OK" if returncode == 0 else "PROCESS_FAILED")
+    return BoundedProcessResult(
+        status="ok" if resolved_code == "OK" else "error",
+        machine_error_code=resolved_code,
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=timed_out,
+        duration_seconds=0.01,
+    )
 
 
 def review_packet(**overrides: object) -> dict[str, object]:
@@ -59,6 +90,97 @@ def write_scene_manifest(root: Path, entries: list[dict[str, str]]) -> Path:
 class ReviewBridgeApplyAdmissionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = ReviewSessionStore()
+
+    def test_git_head_sha_uses_bounded_runner_with_sanitized_env_cwd_timeout_cap(
+        self,
+    ) -> None:
+        observed_calls: list[dict[str, object]] = []
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_git_result(stdout=" abc123 \n")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            with mock.patch(
+                "wild_boar_proxy.review_bridge_packet_import.run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                value = _git_head_sha(repo_root)
+
+        self.assertEqual(value, "abc123")
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(call["command"], ["git", "rev-parse", "HEAD"])
+        self.assertEqual(call["cwd"], repo_root)
+        self.assertEqual(call["timeout_seconds"], REVIEW_BRIDGE_GIT_TIMEOUT_SECONDS)
+        self.assertEqual(call["output_cap_bytes"], REVIEW_BRIDGE_GIT_OUTPUT_CAP_BYTES)
+        self.assertEqual(
+            call["env"],
+            {
+                "PATH": REVIEW_BRIDGE_GIT_RUNTIME_PATH,
+                "NO_PROXY": "127.0.0.1,localhost,::1",
+                "no_proxy": "127.0.0.1,localhost,::1",
+            },
+        )
+
+    def test_git_head_sha_rejects_nonzero_empty_timeout_missing_and_runner_exception(
+        self,
+    ) -> None:
+        cases = (
+            bounded_git_result(returncode=1, stdout="abc123\n", stderr="fatal"),
+            bounded_git_result(returncode=0, stdout=" \n"),
+            bounded_git_result(
+                returncode=None,
+                machine_error_code="PROCESS_TIMEOUT",
+                timed_out=True,
+            ),
+            bounded_git_result(
+                returncode=None,
+                machine_error_code="PROCESS_NOT_FOUND",
+                stderr="missing git",
+            ),
+        )
+        for result in cases:
+            with self.subTest(machine_error_code=result.machine_error_code):
+                with mock.patch(
+                    "wild_boar_proxy.review_bridge_packet_import.run_bounded_process",
+                    return_value=result,
+                ):
+                    with self.assertRaises(ReviewPacketImportError) as raised:
+                        _git_head_sha(Path("/tmp/repo"))
+
+                self.assertEqual(
+                    raised.exception.machine_error_code,
+                    "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+                )
+
+        with mock.patch(
+            "wild_boar_proxy.review_bridge_packet_import.run_bounded_process",
+            side_effect=RuntimeError("runner failed"),
+        ):
+            with self.assertRaises(ReviewPacketImportError) as raised:
+                _git_head_sha(Path("/tmp/repo"))
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+        )
 
     def test_default_review_apply_context_loads_server_owned_scene_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
