@@ -6070,6 +6070,264 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
         self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
 
+    def test_original_launch_prechecks_do_not_call_bounded_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            app_bundle = temp_path / "Codex.app"
+            app_bundle.mkdir()
+            missing_bundle = temp_path / "Missing.app"
+            original_exists = live_server.Path.exists
+
+            def fake_open_missing_exists(path: Path) -> bool:
+                if str(path) == "/usr/bin/open":
+                    return False
+                return original_exists(path)
+
+            with (
+                mock.patch.object(live_server, "run_bounded_process") as runner,
+                mock.patch.object(live_server, "protected_snapshot") as snapshot,
+            ):
+                forbidden = live_server._launch_original_codex_packet(
+                    {"route_id": "browser-controlled"},
+                    owner_authorized=True,
+                    app_bundle_path=app_bundle,
+                )
+                unauthorized = live_server._launch_original_codex_packet(
+                    {},
+                    owner_authorized=False,
+                    app_bundle_path=app_bundle,
+                )
+                missing_app = live_server._launch_original_codex_packet(
+                    {},
+                    owner_authorized=True,
+                    app_bundle_path=missing_bundle,
+                )
+            with (
+                mock.patch.object(live_server.Path, "exists", new=fake_open_missing_exists),
+                mock.patch.object(live_server, "run_bounded_process") as missing_open_runner,
+                mock.patch.object(live_server, "protected_snapshot") as missing_open_snapshot,
+            ):
+                missing_open = live_server._launch_original_codex_packet(
+                    {},
+                    owner_authorized=True,
+                    app_bundle_path=app_bundle,
+                )
+
+        runner.assert_not_called()
+        snapshot.assert_not_called()
+        missing_open_runner.assert_not_called()
+        missing_open_snapshot.assert_not_called()
+        self.assertEqual(forbidden["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(unauthorized["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(missing_app["machine_error_code"], "ORIGINAL_CODEX_APP_UNAVAILABLE")
+        self.assertEqual(missing_open["machine_error_code"], "SYSTEM_OPEN_UNAVAILABLE")
+
+    def test_original_launch_uses_bounded_runner_with_sanitized_env_and_neutral_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            app_bundle = temp_path / "Codex.app"
+            app_bundle.mkdir()
+            protected = {"codex_config": {"exists": True, "mtime_ns": 1}}
+            process = live_server.BoundedProcessResult(
+                status="ok",
+                machine_error_code=live_server.PROCESS_OK,
+                exit_code=0,
+                stdout="hidden stdout",
+                stderr="hidden stderr",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.01,
+            )
+            original_exists = live_server.Path.exists
+
+            def fake_open_exists(path: Path) -> bool:
+                if str(path) == "/usr/bin/open":
+                    return True
+                return original_exists(path)
+
+            with (
+                mock.patch.object(live_server.Path, "exists", new=fake_open_exists),
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "HOME": "/tmp/ambient-home",
+                        "CODEX_HOME": "/tmp/ambient-codex",
+                        "OPENAI_API_KEY": "sk-should-not-leak",
+                        "WBP_ENDPOINT": "http://127.0.0.1:1",
+                    },
+                    clear=False,
+                ),
+                mock.patch.object(live_server, "protected_snapshot", side_effect=[protected, protected]) as snapshot,
+                mock.patch.object(
+                    live_server,
+                    "compare_snapshots",
+                    return_value={"codex_config": {"exists_unchanged": True}},
+                ),
+                mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=True),
+                mock.patch.object(live_server, "run_bounded_process", return_value=process) as runner,
+            ):
+                packet = live_server._launch_original_codex_packet(
+                    {},
+                    owner_authorized=True,
+                    app_bundle_path=app_bundle,
+                )
+
+        runner.assert_called_once()
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], ["/usr/bin/open", "-a", str(app_bundle)])
+        self.assertEqual(kwargs["timeout_seconds"], live_server.ORIGINAL_CODEX_SYSTEM_OPEN_TIMEOUT_SECONDS)
+        self.assertEqual(kwargs["cwd"], live_server.ORIGINAL_CODEX_SYSTEM_OPEN_CWD)
+        self.assertNotIn("shell", kwargs)
+        env = kwargs["env"]
+        self.assertNotIn("HOME", env)
+        self.assertNotIn("CODEX_HOME", env)
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("WBP_ENDPOINT", env)
+        self.assertEqual(snapshot.call_count, 2)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["dispatch_observed"])
+        self.assertEqual(packet["dispatch_exit_code"], 0)
+        self.assertTrue(packet["running_status"])
+        self.assertNotIn("hidden stdout", json.dumps(packet))
+        self.assertNotIn("hidden stderr", json.dumps(packet))
+
+    def test_original_launch_bounded_process_failures_do_not_claim_running_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            app_bundle = temp_path / "Codex.app"
+            app_bundle.mkdir()
+            protected = {"codex_config": {"exists": True, "mtime_ns": 1}}
+            original_exists = live_server.Path.exists
+
+            def fake_open_exists(path: Path) -> bool:
+                if str(path) == "/usr/bin/open":
+                    return True
+                return original_exists(path)
+
+            cases = (
+                (
+                    "nonzero",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_FAILED,
+                        exit_code=17,
+                        stdout="",
+                        stderr="failed",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.01,
+                    ),
+                    17,
+                ),
+                (
+                    "timeout",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_TIMEOUT,
+                        exit_code=None,
+                        stdout="",
+                        stderr="",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=True,
+                        duration_seconds=5.0,
+                    ),
+                    None,
+                ),
+                (
+                    "not_found",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_NOT_FOUND,
+                        exit_code=None,
+                        stdout="",
+                        stderr="missing",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.01,
+                    ),
+                    None,
+                ),
+            )
+
+            for name, process, expected_exit_code in cases:
+                with self.subTest(name=name):
+                    with (
+                        mock.patch.object(live_server.Path, "exists", new=fake_open_exists),
+                        mock.patch.object(live_server, "protected_snapshot", side_effect=[protected, protected]),
+                        mock.patch.object(
+                            live_server,
+                            "compare_snapshots",
+                            return_value={"codex_config": {"exists_unchanged": True}},
+                        ),
+                        mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=True),
+                        mock.patch.object(live_server, "run_bounded_process", return_value=process),
+                    ):
+                        packet = live_server._launch_original_codex_packet(
+                            {},
+                            owner_authorized=True,
+                            app_bundle_path=app_bundle,
+                        )
+                    self.assertEqual(packet["status"], "blocked")
+                    self.assertEqual(packet["machine_error_code"], "ORIGINAL_CODEX_LAUNCH_FAILED")
+                    self.assertFalse(packet["dispatch_observed"])
+                    self.assertEqual(packet["dispatch_exit_code"], expected_exit_code)
+                    self.assertFalse(packet["running_status"])
+                    self.assertEqual(packet["next_action"], "retry_original_launch")
+
+    def test_original_launch_protected_surface_mutation_overrides_process_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            app_bundle = temp_path / "Codex.app"
+            app_bundle.mkdir()
+            before = {"codex_config": {"exists": True, "sha256": "before"}}
+            after = {"codex_config": {"exists": True, "sha256": "after"}}
+            comparisons = {"codex_config": {"sha256_unchanged": False}}
+            process = live_server.BoundedProcessResult(
+                status="ok",
+                machine_error_code=live_server.PROCESS_OK,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.01,
+            )
+            original_exists = live_server.Path.exists
+
+            def fake_open_exists(path: Path) -> bool:
+                if str(path) == "/usr/bin/open":
+                    return True
+                return original_exists(path)
+
+            with (
+                mock.patch.object(live_server.Path, "exists", new=fake_open_exists),
+                mock.patch.object(live_server, "protected_snapshot", side_effect=[before, after]),
+                mock.patch.object(live_server, "compare_snapshots", return_value=comparisons),
+                mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=False),
+                mock.patch.object(live_server, "run_bounded_process", return_value=process),
+            ):
+                packet = live_server._launch_original_codex_packet(
+                    {},
+                    owner_authorized=True,
+                    app_bundle_path=app_bundle,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CURRENT_CODEX_TOUCHED")
+        self.assertTrue(packet["dispatch_observed"])
+        self.assertEqual(packet["dispatch_exit_code"], 0)
+        self.assertFalse(packet["running_status"])
+        self.assertTrue(packet["current_codex_touched"])
+        self.assertFalse(packet["protected_surfaces_unchanged"])
+        self.assertEqual(packet["protected_surface_comparisons"], comparisons)
+        self.assertEqual(packet["next_action"], "stop_and_diagnose_current_codex_touch")
+
     def test_original_and_custom_launch_endpoints_prove_authorized_baseline_and_workbench(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []
 
@@ -6107,7 +6365,21 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 mock.patch.object(live_server, "protected_snapshot", side_effect=[protected, protected]),
                 mock.patch.object(live_server, "compare_snapshots", return_value={"codex_config": {"exists_unchanged": True, "mtime_ns_unchanged": True, "size_unchanged": True, "sha256_unchanged": True}}),
                 mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=True),
-                mock.patch.object(live_server.subprocess, "run", return_value=live_server.subprocess.CompletedProcess(args=["open"], returncode=0, stdout="", stderr="")),
+                mock.patch.object(
+                    live_server,
+                    "run_bounded_process",
+                    return_value=live_server.BoundedProcessResult(
+                        status="ok",
+                        machine_error_code=live_server.PROCESS_OK,
+                        exit_code=0,
+                        stdout="",
+                        stderr="",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.01,
+                    ),
+                ),
                 mock.patch.object(
                     live_server,
                     "CodexCustomSessionManager",

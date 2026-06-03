@@ -1009,6 +1009,8 @@ LEGACY_IMPORT_TOKEN_INVALID_CODE = "UI_LEGACY_IMPORT_TOKEN_INVALID"
 LEGACY_IMPORT_TOKEN_UNKNOWN_CODE = "UI_LEGACY_IMPORT_TOKEN_UNKNOWN"
 LEGACY_IMPORT_CONFIRM_INVALID_CODE = "UI_LEGACY_IMPORT_CONFIRM_INVALID"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
+ORIGINAL_CODEX_SYSTEM_OPEN_TIMEOUT_SECONDS = 5.0
+ORIGINAL_CODEX_SYSTEM_OPEN_CWD = Path("/")
 
 
 @dataclass(frozen=True)
@@ -4140,27 +4142,17 @@ def _launch_original_codex_packet(
             env.pop(key, None)
     env.pop("CODEX_HOME", None)
     before = protected_snapshot()
-    try:
-        launch = subprocess.run(
-            [str(open_bin), "-a", str(app_bundle)],
-            capture_output=True,
-            text=True,
-            env=env,
-            check=False,
-        )
-    except OSError as exc:
-        return {
-            **base,
-            "status": "failed",
-            "machine_error_code": "ORIGINAL_CODEX_LAUNCH_FAILED",
-            "human_message": f"Original Codex launch failed: {type(exc).__name__}.",
-            "error_class": type(exc).__name__,
-            "next_action": "retry_original_launch",
-        }
+    launch = run_bounded_process(
+        [str(open_bin), "-a", str(app_bundle)],
+        env=env,
+        cwd=ORIGINAL_CODEX_SYSTEM_OPEN_CWD,
+        timeout_seconds=ORIGINAL_CODEX_SYSTEM_OPEN_TIMEOUT_SECONDS,
+    )
     after = protected_snapshot()
     comparisons = compare_snapshots(before, after)
     untouched = protected_surfaces_unchanged(comparisons)
-    running_status = launch.returncode == 0 and untouched
+    dispatch_observed = launch.machine_error_code == PROCESS_OK and launch.exit_code == 0
+    running_status = dispatch_observed and untouched
     return {
         **base,
         "status": "ok" if running_status else "blocked",
@@ -4171,8 +4163,8 @@ def _launch_original_codex_packet(
             else "Original Codex launch did not satisfy protected-baseline proof."
         ),
         "owner_authorization_phrase_present": True,
-        "dispatch_observed": launch.returncode == 0,
-        "dispatch_exit_code": launch.returncode,
+        "dispatch_observed": dispatch_observed,
+        "dispatch_exit_code": launch.exit_code,
         "running_status": running_status,
         "proxy_env_present": False,
         "wbp_endpoint_injected": False,

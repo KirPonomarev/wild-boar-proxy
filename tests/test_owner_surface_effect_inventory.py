@@ -571,6 +571,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_web_design_original_codex_launch_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(WEB_DESIGN_LIVE_SERVER, "_launch_original_codex_packet"))
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:
