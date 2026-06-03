@@ -15,6 +15,7 @@ class AccountLifecyclePaths(Protocol):
 class AccountLifecycleDependencies:
     run_protective_lifecycle_owner_path: Callable[..., dict[str, Any]]
     run_demote_impl: Callable[..., dict[str, Any]]
+    run_promote_impl: Callable[..., dict[str, Any]]
     run_retire_impl: Callable[..., dict[str, Any]]
 
 
@@ -55,6 +56,20 @@ def run_demote(
     dependencies: AccountLifecycleDependencies,
 ) -> dict[str, Any]:
     return dependencies.run_demote_impl(paths, backend_id)
+
+
+def run_promote(
+    paths: AccountLifecyclePaths,
+    backend_id: str,
+    *,
+    lock_acquired: bool = False,
+    dependencies: AccountLifecycleDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_promote_impl(
+        paths,
+        backend_id,
+        lock_acquired=lock_acquired,
+    )
 
 
 def run_retire(

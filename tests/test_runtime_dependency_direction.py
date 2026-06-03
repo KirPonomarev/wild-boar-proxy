@@ -617,6 +617,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
+            run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
 
@@ -659,6 +660,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
+            run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
 
@@ -743,6 +745,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=fake_run_demote_impl,
+            run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
 
@@ -770,6 +773,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
+            run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=fake_run_retire_impl,
         )
 
@@ -835,6 +839,110 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                     "retire",
                     ("paths-sentinel", "backend-retire"),
                     {"dependencies": runtime_mod._accounts_lifecycle_dependencies()},
+                ),
+            ],
+        )
+
+    def test_accounts_lifecycle_promote_wrapper_passes_exact_impl_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_promote_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "transition": "promote",
+                "lock_acquired": kwargs["lock_acquired"],
+            }
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_promote_impl=fake_run_promote_impl,
+            run_retire_impl=lambda *args, **kwargs: {},
+        )
+
+        default_payload = accounts_lifecycle.run_promote(
+            "paths-sentinel",
+            "backend-default",
+            dependencies=dependencies,
+        )
+        locked_payload = accounts_lifecycle.run_promote(
+            "paths-sentinel",
+            "backend-locked",
+            lock_acquired=True,
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(default_payload["transition"], "promote")
+        self.assertIs(default_payload["lock_acquired"], False)
+        self.assertIs(locked_payload["lock_acquired"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "backend-default"),
+                    {"lock_acquired": False},
+                ),
+                (
+                    ("paths-sentinel", "backend-locked"),
+                    {"lock_acquired": True},
+                ),
+            ],
+        )
+
+    def test_accounts_lifecycle_promote_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_lifecycle_run_promote(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "transition": "promote",
+                "lock_acquired": kwargs["lock_acquired"],
+            }
+
+        with mock.patch.object(
+            accounts_lifecycle,
+            "run_promote",
+            side_effect=fake_lifecycle_run_promote,
+        ):
+            default_payload = runtime_mod.run_promote(
+                "paths-sentinel",
+                "backend-default",
+            )
+            locked_payload = runtime_mod.run_promote(
+                "paths-sentinel",
+                "backend-locked",
+                lock_acquired=True,
+            )
+
+        self.assertEqual(default_payload["transition"], "promote")
+        self.assertIs(default_payload["lock_acquired"], False)
+        self.assertIs(locked_payload["lock_acquired"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "backend-default"),
+                    {
+                        "lock_acquired": False,
+                        "dependencies": runtime_mod._accounts_lifecycle_dependencies(),
+                    },
+                ),
+                (
+                    ("paths-sentinel", "backend-locked"),
+                    {
+                        "lock_acquired": True,
+                        "dependencies": runtime_mod._accounts_lifecycle_dependencies(),
+                    },
                 ),
             ],
         )

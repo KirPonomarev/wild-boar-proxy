@@ -165,17 +165,10 @@ OWNER_SURFACES = {
         ),
     ),
     "run_promote": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_promote",
         SUBPROCESS_ADJACENT,
-        frozenset(
-            {
-                "serialized_lock",
-                "run_bounded_process",
-                "run_sync_for_owner_path_under_lock",
-                "detect_changed_files",
-            }
-        ),
+        frozenset({"run_promote_impl"}),
     ),
     "run_demote": Surface(
         ACCOUNTS_LIFECYCLE,
@@ -235,7 +228,7 @@ KNOWN_EFFECT_CONTRACT_GAPS = {
     ),
     "promote_missing_mutation_metadata": (
         RUNTIME,
-        "run_promote",
+        "_run_promote_impl",
         "mutation_id",
     ),
 }
@@ -301,7 +294,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME_HEALTH, "run_healthcheck_probe"),
                 (RUNTIME_REPAIR, "run_healthcheck_repair"),
                 (RUNTIME, "run_onboard"),
-                (RUNTIME, "run_promote"),
+                (ACCOUNTS_LIFECYCLE, "run_promote"),
                 (ACCOUNTS_LIFECYCLE, "run_demote"),
                 (ACCOUNTS_LIFECYCLE, "run_hold"),
                 (ACCOUNTS_LIFECYCLE, "run_release"),
@@ -389,7 +382,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_promote_uses_bounded_runner_without_raw_subprocess(self) -> None:
-        calls = _call_names(_function(RUNTIME, "run_promote"))
+        calls = _call_names(_function(RUNTIME, "_run_promote_impl"))
         self.assertIn("serialized_lock", calls)
         self.assertIn("run_bounded_process", calls)
         self.assertIn("run_sync_for_owner_path_under_lock", calls)
@@ -474,7 +467,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(SUBPROCESS_ADJACENT, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
 
-        for name in ("run_demote", "run_hold", "run_release", "run_retire"):
+        for name in (
+            "run_demote",
+            "run_hold",
+            "run_promote",
+            "run_release",
+            "run_retire",
+        ):
             surface = OWNER_SURFACES[name]
             with self.subTest(function=f"{surface.function}_delegates"):
                 calls = _call_names(_function(surface.path, surface.function))

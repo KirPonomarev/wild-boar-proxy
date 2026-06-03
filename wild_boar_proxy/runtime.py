@@ -14392,6 +14392,7 @@ def _accounts_lifecycle_dependencies() -> Any:
     return AccountLifecycleDependencies(
         run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path,
         run_demote_impl=_run_demote_impl,
+        run_promote_impl=_run_promote_impl,
         run_retire_impl=_run_retire_impl,
     )
 
@@ -15928,6 +15929,22 @@ def run_protective_lifecycle_owner_path(
 
 
 def run_promote(
+    paths: RuntimePaths,
+    backend_id: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
+    from .accounts_lifecycle import run_promote as _run_promote
+
+    return _run_promote(
+        paths,
+        backend_id,
+        lock_acquired=lock_acquired,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
+
+
+def _run_promote_impl(
     paths: RuntimePaths,
     backend_id: str,
     *,
