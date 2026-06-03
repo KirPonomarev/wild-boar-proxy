@@ -8469,121 +8469,39 @@ def run_invariant_check(paths: RuntimePaths) -> dict[str, Any]:
     return build_invariant_check_packet(paths)
 
 
-def build_status_snapshot_payload(paths: RuntimePaths) -> dict[str, Any]:
-    desired_mode = get_desired_mode(paths)
-    registry = read_json(paths.registry_file)
-    pool_counts = summarize_registry_pool_counts(registry)
-    policy_drift_observed = get_stable_policy_drift(paths, registry)
-    state = read_json(paths.state_file, required=False)
-    effective_mode = get_effective_mode(paths, state)
-    _, _, endpoint = get_endpoint(paths, effective_mode)
-    configured_model = get_model(paths)
-    configured_proxy_url = get_configured_proxy_url(paths, effective_mode)
-    current_proxy_url = get_reported_current_proxy_url(paths, state, effective_mode)
-    registry_identity = get_registry_identity(registry)
-    stable_runtime_consumer = build_stable_runtime_consumer_contract(
-        paths, registry, policy_drift_observed, state
-    )
-    current_proxy_adoption_contract = {
-        **build_current_proxy_adoption_contract(paths),
-        "status_delegates_to_owner": False,
-        "status_snapshot_only": True,
-    }
-    last_known_good_proxy_contract = {
-        **build_last_known_good_proxy_contract(paths),
-        "status_delegates_to_owner": False,
-        "status_snapshot_only": True,
-    }
-    last_known_good_proxy = build_last_known_good_proxy_surface(
-        paths, state, current_proxy_url
-    )
-    pool_summary = {
-        "active": int(pool_counts.get("active", 0) or 0),
-        "reserve": int(pool_counts.get("reserve", 0) or 0),
-        "retired": int(pool_counts.get("retired", 0) or 0),
-        "healthy": int(state.get("healthy_count", 0) or 0),
-        "degraded": int(state.get("degraded_count", 0) or 0),
-        "down": int(state.get("down_count", 0) or 0),
-        "selected_backend_ids": state.get("selected_backend_ids") or [],
-        "backend_count": len(registry.get("backends") or []),
-    }
-    auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
-    auth_pool_hygiene["delegated_from_status"] = False
-    native_auth_recovery_hint = build_native_auth_recovery_hint(
-        machine_error_code="OK",
-        auth_pool_hygiene=auth_pool_hygiene,
-    )
-    native_auth_recovery_hint["delegated_from_status"] = False
-    launch_readiness = {
-        "status": "not_evaluated",
-        "owner_command_surface": "status --json",
-        "delegated_from_status": False,
-        "real_inference_required": True,
-        "listener_reachable": None,
-        "models_surface_reachable": None,
-        "responses_proof_passed": None,
-        "truth_alignment_passed": None,
-        "base_url_match": None,
-        "effective_mode_match": None,
-        "model_match": None,
-        "proxy_url_match": None,
-        "gate_passed": False,
-        "blocking_reason": "live_attestation_not_run_by_status",
-        "failed_checks": ["live_attestation_not_run_by_status"],
-        "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
-        "last_error": "",
-        "auth_pool_hygiene_status": auth_pool_hygiene.get("status", ""),
-        "launch_capable_backend_count": auth_pool_hygiene.get(
-            "launch_capable_backend_count"
-        ),
-    }
-    runtime_guardrails = build_runtime_guardrail_surface(
-        paths,
-        launch_readiness=launch_readiness,
-        auth_pool_hygiene=auth_pool_hygiene,
-        recovery_result=None,
-    )
-    runtime_guardrails["delegated_from_status"] = False
-    runtime_guardrails["owner_command_surface"] = "status --json"
+def _status_snapshot_dependencies() -> Any:
+    from .runtime_status import StatusSnapshotDependencies
 
-    return build_command_payload(
-        ok=True,
-        human_message="Runtime status snapshot is available.",
-        machine_error_code="OK",
-        liveness="unknown",
-        severity="recoverable",
-        operator_action="none",
-        changed_files=[],
-        effect=EFFECT_READ,
-        extra={
-            "desired_mode": desired_mode,
-            "effective_mode": effective_mode,
-            "endpoint": endpoint,
-            "configured_model": configured_model,
-            "requested_model": configured_model,
-            "configured_proxy_url": configured_proxy_url,
-            "current_proxy_url": current_proxy_url,
-            "current_proxy_adoption_contract": current_proxy_adoption_contract,
-            "last_known_good_proxy_contract": last_known_good_proxy_contract,
-            "last_known_good_proxy": last_known_good_proxy,
-            "pool_summary": pool_summary,
-            "auth_pool_hygiene": auth_pool_hygiene,
-            "native_auth_recovery_hint": native_auth_recovery_hint,
-            "policy_drift": policy_drift_observed,
-            "policy_drift_observed": policy_drift_observed,
-            "stable_runtime_consumer": stable_runtime_consumer,
-            "launch_readiness": launch_readiness,
-            "runtime_guardrails": runtime_guardrails,
-            "registry_identity_summary": summarize_registry_identity(registry_identity),
-            "claim_gate": get_claim_gate(policy_drift_observed, registry_identity),
-            "last_error": str(state.get("last_error", "")),
-            "attestation_summary": {
-                "status": "not_run",
-                "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
-                "attestation_source": "status --json",
-                "observed_at_utc": "",
-            },
-        },
+    return StatusSnapshotDependencies(
+        get_desired_mode=get_desired_mode,
+        read_json=read_json,
+        summarize_registry_pool_counts=summarize_registry_pool_counts,
+        get_stable_policy_drift=get_stable_policy_drift,
+        get_effective_mode=get_effective_mode,
+        get_endpoint=get_endpoint,
+        get_model=get_model,
+        get_configured_proxy_url=get_configured_proxy_url,
+        get_reported_current_proxy_url=get_reported_current_proxy_url,
+        get_registry_identity=get_registry_identity,
+        build_stable_runtime_consumer_contract=build_stable_runtime_consumer_contract,
+        build_current_proxy_adoption_contract=build_current_proxy_adoption_contract,
+        build_last_known_good_proxy_contract=build_last_known_good_proxy_contract,
+        build_last_known_good_proxy_surface=build_last_known_good_proxy_surface,
+        summarize_auth_pool_hygiene=summarize_auth_pool_hygiene,
+        build_native_auth_recovery_hint=build_native_auth_recovery_hint,
+        build_runtime_guardrail_surface=build_runtime_guardrail_surface,
+        build_command_payload=build_command_payload,
+        summarize_registry_identity=summarize_registry_identity,
+        get_claim_gate=get_claim_gate,
+    )
+
+
+def build_status_snapshot_payload(paths: RuntimePaths) -> dict[str, Any]:
+    from .runtime_status import build_status_snapshot_payload as _build_status_snapshot
+
+    return _build_status_snapshot(
+        paths,
+        dependencies=_status_snapshot_dependencies(),
     )
 
 
