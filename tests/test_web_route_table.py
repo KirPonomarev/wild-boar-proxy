@@ -29,6 +29,7 @@ class WebRouteTableTests(unittest.TestCase):
                     auth_required=True,
                     body_kind=BODY_KIND_JSON,
                     browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+                    handler_id="post_api_action",
                 )
             ]
         )
@@ -47,6 +48,7 @@ class WebRouteTableTests(unittest.TestCase):
             auth_required=True,
             body_kind=BODY_KIND_JSON,
             browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+            handler_id="post_api_codex_custom_prefix",
             prefix=True,
         )
         narrow = RouteSpec(
@@ -56,6 +58,7 @@ class WebRouteTableTests(unittest.TestCase):
             auth_required=True,
             body_kind=BODY_KIND_JSON,
             browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+            handler_id="post_api_codex_custom_sessions_prefix",
             prefix=True,
         )
         table = WebRouteTable([broad, narrow])
@@ -77,6 +80,29 @@ class WebRouteTableTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             WebRouteTable([route, route])
 
+    def test_duplicate_post_handler_ids_are_rejected(self) -> None:
+        first = RouteSpec(
+            method="POST",
+            path="/api/first",
+            effect=EFFECT_MUTATE,
+            auth_required=True,
+            body_kind=BODY_KIND_JSON,
+            browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+            handler_id="post_duplicate",
+        )
+        second = RouteSpec(
+            method="POST",
+            path="/api/second",
+            effect=EFFECT_MUTATE,
+            auth_required=True,
+            body_kind=BODY_KIND_JSON,
+            browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+            handler_id="post_duplicate",
+        )
+
+        with self.assertRaises(ValueError):
+            WebRouteTable([first, second])
+
     def test_effects_are_canonical(self) -> None:
         self.assertEqual(CANONICAL_ROUTE_EFFECTS, {"read", "probe", "mutate", "repair"})
         with self.assertRaises(ValueError):
@@ -87,6 +113,17 @@ class WebRouteTableTests(unittest.TestCase):
                 auth_required=False,
                 body_kind=BODY_KIND_NONE,
                 browser_field_policy=BROWSER_FIELD_POLICY_NONE,
+            )
+
+    def test_post_routes_require_handler_id(self) -> None:
+        with self.assertRaises(ValueError):
+            RouteSpec(
+                method="POST",
+                path="/api/status",
+                effect=EFFECT_MUTATE,
+                auth_required=True,
+                body_kind=BODY_KIND_JSON,
+                browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
             )
 
 

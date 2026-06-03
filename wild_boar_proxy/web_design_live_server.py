@@ -1005,6 +1005,12 @@ def _get_route(path: str) -> RouteSpec:
     )
 
 
+def _route_handler_id(method: str, path: str, *, prefix: bool = False) -> str:
+    normalized_path = path.strip("/").replace("-", "_").replace("/", "_")
+    suffix = "_prefix" if prefix else ""
+    return f"{method.lower()}_{normalized_path or 'root'}{suffix}"
+
+
 def _post_route(
     path: str,
     effect: str,
@@ -1023,6 +1029,7 @@ def _post_route(
         browser_field_policy=browser_field_policy,
         effect_source=effect_source,
         multiplexed_by=multiplexed_by,
+        handler_id=_route_handler_id("POST", path),
     )
 
 
@@ -1044,6 +1051,7 @@ def _post_prefix_route(
         prefix=True,
         effect_source=effect_source,
         multiplexed_by=multiplexed_by,
+        handler_id=_route_handler_id("POST", path, prefix=True),
     )
 
 
@@ -9053,6 +9061,8 @@ def build_handler(
         )
 
     class Handler(BaseHTTPRequestHandler):
+        POST_ROUTE_DISPATCH_TABLE: dict[str, str] = {}
+
         def do_GET(self) -> None:
             try:
                 self._handle_get()
@@ -9608,165 +9618,127 @@ def build_handler(
 
         def _handle_post(self) -> None:
             parsed = urlparse(self.path)
-            self._admit_post_request(parsed.path)
-            if parsed.path == "/api/operator/run":
-                self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
-                return
-            if parsed.path == "/api/review-command":
-                payload = self._read_json_body()
-                command_id = payload.get("command_id")
-                if not isinstance(command_id, str):
-                    self._send_json(
-                        {
-                            "status": "command_error",
-                            "exit_code": 1,
-                            "human_message": "command_id must be a non-empty string.",
-                            "machine_error_code": "REVIEW_COMMAND_ID_REQUIRED",
-                            "changed_files": [],
-                            "next_action": "fix_command_payload",
-                            "data": {},
-                        }
-                    )
-                    return
-                command_payload = payload.get("payload", {})
+            route_spec = self._admit_post_request(parsed.path)
+            self._dispatch_post_route(route_spec, parsed.path)
+
+        def _dispatch_post_route(self, route_spec: RouteSpec, request_path: str) -> None:
+            handler_id = str(route_spec.handler_id or "").strip()
+            if not handler_id:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_POST_ROUTE_HANDLER_ID_MISSING",
+                    human_message="Registered Web POST route is missing its handler binding.",
+                )
+            dispatcher_name = type(self).POST_ROUTE_DISPATCH_TABLE.get(handler_id)
+            if dispatcher_name is None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_POST_ROUTE_DISPATCH_MISSING",
+                    human_message="Registered Web POST route is not bound in the dispatch table.",
+                )
+            dispatcher = getattr(self, dispatcher_name, None)
+            if not callable(dispatcher):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_POST_ROUTE_DISPATCH_TARGET_MISSING",
+                    human_message="Registered Web POST route dispatch target is unavailable.",
+                )
+            dispatcher(request_path)
+
+        def _handle_post_api_operator_run(self, actual_path: str) -> None:
+            self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+            return
+
+        def _handle_post_api_review_command(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            command_id = payload.get("command_id")
+            if not isinstance(command_id, str):
                 self._send_json(
-                    execute_review_command(
-                        review_session_store,
-                        command_id,
-                        payload=command_payload if isinstance(command_payload, dict) else {},
-                        import_context=bounded_review_import_context,
-                        apply_context=command_review_apply_context,
-                    )
+                    {
+                        "status": "command_error",
+                        "exit_code": 1,
+                        "human_message": "command_id must be a non-empty string.",
+                        "machine_error_code": "REVIEW_COMMAND_ID_REQUIRED",
+                        "changed_files": [],
+                        "next_action": "fix_command_payload",
+                        "data": {},
+                    }
                 )
                 return
-            if parsed.path == "/api/codex/original/launch-dry-run":
-                self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
-                return
-            if parsed.path == "/api/codex/original/launch":
-                self._send_json(
-                    _launch_original_codex_packet(
-                        self._read_json_body(),
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                    )
+            command_payload = payload.get("payload", {})
+            self._send_json(
+                execute_review_command(
+                    review_session_store,
+                    command_id,
+                    payload=command_payload if isinstance(command_payload, dict) else {},
+                    import_context=bounded_review_import_context,
+                    apply_context=command_review_apply_context,
                 )
-                return
-            if parsed.path == "/api/codex/custom/launch-dry-run":
-                self._send_json(build_custom_launch_dry_run_packet(self._read_json_body()))
-                return
-            if parsed.path == "/api/codex/custom/launch":
-                operator_status = (
-                    operator_surface_session.status_payload()
-                    if codex_custom_live_prompt_authorized
-                    else None
+            )
+            return
+
+        def _handle_post_api_codex_original_launch_dry_run(self, actual_path: str) -> None:
+            self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
+            return
+
+        def _handle_post_api_codex_original_launch(self, actual_path: str) -> None:
+            self._send_json(
+                _launch_original_codex_packet(
+                    self._read_json_body(),
+                    owner_authorized=codex_custom_live_prompt_authorized,
                 )
-                account_commands = (
-                    self._codex_account_commands()
-                    if codex_custom_live_prompt_authorized
-                    else {}
+            )
+            return
+
+        def _handle_post_api_codex_custom_launch_dry_run(self, actual_path: str) -> None:
+            self._send_json(build_custom_launch_dry_run_packet(self._read_json_body()))
+            return
+
+        def _handle_post_api_codex_custom_launch(self, actual_path: str) -> None:
+            operator_status = (
+                operator_surface_session.status_payload()
+                if codex_custom_live_prompt_authorized
+                else None
+            )
+            account_commands = (
+                self._codex_account_commands()
+                if codex_custom_live_prompt_authorized
+                else {}
+            )
+            api_snapshot = (
+                build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                if codex_custom_live_prompt_authorized
+                else None
+            )
+            self._send_json(
+                _launch_custom_codex_packet(
+                    self._read_json_body(),
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    session_manager=codex_custom_sessions,
+                    commands=account_commands,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
                 )
-                api_snapshot = (
-                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                    if codex_custom_live_prompt_authorized
-                    else None
+            )
+            return
+
+        def _handle_post_api_codex_custom_native_launch_preflight(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = (
+                build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                if codex_custom_live_prompt_authorized
+                else None
+            )
+            external_routes_packet = (
+                _external_routes_packet() if codex_custom_live_prompt_authorized else None
+            )
+            operator_status = None
+            if codex_custom_live_prompt_authorized:
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
                 )
-                self._send_json(
-                    _launch_custom_codex_packet(
-                        self._read_json_body(),
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        session_manager=codex_custom_sessions,
-                        commands=account_commands,
-                        operator_status=operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/native-launch-preflight":
-                payload = self._read_json_body()
-                api_snapshot = (
-                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                    if codex_custom_live_prompt_authorized
-                    else None
-                )
-                external_routes_packet = (
-                    _external_routes_packet() if codex_custom_live_prompt_authorized else None
-                )
-                operator_status = None
-                if codex_custom_live_prompt_authorized:
-                    operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                        operator_surface_session
-                    )
-                self._send_json(
-                    _custom_native_launch_preflight_packet(
-                        payload,
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        operator_status=operator_status,
-                        api_snapshot=api_snapshot,
-                        external_routes_packet=external_routes_packet,
-                        native_bridge_lease=custom_native_bridge_lease,
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/native-launch":
-                payload = self._read_json_body()
-                if not codex_custom_live_prompt_authorized:
-                    self._send_json(
-                        _launch_custom_native_codex_packet(
-                            payload,
-                            owner_authorized=False,
-                            commands={},
-                            operator_status=None,
-                            api_snapshot=None,
-                            external_routes_packet=None,
-                            native_bridge_lease=custom_native_bridge_lease,
-                        )
-                    )
-                    return
-                if codex_custom_live_prompt_authorized:
-                    model_id = str(payload.get("model_id") or "").strip()
-                    execution_mode = str(payload.get("execution_mode") or "").strip()
-                    api_model_id = str(payload.get("api_model_id") or "").strip()
-                    chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
-                    missing_selection = not any(
-                        [model_id, execution_mode, api_model_id, chatgpt_model_id]
-                    )
-                    if _forbidden_custom_live_launch_fields(payload) or missing_selection:
-                        packet = _launch_custom_native_codex_packet(
-                            payload,
-                            owner_authorized=True,
-                            commands={},
-                            operator_status=None,
-                            api_snapshot=None,
-                            external_routes_packet=None,
-                            native_bridge_lease=custom_native_bridge_lease,
-                        )
-                        record_custom_native_launch_packet(packet)
-                        self._send_json(packet)
-                        return
-                api_snapshot = (
-                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                    if codex_custom_live_prompt_authorized
-                    else None
-                )
-                external_routes_packet = (
-                    _external_routes_packet() if codex_custom_live_prompt_authorized else None
-                )
-                route_model_ids = {
-                    str(route.get("route_id") or "").strip()
-                    for route in _enabled_external_route_records(external_routes_packet)
-                }
-                requested_model_id = str(payload.get("model_id") or "").strip()
-                if str(payload.get("execution_mode") or "").strip() == "api_only":
-                    requested_model_id = str(payload.get("api_model_id") or "").strip()
-                api_route_selected = (
-                    bool(requested_model_id) and requested_model_id in route_model_ids
-                )
-                operator_status = None
-                if codex_custom_live_prompt_authorized:
-                    operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                        operator_surface_session
-                    )
-                preflight_packet = _custom_native_launch_preflight_packet(
+            self._send_json(
+                _custom_native_launch_preflight_packet(
                     payload,
                     owner_authorized=codex_custom_live_prompt_authorized,
                     operator_status=operator_status,
@@ -9775,765 +9747,871 @@ def build_handler(
                     native_bridge_lease=custom_native_bridge_lease,
                     last_launch_packet=custom_native_launch_state["last_packet"],
                 )
-                if preflight_packet.get("status") != "ok":
-                    packet = _custom_native_launch_stability_guard_packet(
-                        preflight_packet,
-                        status=str(preflight_packet.get("status") or "blocked"),
-                        machine_error_code=str(
-                            preflight_packet.get("machine_error_code")
-                            or "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_BLOCKED"
-                        ),
-                        human_message="Custom native launch stopped because preflight did not return an ok packet.",
-                    )
-                    self._send_json(packet)
-                    return
-                api_route_launch_selected = (
-                    api_route_selected or preflight_packet.get("route_selected") is True
-                )
-                stable_bridge_prewarm = {}
-                if api_route_launch_selected:
-                    stable_bridge_prewarm = _custom_native_stable_bridge_prewarm_packet(
-                        preflight_packet,
-                        requested_model_id=requested_model_id,
-                        operator_status=operator_status,
-                        api_snapshot=api_snapshot,
-                        external_routes_packet=external_routes_packet,
+            )
+            return
+
+        def _handle_post_api_codex_custom_native_launch(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            if not codex_custom_live_prompt_authorized:
+                self._send_json(
+                    _launch_custom_native_codex_packet(
+                        payload,
+                        owner_authorized=False,
+                        commands={},
+                        operator_status=None,
+                        api_snapshot=None,
+                        external_routes_packet=None,
                         native_bridge_lease=custom_native_bridge_lease,
                     )
-                    preflight_packet["stable_bridge_prewarm_required"] = (
-                        stable_bridge_prewarm.get("prewarm_required") is True
+                )
+                return
+            if codex_custom_live_prompt_authorized:
+                model_id = str(payload.get("model_id") or "").strip()
+                execution_mode = str(payload.get("execution_mode") or "").strip()
+                api_model_id = str(payload.get("api_model_id") or "").strip()
+                chatgpt_model_id = str(payload.get("chatgpt_model_id") or "").strip()
+                missing_selection = not any(
+                    [model_id, execution_mode, api_model_id, chatgpt_model_id]
+                )
+                if _forbidden_custom_live_launch_fields(payload) or missing_selection:
+                    packet = _launch_custom_native_codex_packet(
+                        payload,
+                        owner_authorized=True,
+                        commands={},
+                        operator_status=None,
+                        api_snapshot=None,
+                        external_routes_packet=None,
+                        native_bridge_lease=custom_native_bridge_lease,
                     )
-                    preflight_packet["stable_bridge_prewarm_status"] = str(
-                        stable_bridge_prewarm.get("status") or ""
-                    )
-                    preflight_packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
-                    if stable_bridge_prewarm.get("status") != "ok":
-                        packet = _custom_native_launch_stability_guard_packet(
-                            preflight_packet,
-                            status="blocked",
-                            machine_error_code=str(
-                                stable_bridge_prewarm.get("machine_error_code")
-                                or "STABLE_BRIDGE_PREWARM_BLOCKED"
-                            ),
-                            human_message="Custom native launch stopped because the stable WBP bridge prewarm did not prove the selected API route.",
-                        )
-                        packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
-                        packet["stable_bridge_prewarm_required"] = (
-                            stable_bridge_prewarm.get("prewarm_required") is True
-                        )
-                        packet["stable_bridge_prewarm_status"] = str(
-                            stable_bridge_prewarm.get("status") or ""
-                        )
-                        packet["final_status"] = str(
-                            stable_bridge_prewarm.get("final_status")
-                            or "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN"
-                        )
-                        self._send_json(packet)
-                        return
-                stable_bridge_gate = _custom_native_stable_bridge_launch_gate_packet(
+                    record_custom_native_launch_packet(packet)
+                    self._send_json(packet)
+                    return
+            api_snapshot = (
+                build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                if codex_custom_live_prompt_authorized
+                else None
+            )
+            external_routes_packet = (
+                _external_routes_packet() if codex_custom_live_prompt_authorized else None
+            )
+            route_model_ids = {
+                str(route.get("route_id") or "").strip()
+                for route in _enabled_external_route_records(external_routes_packet)
+            }
+            requested_model_id = str(payload.get("model_id") or "").strip()
+            if str(payload.get("execution_mode") or "").strip() == "api_only":
+                requested_model_id = str(payload.get("api_model_id") or "").strip()
+            api_route_selected = (
+                bool(requested_model_id) and requested_model_id in route_model_ids
+            )
+            operator_status = None
+            if codex_custom_live_prompt_authorized:
+                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+            preflight_packet = _custom_native_launch_preflight_packet(
+                payload,
+                owner_authorized=codex_custom_live_prompt_authorized,
+                operator_status=operator_status,
+                api_snapshot=api_snapshot,
+                external_routes_packet=external_routes_packet,
+                native_bridge_lease=custom_native_bridge_lease,
+                last_launch_packet=custom_native_launch_state["last_packet"],
+            )
+            if preflight_packet.get("status") != "ok":
+                packet = _custom_native_launch_stability_guard_packet(
                     preflight_packet,
-                    native_bridge_lease=custom_native_bridge_lease,
+                    status=str(preflight_packet.get("status") or "blocked"),
+                    machine_error_code=str(
+                        preflight_packet.get("machine_error_code")
+                        or "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_BLOCKED"
+                    ),
+                    human_message="Custom native launch stopped because preflight did not return an ok packet.",
                 )
-                preflight_packet["stable_bridge_preflight_required"] = (
-                    stable_bridge_gate.get("bridge_preflight_required") is True
-                )
-                preflight_packet["stable_bridge_preflight_status"] = str(
-                    stable_bridge_gate.get("bridge_preflight_status") or ""
-                )
-                preflight_packet["stable_bridge_launch_allowed"] = (
-                    stable_bridge_gate.get("launch_allowed") is True
-                )
-                preflight_packet["stable_bridge_preflight_packet"] = (
-                    stable_bridge_gate.get("stable_bridge_preflight_packet", {})
-                )
-                if stable_bridge_gate.get("status") != "ok":
-                    packet = _custom_native_launch_stability_guard_packet(
-                        preflight_packet,
-                        status="blocked",
-                        machine_error_code="STABLE_BRIDGE_PREFLIGHT_BLOCKED",
-                        human_message="Custom native launch stopped because the stable WBP bridge preflight blocked this API-dependent mode.",
-                    )
-                    packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
-                    packet["final_status"] = str(stable_bridge_gate.get("final_status") or "")
-                    self._send_json(packet)
-                    return
-                if (
-                    preflight_packet.get("existing_window_reuse_admissible") is True
-                ):
-                    show_window_packet = show_custom_native_window_packet()
-                    show_ok = (
-                        show_window_packet.get("status") == "ok"
-                        and show_window_packet.get("custom_window_visible") is True
-                    )
-                    packet = _custom_native_launch_stability_guard_packet(
-                        preflight_packet,
-                        status="ok" if show_ok else "blocked",
-                        machine_error_code=(
-                            "OK"
-                            if show_ok
-                            else "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
-                        ),
-                        human_message=(
-                            "Existing Custom Codex window reused; no new launch was started."
-                            if show_ok
-                            else "Existing Custom Codex process matched the launch config, but the window could not be proven usable."
-                        ),
-                        show_window_packet=show_window_packet,
-                    )
-                    self._send_json(packet)
-                    return
-                if (
-                    preflight_packet.get("custom_process_observed") is True
-                ):
-                    config_status = str(preflight_packet.get("config_status") or "")
-                    if config_status == "changed":
-                        machine_error_code = (
-                            "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
-                        )
-                        human_message = "Existing Custom Codex process uses a different launch selection; silent reuse and second-window launch are blocked."
-                    else:
-                        machine_error_code = (
-                            "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
-                        )
-                        human_message = "Existing Custom Codex process is running, but no matching previous launch packet proves it belongs to the selected config; second-window launch is blocked."
-                    packet = _custom_native_launch_stability_guard_packet(
-                        preflight_packet,
-                        status="blocked",
-                        machine_error_code=machine_error_code,
-                        human_message=human_message,
-                    )
-                    self._send_json(packet)
-                    return
-                account_commands = (
-                    {}
-                    if api_route_launch_selected
-                    else (
-                        self._codex_account_commands()
-                        if codex_custom_live_prompt_authorized
-                        else {}
-                    )
-                )
-                packet = _launch_custom_native_codex_packet(
-                    payload,
-                    owner_authorized=codex_custom_live_prompt_authorized,
-                    commands=account_commands,
+                self._send_json(packet)
+                return
+            api_route_launch_selected = (
+                api_route_selected or preflight_packet.get("route_selected") is True
+            )
+            stable_bridge_prewarm = {}
+            if api_route_launch_selected:
+                stable_bridge_prewarm = _custom_native_stable_bridge_prewarm_packet(
+                    preflight_packet,
+                    requested_model_id=requested_model_id,
                     operator_status=operator_status,
                     api_snapshot=api_snapshot,
                     external_routes_packet=external_routes_packet,
                     native_bridge_lease=custom_native_bridge_lease,
                 )
-                if (
-                    api_route_launch_selected
-                    and preflight_packet.get("launch_id")
-                    and preflight_packet.get("trace_id")
-                ):
-                    packet["launch_id"] = str(preflight_packet.get("launch_id") or "")
-                    packet["trace_id"] = str(preflight_packet.get("trace_id") or "")
-                    packet["launch_route_digest"] = str(
-                        preflight_packet.get("launch_route_digest") or ""
+                preflight_packet["stable_bridge_prewarm_required"] = (
+                    stable_bridge_prewarm.get("prewarm_required") is True
+                )
+                preflight_packet["stable_bridge_prewarm_status"] = str(
+                    stable_bridge_prewarm.get("status") or ""
+                )
+                preflight_packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
+                if stable_bridge_prewarm.get("status") != "ok":
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status="blocked",
+                        machine_error_code=str(
+                            stable_bridge_prewarm.get("machine_error_code")
+                            or "STABLE_BRIDGE_PREWARM_BLOCKED"
+                        ),
+                        human_message="Custom native launch stopped because the stable WBP bridge prewarm did not prove the selected API route.",
                     )
-                    custom_native_bridge_lease.set_trace_context(
-                        {
-                            "launch_id": packet.get("launch_id"),
-                            "trace_id": packet.get("trace_id"),
-                            "selected_model": packet.get("selected_model"),
-                            "api_reasoning_option_id": packet.get(
-                                "api_reasoning_option_id"
-                            ),
-                            "launch_route_digest": packet.get("launch_route_digest"),
-                        }
+                    packet["stable_bridge_prewarm_packet"] = stable_bridge_prewarm
+                    packet["stable_bridge_prewarm_required"] = (
+                        stable_bridge_prewarm.get("prewarm_required") is True
                     )
-                packet["launch_preflight_packet"] = preflight_packet
+                    packet["stable_bridge_prewarm_status"] = str(
+                        stable_bridge_prewarm.get("status") or ""
+                    )
+                    packet["final_status"] = str(
+                        stable_bridge_prewarm.get("final_status")
+                        or "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN"
+                    )
+                    self._send_json(packet)
+                    return
+            stable_bridge_gate = _custom_native_stable_bridge_launch_gate_packet(
+                preflight_packet,
+                native_bridge_lease=custom_native_bridge_lease,
+            )
+            preflight_packet["stable_bridge_preflight_required"] = (
+                stable_bridge_gate.get("bridge_preflight_required") is True
+            )
+            preflight_packet["stable_bridge_preflight_status"] = str(
+                stable_bridge_gate.get("bridge_preflight_status") or ""
+            )
+            preflight_packet["stable_bridge_launch_allowed"] = (
+                stable_bridge_gate.get("launch_allowed") is True
+            )
+            preflight_packet["stable_bridge_preflight_packet"] = (
+                stable_bridge_gate.get("stable_bridge_preflight_packet", {})
+            )
+            if stable_bridge_gate.get("status") != "ok":
+                packet = _custom_native_launch_stability_guard_packet(
+                    preflight_packet,
+                    status="blocked",
+                    machine_error_code="STABLE_BRIDGE_PREFLIGHT_BLOCKED",
+                    human_message="Custom native launch stopped because the stable WBP bridge preflight blocked this API-dependent mode.",
+                )
                 packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
-                packet["stable_bridge_preflight_required"] = (
-                    stable_bridge_gate.get("bridge_preflight_required") is True
-                )
-                packet["stable_bridge_preflight_status"] = str(
-                    stable_bridge_gate.get("bridge_preflight_status") or ""
-                )
-                packet["stable_bridge_launch_allowed"] = (
-                    stable_bridge_gate.get("launch_allowed") is True
-                )
-                packet["stable_bridge_preflight_packet"] = stable_bridge_gate.get(
-                    "stable_bridge_preflight_packet",
-                    {},
-                )
-                packet["launch_stability_guard_checked"] = True
-                packet["reused_existing_window"] = (
-                    packet.get("reused_existing_window") is True
-                    or packet.get("existing_custom_window_reused") is True
-                )
-                packet["launch_packet_is_truth_source"] = True
-                packet["visible_window_counts_as_model_truth"] = False
-                packet["response_text_counts_as_route_truth"] = False
-                packet["final_status"] = "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
-                record_custom_native_launch_packet(packet)
+                packet["final_status"] = str(stable_bridge_gate.get("final_status") or "")
                 self._send_json(packet)
                 return
-            if parsed.path == "/api/codex/custom/show-window":
-                self._read_optional_json_body()
-                packet = show_custom_native_window_packet()
+            if (
+                preflight_packet.get("existing_window_reuse_admissible") is True
+            ):
+                show_window_packet = show_custom_native_window_packet()
+                show_ok = (
+                    show_window_packet.get("status") == "ok"
+                    and show_window_packet.get("custom_window_visible") is True
+                )
+                packet = _custom_native_launch_stability_guard_packet(
+                    preflight_packet,
+                    status="ok" if show_ok else "blocked",
+                    machine_error_code=(
+                        "OK"
+                        if show_ok
+                        else "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+                    ),
+                    human_message=(
+                        "Existing Custom Codex window reused; no new launch was started."
+                        if show_ok
+                        else "Existing Custom Codex process matched the launch config, but the window could not be proven usable."
+                    ),
+                    show_window_packet=show_window_packet,
+                )
                 self._send_json(packet)
                 return
-            if parsed.path == "/api/codex/custom/visible-history/owner-confirmation":
-                self._send_json(
-                    build_visible_thread_history_owner_confirmation_packet(
-                        self._read_json_body(),
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        last_launch_packet=custom_native_launch_state["last_packet"],
+            if (
+                preflight_packet.get("custom_process_observed") is True
+            ):
+                config_status = str(preflight_packet.get("config_status") or "")
+                if config_status == "changed":
+                    machine_error_code = (
+                        "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
                     )
-                )
-                return
-            if parsed.path == "/api/codex/custom/visible-history/relaunch-owner-confirmation":
-                relaunch_profile_packet = build_custom_codex_persistent_relaunch_profile_packet(
-                    first_launch_packet=custom_native_launch_state["previous_packet"],
-                    second_launch_packet=custom_native_launch_state["last_packet"],
-                )
-                self._send_json(
-                    build_custom_codex_visible_history_relaunch_owner_confirmation_packet(
-                        self._read_json_body(),
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        relaunch_profile_packet=relaunch_profile_packet,
+                    human_message = "Existing Custom Codex process uses a different launch selection; silent reuse and second-window launch are blocked."
+                else:
+                    machine_error_code = (
+                        "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
                     )
+                    human_message = "Existing Custom Codex process is running, but no matching previous launch packet proves it belongs to the selected config; second-window launch is blocked."
+                packet = _custom_native_launch_stability_guard_packet(
+                    preflight_packet,
+                    status="blocked",
+                    machine_error_code=machine_error_code,
+                    human_message=human_message,
                 )
+                self._send_json(packet)
                 return
-            if parsed.path == "/api/codex/app-copy/launch-dry-run":
-                self._send_json(build_safe_app_copy_launch_dry_run_packet(self._read_json_body()))
-                return
-            if parsed.path == "/api/codex/app-copy/live-admission":
-                self._send_json(
-                    build_safe_app_copy_live_admission_packet(
-                        self._read_json_body(),
-                        _launch_copy_preflight(launch_copy_contract),
-                    )
+            account_commands = (
+                {}
+                if api_route_launch_selected
+                else (
+                    self._codex_account_commands()
+                    if codex_custom_live_prompt_authorized
+                    else {}
                 )
-                return
-            if parsed.path == "/api/codex/app-copy/launch":
-                launch_payload = self._read_app_copy_launch_body()
-                launch_preflight = _launch_copy_preflight(launch_copy_contract)
-                helper_result = (
-                    _run_safe_app_copy_bounded_helper(launch_copy_contract, launch_preflight)
-                    if launch_payload == {}
-                    else None
+            )
+            packet = _launch_custom_native_codex_packet(
+                payload,
+                owner_authorized=codex_custom_live_prompt_authorized,
+                commands=account_commands,
+                operator_status=operator_status,
+                api_snapshot=api_snapshot,
+                external_routes_packet=external_routes_packet,
+                native_bridge_lease=custom_native_bridge_lease,
+            )
+            if (
+                api_route_launch_selected
+                and preflight_packet.get("launch_id")
+                and preflight_packet.get("trace_id")
+            ):
+                packet["launch_id"] = str(preflight_packet.get("launch_id") or "")
+                packet["trace_id"] = str(preflight_packet.get("trace_id") or "")
+                packet["launch_route_digest"] = str(
+                    preflight_packet.get("launch_route_digest") or ""
                 )
-                self._send_json(
-                    build_safe_app_copy_launch_live_packet(
-                        launch_payload,
-                        launch_preflight,
-                        helper_result,
-                    )
+                custom_native_bridge_lease.set_trace_context(
+                    {
+                        "launch_id": packet.get("launch_id"),
+                        "trace_id": packet.get("trace_id"),
+                        "selected_model": packet.get("selected_model"),
+                        "api_reasoning_option_id": packet.get(
+                            "api_reasoning_option_id"
+                        ),
+                        "launch_route_digest": packet.get("launch_route_digest"),
+                    }
                 )
-                return
-            if parsed.path == "/api/codex/custom/model-dry-run":
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+            packet["launch_preflight_packet"] = preflight_packet
+            packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
+            packet["stable_bridge_preflight_required"] = (
+                stable_bridge_gate.get("bridge_preflight_required") is True
+            )
+            packet["stable_bridge_preflight_status"] = str(
+                stable_bridge_gate.get("bridge_preflight_status") or ""
+            )
+            packet["stable_bridge_launch_allowed"] = (
+                stable_bridge_gate.get("launch_allowed") is True
+            )
+            packet["stable_bridge_preflight_packet"] = stable_bridge_gate.get(
+                "stable_bridge_preflight_packet",
+                {},
+            )
+            packet["launch_stability_guard_checked"] = True
+            packet["reused_existing_window"] = (
+                packet.get("reused_existing_window") is True
+                or packet.get("existing_custom_window_reused") is True
+            )
+            packet["launch_packet_is_truth_source"] = True
+            packet["visible_window_counts_as_model_truth"] = False
+            packet["response_text_counts_as_route_truth"] = False
+            packet["final_status"] = "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
+            record_custom_native_launch_packet(packet)
+            self._send_json(packet)
+            return
+
+        def _handle_post_api_codex_custom_show_window(self, actual_path: str) -> None:
+            self._read_optional_json_body()
+            packet = show_custom_native_window_packet()
+            self._send_json(packet)
+            return
+
+        def _handle_post_api_codex_custom_visible_history_owner_confirmation(self, actual_path: str) -> None:
+            self._send_json(
+                build_visible_thread_history_owner_confirmation_packet(
+                    self._read_json_body(),
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_visible_history_relaunch_owner_confirmation(self, actual_path: str) -> None:
+            relaunch_profile_packet = build_custom_codex_persistent_relaunch_profile_packet(
+                first_launch_packet=custom_native_launch_state["previous_packet"],
+                second_launch_packet=custom_native_launch_state["last_packet"],
+            )
+            self._send_json(
+                build_custom_codex_visible_history_relaunch_owner_confirmation_packet(
+                    self._read_json_body(),
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    relaunch_profile_packet=relaunch_profile_packet,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_app_copy_launch_dry_run(self, actual_path: str) -> None:
+            self._send_json(build_safe_app_copy_launch_dry_run_packet(self._read_json_body()))
+            return
+
+        def _handle_post_api_codex_app_copy_live_admission(self, actual_path: str) -> None:
+            self._send_json(
+                build_safe_app_copy_live_admission_packet(
+                    self._read_json_body(),
+                    _launch_copy_preflight(launch_copy_contract),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_app_copy_launch(self, actual_path: str) -> None:
+            launch_payload = self._read_app_copy_launch_body()
+            launch_preflight = _launch_copy_preflight(launch_copy_contract)
+            helper_result = (
+                _run_safe_app_copy_bounded_helper(launch_copy_contract, launch_preflight)
+                if launch_payload == {}
+                else None
+            )
+            self._send_json(
+                build_safe_app_copy_launch_live_packet(
+                    launch_payload,
+                    launch_preflight,
+                    helper_result,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_model_dry_run(self, actual_path: str) -> None:
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                operator_surface_session.status_payload(),
+                api_snapshot=api_snapshot,
+            )
+            self._send_json(
+                build_custom_model_dry_run_packet(
+                    self._read_json_body(),
                     operator_surface_session.status_payload(),
                     api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
                 )
-                self._send_json(
-                    build_custom_model_dry_run_packet(
-                        self._read_json_body(),
-                        operator_surface_session.status_payload(),
-                        api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/model-selector-dry-run":
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_dual_lane_selection_intent_packet(
-                        self._read_json_body(),
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/api-action-gate":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status = operator_surface_session.status_payload()
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+            )
+            return
+
+        def _handle_post_api_codex_custom_model_selector_dry_run(self, actual_path: str) -> None:
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_dual_lane_selection_intent_packet(
+                    self._read_json_body(),
                     operator_status,
                     api_snapshot=api_snapshot,
                 )
-                self._send_json(
-                    build_custom_api_action_gate_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/execution-mode-dry-run":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_custom_codex_execution_mode_selector_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/server-model-selection-truth":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_server_model_selection_and_reasoning_truth_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/config-admission":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_quick_start_config_admission_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/chatgpt-plus-api-slot-truth":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_chatgpt_plus_api_slot_truth_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/api-only-executor-truth":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
-                self._send_json(
-                    build_api_only_executor_truth_packet(
-                        payload,
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/api-only-deepseek/live-format":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status = operator_surface_session.status_payload()
-                availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                    operator_status,
-                    api_snapshot=api_snapshot,
-                )
-                preflight = build_api_only_deepseek_live_route_format_packet(
+            )
+            return
+
+        def _handle_post_api_codex_custom_api_action_gate(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status = operator_surface_session.status_payload()
+            availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                operator_status,
+                api_snapshot=api_snapshot,
+            )
+            self._send_json(
+                build_custom_api_action_gate_packet(
                     payload,
                     operator_status,
                     api_snapshot=api_snapshot,
                     availability_lattice_packet=availability_lattice_packet,
                     owner_authorized=codex_custom_live_prompt_authorized,
                 )
-                live_result = None
-                live_error = None
-                if (
-                    preflight.get("status") != "rejected"
-                    and preflight.get("execution_mode") == "api_only"
-                    and preflight.get("deepseek_selected_from_server_catalog") is True
-                    and codex_custom_live_prompt_authorized
-                ):
-                    live_command = execute_command(
-                        action_runner,
-                        "external_models_live_format_check",
-                        structured_args={
-                            "route_id": str(payload.get("api_model_id") or ""),
-                            "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
-                            "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
-                        },
-                    )
-                    packet = live_command.get("packet")
-                    packet_data = packet.get("data") if isinstance(packet, dict) else None
-                    if live_command.get("status") == "ok" and isinstance(packet_data, dict):
-                        live_result = packet_data
-                    else:
-                        live_error = {
-                            "status": live_command.get("status"),
-                            "machine_error_code": live_command.get("machine_error_code"),
-                            "human_message": live_command.get("human_message"),
-                            "next_action": live_command.get("next_action"),
-                            "changed_files": live_command.get("changed_files") or [],
-                        }
+            )
+            return
+
+        def _handle_post_api_codex_custom_execution_mode_dry_run(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_custom_codex_execution_mode_selector_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_server_model_selection_truth(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_server_model_selection_and_reasoning_truth_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_config_admission(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_quick_start_config_admission_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_chatgpt_plus_api_slot_truth(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_chatgpt_plus_api_slot_truth_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_api_only_executor_truth(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                build_api_only_executor_truth_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_api_only_deepseek_live_format(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status = operator_surface_session.status_payload()
+            availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                operator_status,
+                api_snapshot=api_snapshot,
+            )
+            preflight = build_api_only_deepseek_live_route_format_packet(
+                payload,
+                operator_status,
+                api_snapshot=api_snapshot,
+                availability_lattice_packet=availability_lattice_packet,
+                owner_authorized=codex_custom_live_prompt_authorized,
+            )
+            live_result = None
+            live_error = None
+            if (
+                preflight.get("status") != "rejected"
+                and preflight.get("execution_mode") == "api_only"
+                and preflight.get("deepseek_selected_from_server_catalog") is True
+                and codex_custom_live_prompt_authorized
+            ):
+                live_command = execute_command(
+                    action_runner,
+                    "external_models_live_format_check",
+                    structured_args={
+                        "route_id": str(payload.get("api_model_id") or ""),
+                        "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
+                        "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
+                    },
+                )
+                packet = live_command.get("packet")
+                packet_data = packet.get("data") if isinstance(packet, dict) else None
+                if live_command.get("status") == "ok" and isinstance(packet_data, dict):
+                    live_result = packet_data
+                else:
+                    live_error = {
+                        "status": live_command.get("status"),
+                        "machine_error_code": live_command.get("machine_error_code"),
+                        "human_message": live_command.get("human_message"),
+                        "next_action": live_command.get("next_action"),
+                        "changed_files": live_command.get("changed_files") or [],
+                    }
+            self._send_json(
+                build_api_only_deepseek_live_route_format_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    live_result=live_result,
+                    live_error=live_error,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_deepseek_safe_worktree_check(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(
+                _quick_start_deepseek_safe_worktree_check_packet(
+                    payload,
+                    session_manager=codex_custom_sessions,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    prompt_runner=lambda runner_payload, worktree_dir: operator_surface_session.run_prompt(
+                        runner_payload,
+                        trace_wbp=True,
+                        sandbox_mode_override="workspace-write",
+                        writable_additional_dir=worktree_dir,
+                    ),
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    repo_root=codex_custom_safe_worktree_repo_root,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_deepseek_code_edit_proof(self, actual_path: str) -> None:
+            self._send_json(
+                build_custom_codex_deepseek_code_edit_reproduction_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=self._read_json_body(),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_api_only_deepseek_live_code_edit_truth(self, actual_path: str) -> None:
+            self._send_json(
+                build_api_only_deepseek_live_code_edit_truth_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=self._read_json_body(),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_deepseek_route_bound_edit_proof(self, actual_path: str) -> None:
+            self._send_json(
+                build_custom_codex_deepseek_route_bound_real_edit_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=self._read_json_body(),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_quick_start_chatgpt_plus_deepseek_file_edit_proof(self, actual_path: str) -> None:
+            self._send_json(
+                build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=self._read_json_body(),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_stable_profile_history_persistence(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            action = _payload_first_text(payload, "action", "prove_after")
+            if action == "capture_before":
+                packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    browser_payload=payload,
+                )
+                if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
+                    custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
+                self._send_json(packet)
+                return
+            self._send_json(
+                build_custom_codex_stable_profile_history_persistence_packet(
+                    first_launch_packet=custom_native_launch_state["previous_packet"],
+                    second_launch_packet=custom_native_launch_state["last_packet"],
+                    before_history_snapshot=custom_native_launch_state[
+                        "history_before_snapshot"
+                    ],
+                    browser_payload=payload,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_account_smoke_dry_run(self, actual_path: str) -> None:
+            self._send_json(
+                build_account_smoke_dry_run_packet(
+                    self._read_json_body(),
+                    self._codex_account_commands(),
+                    operator_surface_session.status_payload(),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_sessions(self, actual_path: str) -> None:
+            operator_status = operator_surface_session.status_payload()
+            payload = self._read_json_body()
+            model_id = payload.get("primary_model_id")
+            if not isinstance(model_id, str):
+                model_id = ""
+            account_commands = self._codex_account_commands()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            self._send_json(
+                codex_custom_sessions.create_packet(
+                    payload,
+                    account_commands,
+                    operator_status,
+                    selection=_codex_custom_selection_packet(
+                        model_id=model_id,
+                        commands=account_commands,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                    ),
+                    api_snapshot=api_snapshot,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_recovery_rollback_point(self, actual_path: str) -> None:
+            self._send_json(
+                build_custom_recovery_rollback_point_create_live_packet(
+                    rollback_point_create_admission=(
+                        build_rollback_point_create_admission_packet()
+                    ),
+                    browser_payload=self._read_rollback_point_create_body(),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_recovery_rollback_apply(self, actual_path: str) -> None:
+            self._send_json(
+                build_rollback_apply_bounded_live_packet(
+                    browser_payload=self._read_rollback_point_create_body(),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_recovery_stop_cleanup(self, actual_path: str) -> None:
+            self._send_json(
+                build_stop_cleanup_live_packet(
+                    browser_payload=self._read_rollback_point_create_body(),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_worktrees_prefix(self, actual_path: str) -> None:
+            worktree_cleanup_prefix = "/api/codex/custom/worktrees/"
+            if actual_path.startswith(worktree_cleanup_prefix):
+                rest = actual_path[len(worktree_cleanup_prefix) :].strip("/")
+                parts = rest.split("/")
+                if len(parts) == 2 and parts[1] == "cleanup":
+                    self._read_optional_json_body()
+                    self._send_json(codex_custom_sessions.safe_worktree_cleanup_packet(parts[0]))
+                    return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        def _handle_post_api_codex_custom_sessions_prefix(self, actual_path: str) -> None:
+            custom_session = self._custom_session_route(actual_path)
+            if custom_session is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            session_id, action = custom_session
+            if action == "revalidate":
+                self._read_optional_json_body()
+                operator_status = operator_surface_session.status_payload()
+                account_commands = self._codex_account_commands()
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
                 self._send_json(
-                    build_api_only_deepseek_live_route_format_packet(
-                        payload,
+                    codex_custom_sessions.revalidate_packet(
+                        session_id,
+                        account_commands,
                         operator_status,
                         api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        live_result=live_result,
-                        live_error=live_error,
                     )
                 )
                 return
-            if parsed.path == "/api/codex/custom/quick-start/deepseek-safe-worktree-check":
-                payload = self._read_json_body()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                operator_status, _operator_status_timeout = _bounded_operator_status_payload(
-                    operator_surface_session
-                )
+            if action == "prompt-dry-run":
                 self._send_json(
-                    _quick_start_deepseek_safe_worktree_check_packet(
-                        payload,
-                        session_manager=codex_custom_sessions,
-                        operator_status=operator_status,
-                        api_snapshot=api_snapshot,
-                        prompt_runner=lambda runner_payload, worktree_dir: operator_surface_session.run_prompt(
-                            runner_payload,
+                    codex_custom_sessions.prompt_dry_run_packet(
+                        session_id,
+                        self._read_json_body(),
+                    )
+                )
+                return
+            if action == "prompt":
+                if codex_custom_live_prompt_authorized:
+                    self._send_json(
+                        codex_custom_sessions.prompt_packet(
+                            session_id,
+                            self._read_json_body(),
+                            lambda payload: operator_surface_session.run_prompt(
+                                payload,
+                                trace_wbp=True,
+                            ),
+                            owner_authorized=codex_custom_live_prompt_authorized,
+                        )
+                    )
+                    return
+                self._send_json(
+                    codex_custom_sessions.prompt_not_admitted_packet(
+                        session_id,
+                        self._read_json_body(),
+                    )
+                )
+                return
+            if action == "temp-write-probe":
+                self._send_json(
+                    codex_custom_sessions.temp_write_probe_packet(
+                        session_id,
+                        self._read_json_body(),
+                        lambda payload, writable_dir: operator_surface_session.run_prompt(
+                            payload,
                             trace_wbp=True,
                             sandbox_mode_override="workspace-write",
-                            writable_additional_dir=worktree_dir,
+                            writable_additional_dir=writable_dir,
+                        ),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                    )
+                )
+                return
+            if action == "safe-worktree-edit-probe":
+                self._send_json(
+                    codex_custom_sessions.safe_worktree_edit_probe_packet(
+                        session_id,
+                        self._read_json_body(),
+                        lambda payload, writable_dir: operator_surface_session.run_prompt(
+                            payload,
+                            trace_wbp=True,
+                            sandbox_mode_override="workspace-write",
+                            writable_additional_dir=writable_dir,
                         ),
                         owner_authorized=codex_custom_live_prompt_authorized,
                         repo_root=codex_custom_safe_worktree_repo_root,
                     )
                 )
                 return
-            if parsed.path == "/api/codex/custom/quick-start/deepseek-code-edit-proof":
+            if action == "repo-tmp-edit-probe":
+                repo_tmp_dir = Path(codex_custom_safe_worktree_repo_root).resolve() / ".tmp"
+                repo_tmp_dir.mkdir(parents=True, exist_ok=True)
                 self._send_json(
-                    build_custom_codex_deepseek_code_edit_reproduction_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=self._read_json_body(),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth":
-                self._send_json(
-                    build_api_only_deepseek_live_code_edit_truth_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=self._read_json_body(),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/deepseek-route-bound-edit-proof":
-                self._send_json(
-                    build_custom_codex_deepseek_route_bound_real_edit_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=self._read_json_body(),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof":
-                self._send_json(
-                    build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=self._read_json_body(),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/stable-profile-history-persistence":
-                payload = self._read_json_body()
-                action = _payload_first_text(payload, "action", "prove_after")
-                if action == "capture_before":
-                    packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        browser_payload=payload,
-                    )
-                    if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
-                        custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
-                    self._send_json(packet)
-                    return
-                self._send_json(
-                    build_custom_codex_stable_profile_history_persistence_packet(
-                        first_launch_packet=custom_native_launch_state["previous_packet"],
-                        second_launch_packet=custom_native_launch_state["last_packet"],
-                        before_history_snapshot=custom_native_launch_state[
-                            "history_before_snapshot"
-                        ],
-                        browser_payload=payload,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/account-smoke-dry-run":
-                self._send_json(
-                    build_account_smoke_dry_run_packet(
+                    codex_custom_sessions.repo_tmp_edit_probe_packet(
+                        session_id,
                         self._read_json_body(),
-                        self._codex_account_commands(),
-                        operator_surface_session.status_payload(),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/sessions":
-                operator_status = operator_surface_session.status_payload()
-                payload = self._read_json_body()
-                model_id = payload.get("primary_model_id")
-                if not isinstance(model_id, str):
-                    model_id = ""
-                account_commands = self._codex_account_commands()
-                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-                self._send_json(
-                    codex_custom_sessions.create_packet(
-                        payload,
-                        account_commands,
-                        operator_status,
-                        selection=_codex_custom_selection_packet(
-                            model_id=model_id,
-                            commands=account_commands,
-                            operator_status=operator_status,
-                            api_snapshot=api_snapshot,
+                        lambda payload, writable_dir: operator_surface_session.run_prompt(
+                            payload,
+                            trace_wbp=True,
+                            sandbox_mode_override="workspace-write",
+                            writable_additional_dir=writable_dir,
+                            declared_repo_tmp_dir=repo_tmp_dir,
                         ),
-                        api_snapshot=api_snapshot,
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        repo_root=codex_custom_safe_worktree_repo_root,
                     )
                 )
                 return
-            if parsed.path == "/api/codex/custom/recovery/rollback-point":
-                self._send_json(
-                    build_custom_recovery_rollback_point_create_live_packet(
-                        rollback_point_create_admission=(
-                            build_rollback_point_create_admission_packet()
-                        ),
-                        browser_payload=self._read_rollback_point_create_body(),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-apply":
-                self._send_json(
-                    build_rollback_apply_bounded_live_packet(
-                        browser_payload=self._read_rollback_point_create_body(),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/stop-cleanup":
-                self._send_json(
-                    build_stop_cleanup_live_packet(
-                        browser_payload=self._read_rollback_point_create_body(),
-                    )
-                )
-                return
-            worktree_cleanup_prefix = "/api/codex/custom/worktrees/"
-            if parsed.path.startswith(worktree_cleanup_prefix):
-                rest = parsed.path[len(worktree_cleanup_prefix) :].strip("/")
-                parts = rest.split("/")
-                if len(parts) == 2 and parts[1] == "cleanup":
-                    self._read_optional_json_body()
-                    self._send_json(codex_custom_sessions.safe_worktree_cleanup_packet(parts[0]))
-                    return
-            custom_session = self._custom_session_route(parsed.path)
-            if custom_session is not None:
-                session_id, action = custom_session
-                if action == "revalidate":
-                    self._read_optional_json_body()
-                    operator_status = operator_surface_session.status_payload()
-                    account_commands = self._codex_account_commands()
-                    api_snapshot = build_api_connections_readonly_snapshot(
-                        api_connections_readonly_runner
-                    )
-                    self._send_json(
-                        codex_custom_sessions.revalidate_packet(
-                            session_id,
-                            account_commands,
-                            operator_status,
-                            api_snapshot=api_snapshot,
-                        )
-                    )
-                    return
-                if action == "prompt-dry-run":
-                    self._send_json(
-                        codex_custom_sessions.prompt_dry_run_packet(
-                            session_id,
-                            self._read_json_body(),
-                        )
-                    )
-                    return
-                if action == "prompt":
-                    if codex_custom_live_prompt_authorized:
-                        self._send_json(
-                            codex_custom_sessions.prompt_packet(
-                                session_id,
-                                self._read_json_body(),
-                                lambda payload: operator_surface_session.run_prompt(
-                                    payload,
-                                    trace_wbp=True,
-                                ),
-                                owner_authorized=codex_custom_live_prompt_authorized,
-                            )
-                        )
-                        return
-                    self._send_json(
-                        codex_custom_sessions.prompt_not_admitted_packet(
-                            session_id,
-                            self._read_json_body(),
-                        )
-                    )
-                    return
-                if action == "temp-write-probe":
-                    self._send_json(
-                        codex_custom_sessions.temp_write_probe_packet(
-                            session_id,
-                            self._read_json_body(),
-                            lambda payload, writable_dir: operator_surface_session.run_prompt(
-                                payload,
-                                trace_wbp=True,
-                                sandbox_mode_override="workspace-write",
-                                writable_additional_dir=writable_dir,
-                            ),
-                            owner_authorized=codex_custom_live_prompt_authorized,
-                        )
-                    )
-                    return
-                if action == "safe-worktree-edit-probe":
-                    self._send_json(
-                        codex_custom_sessions.safe_worktree_edit_probe_packet(
-                            session_id,
-                            self._read_json_body(),
-                            lambda payload, writable_dir: operator_surface_session.run_prompt(
-                                payload,
-                                trace_wbp=True,
-                                sandbox_mode_override="workspace-write",
-                                writable_additional_dir=writable_dir,
-                            ),
-                            owner_authorized=codex_custom_live_prompt_authorized,
-                            repo_root=codex_custom_safe_worktree_repo_root,
-                        )
-                    )
-                    return
-                if action == "repo-tmp-edit-probe":
-                    repo_tmp_dir = Path(codex_custom_safe_worktree_repo_root).resolve() / ".tmp"
-                    repo_tmp_dir.mkdir(parents=True, exist_ok=True)
-                    self._send_json(
-                        codex_custom_sessions.repo_tmp_edit_probe_packet(
-                            session_id,
-                            self._read_json_body(),
-                            lambda payload, writable_dir: operator_surface_session.run_prompt(
-                                payload,
-                                trace_wbp=True,
-                                sandbox_mode_override="workspace-write",
-                                writable_additional_dir=writable_dir,
-                                declared_repo_tmp_dir=repo_tmp_dir,
-                            ),
-                            owner_authorized=codex_custom_live_prompt_authorized,
-                            repo_root=codex_custom_safe_worktree_repo_root,
-                        )
-                    )
-                    return
-                if action == "mixed-slot-dispatch-probe":
-                    def mixed_slot_probe_runner(payload: dict[str, Any]) -> dict[str, Any]:
-                        slot_id = str(payload.get("slot_id") or "")
-                        model_id = str(payload.get("model_id") or "")
-                        route_backed = slot_id == "coding_agent_model_slot"
-                        return {
-                            "status": "ok",
-                            "machine_error_code": "OK",
-                            "requested_slot_id": slot_id,
-                            "selected_model": model_id,
-                            "runtime_model": model_id,
-                            "final_message": "WBP_MIXED_DEEPSEEK_CODER_OK"
-                            if route_backed
-                            else "WBP_MIXED_PRIMARY_SLOT_OK",
-                            "configured_provider": "external_route"
-                            if route_backed
-                            else "cliproxy",
-                            "configured_wire_api": "responses",
-                            "wbp_endpoint_configured": True,
-                            "config_endpoint_matches": True,
-                            "config_provider_matches": True,
-                            "config_wire_api_matches": True,
-                            "command_uses_stdin_dash": True,
-                            "command_json_mode": True,
-                            "env_codex_home_is_temp": True,
-                            "env_home_is_temp": True,
-                            "workdir_is_temp": True,
-                            "command_workdir_is_temp": True,
-                            "command_output_file_is_temp": True,
-                            "current_codex_home_used": False,
-                            "independent_wbp_trace_observed": True,
-                            "trace_observer_packet": {
-                                "path": "/v1/responses",
-                                "upstream_status": 200,
-                                "forwarded_to_wbp": True,
-                                "prompt_body_recorded": False,
-                                "auth_header_recorded": False,
-                                "secret_value_recorded": False,
-                            },
+            if action == "mixed-slot-dispatch-probe":
+                def mixed_slot_probe_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                    slot_id = str(payload.get("slot_id") or "")
+                    model_id = str(payload.get("model_id") or "")
+                    route_backed = slot_id == "coding_agent_model_slot"
+                    return {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "requested_slot_id": slot_id,
+                        "selected_model": model_id,
+                        "runtime_model": model_id,
+                        "final_message": "WBP_MIXED_DEEPSEEK_CODER_OK"
+                        if route_backed
+                        else "WBP_MIXED_PRIMARY_SLOT_OK",
+                        "configured_provider": "external_route"
+                        if route_backed
+                        else "cliproxy",
+                        "configured_wire_api": "responses",
+                        "wbp_endpoint_configured": True,
+                        "config_endpoint_matches": True,
+                        "config_provider_matches": True,
+                        "config_wire_api_matches": True,
+                        "command_uses_stdin_dash": True,
+                        "command_json_mode": True,
+                        "env_codex_home_is_temp": True,
+                        "env_home_is_temp": True,
+                        "workdir_is_temp": True,
+                        "command_workdir_is_temp": True,
+                        "command_output_file_is_temp": True,
+                        "current_codex_home_used": False,
+                        "independent_wbp_trace_observed": True,
+                        "trace_observer_packet": {
+                            "path": "/v1/responses",
+                            "upstream_status": 200,
+                            "forwarded_to_wbp": True,
+                            "prompt_body_recorded": False,
+                            "auth_header_recorded": False,
                             "secret_value_recorded": False,
-                            "live_provider_call_attempted": False,
-                            "file_write_attempted": False,
-                        }
+                        },
+                        "secret_value_recorded": False,
+                        "live_provider_call_attempted": False,
+                        "file_write_attempted": False,
+                    }
 
-                    self._send_json(
-                        codex_custom_sessions.mixed_slot_dispatch_probe_packet(
-                            session_id,
-                            self._read_json_body(),
-                            mixed_slot_probe_runner,
-                            owner_authorized=codex_custom_live_prompt_authorized,
-                        )
+                self._send_json(
+                    codex_custom_sessions.mixed_slot_dispatch_probe_packet(
+                        session_id,
+                        self._read_json_body(),
+                        mixed_slot_probe_runner,
+                        owner_authorized=codex_custom_live_prompt_authorized,
                     )
-                    return
-                if action == "safe-worktree-coder":
-                    self._send_json(
-                        codex_custom_sessions.safe_worktree_coder_packet(
-                            session_id,
-                            self._read_json_body(),
-                            lambda payload, worktree_dir: operator_surface_session.run_prompt(
-                                payload,
-                                trace_wbp=True,
-                                sandbox_mode_override="workspace-write",
-                                working_dir_override=worktree_dir,
-                            ),
-                            owner_authorized=codex_custom_live_prompt_authorized,
-                            repo_root=codex_custom_safe_worktree_repo_root,
-                        )
-                    )
-                    return
-                if action == "cancel":
-                    self._read_optional_json_body()
-                    self._send_json(codex_custom_sessions.cancel_packet(session_id))
-                    return
-                if action == "cleanup":
-                    self._read_optional_json_body()
-                    self._send_json(codex_custom_sessions.cleanup_packet(session_id))
-                    return
-            if parsed.path != "/api/action":
-                self.send_error(HTTPStatus.NOT_FOUND)
+                )
                 return
+            if action == "safe-worktree-coder":
+                self._send_json(
+                    codex_custom_sessions.safe_worktree_coder_packet(
+                        session_id,
+                        self._read_json_body(),
+                        lambda payload, worktree_dir: operator_surface_session.run_prompt(
+                            payload,
+                            trace_wbp=True,
+                            sandbox_mode_override="workspace-write",
+                            working_dir_override=worktree_dir,
+                        ),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        repo_root=codex_custom_safe_worktree_repo_root,
+                    )
+                )
+                return
+            if action == "cancel":
+                self._read_optional_json_body()
+                self._send_json(codex_custom_sessions.cancel_packet(session_id))
+                return
+            if action == "cleanup":
+                self._read_optional_json_body()
+                self._send_json(codex_custom_sessions.cleanup_packet(session_id))
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        def _handle_post_api_action(self, actual_path: str) -> None:
             action_payload = self._read_json_body()
             action_owner_authorized = codex_custom_live_prompt_authorized
             native_context_required = (
-            action_owner_authorized
-            and isinstance(action_payload, dict)
-            and action_payload.get("ui_action") == "launch_custom_client_native"
-            and set(action_payload).issubset(
-                {"ui_action", *CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS}
+                action_owner_authorized
+                and isinstance(action_payload, dict)
+                and action_payload.get("ui_action") == "launch_custom_client_native"
+                and set(action_payload).issubset(
+                    {"ui_action", *CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS}
+                )
             )
-        )
             native_operator_status = None
             if native_context_required:
                 native_operator_status, _native_operator_status_timeout = (
@@ -10558,6 +10636,8 @@ def build_handler(
                     legacy_import_token_store=legacy_import_token_store,
                 )
             )
+
+            return
 
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             return
@@ -10863,6 +10943,12 @@ def build_handler(
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    Handler.POST_ROUTE_DISPATCH_TABLE = {
+        str(route.handler_id): f"_handle_{route.handler_id}"
+        for route in WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+        if route.method == "POST" and route.handler_id
+    }
 
     return Handler
 

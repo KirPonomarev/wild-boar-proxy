@@ -5984,25 +5984,30 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         end = source.index(end_marker, start)
         return source[start:end]
 
-    def test_registry_covers_current_exact_get_and_post_dispatch_paths(self) -> None:
+    def test_registry_covers_current_exact_get_paths_and_post_dispatch_bindings(self) -> None:
         get_block = self._handler_block("        def _handle_get", "        def do_POST")
-        post_block = self._handler_block("        def _handle_post", "        def log_message")
         handled_get_paths = set(re.findall(r'if parsed\.path == "([^"]+)"', get_block))
-        handled_post_paths = set(re.findall(r'if parsed\.path == "([^"]+)"', post_block))
-        handled_post_paths.update(re.findall(r'if parsed\.path != "([^"]+)"', post_block))
         registered_get_paths = {
             route.path
             for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
             if route.method == "GET" and not route.prefix
         }
-        registered_post_paths = {
-            route.path
+        registered_post_handler_ids = {
+            route.handler_id
             for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
-            if route.method == "POST" and not route.prefix
+            if route.method == "POST"
         }
+        handler = build_handler(runner=mock.Mock())
 
         self.assertEqual(handled_get_paths, registered_get_paths)
-        self.assertEqual(handled_post_paths, registered_post_paths)
+        self.assertEqual(set(handler.POST_ROUTE_DISPATCH_TABLE), registered_post_handler_ids)
+        self.assertEqual(
+            len(set(handler.POST_ROUTE_DISPATCH_TABLE.values())),
+            len(registered_post_handler_ids),
+        )
+        for handler_id, dispatcher_name in handler.POST_ROUTE_DISPATCH_TABLE.items():
+            self.assertEqual(dispatcher_name, f"_handle_{handler_id}")
+            self.assertTrue(callable(getattr(handler, dispatcher_name, None)))
 
     def test_registry_specs_have_canonical_effects_and_post_auth_policy(self) -> None:
         for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes:
@@ -6011,6 +6016,7 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
             self.assertTrue(route.browser_field_policy)
             if route.method == "POST":
                 self.assertTrue(route.auth_required, route.path)
+                self.assertTrue(route.handler_id, route.path)
 
     def test_registry_dynamic_prefixes_and_queryless_lookup(self) -> None:
         action = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
@@ -6122,6 +6128,78 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
                 self.assertEqual(status, HTTPStatus.NOT_FOUND)
                 self.assertEqual(packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
                 self.assertEqual(packet["changed_files"], [])
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+    def test_missing_post_dispatch_binding_rejects_before_body_dispatch(self) -> None:
+        handler = build_handler(runner=mock.Mock())
+        route = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("POST", "/api/operator/run")
+        self.assertIsNotNone(route)
+        assert route is not None
+        binding = route.handler_id
+        self.assertTrue(binding)
+        reduced_dispatch = {
+            key: value for key, value in handler.POST_ROUTE_DISPATCH_TABLE.items() if key != binding
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with mock.patch.object(handler, "POST_ROUTE_DISPATCH_TABLE", reduced_dispatch):
+                status, packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b"{not-json",
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(status, HTTPStatus.INTERNAL_SERVER_ERROR)
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["source"], "web_ingress")
+        self.assertEqual(packet["machine_error_code"], "WEB_POST_ROUTE_DISPATCH_MISSING")
+        self.assertEqual(packet["changed_files"], [])
+
+    def test_post_dispatch_table_preserves_representative_exact_prefix_and_action_packets(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            exact = json.loads(post_json(f"{base}/api/review-command", {}))
+            prefix = json.loads(
+                post_json(f"{base}/api/codex/custom/worktrees/session-1/cleanup", {})
+            )
+            action = json.loads(post_json(f"{base}/api/action", {}))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(exact["machine_error_code"], "REVIEW_COMMAND_ID_REQUIRED")
+        self.assertEqual(exact["status"], "command_error")
+        self.assertEqual(prefix["machine_error_code"], "WORKTREE_NOT_FOUND")
+        self.assertEqual(prefix["status"], "rejected")
+        self.assertEqual(action["status"], "integration_failure")
+        self.assertEqual(action["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+
+    def test_registered_prefix_routes_reject_unknown_subactions(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            for path in (
+                "/api/codex/custom/sessions/session-1/unknown-action",
+                "/api/codex/custom/worktrees/session-1/not-cleanup",
+            ):
+                with self.subTest(path=path), self.assertRaises(urllib.error.HTTPError) as raised:
+                    post_json(f"{base}{path}", {})
+                self.assertEqual(raised.exception.code, HTTPStatus.NOT_FOUND)
         finally:
             server.shutdown()
             thread.join(timeout=2)
