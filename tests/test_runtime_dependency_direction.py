@@ -637,18 +637,22 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         calls = _call_names(source)
         forbidden = {
             "build_command_payload",
+            "coerce_nonnegative_int",
+            "detect_changed_files",
             "detect_changed_files_by_state",
             "dual_lock",
             "export_scale_evidence_bundle",
             "get_stable_policy_drift",
             "list_accounts",
             "materialize_selected_backend_snapshot_for_sync",
+            "observe_current_stage_from_pool_policy",
             "observe_status_proof_for_owner_path_under_lock",
             "read_json",
             "run_bounded_process",
             "run_healthcheck",
             "run_healthcheck_probe",
             "run_healthcheck_repair",
+            "run_launch_smoke",
             "run_policy_stage_set",
             "run_promote",
             "run_rollout_attestation_healthcheck",
@@ -659,8 +663,11 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "run_sync_for_owner_path_under_lock",
             "runtime_write_surface_candidates",
             "serialized_lock",
+            "snapshot_known_files",
             "socket_is_listening",
             "summarize_status",
+            "summarize_stable_10_rollback_readiness",
+            "summarize_stage_pool_policy_mapping",
             "write_json_artifact",
             "write_json_atomic",
             "write_text_atomic",
@@ -686,6 +693,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_rotation_inspect_impl=fake_run_rollout_rotation_inspect_impl,
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
         )
 
         default_payload = rollout.run_rollout_rotation_inspect(
@@ -726,6 +734,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_posture_inspect_impl=fake_run_rollout_posture_inspect_impl,
             run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
         )
 
         payload = rollout.run_rollout_posture_inspect(
@@ -755,6 +764,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_evidence_capture_impl=fake_run_rollout_evidence_capture_impl,
+            run_rollout_stage_prove_impl=lambda *args, **kwargs: {},
         )
 
         payload = rollout.run_rollout_evidence_capture(
@@ -766,6 +776,52 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertEqual(payload["surface"], "rollout-evidence-capture")
         self.assertEqual(payload["target"], "16")
         self.assertEqual(calls, [(("paths-sentinel", "16"), {})])
+
+    def test_rollout_stage_prove_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_rollout_stage_prove_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-stage-prove",
+                "stage": args[1],
+                "lock_acquired": kwargs["lock_acquired"],
+            }
+
+        dependencies = rollout.RolloutDependencies(
+            run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
+            run_rollout_stage_prove_impl=fake_run_rollout_stage_prove_impl,
+        )
+
+        default_payload = rollout.run_rollout_stage_prove(
+            "paths-sentinel",
+            "10",
+            dependencies=dependencies,
+        )
+        locked_payload = rollout.run_rollout_stage_prove(
+            "paths-sentinel",
+            "15",
+            lock_acquired=True,
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(default_payload["surface"], "rollout-stage-prove")
+        self.assertEqual(default_payload["stage"], "10")
+        self.assertIs(default_payload["lock_acquired"], False)
+        self.assertEqual(locked_payload["stage"], "15")
+        self.assertIs(locked_payload["lock_acquired"], True)
+        self.assertEqual(
+            calls,
+            [
+                (("paths-sentinel", "10"), {"lock_acquired": False}),
+                (("paths-sentinel", "15"), {"lock_acquired": True}),
+            ],
+        )
 
     def test_rollout_rotation_inspect_facade_passes_runtime_dependency(
         self,
@@ -893,6 +949,60 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                         "dependencies": runtime_mod._rollout_dependencies(),
                     },
                 )
+            ],
+        )
+
+    def test_rollout_stage_prove_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_rollout_stage_prove(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-stage-prove",
+                "stage": args[1],
+                "lock_acquired": kwargs["lock_acquired"],
+            }
+
+        with mock.patch.object(
+            rollout,
+            "run_rollout_stage_prove",
+            side_effect=fake_rollout_stage_prove,
+        ):
+            default_payload = runtime_mod.run_rollout_stage_prove(
+                "paths-sentinel",
+                "10",
+            )
+            locked_payload = runtime_mod.run_rollout_stage_prove(
+                "paths-sentinel",
+                "15",
+                lock_acquired=True,
+            )
+
+        self.assertEqual(default_payload["surface"], "rollout-stage-prove")
+        self.assertEqual(default_payload["stage"], "10")
+        self.assertIs(default_payload["lock_acquired"], False)
+        self.assertEqual(locked_payload["stage"], "15")
+        self.assertIs(locked_payload["lock_acquired"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "10"),
+                    {
+                        "lock_acquired": False,
+                        "dependencies": runtime_mod._rollout_dependencies(),
+                    },
+                ),
+                (
+                    ("paths-sentinel", "15"),
+                    {
+                        "lock_acquired": True,
+                        "dependencies": runtime_mod._rollout_dependencies(),
+                    },
+                ),
             ],
         )
 

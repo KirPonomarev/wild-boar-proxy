@@ -13216,6 +13216,26 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
         proof = payload["stage_proof_result"]
+        self.assertEqual(
+            set(proof),
+            {
+                "active_pool_count_observed",
+                "attempted",
+                "delegated_evidence",
+                "final_outcome",
+                "policy_mapping_status",
+                "policy_stage_observed",
+                "policy_stage_status",
+                "proof_gate_status",
+                "requested_stage",
+                "reserve_pool_count_observed",
+                "rollback_readiness_status",
+                "rotation_evidence_status",
+                "runtime_attestation_status",
+                "runtime_smoke_status",
+                "status",
+            },
+        )
         self.assertEqual(proof["policy_stage_status"], "matched")
         self.assertEqual(proof["policy_stage_observed"], "10")
         self.assertEqual(proof["active_pool_count_observed"], 10)

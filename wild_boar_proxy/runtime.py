@@ -10569,6 +10569,7 @@ def _rollout_dependencies() -> Any:
         run_rollout_rotation_inspect_impl=_run_rollout_rotation_inspect_impl,
         run_rollout_posture_inspect_impl=_run_rollout_posture_inspect_impl,
         run_rollout_evidence_capture_impl=_run_rollout_evidence_capture_impl,
+        run_rollout_stage_prove_impl=_run_rollout_stage_prove_impl,
     )
 
 
@@ -12104,6 +12105,22 @@ def _run_rollout_posture_inspect_impl(
 
 
 def run_rollout_stage_prove(
+    paths: RuntimePaths,
+    stage: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
+    from .rollout import run_rollout_stage_prove as _run_rollout_stage_prove
+
+    return _run_rollout_stage_prove(
+        paths,
+        stage,
+        lock_acquired=lock_acquired,
+        dependencies=_rollout_dependencies(),
+    )
+
+
+def _run_rollout_stage_prove_impl(
     paths: RuntimePaths,
     stage: str,
     *,

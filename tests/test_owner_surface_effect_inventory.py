@@ -100,6 +100,12 @@ OWNER_SURFACES = {
         WRITE_ADJACENT,
         frozenset({"run_rollout_evidence_capture_impl"}),
     ),
+    "run_rollout_stage_prove": Surface(
+        ROLLOUT,
+        "run_rollout_stage_prove",
+        SUBPROCESS_ADJACENT,
+        frozenset({"run_rollout_stage_prove_impl"}),
+    ),
     "credential_status": Surface(
         CREDENTIALS,
         "credential_status",
@@ -301,6 +307,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (ROLLOUT, "run_rollout_rotation_inspect"),
                 (ROLLOUT, "run_rollout_posture_inspect"),
                 (ROLLOUT, "run_rollout_evidence_capture"),
+                (ROLLOUT, "run_rollout_stage_prove"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),
@@ -560,6 +567,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         forbidden_raw_primitives = WRITE_PRIMITIVES | SUBPROCESS_PRIMITIVES | LOCK_PRIMITIVES
         for name, expected_class in (
             ("run_rollout_evidence_capture", WRITE_ADJACENT),
+            ("run_rollout_stage_prove", SUBPROCESS_ADJACENT),
             ("_run_credentials_command", WRITE_ADJACENT),
             ("main", DEFERRED_UNCLASSIFIED),
         ):
