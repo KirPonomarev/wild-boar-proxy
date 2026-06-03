@@ -18,6 +18,15 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs
 
+from .web_ingress import (
+    FORM_CONTENT_TYPE,
+    MAX_WEB_REQUEST_BODY_BYTES,
+    content_type_matches,
+    host_header_is_local,
+    origin_header_is_allowed,
+    parse_content_length,
+    unsafe_bind_requested,
+)
 from .external_models.paths import ExternalModelsPaths
 from .ui_shell import (
     AccountPoolSnapshot,
@@ -1045,10 +1054,14 @@ class WildBoarWebUi:
 def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
+            if not self._admit_common_request():
+                return
             self._send_html(render_dashboard(app.get_dashboard(path=self.path)))
 
         def do_POST(self) -> None:  # noqa: N802
-            length = int(self.headers.get("Content-Length", "0"))
+            length = self._admitted_form_body_length()
+            if length is None:
+                return
             body = self.rfile.read(length).decode("utf-8")
             parsed = {
                 key: values[-1]
@@ -1058,6 +1071,82 @@ def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
 
         def log_message(self, fmt: str, *args: object) -> None:
             return
+
+        def _admit_common_request(self) -> bool:
+            if host_header_is_local(
+                self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                return True
+            self._send_plain_rejection(
+                HTTPStatus.BAD_REQUEST,
+                "WEB_INGRESS_HOST_REJECTED",
+                "HTTP Host must target this local Wild Boar Proxy server.",
+            )
+            return False
+
+        def _admitted_form_body_length(self) -> int | None:
+            if not self._admit_common_request():
+                return None
+            length, length_error = parse_content_length(self.headers)
+            if length_error is not None:
+                self._send_plain_rejection(
+                    HTTPStatus.BAD_REQUEST,
+                    length_error,
+                    "HTTP Content-Length must be a non-negative integer.",
+                )
+                return None
+            if length <= 0:
+                self._send_plain_rejection(
+                    HTTPStatus.BAD_REQUEST,
+                    "WEB_INGRESS_FORM_BODY_REQUIRED",
+                    "Form POST requests must include a request body.",
+                )
+                return None
+            if length > MAX_WEB_REQUEST_BODY_BYTES:
+                self._send_plain_rejection(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    "WEB_INGRESS_BODY_TOO_LARGE",
+                    "HTTP request body exceeds the Wild Boar Proxy web ingress limit.",
+                )
+                return None
+            content_type_header = str(self.headers.get("Content-Type", "") or "").strip()
+            if (
+                (length > 0 or content_type_header)
+                and not content_type_matches(self.headers, FORM_CONTENT_TYPE)
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "WEB_INGRESS_CONTENT_TYPE_REJECTED",
+                    "Form POST requests must use application/x-www-form-urlencoded.",
+                )
+                return None
+            if not origin_header_is_allowed(
+                self.headers.get("Origin"),
+                host_header=self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.FORBIDDEN,
+                    "WEB_INGRESS_ORIGIN_REJECTED",
+                    "Browser POST Origin must match this local Wild Boar Proxy server.",
+                )
+                return None
+            return length
+
+        def _send_plain_rejection(
+            self,
+            status: HTTPStatus,
+            machine_error_code: str,
+            human_message: str,
+        ) -> None:
+            payload = f"{machine_error_code}\n{human_message}\n".encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
 
         def _send_html(self, body: str) -> None:
             payload = body.encode("utf-8")
@@ -1075,11 +1164,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wild-boar-proxy-web-ui")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--unsafe-allow-public-bind",
+        action="store_true",
+        help="allow binding the web UI to a public/unspecified host",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if unsafe_bind_requested(args.host) and not args.unsafe_allow_public_bind:
+        parser.error(
+            "--host 0.0.0.0/:: is unsafe for the web UI; "
+            "pass --unsafe-allow-public-bind only with an explicit operator boundary."
+        )
     server = ThreadingHTTPServer((args.host, args.port), build_handler(WildBoarWebUi()))
     print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
     try:

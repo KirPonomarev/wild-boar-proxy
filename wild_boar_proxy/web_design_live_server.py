@@ -126,6 +126,16 @@ from wild_boar_proxy.review_bridge_session_store import (
     ReviewSessionStore,
 )
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
+from wild_boar_proxy.web_ingress import (
+    JSON_CONTENT_TYPE,
+    MAX_WEB_REQUEST_BODY_BYTES,
+    content_type_matches,
+    host_header_is_local,
+    origin_header_is_allowed,
+    parse_content_length,
+    unsafe_bind_requested,
+    web_ingress_rejection_packet,
+)
 from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
     DEFAULT_CODEX_BIN,
@@ -175,6 +185,22 @@ STABLE_PROFILE_HISTORY_ALLOWED_BROWSER_FIELDS = frozenset(
 DEFAULT_STABLE_PROFILE_HISTORY_MARKER = "WBP_STABLE_HISTORY_MARKER"
 CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_ENV = "WBP_CUSTOM_CODEX_BRIDGE_PORT"
 DEFAULT_CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT = 50555
+
+
+class _HttpIngressRejection(Exception):
+    def __init__(
+        self,
+        *,
+        status: HTTPStatus,
+        machine_error_code: str,
+        human_message: str,
+    ) -> None:
+        super().__init__(machine_error_code)
+        self.status = status
+        self.packet = web_ingress_rejection_packet(
+            machine_error_code=machine_error_code,
+            human_message=human_message,
+        )
 
 
 def _custom_codex_stable_wbp_bridge_port() -> int:
@@ -8751,6 +8777,13 @@ def build_handler(
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            try:
+                self._handle_get()
+            except _HttpIngressRejection as rejection:
+                self._send_json(rejection.packet, status=rejection.status)
+
+        def _handle_get(self) -> None:
+            self._admit_common_request()
             parsed = urlparse(self.path)
             if parsed.path == "/owner-login/sandbox":
                 self._send_owner_login_sandbox_page(parsed.query)
@@ -9291,7 +9324,14 @@ def build_handler(
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
+            try:
+                self._handle_post()
+            except _HttpIngressRejection as rejection:
+                self._send_json(rejection.packet, status=rejection.status)
+
+        def _handle_post(self) -> None:
             parsed = urlparse(self.path)
+            self._admit_post_request(parsed.path)
             if parsed.path == "/api/operator/run":
                 self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
                 return
@@ -9654,6 +9694,7 @@ def build_handler(
                 self._send_json(packet)
                 return
             if parsed.path == "/api/codex/custom/show-window":
+                self._read_optional_json_body()
                 packet = show_custom_native_window_packet()
                 self._send_json(packet)
                 return
@@ -10025,12 +10066,14 @@ def build_handler(
                 rest = parsed.path[len(worktree_cleanup_prefix) :].strip("/")
                 parts = rest.split("/")
                 if len(parts) == 2 and parts[1] == "cleanup":
+                    self._read_optional_json_body()
                     self._send_json(codex_custom_sessions.safe_worktree_cleanup_packet(parts[0]))
                     return
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:
                 session_id, action = custom_session
                 if action == "revalidate":
+                    self._read_optional_json_body()
                     operator_status = operator_surface_session.status_payload()
                     account_commands = self._codex_account_commands()
                     api_snapshot = build_api_connections_readonly_snapshot(
@@ -10194,9 +10237,11 @@ def build_handler(
                     )
                     return
                 if action == "cancel":
+                    self._read_optional_json_body()
                     self._send_json(codex_custom_sessions.cancel_packet(session_id))
                     return
                 if action == "cleanup":
+                    self._read_optional_json_body()
                     self._send_json(codex_custom_sessions.cleanup_packet(session_id))
                     return
             if parsed.path != "/api/action":
@@ -10240,14 +10285,67 @@ def build_handler(
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             return
 
-        def _send_json(self, payload: dict[str, Any]) -> None:
+        def _send_json(
+            self,
+            payload: dict[str, Any],
+            *,
+            status: HTTPStatus = HTTPStatus.OK,
+        ) -> None:
             body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _admit_common_request(self) -> None:
+            if not host_header_is_local(
+                self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_HOST_REJECTED",
+                    human_message="HTTP Host must target this local Wild Boar Proxy server.",
+                )
+
+        def _admit_post_request(self, path: str) -> None:
+            self._admit_common_request()
+            length, length_error = parse_content_length(self.headers)
+            if length_error is not None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code=length_error,
+                    human_message="HTTP Content-Length must be a non-negative integer.",
+                )
+            if length > MAX_WEB_REQUEST_BODY_BYTES:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    machine_error_code="WEB_INGRESS_BODY_TOO_LARGE",
+                    human_message="HTTP request body exceeds the Wild Boar Proxy web ingress limit.",
+                )
+            content_type_header = str(self.headers.get("Content-Type", "") or "").strip()
+            if (
+                (length > 0 or content_type_header)
+                and not content_type_matches(self.headers, JSON_CONTENT_TYPE)
+            ):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                    machine_error_code="WEB_INGRESS_CONTENT_TYPE_REJECTED",
+                    human_message="JSON POST requests must use Content-Type: application/json.",
+                )
+            if not origin_header_is_allowed(
+                self.headers.get("Origin"),
+                host_header=self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.FORBIDDEN,
+                    machine_error_code="WEB_INGRESS_ORIGIN_REJECTED",
+                    human_message="Browser POST Origin must match this local Wild Boar Proxy server.",
+                )
+            _ = path
 
         def _codex_account_commands(self) -> dict[str, dict[str, Any]]:
             return {
@@ -10274,43 +10372,112 @@ def build_handler(
             return None
 
         def _read_json_body(self) -> dict[str, Any]:
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return {}
+            length = self._admitted_body_length()
             if length <= 0:
-                return {}
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_BODY_REQUIRED",
+                    human_message="JSON POST requests must include a JSON object body.",
+                )
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                return {}
-            return payload if isinstance(payload, dict) else {}
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_INVALID",
+                    human_message="HTTP request body must be valid UTF-8 JSON.",
+                ) from None
+            if not isinstance(payload, dict):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_OBJECT_REQUIRED",
+                    human_message="HTTP request body must be a JSON object.",
+                )
+            return payload
 
         def _read_app_copy_launch_body(self) -> dict[str, Any]:
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return {"invalid_body": True}
+            length = self._admitted_body_length()
             if length <= 0:
-                return {"invalid_body": True}
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_BODY_REQUIRED",
+                    human_message="App-copy launch requests must include a JSON object body.",
+                )
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                return {"invalid_body": True}
-            return payload if isinstance(payload, dict) else {"invalid_body": True}
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_INVALID",
+                    human_message="App-copy launch request body must be valid UTF-8 JSON.",
+                ) from None
+            if not isinstance(payload, dict):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_OBJECT_REQUIRED",
+                    human_message="App-copy launch request body must be a JSON object.",
+                )
+            return payload
 
         def _read_rollback_point_create_body(self) -> dict[str, Any]:
+            length = self._admitted_body_length()
+            if length <= 0:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_BODY_REQUIRED",
+                    human_message="Recovery live requests must include a JSON object body.",
+                )
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return {"invalid_body": True}
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_INVALID",
+                    human_message="Recovery live request body must be valid UTF-8 JSON.",
+                ) from None
+            if not isinstance(payload, dict):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_OBJECT_REQUIRED",
+                    human_message="Recovery live request body must be a JSON object.",
+                )
+            return payload
+
+        def _read_optional_json_body(self) -> dict[str, Any]:
+            length = self._admitted_body_length()
             if length <= 0:
                 return {}
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                return {"invalid_body": True}
-            return payload if isinstance(payload, dict) else {"invalid_body": True}
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_INVALID",
+                    human_message="Optional POST request body must be valid UTF-8 JSON.",
+                ) from None
+            if not isinstance(payload, dict):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code="WEB_INGRESS_JSON_OBJECT_REQUIRED",
+                    human_message="Optional POST request body must be a JSON object.",
+                )
+            return payload
+
+        def _admitted_body_length(self) -> int:
+            length, length_error = parse_content_length(self.headers)
+            if length_error is not None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.BAD_REQUEST,
+                    machine_error_code=length_error,
+                    human_message="HTTP Content-Length must be a non-negative integer.",
+                )
+            if length > MAX_WEB_REQUEST_BODY_BYTES:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    machine_error_code="WEB_INGRESS_BODY_TOO_LARGE",
+                    human_message="HTTP request body exceeds the Wild Boar Proxy web ingress limit.",
+                )
+            return length
 
         def _send_static(self, request_path: str) -> None:
             relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")
@@ -12480,6 +12647,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument(
+        "--unsafe-allow-public-bind",
+        action="store_true",
+        help="allow binding the web control surface to a public/unspecified host",
+    )
+    parser.add_argument(
         "--action-phase",
         default=LIVE_READONLY_ACTION_PHASE,
         choices=(LIVE_READONLY_ACTION_PHASE, SANDBOX_ACTION_PHASE, FULL_ACTION_PHASE),
@@ -12495,6 +12667,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=(SAFE_APP_COPY_HELPER_PROVENANCE,),
     )
     args = parser.parse_args(argv)
+    if unsafe_bind_requested(args.host) and not args.unsafe_allow_public_bind:
+        parser.error(
+            "--host 0.0.0.0/:: is unsafe for the web control surface; "
+            "pass --unsafe-allow-public-bind only with an explicit operator boundary."
+        )
     launch_copy_contract = LaunchCopyContract(
         client_path=args.launch_client_path,
         profile_dir=args.launch_copy_profile_dir,

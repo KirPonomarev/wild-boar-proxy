@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
@@ -841,6 +842,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
+
+    def test_live_server_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            live_server.main(["--host", "0.0.0.0", "--port", "0"])
+
+        self.assertEqual(raised.exception.code, 2)
 
     def test_sandbox_action_phase_routes_all_readonly_surfaces_to_sandbox_runner(self) -> None:
         default_payloads = live_payloads()
@@ -5901,6 +5908,123 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
         self.assertEqual(result["final_message"], "MAIN_WEB_OK")
         self.assertTrue(result["stdin_prompt_used"])
         self.assertTrue(result["refresh_packet"])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+    def test_web_ingress_rejects_malformed_operator_post_before_runner(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                invalid_status, invalid_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b"{not-json",
+                )
+                non_object_status, non_object_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b'["run"]',
+                )
+                wrong_type_status, wrong_type_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b'{"prompt":"wrong type"}',
+                    headers={"Content-Type": "text/plain"},
+                )
+                secret_marker = "secret-token-should-not-leak"
+                too_large_status, too_large_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    (
+                        b'{"prompt":"'
+                        + secret_marker.encode("utf-8")
+                        + b"a" * live_server.MAX_WEB_REQUEST_BODY_BYTES
+                        + b'"}'
+                    ),
+                )
+                origin_status, origin_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b'{"prompt":"evil origin"}',
+                    headers={
+                        "Content-Type": "application/json",
+                        "Origin": "http://evil.example",
+                    },
+                )
+                same_origin_status, same_origin_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}',
+                    headers={
+                        "Content-Type": "application/json",
+                        "Origin": f"http://127.0.0.1:{server.server_port}",
+                    },
+                )
+                bad_host_status, bad_host_packet = raw_http_json_response(
+                    port=server.server_port,
+                    method="GET",
+                    path="/api/live-readonly",
+                    host="evil.example",
+                )
+                bad_length_status, bad_length_packet = raw_http_json_response(
+                    port=server.server_port,
+                    method="POST",
+                    path="/api/operator/run",
+                    host=f"127.0.0.1:{server.server_port}",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Content-Length": "abc",
+                    },
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(invalid_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(invalid_packet["machine_error_code"], "WEB_INGRESS_JSON_INVALID")
+        self.assertEqual(non_object_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(
+            non_object_packet["machine_error_code"],
+            "WEB_INGRESS_JSON_OBJECT_REQUIRED",
+        )
+        self.assertEqual(wrong_type_status, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+        self.assertEqual(
+            wrong_type_packet["machine_error_code"],
+            "WEB_INGRESS_CONTENT_TYPE_REJECTED",
+        )
+        self.assertEqual(too_large_status, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        self.assertEqual(too_large_packet["machine_error_code"], "WEB_INGRESS_BODY_TOO_LARGE")
+        self.assertNotIn(secret_marker, json.dumps(too_large_packet))
+        self.assertEqual(origin_status, HTTPStatus.FORBIDDEN)
+        self.assertEqual(origin_packet["machine_error_code"], "WEB_INGRESS_ORIGIN_REJECTED")
+        self.assertEqual(bad_host_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(bad_host_packet["machine_error_code"], "WEB_INGRESS_HOST_REJECTED")
+        self.assertEqual(bad_length_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(
+            bad_length_packet["machine_error_code"],
+            "WEB_INGRESS_CONTENT_LENGTH_INVALID",
+        )
+        for packet in (
+            invalid_packet,
+            non_object_packet,
+            wrong_type_packet,
+            too_large_packet,
+            origin_packet,
+            bad_host_packet,
+            bad_length_packet,
+        ):
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["source"], "web_ingress")
+            self.assertEqual(packet["changed_files"], [])
+        self.assertEqual(same_origin_status, HTTPStatus.OK)
+        self.assertEqual(same_origin_packet["status"], "ok")
         self.assertEqual(
             created_sessions[0].run_payloads,
             [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
@@ -11519,26 +11643,43 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
             try:
-                invalid_json = json.loads(
-                    post_body(f"{base}/api/codex/app-copy/launch", b"{not-json")
+                invalid_json_status, invalid_json = post_body_response(
+                    f"{base}/api/codex/app-copy/launch",
+                    b"{not-json",
                 )
-                non_object = json.loads(
-                    post_body(f"{base}/api/codex/app-copy/launch", b'["run"]')
+                non_object_status, non_object = post_body_response(
+                    f"{base}/api/codex/app-copy/launch",
+                    b'["run"]',
                 )
-                no_body = json.loads(post_body(f"{base}/api/codex/app-copy/launch", b""))
+                no_body_status, no_body = post_body_response(
+                    f"{base}/api/codex/app-copy/launch",
+                    b"",
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
                 server.server_close()
 
+        self.assertEqual(invalid_json_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(invalid_json["status"], "rejected")
+        self.assertEqual(invalid_json["machine_error_code"], "WEB_INGRESS_JSON_INVALID")
+        self.assertEqual(non_object_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(non_object["status"], "rejected")
+        self.assertEqual(
+            non_object["machine_error_code"],
+            "WEB_INGRESS_JSON_OBJECT_REQUIRED",
+        )
+        self.assertEqual(no_body_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(no_body["status"], "rejected")
+        self.assertEqual(
+            no_body["machine_error_code"],
+            "WEB_INGRESS_JSON_BODY_REQUIRED",
+        )
         for rejected in (invalid_json, non_object, no_body):
-            self.assertEqual(rejected["status"], "blocked")
-            self.assertEqual(
-                rejected["machine_error_code"],
-                "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
-            )
-            self.assertEqual(rejected["forbidden_fields"], ["invalid_body"])
-            self.assertFalse(rejected["launch_performed"])
+            self.assertEqual(rejected["source"], "web_ingress")
+            self.assertEqual(rejected["changed_files"], [])
+            self.assertNotIn(str(helper_path), json.dumps(rejected))
+            self.assertNotIn(str(temp_path), json.dumps(rejected))
         self.assertFalse(marker_path.exists())
 
     def test_app_copy_launch_blocks_helper_without_server_provenance(self) -> None:
@@ -13307,6 +13448,41 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(sessions["status"], "ok")
         self.assertEqual(sessions["session_count"], 0)
 
+    def test_bodyless_optional_post_rejects_wrong_content_type_before_runner(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        runner = MappingRunner(live_payloads())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                status, packet = post_body_response(
+                    f"{base}/api/codex/custom/sessions/ccs-ingress-test/revalidate",
+                    b"",
+                    headers={"Content-Type": "text/plain"},
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(status, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["source"], "web_ingress")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_INGRESS_CONTENT_TYPE_REJECTED",
+        )
+        self.assertEqual(packet["changed_files"], [])
+        self.assertEqual(runner.calls, [])
+
     def test_codex_custom_session_create_requires_manual_model_selection(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
             server = ThreadingHTTPServer(
@@ -14404,16 +14580,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         {"path": "/tmp/forbidden", "session_id": "ccs-forbidden"},
                     )
                 )
-                non_object_request = urllib.request.Request(
+                non_object_create_status, non_object_create = post_body_response(
                     f"{base}/api/codex/custom/recovery/rollback-point",
-                    data=b"[]",
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                non_object_create = json.loads(
-                    NO_PROXY_OPENER.open(non_object_request, timeout=10)
-                    .read()
-                    .decode("utf-8")
+                    b"[]",
                 )
                 verify_packet = json.loads(
                     fetch(f"{base}/api/codex/custom/recovery/rollback-point/verify")
@@ -14485,16 +14654,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         },
                     )
                 )
-                non_object_apply_request = urllib.request.Request(
+                non_object_apply_status, non_object_apply = post_body_response(
                     f"{base}/api/codex/custom/recovery/rollback-apply",
-                    data=b"[]",
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                non_object_apply = json.loads(
-                    NO_PROXY_OPENER.open(non_object_apply_request, timeout=10)
-                    .read()
-                    .decode("utf-8")
+                    b"[]",
                 )
                 receipt_verify_packet = json.loads(
                     fetch(
@@ -14640,13 +14802,14 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("path", rejected_create["forbidden_fields"])
         self.assertIn("session_id", rejected_create["forbidden_fields"])
         self.assertFalse(rejected_create["filesystem_write_performed"])
-        self.assertEqual(non_object_create["status"], "blocked")
+        self.assertEqual(non_object_create_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(non_object_create["status"], "rejected")
         self.assertEqual(
             non_object_create["machine_error_code"],
-            "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+            "WEB_INGRESS_JSON_OBJECT_REQUIRED",
         )
-        self.assertIn("invalid_body", non_object_create["forbidden_fields"])
-        self.assertFalse(non_object_create["filesystem_write_performed"])
+        self.assertEqual(non_object_create["source"], "web_ingress")
+        self.assertEqual(non_object_create["changed_files"], [])
         self.assertEqual(verify_packet["status"], "ok")
         self.assertEqual(verify_packet["machine_error_code"], "ROLLBACK_POINT_VERIFY_READY")
         self.assertEqual(
@@ -14885,13 +15048,14 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(apply_with_payload["filesystem_read_performed"])
         self.assertFalse(apply_with_payload["filesystem_write_performed"])
         self.assertFalse(apply_with_payload["rollback_apply_performed"])
-        self.assertEqual(non_object_apply["status"], "blocked")
+        self.assertEqual(non_object_apply_status, HTTPStatus.BAD_REQUEST)
+        self.assertEqual(non_object_apply["status"], "rejected")
         self.assertEqual(
             non_object_apply["machine_error_code"],
-            "ROLLBACK_APPLY_BROWSER_FIELD_REJECTED",
+            "WEB_INGRESS_JSON_OBJECT_REQUIRED",
         )
-        self.assertIn("invalid_body", non_object_apply["forbidden_fields"])
-        self.assertFalse(non_object_apply["filesystem_write_performed"])
+        self.assertEqual(non_object_apply["source"], "web_ingress")
+        self.assertEqual(non_object_apply["changed_files"], [])
         self.assertEqual(receipt_verify_packet["status"], "ok")
         self.assertEqual(
             receipt_verify_packet["machine_error_code"],
@@ -17118,6 +17282,49 @@ def post_body(url: str, body: bytes) -> str:
     )
     with NO_PROXY_OPENER.open(request, timeout=10) as response:
         return response.read().decode("utf-8")
+
+
+def post_body_response(
+    url: str,
+    body: bytes,
+    *,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers=headers or {"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with NO_PROXY_OPENER.open(request, timeout=10) as response:
+            return int(response.status), json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), json.loads(exc.read().decode("utf-8"))
+
+
+def raw_http_json_response(
+    *,
+    port: int,
+    method: str,
+    path: str,
+    host: str,
+    headers: dict[str, str] | None = None,
+    body: bytes = b"",
+) -> tuple[int, dict[str, object]]:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.putrequest(method, path, skip_host=True)
+    conn.putheader("Host", host)
+    for key, value in (headers or {}).items():
+        conn.putheader(key, value)
+    conn.endheaders()
+    if body:
+        conn.send(body)
+    response = conn.getresponse()
+    raw_body = response.read().decode("utf-8")
+    status = int(response.status)
+    conn.close()
+    return status, json.loads(raw_body)
 
 
 if __name__ == "__main__":

@@ -7,8 +7,10 @@ import http.client
 import socket
 import threading
 import unittest
+from http import HTTPStatus
 from pathlib import Path
 
+import wild_boar_proxy.web_ui as web_ui
 from wild_boar_proxy.ui_shell import (
     AccountPoolSnapshot,
     AccountRecord,
@@ -20,6 +22,7 @@ from wild_boar_proxy.ui_shell import (
     RuntimeSnapshot,
     UiShellError,
 )
+from wild_boar_proxy.web_ingress import MAX_WEB_REQUEST_BODY_BYTES
 from wild_boar_proxy.web_ui import (
     DashboardState,
     UiEvent,
@@ -727,6 +730,84 @@ class WebUiTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
+
+    def test_http_handler_rejects_malformed_ingress_without_action(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body='{"action":"sync"}',
+                headers={"Content-Type": "application/json"},
+            )
+            wrong_type = conn.getresponse()
+            wrong_type_body = wrong_type.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=sync",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": "http://evil.example",
+                },
+            )
+            bad_origin = conn.getresponse()
+            bad_origin_body = bad_origin.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=" + ("a" * MAX_WEB_REQUEST_BODY_BYTES),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            too_large = conn.getresponse()
+            too_large_body = too_large.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.putrequest("GET", "/", skip_host=True)
+            conn.putheader("Host", "evil.example")
+            conn.endheaders()
+            bad_host = conn.getresponse()
+            bad_host_body = bad_host.read().decode("utf-8")
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(wrong_type.status, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+        self.assertIn("WEB_INGRESS_CONTENT_TYPE_REJECTED", wrong_type_body)
+        self.assertEqual(bad_origin.status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_ORIGIN_REJECTED", bad_origin_body)
+        self.assertEqual(too_large.status, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        self.assertIn("WEB_INGRESS_BODY_TOO_LARGE", too_large_body)
+        self.assertEqual(bad_host.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("WEB_INGRESS_HOST_REJECTED", bad_host_body)
+        self.assertEqual(app.actions, [])
+
+    def test_web_ui_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            web_ui.main(["--host", "0.0.0.0", "--port", "0"])
+
+        self.assertEqual(raised.exception.code, 2)
 
     def test_http_handler_recovers_unknown_get_route(self) -> None:
         state = DashboardState(
