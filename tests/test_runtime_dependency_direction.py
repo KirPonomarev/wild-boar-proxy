@@ -8,8 +8,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from wild_boar_proxy import runtime as runtime_mod
+from wild_boar_proxy import runtime_health
 from wild_boar_proxy import runtime_modes
 from wild_boar_proxy import runtime_status
 
@@ -52,6 +54,27 @@ FORBIDDEN_IMPORT_PREFIXES_BY_MODULE = {
         "wild_boar_proxy.web_design_ui",
         "wild_boar_proxy.web_ui",
     ),
+    "wild_boar_proxy.runtime_health": (
+        "tools",
+        "wild_boar_proxy.accounts_lifecycle",
+        "wild_boar_proxy.cli",
+        "wild_boar_proxy.mutation_ledger",
+        "wild_boar_proxy.operator_surface",
+        "wild_boar_proxy.process_runner",
+        "wild_boar_proxy.runtime",
+        "wild_boar_proxy.runtime_repair",
+        "wild_boar_proxy.state_startup_contract",
+        "wild_boar_proxy.state_startup_lock",
+        "wild_boar_proxy.state_startup_recovery",
+        "wild_boar_proxy.state_startup_schema",
+        "wild_boar_proxy.state_startup_truth",
+        "wild_boar_proxy.state_transaction",
+        "wild_boar_proxy.web",
+        "wild_boar_proxy.web_design_command_adapter",
+        "wild_boar_proxy.web_design_live_server",
+        "wild_boar_proxy.web_design_ui",
+        "wild_boar_proxy.web_ui",
+    ),
     "wild_boar_proxy.runtime_status": (
         "tools",
         "wild_boar_proxy.accounts_lifecycle",
@@ -79,6 +102,7 @@ FORBIDDEN_IMPORT_PREFIXES_BY_MODULE = {
 RUNTIME_MODULE_PATHS = {
     "wild_boar_proxy.runtime_errors": REPO_ROOT / "wild_boar_proxy" / "runtime_errors.py",
     "wild_boar_proxy.runtime": REPO_ROOT / "wild_boar_proxy" / "runtime.py",
+    "wild_boar_proxy.runtime_health": REPO_ROOT / "wild_boar_proxy" / "runtime_health.py",
     "wild_boar_proxy.runtime_modes": REPO_ROOT / "wild_boar_proxy" / "runtime_modes.py",
     "wild_boar_proxy.runtime_status": REPO_ROOT / "wild_boar_proxy" / "runtime_status.py",
 }
@@ -256,6 +280,21 @@ def _snapshot_files(paths: list[Path]) -> dict[Path, tuple[bool, bytes]]:
     }
 
 
+def _normalize_observed_times(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: (
+                "<OBSERVED_AT>"
+                if key == "observed_at_utc" and isinstance(item, str) and item
+                else _normalize_observed_times(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_observed_times(item) for item in value]
+    return value
+
+
 def _assert_status_snapshot_contract(
     testcase: unittest.TestCase, payload: dict[str, object]
 ) -> None:
@@ -318,6 +357,32 @@ def _assert_status_snapshot_contract(
     testcase.assertEqual(payload["attestation_summary"]["observed_at_utc"], "")
 
 
+def _assert_health_probe_contract(
+    testcase: unittest.TestCase, payload: dict[str, object]
+) -> None:
+    testcase.assertEqual(payload["status"], "error")
+    testcase.assertEqual(payload["exit_code"], 1)
+    testcase.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+    testcase.assertEqual(payload["changed_files"], [])
+    testcase.assertEqual(payload["effect"], "probe")
+    testcase.assertEqual(payload["liveness"], "down")
+    testcase.assertEqual(payload["severity"], "recoverable")
+    testcase.assertEqual(payload["operator_action"], "retry")
+    testcase.assertEqual(payload["attestation"]["attestation_source"], "healthcheck --json")
+    testcase.assertEqual(
+        payload["launch_readiness"]["owner_command_surface"],
+        "healthcheck --json",
+    )
+    testcase.assertEqual(
+        payload["runtime_guardrails"]["owner_command_surface"],
+        "healthcheck --json",
+    )
+    testcase.assertNotIn("mutation_id", payload)
+    testcase.assertNotIn("mutation_ledger", payload)
+    testcase.assertNotIn("deterministic_stable_recovery_result", payload)
+    testcase.assertNotIn("proxy_reprobe_adoption_result", payload)
+
+
 class RuntimeDependencyDirectionTests(unittest.TestCase):
     def test_detector_flags_relative_forbidden_import(self) -> None:
         source = "from . import web_ui\n"
@@ -359,6 +424,30 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ["wild_boar_proxy.state_transaction"],
         )
 
+    def test_detector_flags_health_runtime_import(self) -> None:
+        source = "from . import runtime\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_health"),
+            ["wild_boar_proxy.runtime"],
+        )
+
+    def test_detector_flags_health_repair_import(self) -> None:
+        source = "from . import runtime_repair\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_health"),
+            ["wild_boar_proxy.runtime_repair"],
+        )
+
+    def test_detector_flags_health_mutation_layer_import(self) -> None:
+        source = "from . import mutation_ledger\n"
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_health"),
+            ["wild_boar_proxy.mutation_ledger"],
+        )
+
     def test_runtime_split_modules_do_not_import_forbidden_layers(self) -> None:
         for module_name, path in RUNTIME_MODULE_PATHS.items():
             with self.subTest(module=module_name):
@@ -381,6 +470,60 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         }
 
         self.assertEqual(calls & forbidden, set())
+
+    def test_runtime_health_probe_does_not_call_repair_owner_surfaces(self) -> None:
+        source = RUNTIME_MODULE_PATHS["wild_boar_proxy.runtime_health"].read_text(
+            encoding="utf-8"
+        )
+        calls = _call_names(source)
+        forbidden = {
+            "clear_stale_managed_pid_if_needed",
+            "reconcile_stable_fallback",
+            "refresh_last_known_good_proxy_from_healthcheck",
+            "run_current_proxy_owner_path_activation",
+            "run_healthcheck_repair",
+            "run_stable_runtime_launcher_attempt",
+            "run_startup_contract_repair_owner_path",
+            "write_stable_runtime_consumer_snapshot",
+        }
+
+        self.assertEqual(calls & forbidden, set())
+
+    def test_runtime_health_probe_wrapper_passes_exact_probe_flags(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_healthcheck(*args: object, **kwargs: object) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {"effect": "probe", "changed_files": []}
+
+        dependencies = runtime_health.HealthProbeDependencies(
+            run_healthcheck=fake_run_healthcheck
+        )
+
+        payload = runtime_health.run_healthcheck_probe(
+            "paths-sentinel",
+            "gpt-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "gpt-sentinel"),
+                    {
+                        "allow_recovery": False,
+                        "allow_last_known_good_proxy_write": False,
+                        "allow_current_proxy_auto_adoption": False,
+                        "allow_stable_fallback_write": False,
+                        "allow_stale_pid_cleanup": False,
+                        "effect": "probe",
+                    },
+                )
+            ],
+        )
 
     def test_runtime_mode_get_facade_matches_direct_modes_module(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -430,6 +573,47 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             after = {path: path.read_bytes() for path in tracked_paths}
 
         self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(after, before)
+
+    def test_runtime_health_probe_facade_matches_direct_health_module(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _status_runtime_paths(Path(temp_dir))
+
+            facade_payload = runtime_mod.run_healthcheck_probe(paths)
+            direct_payload = runtime_health.run_healthcheck_probe(
+                paths,
+                dependencies=runtime_mod._health_probe_dependencies(),
+            )
+
+        self.assertEqual(
+            _normalize_observed_times(facade_payload),
+            _normalize_observed_times(direct_payload),
+        )
+        _assert_health_probe_contract(self, facade_payload)
+
+    def test_runtime_health_probe_does_not_write_runtime_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _status_runtime_paths(Path(temp_dir))
+            tracked_paths = [
+                paths.registry_file,
+                paths.state_file,
+                paths.config_toml,
+                paths.runtime_mode_file,
+                paths.runtime_effective_mode_file,
+                paths.stable_config,
+                paths.managed_config_file,
+                paths.repair_target_reference_file,
+                paths.stable_runtime_generated_config_file,
+                runtime_mod.managed_pid_path(paths),
+            ]
+            before = _snapshot_files(tracked_paths)
+
+            payload = runtime_mod.run_healthcheck_probe(paths)
+
+            after = _snapshot_files(tracked_paths)
+
+        self.assertEqual(payload["effect"], "probe")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(after, before)
 

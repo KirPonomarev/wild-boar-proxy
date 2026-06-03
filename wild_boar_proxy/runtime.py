@@ -9721,18 +9721,21 @@ def run_healthcheck(
     )
 
 
+def _health_probe_dependencies() -> Any:
+    from .runtime_health import HealthProbeDependencies
+
+    return HealthProbeDependencies(run_healthcheck=run_healthcheck)
+
+
 def run_healthcheck_probe(
     paths: RuntimePaths, model: str | None = None
 ) -> dict[str, Any]:
-    return run_healthcheck(
+    from .runtime_health import run_healthcheck_probe as _run_healthcheck_probe
+
+    return _run_healthcheck_probe(
         paths,
         model,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-        allow_stable_fallback_write=False,
-        allow_stale_pid_cleanup=False,
-        effect=EFFECT_PROBE,
+        dependencies=_health_probe_dependencies(),
     )
 
 
