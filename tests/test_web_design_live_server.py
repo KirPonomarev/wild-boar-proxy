@@ -11406,6 +11406,238 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
         )
 
+    def test_app_copy_bounded_helper_uses_bounded_runner_with_server_env(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            helper_path = temp_path / "safe-helper.sh"
+            helper_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            process = live_server.BoundedProcessResult(
+                status="ok",
+                machine_error_code=live_server.PROCESS_OK,
+                exit_code=0,
+                stdout="hidden stdout",
+                stderr="hidden stderr",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.01,
+            )
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "OPENAI_API_KEY": "sk-should-not-leak",
+                        "WBP_UNRELATED": "should-not-leak",
+                    },
+                    clear=False,
+                ),
+                mock.patch.object(live_server, "run_bounded_process", return_value=process) as runner,
+            ):
+                execution = live_server._run_safe_app_copy_bounded_helper(
+                    contract,
+                    {"status": "admitted"},
+                )
+
+        runner.assert_called_once()
+        args, kwargs = runner.call_args
+        self.assertEqual(args[0], [str(helper_path)])
+        self.assertEqual(kwargs["timeout_seconds"], 2)
+        self.assertNotIn("shell", kwargs)
+        self.assertNotIn("cwd", kwargs)
+        env = kwargs["env"]
+        self.assertEqual(env["HOME"], str(temp_path / "profile"))
+        self.assertEqual(env["CODEX_HOME"], str(temp_path / "profile" / "codex-home"))
+        self.assertEqual(env["WBP_PROFILE_DIR"], str(temp_path / "profile"))
+        self.assertEqual(env["WBP_MANAGED_DIR"], str(temp_path / "data"))
+        self.assertEqual(env["WBP_APP_COPY_HELPER"], "1")
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("WBP_UNRELATED", env)
+        self.assertEqual(execution["machine_error_code"], "OK")
+        self.assertTrue(execution["helper_execution_attempted"])
+        self.assertTrue(execution["process_started"])
+        self.assertTrue(execution["helper_exit_code_zero"])
+        self.assertTrue(execution["cleanup_or_stop_completed"])
+        packet = live_server.build_safe_app_copy_launch_live_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+            execution,
+        )
+        packet_text = json.dumps(packet)
+        self.assertNotIn("hidden stdout", packet_text)
+        self.assertNotIn("hidden stderr", packet_text)
+        self.assertFalse(packet["raw_pid_exposed"])
+        self.assertFalse(packet["raw_env_exposed"])
+
+    def test_app_copy_bounded_helper_blocks_without_running_when_not_admitted_or_unsafe(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            helper_path = temp_path / "safe-helper.sh"
+            helper_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            helper_path.chmod(0o755)
+            admitted_contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            unsafe_contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+            )
+            with mock.patch.object(live_server, "run_bounded_process") as runner:
+                not_admitted = live_server._run_safe_app_copy_bounded_helper(
+                    admitted_contract,
+                    {"status": "blocked"},
+                )
+                unsafe = live_server._run_safe_app_copy_bounded_helper(
+                    unsafe_contract,
+                    {"status": "admitted"},
+                )
+
+        runner.assert_not_called()
+        self.assertEqual(
+            not_admitted["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+        )
+        self.assertFalse(not_admitted["helper_execution_attempted"])
+        self.assertEqual(
+            unsafe["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+        )
+        self.assertFalse(unsafe["helper_execution_attempted"])
+
+    def test_app_copy_bounded_helper_failures_do_not_claim_launch_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            helper_path = temp_path / "safe-helper.sh"
+            helper_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            admitted = {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            }
+            cases = (
+                (
+                    "timeout",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_TIMEOUT,
+                        exit_code=None,
+                        stdout="",
+                        stderr="",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=True,
+                        duration_seconds=2.0,
+                    ),
+                    True,
+                    True,
+                    "no_process_remaining",
+                ),
+                (
+                    "not_found",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_NOT_FOUND,
+                        exit_code=None,
+                        stdout="",
+                        stderr="not found",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.01,
+                    ),
+                    False,
+                    False,
+                    "cleanup_not_proven",
+                ),
+                (
+                    "nonzero",
+                    live_server.BoundedProcessResult(
+                        status="error",
+                        machine_error_code=live_server.PROCESS_FAILED,
+                        exit_code=17,
+                        stdout="",
+                        stderr="failed",
+                        stdout_truncated=False,
+                        stderr_truncated=False,
+                        timed_out=False,
+                        duration_seconds=0.01,
+                    ),
+                    True,
+                    True,
+                    "no_process_remaining",
+                ),
+            )
+
+            for name, process, expected_started, expected_cleanup, expected_cleanup_instruction in cases:
+                with self.subTest(name=name):
+                    with mock.patch.object(live_server, "run_bounded_process", return_value=process):
+                        execution = live_server._run_safe_app_copy_bounded_helper(
+                            contract,
+                            {"status": "admitted"},
+                        )
+                    packet = live_server.build_safe_app_copy_launch_live_packet(
+                        {},
+                        admitted,
+                        execution,
+                    )
+                    self.assertEqual(packet["status"], "blocked")
+                    self.assertEqual(
+                        packet["machine_error_code"],
+                        "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
+                    )
+                    self.assertFalse(packet["launch_performed"])
+                    self.assertFalse(packet["bounded_live_launch_execution_ready"])
+                    self.assertFalse(packet["launch_ready_claimed"])
+                    self.assertEqual(packet["process_started"], expected_started)
+                    self.assertEqual(packet["cleanup_or_stop_completed"], expected_cleanup)
+                    self.assertEqual(packet["cleanup_or_stop_instruction"], expected_cleanup_instruction)
+                    self.assertEqual(
+                        packet["block_reason_code"],
+                        "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
+                    )
+                    self.assertFalse(packet["helper_exit_code_zero"])
+
     def test_app_copy_launch_forbidden_payload_does_not_execute_helper(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

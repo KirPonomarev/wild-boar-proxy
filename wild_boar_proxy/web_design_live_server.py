@@ -26,6 +26,14 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+from wild_boar_proxy.process_runner import (
+    PROCESS_FAILED,
+    PROCESS_NOT_FOUND,
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+    BoundedProcessResult,
+    run_bounded_process,
+)
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
     UiShellError,
@@ -1197,6 +1205,28 @@ def _safe_app_copy_helper_env(contract: LaunchCopyContract) -> dict[str, str]:
     return env
 
 
+def _safe_app_copy_helper_execution_result_from_process(
+    process: BoundedProcessResult,
+) -> dict[str, Any]:
+    process_started = process.exit_code is not None or process.machine_error_code == PROCESS_TIMEOUT
+    helper_exit_code_zero = process.machine_error_code == PROCESS_OK and process.exit_code == 0
+    cleanup_or_stop_completed = process.machine_error_code in {
+        PROCESS_OK,
+        PROCESS_FAILED,
+        PROCESS_TIMEOUT,
+    } and process_started
+    return {
+        "machine_error_code": (
+            "OK" if helper_exit_code_zero else "WEB_SAFE_APP_COPY_HELPER_START_FAILED"
+        ),
+        "helper_target_safe": True,
+        "helper_execution_attempted": True,
+        "process_started": process_started,
+        "helper_exit_code_zero": helper_exit_code_zero,
+        "cleanup_or_stop_completed": cleanup_or_stop_completed,
+    }
+
+
 def _run_safe_app_copy_bounded_helper(
     contract: LaunchCopyContract | None,
     preflight: dict[str, Any],
@@ -1219,48 +1249,12 @@ def _run_safe_app_copy_bounded_helper(
             "helper_exit_code_zero": False,
             "cleanup_or_stop_completed": False,
         }
-    try:
-        completed = subprocess.run(
-            [str(Path(contract.client_path or "").expanduser())],
-            check=False,
-            env=_safe_app_copy_helper_env(contract),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-            text=True,
-            timeout=2,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
-            "helper_target_safe": True,
-            "helper_execution_attempted": True,
-            "process_started": True,
-            "helper_exit_code_zero": False,
-            "cleanup_or_stop_completed": True,
-        }
-    except (OSError, ValueError):
-        return {
-            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
-            "helper_target_safe": True,
-            "helper_execution_attempted": True,
-            "process_started": False,
-            "helper_exit_code_zero": False,
-            "cleanup_or_stop_completed": False,
-        }
-    return {
-        "machine_error_code": (
-            "OK"
-            if completed.returncode == 0
-            else "WEB_SAFE_APP_COPY_HELPER_START_FAILED"
-        ),
-        "helper_target_safe": True,
-        "helper_execution_attempted": True,
-        "process_started": True,
-        "helper_exit_code_zero": completed.returncode == 0,
-        "cleanup_or_stop_completed": True,
-    }
+    process = run_bounded_process(
+        [str(Path(contract.client_path or "").expanduser())],
+        env=_safe_app_copy_helper_env(contract),
+        timeout_seconds=2,
+    )
+    return _safe_app_copy_helper_execution_result_from_process(process)
 
 
 def _current_runtime_target_paths() -> tuple[Path, Path]:

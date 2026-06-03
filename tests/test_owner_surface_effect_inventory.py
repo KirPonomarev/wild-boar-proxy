@@ -13,6 +13,7 @@ CREDENTIALS = ROOT / "wild_boar_proxy" / "external_models" / "credentials.py"
 CLI = ROOT / "wild_boar_proxy" / "cli.py"
 UI_SHELL = ROOT / "wild_boar_proxy" / "ui_shell.py"
 WEB_UI = ROOT / "wild_boar_proxy" / "web_ui.py"
+WEB_DESIGN_LIVE_SERVER = ROOT / "wild_boar_proxy" / "web_design_live_server.py"
 CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
 KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 NATIVE_WINDOW_PROBE = ROOT / "wild_boar_proxy" / "native_window_probe.py"
@@ -561,6 +562,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
     ) -> None:
         calls = _call_names(_function(WEB_UI, "_default_support_opener"))
         self.assertIn("start_detached_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_web_design_safe_app_copy_helper_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(WEB_DESIGN_LIVE_SERVER, "_run_safe_app_copy_bounded_helper"))
+        self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
