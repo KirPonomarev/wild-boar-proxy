@@ -54,24 +54,7 @@ from .process_runner import (
     run_bounded_process,
     start_detached_process,
 )
-
-
-class RuntimeErrorInfo(Exception):
-    def __init__(
-        self,
-        message: str,
-        *,
-        machine_error_code: str,
-        severity: str = "fatal",
-        operator_action: str = "stop",
-        exit_code: int = 1,
-    ) -> None:
-        super().__init__(message)
-        self.message = message
-        self.machine_error_code = machine_error_code
-        self.severity = severity
-        self.operator_action = operator_action
-        self.exit_code = exit_code
+from .runtime_errors import RuntimeErrorInfo
 
 
 DEFAULT_LAUNCHER_SCRIPT_NAME = "codex-custom-launch.sh"
@@ -9851,27 +9834,15 @@ def run_healthcheck_repair(
 
 
 def mode_get(paths: RuntimePaths) -> dict[str, Any]:
-    state = read_json(paths.state_file, required=False)
-    desired_mode = get_desired_mode(paths)
-    effective_mode = get_effective_mode(paths, state)
-    host, port, _ = get_endpoint(paths, effective_mode)
-    listener_ok = socket_is_listening(host, port)
-    reported_effective_mode = reconcile_effective_mode_for_reporting(
-        effective_mode, listener_ok=listener_ok
-    )
-    return build_command_payload(
-        ok=True,
-        human_message="Mode values are available.",
-        machine_error_code="OK",
-        liveness="unknown",
-        severity="recoverable",
-        operator_action="none",
-        changed_files=[],
-        effect=EFFECT_READ,
-        extra={
-            "desired_mode": desired_mode,
-            "effective_mode": reported_effective_mode,
-        },
+    from .runtime_modes import mode_get as _mode_get
+
+    def _build_mode_payload(**kwargs: Any) -> dict[str, Any]:
+        return build_command_payload(**kwargs)
+
+    return _mode_get(
+        paths,
+        read_optional_json_object=lambda path: read_json(path, required=False),
+        build_payload=_build_mode_payload,
     )
 
 
