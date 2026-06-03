@@ -19,6 +19,7 @@ TRANSACTION_PREPARING = "preparing"
 TRANSACTION_PREPARED = "prepared"
 TRANSACTION_COMMITTING = "committing"
 TRANSACTION_COMMITTED = "committed"
+TRANSACTION_ROLLED_BACK = "rolled_back"
 TRANSACTION_FAILED_RECOVERABLE = "failed_recoverable"
 TRANSACTION_FAILED_BLOCKED = "failed_blocked"
 
@@ -38,10 +39,12 @@ STATE_TRANSACTION_FAILED_RECOVERABLE = "STATE_TRANSACTION_FAILED_RECOVERABLE"
 STATE_TRANSACTION_FAILED_BLOCKED = "STATE_TRANSACTION_FAILED_BLOCKED"
 STATE_TRANSACTION_ROLLBACK_COMPLETED = "STATE_TRANSACTION_ROLLBACK_COMPLETED"
 STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE = "STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE"
+STATE_TRANSACTION_ROLLBACK_READY = "STATE_TRANSACTION_ROLLBACK_READY"
 STATE_TRANSACTION_ROLLBACK_BLOCKED = "STATE_TRANSACTION_ROLLBACK_BLOCKED"
 
 TRANSACTION_ROLLBACK_COMPLETED = "rollback_completed"
 TRANSACTION_ROLLBACK_NOT_AVAILABLE = "rollback_not_available"
+TRANSACTION_ROLLBACK_READY = "rollback_ready"
 TRANSACTION_ROLLBACK_BLOCKED = "rollback_blocked"
 ROLLBACK_ID_PREFIX = "wbp-rb-"
 
@@ -51,6 +54,7 @@ _VALID_STATES = frozenset(
         TRANSACTION_PREPARED,
         TRANSACTION_COMMITTING,
         TRANSACTION_COMMITTED,
+        TRANSACTION_ROLLED_BACK,
         TRANSACTION_FAILED_RECOVERABLE,
         TRANSACTION_FAILED_BLOCKED,
     }
@@ -140,6 +144,28 @@ class TransactionRollbackResult:
     transaction_id: str | None
     status: str
     changed_files: tuple[str, ...]
+    blocked_reasons: tuple[str, ...]
+    machine_error_code: str
+
+
+@dataclass(frozen=True)
+class TransactionRollbackPreflightFile:
+    target_path: str
+    sha256_before: str | None
+    sha256_after: str | None
+
+
+@dataclass(frozen=True)
+class TransactionRollbackPreflightResult:
+    rollback_available: bool
+    rollback_id: str | None
+    transaction_id: str | None
+    mutation_id: str | None
+    effect: str | None
+    scope: str | None
+    status: str
+    would_change_files: tuple[str, ...]
+    files: tuple[TransactionRollbackPreflightFile, ...]
     blocked_reasons: tuple[str, ...]
     machine_error_code: str
 
@@ -605,6 +631,17 @@ def classify_transaction_metadata(
             classification=TRANSACTION_BLOCKED,
             machine_error_code=STATE_TRANSACTION_FAILED_BLOCKED,
             reason="transaction failed and is blocked",
+        )
+    if parsed.state == TRANSACTION_ROLLED_BACK:
+        if all(file_record.committed and file_record.sha256_after for file_record in parsed.files):
+            return TransactionClassification(
+                classification=TRANSACTION_CLEAN,
+                machine_error_code=STATE_TRANSACTION_CLEAN,
+                reason="transaction has been rolled back",
+            )
+        raise StateTransactionError(
+            "Rolled-back transaction metadata has uncommitted file records.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
         )
     if all(file_record.committed and file_record.sha256_after for file_record in parsed.files):
         return TransactionClassification(
@@ -1162,6 +1199,35 @@ def _rollback_result(
     )
 
 
+def _rollback_preflight_result(
+    *,
+    rollback_available: bool,
+    rollback_id: str | None,
+    transaction_id: str | None,
+    mutation_id: str | None = None,
+    effect: str | None = None,
+    scope: str | None = None,
+    status: str,
+    would_change_files: tuple[str, ...] = (),
+    files: tuple[TransactionRollbackPreflightFile, ...] = (),
+    blocked_reasons: tuple[str, ...] = (),
+    machine_error_code: str,
+) -> TransactionRollbackPreflightResult:
+    return TransactionRollbackPreflightResult(
+        rollback_available=rollback_available,
+        rollback_id=rollback_id,
+        transaction_id=transaction_id,
+        mutation_id=mutation_id,
+        effect=effect,
+        scope=scope,
+        status=status,
+        would_change_files=would_change_files,
+        files=files,
+        blocked_reasons=blocked_reasons,
+        machine_error_code=machine_error_code,
+    )
+
+
 def _latest_rollback_eligible_metadata(
     store_root: Path,
 ) -> tuple[Path, TransactionMetadata] | None:
@@ -1217,11 +1283,25 @@ def _rollback_preflight_blocked_reasons(metadata: TransactionMetadata) -> tuple[
     return tuple(blocked_reasons)
 
 
-def rollback_latest_state_transaction(
+def _rollback_preflight_files(
+    metadata: TransactionMetadata,
+) -> tuple[TransactionRollbackPreflightFile, ...]:
+    return tuple(
+        TransactionRollbackPreflightFile(
+            target_path=record.target_path,
+            sha256_before=record.sha256_before,
+            sha256_after=record.sha256_after,
+        )
+        for record in metadata.files
+    )
+
+
+def _preflight_latest_state_transaction_rollback_with_metadata(
     transaction_root: Path,
-    *,
-    failure_hook: Callable[[str], None] | None = None,
-) -> TransactionRollbackResult:
+) -> tuple[
+    TransactionRollbackPreflightResult,
+    tuple[Path, TransactionMetadata] | None,
+]:
     root = Path(transaction_root)
     if not root.is_absolute():
         raise StateTransactionError(
@@ -1232,38 +1312,120 @@ def rollback_latest_state_transaction(
     store_root = _transaction_store_root_for(root)
     store_classification = classify_transaction_store(store_root)
     if store_classification.classification != TRANSACTION_CLEAN:
-        return _rollback_result(
-            rollback_available=False,
-            rollback_id=None,
-            transaction_id=None,
-            status=TRANSACTION_ROLLBACK_BLOCKED,
-            blocked_reasons=(
-                f"transaction_store_{store_classification.classification}",
+        return (
+            _rollback_preflight_result(
+                rollback_available=False,
+                rollback_id=None,
+                transaction_id=None,
+                status=TRANSACTION_ROLLBACK_BLOCKED,
+                blocked_reasons=(
+                    f"transaction_store_{store_classification.classification}",
+                ),
+                machine_error_code=store_classification.machine_error_code,
             ),
-            machine_error_code=store_classification.machine_error_code,
+            None,
         )
 
     latest = _latest_rollback_eligible_metadata(store_root)
     if latest is None:
-        return _rollback_result(
-            rollback_available=False,
-            rollback_id=None,
-            transaction_id=None,
-            status=TRANSACTION_ROLLBACK_NOT_AVAILABLE,
-            machine_error_code=STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+        return (
+            _rollback_preflight_result(
+                rollback_available=False,
+                rollback_id=None,
+                transaction_id=None,
+                status=TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+                machine_error_code=STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+            ),
+            None,
         )
 
-    metadata_path, metadata = latest
+    _metadata_path, metadata = latest
+    files = _rollback_preflight_files(metadata)
     blocked_reasons = _rollback_preflight_blocked_reasons(metadata)
     if blocked_reasons:
-        return _rollback_result(
-            rollback_available=False,
+        return (
+            _rollback_preflight_result(
+                rollback_available=False,
+                rollback_id=metadata.rollback_id,
+                transaction_id=metadata.transaction_id,
+                mutation_id=metadata.mutation_id,
+                effect=metadata.effect,
+                scope=metadata.scope,
+                status=TRANSACTION_ROLLBACK_BLOCKED,
+                files=files,
+                blocked_reasons=blocked_reasons,
+                machine_error_code=STATE_TRANSACTION_ROLLBACK_BLOCKED,
+            ),
+            None,
+        )
+
+    return (
+        _rollback_preflight_result(
+            rollback_available=True,
             rollback_id=metadata.rollback_id,
             transaction_id=metadata.transaction_id,
+            mutation_id=metadata.mutation_id,
+            effect=metadata.effect,
+            scope=metadata.scope,
+            status=TRANSACTION_ROLLBACK_READY,
+            would_change_files=tuple(record.target_path for record in metadata.files),
+            files=files,
+            machine_error_code=STATE_TRANSACTION_ROLLBACK_READY,
+        ),
+        latest,
+    )
+
+
+def preflight_latest_state_transaction_rollback(
+    transaction_root: Path,
+) -> TransactionRollbackPreflightResult:
+    preflight, _latest = _preflight_latest_state_transaction_rollback_with_metadata(
+        transaction_root
+    )
+    return preflight
+
+
+def rollback_latest_state_transaction(
+    transaction_root: Path,
+    *,
+    expected_transaction_id: str | None = None,
+    expected_rollback_id: str | None = None,
+    failure_hook: Callable[[str], None] | None = None,
+) -> TransactionRollbackResult:
+    if expected_transaction_id is not None:
+        validate_transaction_id(expected_transaction_id)
+    if expected_rollback_id is not None:
+        validate_rollback_id(expected_rollback_id)
+    preflight, latest = _preflight_latest_state_transaction_rollback_with_metadata(
+        transaction_root
+    )
+    if not preflight.rollback_available:
+        return _rollback_result(
+            rollback_available=False,
+            rollback_id=preflight.rollback_id,
+            transaction_id=preflight.transaction_id,
+            status=preflight.status,
+            blocked_reasons=preflight.blocked_reasons,
+            machine_error_code=preflight.machine_error_code,
+        )
+    if latest is None:
+        raise StateTransactionError(
+            "Rollback preflight reported availability without transaction metadata.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    if (
+        (expected_transaction_id is not None and preflight.transaction_id != expected_transaction_id)
+        or (expected_rollback_id is not None and preflight.rollback_id != expected_rollback_id)
+    ):
+        return _rollback_result(
+            rollback_available=False,
+            rollback_id=preflight.rollback_id,
+            transaction_id=preflight.transaction_id,
             status=TRANSACTION_ROLLBACK_BLOCKED,
-            blocked_reasons=blocked_reasons,
+            blocked_reasons=("latest_transaction_changed_after_preflight",),
             machine_error_code=STATE_TRANSACTION_ROLLBACK_BLOCKED,
         )
+    metadata_path, metadata = latest
 
     changed_files: list[str] = []
     try:
@@ -1286,6 +1448,10 @@ def rollback_latest_state_transaction(
                         _fsync_parent_best_effort(rollback_temp_path.parent)
             _call_failure_hook(failure_hook, "after_rollback_file")
             _append_unique(changed_files, str(target))
+        write_transaction_metadata(
+            metadata_path,
+            _metadata_with_state(metadata, state=TRANSACTION_ROLLED_BACK),
+        )
     except Exception as exc:  # noqa: BLE001
         failed_metadata = _failed_metadata(
             metadata,

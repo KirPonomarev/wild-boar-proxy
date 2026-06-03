@@ -288,6 +288,56 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             check=False,
         )
 
+    def commit_rollback_eligible_transaction(
+        self,
+        *,
+        transaction_id: str = "txn-rollback-command",
+        mutation_id: str = "wbp-mut-rollback-command",
+        before: bytes = b"old",
+        after: bytes = b"new",
+    ) -> Path:
+        target = self.managed_dir / "rollback-target.json"
+        target.write_bytes(before)
+        runtime_mod.state_transaction.commit_state_transaction(
+            self.managed_dir,
+            transaction_id,
+            (
+                runtime_mod.state_transaction.TransactionWrite(
+                    target_path=str(target),
+                    payload=after,
+                ),
+            ),
+            effect=runtime_mod.EFFECT_REPAIR,
+            scope="rollback_command_test",
+            mutation_id=mutation_id,
+            rollback_eligible=True,
+        )
+        self.assertEqual(target.read_bytes(), after)
+        return target
+
+    def write_incomplete_transaction_metadata(
+        self,
+        transaction_id: str = "txn-incomplete-command",
+    ) -> Path:
+        metadata_path = runtime_mod.state_transaction.transaction_metadata_path(
+            self.managed_dir / runtime_mod.state_transaction.TRANSACTION_STORE_DIRNAME,
+            transaction_id,
+        )
+        runtime_mod.state_transaction.write_transaction_metadata(
+            metadata_path,
+            runtime_mod.state_transaction.TransactionMetadata(
+                schema_version=runtime_mod.state_transaction.TRANSACTION_METADATA_SCHEMA_VERSION,
+                transaction_id=transaction_id,
+                state=runtime_mod.state_transaction.TRANSACTION_PREPARING,
+                created_at_utc="2026-06-03T00:00:00+00:00",
+                updated_at_utc="2026-06-03T00:00:01+00:00",
+                transaction_root=str(self.managed_dir.resolve(strict=False)),
+                files=(),
+                error=None,
+            ),
+        )
+        return metadata_path
+
     def test_healthcheck_probe_declares_probe_and_does_not_write_truth_files(self) -> None:
         before = self.truth_snapshot()
         result = self.run_cli("healthcheck", "--json")
@@ -509,6 +559,201 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD,
             rolled_back_state,
         )
+
+    def test_rollback_latest_dry_run_reports_ready_without_writes(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+        metadata_path = next((self.managed_dir / "transactions").glob("*.transaction.json"))
+        before_metadata = metadata_path.read_text(encoding="utf-8")
+
+        result = self.run_cli("rollback", "--latest", "--dry-run", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertTrue(payload["rollback_available"])
+        self.assertEqual(payload["rollback_status"], "rollback_ready")
+        self.assertEqual(payload["would_change_files"], [str(target.resolve(strict=False))])
+        self.assertEqual(target.read_bytes(), b"new")
+        self.assertEqual(metadata_path.read_text(encoding="utf-8"), before_metadata)
+
+    def test_rollback_latest_dry_run_no_eligible_does_not_false_green(self) -> None:
+        result = self.run_cli("rollback", "--latest", "--dry-run", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(payload["rollback_available"])
+        self.assertEqual(payload["rollback_status"], "rollback_not_available")
+
+    def test_rollback_latest_apply_restores_file_and_verifies(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+
+        result = self.run_cli("rollback", "--latest", "--apply", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [str(target.resolve(strict=False))])
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_transaction.STATE_TRANSACTION_ROLLBACK_COMPLETED,
+        )
+        self.assertTrue(payload["post_rollback_verification"]["verified"])
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_rollback_latest_apply_blocks_second_attempt_without_false_green(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+        first = self.run_cli("rollback", "--latest", "--apply", "--json")
+        first_payload = _strict_json_object(first.stdout)
+        self.assertEqual(first_payload["status"], "ok")
+
+        second = self.run_cli("rollback", "--latest", "--apply", "--json")
+        second_payload = _strict_json_object(second.stdout)
+
+        self.assertEqual(second.stderr, "")
+        self.assertEqual(second.returncode, second_payload["exit_code"])
+        self.assertNotEqual(second_payload["status"], "ok")
+        self.assertEqual(second_payload["changed_files"], [])
+        self.assertFalse(second_payload["rollback_available"])
+        self.assertEqual(second_payload["rollback_status"], "rollback_not_available")
+        self.assertEqual(second_payload["rollback_blocked_reasons"], [])
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_rollback_latest_apply_blocks_drift_before_writes(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+        target.write_bytes(b"drift")
+
+        result = self.run_cli("rollback", "--latest", "--apply", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(payload["rollback_available"])
+        self.assertIn("target_sha256_drift", " ".join(payload["rollback_blocked_reasons"]))
+        self.assertEqual(target.read_bytes(), b"drift")
+
+    def test_rollback_latest_apply_blocks_missing_backup_before_writes(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+        metadata_path = next((self.managed_dir / "transactions").glob("*.transaction.json"))
+        metadata = runtime_mod.state_transaction.read_transaction_metadata(metadata_path)
+        Path(metadata.files[0].backup_path).unlink()
+
+        result = self.run_cli("rollback", "--latest", "--apply", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(payload["rollback_available"])
+        self.assertIn(
+            "backup_not_regular_file",
+            " ".join(payload["rollback_blocked_reasons"]),
+        )
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_rollback_latest_apply_blocks_dirty_store_before_writes(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+        self.write_incomplete_transaction_metadata()
+
+        result = self.run_cli("rollback", "--latest", "--apply", "--json")
+        payload = _strict_json_object(result.stdout)
+
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(payload["rollback_available"])
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_transaction.STATE_TRANSACTION_INCOMPLETE,
+        )
+        self.assertEqual(payload["rollback_blocked_reasons"], ["transaction_store_incomplete"])
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_rollback_latest_apply_failed_post_verify_does_not_false_green(
+        self,
+    ) -> None:
+        target = self.commit_rollback_eligible_transaction()
+
+        with mock.patch.object(
+            runtime_mod,
+            "_verify_latest_rollback_result",
+            return_value={
+                "status": "failed",
+                "verified": False,
+                "files": [
+                    {
+                        "target_path": str(target.resolve(strict=False)),
+                        "expected_kind": "file",
+                        "observed_kind": "file",
+                        "expected_sha256": "expected",
+                        "observed_sha256": "observed",
+                        "verified": False,
+                    }
+                ],
+            },
+        ):
+            payload = runtime_mod.run_rollback_latest_apply(self.paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(
+            payload["machine_error_code"],
+            "STATE_TRANSACTION_ROLLBACK_POST_VERIFY_FAILED",
+        )
+        self.assertEqual(payload["changed_files"], [str(target.resolve(strict=False))])
+        self.assertFalse(payload["post_rollback_verification"]["verified"])
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_rollback_latest_cli_rejects_mutation_id_selection(self) -> None:
+        target = self.commit_rollback_eligible_transaction()
+
+        result = self.run_cli(
+            "rollback",
+            "--latest",
+            "--mutation-id",
+            "wbp-mut-forbidden",
+            "--dry-run",
+            "--json",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("unrecognized arguments", result.stderr)
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_status_and_healthcheck_do_not_use_rollback_surface(self) -> None:
+        def forbidden(_transaction_root: Path) -> object:
+            raise AssertionError("status/healthcheck must not call rollback")
+
+        with (
+            mock.patch.object(
+                runtime_mod.state_transaction,
+                "preflight_latest_state_transaction_rollback",
+                side_effect=forbidden,
+            ),
+            mock.patch.object(
+                runtime_mod.state_transaction,
+                "rollback_latest_state_transaction",
+                side_effect=forbidden,
+            ),
+        ):
+            status_payload = runtime_mod.summarize_status(self.paths)
+            health_payload = runtime_mod.run_healthcheck_probe(self.paths)
+
+        self.assertEqual(status_payload["effect"], "read")
+        self.assertEqual(health_payload["effect"], "probe")
 
     def test_healthcheck_repair_mixed_writes_do_not_claim_rollback_available(
         self,

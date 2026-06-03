@@ -637,6 +637,24 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_NOT_AVAILABLE)
         self.assertEqual(result.changed_files, ())
 
+    def test_rollback_preflight_no_eligible_transaction_reports_not_available(
+        self,
+    ) -> None:
+        self.write_store_metadata("txn-clean", state=state_transaction.TRANSACTION_COMMITTED)
+
+        result = state_transaction.preflight_latest_state_transaction_rollback(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertIsNone(result.rollback_id)
+        self.assertIsNone(result.transaction_id)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_NOT_AVAILABLE)
+        self.assertEqual(
+            result.machine_error_code,
+            state_transaction.STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+        )
+        self.assertEqual(result.would_change_files, ())
+        self.assertEqual(result.files, ())
+
     def test_rollback_eligible_metadata_requires_truth_fields(self) -> None:
         metadata = self.metadata(
             state=state_transaction.TRANSACTION_COMMITTED,
@@ -717,6 +735,71 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertEqual(result.changed_files, (str(target.resolve(strict=False)),))
         self.assertEqual(target.read_bytes(), b"old")
 
+    def test_successful_rollback_retires_transaction_from_latest_pool(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-retire-after-rollback",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-retire-after-rollback",
+            rollback_eligible=True,
+        )
+        metadata_path = Path(commit_result.metadata_path)
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+        metadata = state_transaction.read_transaction_metadata(metadata_path)
+        target.write_bytes(b"new")
+        preflight_after_thaw = state_transaction.preflight_latest_state_transaction_rollback(
+            self.root
+        )
+
+        self.assertTrue(result.rollback_available)
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_ROLLED_BACK)
+        self.assertTrue(metadata.rollback_eligible)
+        self.assertIsNotNone(metadata.rollback_id)
+        self.assertFalse(preflight_after_thaw.rollback_available)
+        self.assertEqual(
+            preflight_after_thaw.status,
+            state_transaction.TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+        )
+
+    def test_rollback_preflight_reports_latest_ready_without_writes(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-preflight-ready",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-preflight-ready",
+            rollback_eligible=True,
+        )
+        metadata_path = Path(commit_result.metadata_path)
+        before_metadata = metadata_path.read_text(encoding="utf-8")
+
+        result = state_transaction.preflight_latest_state_transaction_rollback(self.root)
+
+        self.assertTrue(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_READY)
+        self.assertEqual(
+            result.machine_error_code,
+            state_transaction.STATE_TRANSACTION_ROLLBACK_READY,
+        )
+        self.assertEqual(result.transaction_id, "txn-preflight-ready")
+        self.assertEqual(result.mutation_id, "wbp-mut-preflight-ready")
+        self.assertEqual(result.effect, "repair")
+        self.assertEqual(result.scope, "state_transaction_test")
+        self.assertEqual(result.would_change_files, (str(target.resolve(strict=False)),))
+        self.assertEqual(result.files[0].target_path, str(target.resolve(strict=False)))
+        self.assertEqual(result.files[0].sha256_before, state_transaction._sha256_bytes(b"old"))
+        self.assertEqual(result.files[0].sha256_after, state_transaction._sha256_bytes(b"new"))
+        self.assertEqual(target.read_bytes(), b"new")
+        self.assertEqual(metadata_path.read_text(encoding="utf-8"), before_metadata)
+
     def test_rollback_latest_create_transaction_deletes_created_file(self) -> None:
         target = self.root / "created.json"
         state_transaction.commit_state_transaction(
@@ -760,6 +843,28 @@ class StateTransactionMetadataTests(unittest.TestCase):
         )
         self.assertIn("target_sha256_drift", result.blocked_reasons[0])
         self.assertEqual(result.changed_files, ())
+        self.assertEqual(target.read_bytes(), b"drift")
+
+    def test_rollback_preflight_blocks_target_drift_without_writes(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-preflight-drift",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-preflight-drift",
+            rollback_eligible=True,
+        )
+        target.write_bytes(b"drift")
+
+        result = state_transaction.preflight_latest_state_transaction_rollback(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertEqual(result.would_change_files, ())
+        self.assertIn("target_sha256_drift", result.blocked_reasons[0])
         self.assertEqual(target.read_bytes(), b"drift")
 
     def test_rollback_multifile_drift_blocks_before_any_write(self) -> None:
@@ -908,6 +1013,29 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertEqual(result.changed_files, ())
         self.assertEqual(target.read_bytes(), b"new")
 
+    def test_rollback_preflight_blocks_when_transaction_store_is_not_clean(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-preflight-eligible",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-preflight-store-block",
+            rollback_eligible=True,
+        )
+        self.write_store_metadata("txn-preflight-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+
+        result = state_transaction.preflight_latest_state_transaction_rollback(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertEqual(result.machine_error_code, state_transaction.STATE_TRANSACTION_INCOMPLETE)
+        self.assertEqual(result.would_change_files, ())
+        self.assertEqual(result.files, ())
+        self.assertEqual(target.read_bytes(), b"new")
+
     def test_rollback_latest_selection_uses_latest_eligible_committed_metadata(self) -> None:
         alpha = self.root / "alpha.json"
         beta = self.root / "beta.json"
@@ -938,6 +1066,51 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertEqual(result.transaction_id, "txn-002")
         self.assertEqual(alpha.read_bytes(), b"new-alpha")
         self.assertEqual(beta.read_bytes(), b"old-beta")
+
+    def test_rollback_latest_expected_guard_blocks_changed_latest_without_writes(
+        self,
+    ) -> None:
+        alpha = self.root / "alpha.json"
+        beta = self.root / "beta.json"
+        alpha.write_bytes(b"old-alpha")
+        beta.write_bytes(b"old-beta")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-001",
+            (self.transaction_write("alpha.json", b"new-alpha"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-alpha",
+            rollback_eligible=True,
+        )
+        preflight = state_transaction.preflight_latest_state_transaction_rollback(
+            self.root
+        )
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-002",
+            (self.transaction_write("beta.json", b"new-beta"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-beta",
+            rollback_eligible=True,
+        )
+
+        result = state_transaction.rollback_latest_state_transaction(
+            self.root,
+            expected_transaction_id=preflight.transaction_id,
+            expected_rollback_id=preflight.rollback_id,
+        )
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertEqual(
+            result.blocked_reasons,
+            ("latest_transaction_changed_after_preflight",),
+        )
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(alpha.read_bytes(), b"new-alpha")
+        self.assertEqual(beta.read_bytes(), b"new-beta")
 
     def test_commit_state_transaction_rejects_relative_root_invalid_id_and_empty_writes(self) -> None:
         with self.assertRaises(state_transaction.StateTransactionError):

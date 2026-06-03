@@ -7717,6 +7717,256 @@ def build_command_payload(
     return payload
 
 
+def _rollback_preflight_files_packet(
+    preflight: state_transaction.TransactionRollbackPreflightResult,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "target_path": item.target_path,
+            "sha256_before": item.sha256_before,
+            "sha256_after": item.sha256_after,
+        }
+        for item in preflight.files
+    ]
+
+
+def _rollback_packet_extra(
+    preflight: state_transaction.TransactionRollbackPreflightResult,
+    *,
+    command_mode: str,
+    owner_command_surface: str,
+    transaction_root: Path,
+    apply_result: state_transaction.TransactionRollbackResult | None = None,
+    post_rollback_verification: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    packet: dict[str, Any] = {
+        "command_mode": command_mode,
+        "owner_command_surface": owner_command_surface,
+        "rollback_selection": "latest",
+        "rollback_mutation_selection_supported": False,
+        "rollback_available": preflight.rollback_available,
+        "rollback_id": preflight.rollback_id,
+        "transaction_id": preflight.transaction_id,
+        "mutation_id": preflight.mutation_id,
+        "rollback_effect": preflight.effect,
+        "rollback_scope": preflight.scope,
+        "rollback_status": preflight.status,
+        "rollback_blocked_reasons": list(preflight.blocked_reasons),
+        "would_change_files": list(preflight.would_change_files),
+        "rollback_files": _rollback_preflight_files_packet(preflight),
+        "transaction_root": str(transaction_root.expanduser().resolve(strict=False)),
+    }
+    if apply_result is not None:
+        packet["apply_result"] = {
+            "rollback_available": apply_result.rollback_available,
+            "rollback_id": apply_result.rollback_id,
+            "transaction_id": apply_result.transaction_id,
+            "status": apply_result.status,
+            "changed_files": list(apply_result.changed_files),
+            "blocked_reasons": list(apply_result.blocked_reasons),
+            "machine_error_code": apply_result.machine_error_code,
+        }
+    if post_rollback_verification is not None:
+        packet["post_rollback_verification"] = post_rollback_verification
+    return packet
+
+
+def _verify_latest_rollback_result(
+    preflight: state_transaction.TransactionRollbackPreflightResult,
+) -> dict[str, Any]:
+    file_results: list[dict[str, Any]] = []
+    verified = True
+    for item in preflight.files:
+        snapshot = mutation_ledger.snapshot_path(item.target_path)
+        if item.sha256_before is None:
+            item_verified = snapshot.kind == mutation_ledger.KIND_MISSING
+        else:
+            item_verified = (
+                snapshot.kind == mutation_ledger.KIND_FILE
+                and snapshot.sha256 == item.sha256_before
+            )
+        if not item_verified:
+            verified = False
+        file_results.append(
+            {
+                "target_path": item.target_path,
+                "expected_kind": (
+                    mutation_ledger.KIND_MISSING
+                    if item.sha256_before is None
+                    else mutation_ledger.KIND_FILE
+                ),
+                "observed_kind": snapshot.kind,
+                "expected_sha256": item.sha256_before,
+                "observed_sha256": snapshot.sha256,
+                "verified": item_verified,
+            }
+        )
+    return {
+        "status": "verified" if verified else "failed",
+        "verified": verified,
+        "files": file_results,
+    }
+
+
+def run_rollback_latest_dry_run(paths: RuntimePaths) -> dict[str, Any]:
+    transaction_root = paths.managed_dir.expanduser().resolve(strict=False)
+    try:
+        preflight = state_transaction.preflight_latest_state_transaction_rollback(
+            transaction_root
+        )
+    except state_transaction.StateTransactionError as exc:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback dry-run failed during transaction preflight.",
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity="fatal",
+            operator_action="stop",
+            changed_files=[],
+            effect=EFFECT_READ,
+        )
+
+    extra = _rollback_packet_extra(
+        preflight,
+        command_mode="dry_run",
+        owner_command_surface="rollback --latest --dry-run --json",
+        transaction_root=transaction_root,
+    )
+    if not preflight.rollback_available:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback dry-run found no latest transaction eligible to apply.",
+            machine_error_code=preflight.machine_error_code,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra=extra,
+            effect=EFFECT_READ,
+        )
+
+    extra["next_action"] = "run_rollback_latest_apply_if_authorized"
+    return build_command_payload(
+        ok=True,
+        human_message="Rollback dry-run found the latest transaction eligible to apply.",
+        machine_error_code=preflight.machine_error_code,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="user_action",
+        changed_files=[],
+        extra=extra,
+        effect=EFFECT_READ,
+    )
+
+
+def run_rollback_latest_apply(paths: RuntimePaths) -> dict[str, Any]:
+    transaction_root = paths.managed_dir.expanduser().resolve(strict=False)
+    try:
+        preflight = state_transaction.preflight_latest_state_transaction_rollback(
+            transaction_root
+        )
+    except state_transaction.StateTransactionError as exc:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback apply failed during transaction preflight.",
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity="fatal",
+            operator_action="stop",
+            changed_files=[],
+            effect=EFFECT_REPAIR,
+        )
+
+    if not preflight.rollback_available:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback apply blocked before writes by transaction preflight.",
+            machine_error_code=preflight.machine_error_code,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra=_rollback_packet_extra(
+                preflight,
+                command_mode="apply",
+                owner_command_surface="rollback --latest --apply --json",
+                transaction_root=transaction_root,
+            ),
+            effect=EFFECT_REPAIR,
+        )
+
+    try:
+        apply_result = state_transaction.rollback_latest_state_transaction(
+            transaction_root,
+            expected_transaction_id=preflight.transaction_id,
+            expected_rollback_id=preflight.rollback_id,
+        )
+    except state_transaction.StateTransactionError as exc:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback apply failed during transaction rollback.",
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra=_rollback_packet_extra(
+                preflight,
+                command_mode="apply",
+                owner_command_surface="rollback --latest --apply --json",
+                transaction_root=transaction_root,
+            ),
+            effect=EFFECT_REPAIR,
+        )
+
+    post_rollback_verification = _verify_latest_rollback_result(preflight)
+    extra = _rollback_packet_extra(
+        preflight,
+        command_mode="apply",
+        owner_command_surface="rollback --latest --apply --json",
+        transaction_root=transaction_root,
+        apply_result=apply_result,
+        post_rollback_verification=post_rollback_verification,
+    )
+    if not apply_result.rollback_available:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback apply did not complete after preflight.",
+            machine_error_code=apply_result.machine_error_code,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra=extra,
+            effect=EFFECT_REPAIR,
+        )
+    if not post_rollback_verification["verified"]:
+        return build_command_payload(
+            ok=False,
+            human_message="Rollback apply failed post-rollback filesystem verification.",
+            machine_error_code="STATE_TRANSACTION_ROLLBACK_POST_VERIFY_FAILED",
+            liveness="unknown",
+            severity="fatal",
+            operator_action="stop",
+            changed_files=list(apply_result.changed_files),
+            extra=extra,
+            effect=EFFECT_REPAIR,
+        )
+
+    extra["next_action"] = "none"
+    return build_command_payload(
+        ok=True,
+        human_message="Rollback apply completed and passed filesystem verification.",
+        machine_error_code=state_transaction.STATE_TRANSACTION_ROLLBACK_COMPLETED,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=list(apply_result.changed_files),
+        extra=extra,
+        effect=EFFECT_REPAIR,
+    )
+
+
 INVARIANT_CHECK_REQUIRED_FIELDS = [
     "status",
     "exit_code",

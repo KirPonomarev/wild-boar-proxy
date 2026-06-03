@@ -36,6 +36,8 @@ from .runtime import (
     run_promote,
     run_companion_reset,
     run_release,
+    run_rollback_latest_apply,
+    run_rollback_latest_dry_run,
     run_rollout_evidence_capture,
     run_rollout_posture_inspect,
     run_rollout_rotation_inspect,
@@ -91,6 +93,13 @@ def build_parser() -> argparse.ArgumentParser:
     stable_target_switch_mode.add_argument("--dry-run", action="store_true")
     stable_target_switch_mode.add_argument("--apply", action="store_true")
     stable_target_switch.add_argument("--json", action="store_true", required=True)
+
+    rollback = subparsers.add_parser("rollback")
+    rollback.add_argument("--latest", action="store_true", required=True)
+    rollback_mode = rollback.add_mutually_exclusive_group(required=True)
+    rollback_mode.add_argument("--dry-run", action="store_true")
+    rollback_mode.add_argument("--apply", action="store_true")
+    rollback.add_argument("--json", action="store_true", required=True)
 
     sync = subparsers.add_parser("sync")
     sync.add_argument("--json", action="store_true", required=True)
@@ -406,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_stable_target_switch_contract(paths, apply=bool(args.apply))
             )
+        if args.command == "rollback":
+            if args.apply:
+                return emit_json(run_rollback_latest_apply(paths))
+            return emit_json(run_rollback_latest_dry_run(paths))
         if args.command == "sync":
             return emit_json(run_sync(paths, args.model))
         if args.command == "launch" and args.launch_command == "smoke":

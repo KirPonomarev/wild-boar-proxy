@@ -201,6 +201,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
         commands = (
             ("invariant-check", "--json"),
             ("status", "--json"),
+            ("rollback", "--latest", "--dry-run", "--json"),
             ("mode", "get", "--json"),
             ("accounts", "list", "--json"),
             (
@@ -239,6 +240,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
         harness_commands = {
             ("invariant-check", "--json"),
             ("status", "--json"),
+            ("rollback", "--latest", "--dry-run", "--json"),
             ("mode", "get", "--json"),
             ("accounts", "list", "--json"),
             (

@@ -21,6 +21,8 @@ All operator commands must support `--json`.
 - `launch client --json`
 - `healthcheck --json`
 - `healthcheck --repair --json`
+- `rollback --latest --dry-run --json`
+- `rollback --latest --apply --json`
 - `mode get --json`
 - `mode set stable --json`
 - `mode set managed --json`
@@ -148,6 +150,7 @@ Current `read` surfaces:
 - `invariant-check --json`
 - `status --json`
 - `mode get --json`
+- `rollback --latest --dry-run --json`
 - `accounts list --json`
 - `external-models credentials status --provider <provider> --json`
 
@@ -210,7 +213,39 @@ If a repair packet includes any changed top-level path that is not covered by
 the rollback-eligible transaction metadata, rollback fields must stay
 non-actionable (`rollback_available=false`, `rollback_id=null`,
 `rollback_phase=ledger_only`) and `mutation_ledger.transaction_id` must be
-absent. Phase 2 does not add `rollback --mutation-id <id> --json`.
+absent.
+
+`rollback --latest --dry-run --json` is a read-only transaction preflight
+surface. It must emit `effect=read`, `changed_files=[]`, and must not call the
+mutating rollback helper. It may expose:
+
+- `rollback_available`
+- `rollback_id`
+- `transaction_id`
+- `mutation_id`
+- `rollback_status`
+- `rollback_blocked_reasons`
+- `would_change_files`
+- `rollback_files`
+
+`rollback --latest --apply --json` is the only rollback apply surface admitted
+in this phase. It is an explicit `repair` command and must select only the
+latest rollback-eligible committed transaction. It must not accept
+`--mutation-id`, arbitrary transaction ids, or history selection. Apply must run
+the same transaction-layer preflight before writes, and a green packet requires
+both:
+
+- `state_transaction.rollback_latest_state_transaction(...)` completed
+- post-rollback filesystem verification proves each target returned to
+  `sha256_before`, or is absent when the transaction created it
+
+If preflight is blocked, no transaction is eligible, the target has drifted, a
+backup is missing, the transaction store is dirty, or the rollback is repeated
+after success, the command must emit an error packet with `changed_files=[]`.
+If post-rollback verification fails after writes occurred, the command must
+still emit an error packet, but `changed_files` must report the actual files
+changed by the attempted apply and `post_rollback_verification` must carry the
+failed evidence. Phase 2 does not add `rollback --mutation-id <id> --json`.
 
 ## Severity classes
 
