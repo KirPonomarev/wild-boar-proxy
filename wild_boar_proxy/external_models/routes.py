@@ -176,6 +176,17 @@ def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:
     return route
 
 
+def require_route_id(route_id: object) -> str:
+    route_id_error = contracts.route_id_validation_error(route_id)
+    if route_id_error:
+        raise RuntimeErrorInfo(
+            route_id_error,
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="user_action",
+        )
+    return str(route_id)
+
+
 def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
     return {
         "route_id": route["route_id"],
@@ -195,7 +206,8 @@ def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def find_route(routes_payload: dict[str, Any], route_id: str) -> dict[str, Any]:
+def find_route(routes_payload: dict[str, Any], route_id: object) -> dict[str, Any]:
+    route_id = require_route_id(route_id)
     for route in routes_payload["routes"]:
         if route["route_id"] == route_id:
             return route
@@ -222,6 +234,7 @@ def add_route(paths: ExternalModelsPaths, route: dict[str, Any]) -> list[str]:
 
 
 def update_route(paths: ExternalModelsPaths, route_id: str, route: dict[str, Any]) -> list[str]:
+    route_id = require_route_id(route_id)
     validate_route_schema(route)
     if route["route_id"] != route_id:
         raise RuntimeErrorInfo(
@@ -251,6 +264,7 @@ def update_route(paths: ExternalModelsPaths, route_id: str, route: dict[str, Any
 
 
 def remove_route(paths: ExternalModelsPaths, route_id: str) -> list[str]:
+    route_id = require_route_id(route_id)
     changed_files: list[str] = []
     with dual_lock(paths.routes_lock, paths.state_lock):
         routes_payload = load_routes_file(paths.routes_file)
@@ -276,6 +290,7 @@ def remove_route(paths: ExternalModelsPaths, route_id: str) -> list[str]:
 
 
 def set_route_enabled(paths: ExternalModelsPaths, route_id: str, enabled: bool) -> list[str]:
+    route_id = require_route_id(route_id)
     with serialized_lock(paths.routes_lock):
         routes_payload = load_routes_file(paths.routes_file)
         route = find_route(routes_payload, route_id)
@@ -333,6 +348,7 @@ def models_listing(paths: ExternalModelsPaths) -> list[dict[str, Any]]:
 
 
 def profile_packet(paths: ExternalModelsPaths, route_id: str) -> dict[str, Any]:
+    route_id = require_route_id(route_id)
     route = find_route(load_routes_file(paths.routes_file), route_id)
     ensure_secrets_permissions(paths.secrets_file)
     state_payload = load_state_file(paths.state_file)

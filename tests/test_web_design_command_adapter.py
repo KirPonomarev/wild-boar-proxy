@@ -737,6 +737,40 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(non_string["status"], "integration_failure")
         self.assertIn("non-string args", non_string["human_message"])
 
+    def test_external_models_route_commands_reject_invalid_route_id_before_runner(self) -> None:
+        runner = RecordingRunner()
+        invalid_route_id = "wbp-/../../escape"
+        cases: list[tuple[str, dict[str, str]]] = [
+            ("external_models_routes_validate", {"route_id": invalid_route_id}),
+            ("external_models_check", {"route_id": invalid_route_id}),
+            (
+                "external_models_live_format_check",
+                {
+                    "route_id": invalid_route_id,
+                    "prompt": "API_ONLY_DEEPSEEK_READY",
+                    "expected_text": "API_ONLY_DEEPSEEK_READY",
+                },
+            ),
+            ("external_models_routes_enable", {"route_id": invalid_route_id}),
+            ("external_models_routes_disable", {"route_id": invalid_route_id}),
+            ("external_models_routes_remove", {"route_id": invalid_route_id}),
+            ("external_models_profile_codex_desktop", {"route_id": invalid_route_id}),
+            ("external_models_evidence_capture", {"route_id": invalid_route_id}),
+        ]
+
+        for command_id, structured_args in cases:
+            with self.subTest(command_id=command_id):
+                result = execute_command(
+                    runner,
+                    command_id,
+                    structured_args=structured_args,
+                )
+                self.assertEqual(result["status"], "integration_failure")
+                self.assertEqual(result["changed_files"], [])
+                self.assertIn("route_id", result["human_message"])
+
+        self.assertEqual(runner.calls, [])
+
     def test_accounts_onboard_rejects_all_browser_args(self) -> None:
         runner = RecordingRunner()
 

@@ -93,6 +93,18 @@ class ExternalModelContractTests(unittest.TestCase):
                     routes.validate_route_schema(sample_route() | {"route_id": route_id})
                 self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
 
+    def test_find_route_rejects_invalid_route_id_before_registry_lookup(self) -> None:
+        with self.assertRaises(RuntimeErrorInfo) as ctx:
+            routes.find_route({}, "wbp-/../../escape")
+
+        self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+
+    def test_find_route_keeps_missing_canonical_route_as_not_found(self) -> None:
+        with self.assertRaises(RuntimeErrorInfo) as ctx:
+            routes.find_route({"routes": []}, "wbp-missing")
+
+        self.assertEqual(ctx.exception.machine_error_code, "route_not_found")
+
     def test_validate_route_schema_rejects_unknown_transform_profile(self) -> None:
         route = sample_route() | {"transform_profile": "python_eval"}
         with self.assertRaises(RuntimeErrorInfo) as ctx:

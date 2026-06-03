@@ -16,6 +16,7 @@ import subprocess
 from typing import Any, Protocol
 
 from wild_boar_proxy.ui_shell import CommandResult, UiShellError, require_fields
+from wild_boar_proxy.external_models.contracts import route_id_validation_error
 
 
 REQUIRED_COMMAND_FIELDS = (
@@ -482,6 +483,10 @@ def _render_argv(spec: CommandSpec, structured_args: dict[str, str]) -> tuple[st
         session_id = structured_args["session_id"].strip()
         if not session_id:
             raise UiShellError("accounts login session_id must be non-empty")
+    if "route_id" in structured_args:
+        route_id_error = route_id_validation_error(structured_args["route_id"])
+        if route_id_error:
+            raise UiShellError(route_id_error)
 
     return tuple(part.format(**structured_args) for part in spec.argv_template)
 

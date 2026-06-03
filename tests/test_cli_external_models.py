@@ -721,6 +721,167 @@ class ExternalModelsCliTests(unittest.TestCase):
         evidence_payload = json.loads(evidence_path.read_text(encoding="utf-8"))
         self.assertFalse(evidence_payload["network_dependent_evidence"])
 
+    def test_invalid_route_args_block_cli_surfaces_without_side_effects(self) -> None:
+        with mocked_provider() as (base_url, server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            routes_before = (self.external_dir / "routes.json").read_text(encoding="utf-8")
+            state_before = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            evidence_before = (
+                sorted(path.name for path in (self.external_dir / "evidence").glob("*"))
+                if (self.external_dir / "evidence").exists()
+                else []
+            )
+            invalid_route_id = "wbp-/../../escape"
+            cases = [
+                (
+                    (
+                        "external-models",
+                        "routes",
+                        "validate",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+                (
+                    ("external-models", "check", "--json", "--route", invalid_route_id),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "live-format-check",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                        "--prompt",
+                        "API_ONLY_DEEPSEEK_READY",
+                        "--expected-text",
+                        "API_ONLY_DEEPSEEK_READY",
+                    ),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "routes",
+                        "enable",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "routes",
+                        "disable",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "routes",
+                        "remove",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "routes",
+                        "update",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                        "--stdin",
+                    ),
+                    json.dumps(sample_route(base_url=base_url)),
+                ),
+                (
+                    (
+                        "external-models",
+                        "profile",
+                        "codex-desktop",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+                (
+                    (
+                        "external-models",
+                        "evidence",
+                        "capture",
+                        "--json",
+                        "--route",
+                        invalid_route_id,
+                    ),
+                    None,
+                ),
+            ]
+
+            for args, stdin_text in cases:
+                with self.subTest(args=args):
+                    result = self.run_cli(*args, stdin_text=stdin_text)
+                    payload = self.parse_payload(result)
+                    self.assertEqual(payload["status"], "error")
+                    self.assertEqual(payload["machine_error_code"], "schema_invalid")
+                    self.assertEqual(payload["changed_files"], [])
+                    self.assertEqual(
+                        (self.external_dir / "routes.json").read_text(encoding="utf-8"),
+                        routes_before,
+                    )
+                    state_after = (
+                        (self.external_dir / "state.json").read_text(encoding="utf-8")
+                        if (self.external_dir / "state.json").exists()
+                        else ""
+                    )
+                    self.assertEqual(state_after, state_before)
+                    evidence_after = (
+                        sorted(path.name for path in (self.external_dir / "evidence").glob("*"))
+                        if (self.external_dir / "evidence").exists()
+                        else []
+                    )
+                    self.assertEqual(evidence_after, evidence_before)
+                    self.assertEqual(server.request_count, 0)  # type: ignore[attr-defined]
+
+    def test_missing_canonical_route_stays_route_not_found(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "profile",
+            "codex-desktop",
+            "--json",
+            "--route",
+            "wbp-missing",
+        )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "route_not_found")
+        self.assertEqual(payload["changed_files"], [])
+
     def test_status_uses_isolated_external_model_paths(self) -> None:
         result = self.run_cli("external-models", "status", "--json")
         payload = self.parse_payload(result)

@@ -142,7 +142,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                 data=data,
             )
         if args.external_models_command == "evidence" and args.evidence_command == "capture":
-            route = routes.find_route(routes.load_routes_file(paths.routes_file), args.route)
+            route_id = routes.require_route_id(args.route)
+            route = routes.find_route(routes.load_routes_file(paths.routes_file), route_id)
             ensure_secrets_permissions(paths.secrets_file)
             packet = contracts.build_external_models_payload(
                 ok=True,
@@ -191,14 +192,15 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
             data={"route_id": route["route_id"]},
         )
     if action == "update":
+        route_id = routes.require_route_id(args.route)
         route = routes.load_route_input(file_path=args.file, use_stdin=args.stdin)
-        changed_files = routes.update_route(paths, args.route, route)
+        changed_files = routes.update_route(paths, route_id, route)
         return contracts.build_external_models_payload(
             ok=True,
-            human_message=f"External-models route updated: {args.route}.",
+            human_message=f"External-models route updated: {route_id}.",
             machine_error_code=errors.OK,
             changed_files=changed_files,
-            data={"route_id": args.route},
+            data={"route_id": route_id},
         )
     if action == "remove":
         changed_files = routes.remove_route(paths, args.route)

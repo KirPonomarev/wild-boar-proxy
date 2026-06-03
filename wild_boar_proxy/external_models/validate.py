@@ -12,7 +12,7 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 from . import contracts, errors, transforms
 from .http_client import request_json
 from .paths import ExternalModelsPaths
-from .routes import find_route, load_routes_file
+from .routes import find_route, load_routes_file, require_route_id
 from .state import (
     atomic_write_json,
     build_evidence_artifact_path,
@@ -188,6 +188,7 @@ def _handle_models_probe(route: dict[str, Any], paths: ExternalModelsPaths) -> t
 
 
 def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dict[str, Any], list[str]]:
+    route_id = require_route_id(route_id)
     route = find_route(load_routes_file(paths.routes_file), route_id)
     transforms.validate_route_transform_profiles(route)
     transform_metadata = transforms.route_transform_metadata(route)
@@ -317,6 +318,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
 
 
 def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dict[str, Any], list[str]]:
+    route_id = require_route_id(route_id)
     route = find_route(load_routes_file(paths.routes_file), route_id)
     transforms.validate_route_transform_profiles(route)
     transform_metadata = transforms.route_transform_metadata(route)
@@ -496,6 +498,7 @@ def check_route_provider_once_no_write(
     user_prompt: str,
     expected_text: str,
 ) -> dict[str, Any]:
+    route_id = require_route_id(route_id)
     route = find_route(load_routes_file(paths.routes_file), route_id)
     transforms.validate_route_transform_profiles(route)
     transform_metadata = transforms.route_transform_metadata(route)
