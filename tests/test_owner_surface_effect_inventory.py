@@ -267,6 +267,16 @@ def _function(path: Path, name: str) -> ast.FunctionDef:
     raise AssertionError(f"Function not found: {path}:{name}")
 
 
+def _class_function(path: Path, class_name: str, function_name: str) -> ast.FunctionDef:
+    for node in _module(path).body:
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for child in node.body:
+            if isinstance(child, ast.FunctionDef) and child.name == function_name:
+                return child
+    raise AssertionError(f"Method not found: {path}:{class_name}.{function_name}")
+
+
 def _dotted_name(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
@@ -497,6 +507,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 calls = _call_names(_function(OPERATOR_SURFACE, name))
                 self.assertIn("_run_operator_observation_command", calls)
                 self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_operator_surface_session_run_wbp_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        node = _class_function(OPERATOR_SURFACE, "OperatorSurfaceSession", "run_wbp")
+        calls = _call_names(node)
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_short_lived_probe_helpers_use_bounded_runner_without_raw_subprocess(
         self,

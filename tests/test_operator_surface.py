@@ -25,6 +25,8 @@ from wild_boar_proxy.operator_surface import (
     OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES,
     OPERATOR_OBSERVATION_RUNTIME_PATH,
     OPERATOR_OBSERVATION_TIMEOUT_SECONDS,
+    OPERATOR_WBP_OUTPUT_CAP_BYTES,
+    OPERATOR_WBP_TIMEOUT_SECONDS,
     OwnerSideProcessNetworkObserver,
     OperatorSurfaceConfig,
     OperatorSurfaceSession,
@@ -149,6 +151,138 @@ class OperatorSurfaceTests(unittest.TestCase):
             "HOME",
         ):
             self.assertNotIn(key, env)
+
+    def test_run_wbp_uses_bounded_runner_with_expected_command_cwd_env_timeout_cap(
+        self,
+    ) -> None:
+        observed_calls: list[dict[str, object]] = []
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: str,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_completed(stdout='{"status":"ok"}\n', stderr="diagnostic")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            session = OperatorSurfaceSession(
+                OperatorSurfaceConfig(repo_root=repo_root),
+            )
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "HTTP_PROXY": "http://example.invalid:1",
+                        "HTTPS_PROXY": "http://example.invalid:2",
+                        "ALL_PROXY": "http://example.invalid:3",
+                        "http_proxy": "http://example.invalid:4",
+                        "https_proxy": "http://example.invalid:5",
+                        "all_proxy": "http://example.invalid:6",
+                        "PATH": "/usr/bin:/bin",
+                    },
+                    clear=True,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface.run_bounded_process",
+                    side_effect=fake_run_bounded_process,
+                ),
+            ):
+                result = session.run_wbp(["status", "--json"])
+
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["json"], {"status": "ok"})
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(
+            call["command"],
+            ["python3", "-m", "wild_boar_proxy", "status", "--json"],
+        )
+        self.assertEqual(call["cwd"], str(repo_root))
+        self.assertEqual(call["timeout_seconds"], OPERATOR_WBP_TIMEOUT_SECONDS)
+        self.assertEqual(call["output_cap_bytes"], OPERATOR_WBP_OUTPUT_CAP_BYTES)
+        env = call["env"]
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost")
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ):
+            self.assertNotIn(key, env)
+
+    def test_run_wbp_reports_redacted_lengths_without_raw_output(self) -> None:
+        session = OperatorSurfaceSession()
+        with mock.patch(
+            "wild_boar_proxy.operator_surface.run_bounded_process",
+            return_value=bounded_completed(
+                stdout='{"answer":true}',
+                stderr="secret-ish stderr",
+            ),
+        ):
+            result = session.run_wbp(["status", "--json"])
+
+        self.assertEqual(result["json"], {"answer": True})
+        self.assertEqual(result["stdout_redacted_len"], len('{"answer":true}'))
+        self.assertEqual(result["stderr_redacted_len"], len("secret-ish stderr"))
+        self.assertNotIn("stdout", result)
+        self.assertNotIn("stderr", result)
+
+    def test_run_wbp_returns_none_json_for_empty_or_malformed_stdout(self) -> None:
+        session = OperatorSurfaceSession()
+        for stdout in ("", "not-json"):
+            with self.subTest(stdout=stdout):
+                with mock.patch(
+                    "wild_boar_proxy.operator_surface.run_bounded_process",
+                    return_value=bounded_completed(stdout=stdout),
+                ):
+                    result = session.run_wbp(["status", "--json"])
+
+                self.assertEqual(result["exit_code"], 0)
+                self.assertIsNone(result["json"])
+
+    def test_run_wbp_preserves_nonzero_exit_code_without_false_green(self) -> None:
+        session = OperatorSurfaceSession()
+        with mock.patch(
+            "wild_boar_proxy.operator_surface.run_bounded_process",
+            return_value=bounded_completed(
+                returncode=42,
+                stdout='{"status":"error","machine_error_code":"BROKEN"}',
+            ),
+        ):
+            result = session.run_wbp(["healthcheck", "--json"])
+
+        self.assertEqual(result["exit_code"], 42)
+        self.assertEqual(
+            result["json"],
+            {"status": "error", "machine_error_code": "BROKEN"},
+        )
+
+    def test_run_wbp_timeout_without_exit_code_uses_conservative_nonzero(self) -> None:
+        session = OperatorSurfaceSession()
+        with mock.patch(
+            "wild_boar_proxy.operator_surface.run_bounded_process",
+            return_value=bounded_timeout(),
+        ):
+            result = session.run_wbp(["healthcheck", "--json"])
+
+        self.assertEqual(result["exit_code"], 127)
+        self.assertIsNone(result["json"])
 
     def test_process_tree_snapshot_uses_bounded_ps_and_fails_closed(self) -> None:
         ps_stdout = "\n".join(

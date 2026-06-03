@@ -72,6 +72,8 @@ OPERATOR_OBSERVATION_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 OPERATOR_OBSERVATION_TIMEOUT_SECONDS = 5.0
 OPERATOR_OBSERVATION_OUTPUT_CAP_BYTES = 64 * 1024
 OPERATOR_OBSERVATION_CWD = Path("/")
+OPERATOR_WBP_TIMEOUT_SECONDS = 120.0
+OPERATOR_WBP_OUTPUT_CAP_BYTES = 256 * 1024
 BRIDGE_RESTART_ERROR_CODES = {
     "LOCAL_BRIDGE_DEAD",
     "LOCAL_BRIDGE_STREAM_DISCONNECTED",
@@ -2759,13 +2761,12 @@ class OperatorSurfaceSession:
         return result
 
     def run_wbp(self, args: list[str]) -> dict[str, Any]:
-        process = subprocess.run(
+        process = run_bounded_process(
             ["python3", "-m", "wild_boar_proxy", *args],
             cwd=str(self.config.repo_root),
             env=clean_env(),
-            text=True,
-            capture_output=True,
-            timeout=120,
+            timeout_seconds=OPERATOR_WBP_TIMEOUT_SECONDS,
+            output_cap_bytes=OPERATOR_WBP_OUTPUT_CAP_BYTES,
         )
         packet = None
         if process.stdout.strip():
@@ -2774,7 +2775,7 @@ class OperatorSurfaceSession:
             except json.JSONDecodeError:
                 packet = None
         return {
-            "exit_code": process.returncode,
+            "exit_code": process.exit_code if process.exit_code is not None else 127,
             "json": packet,
             "stdout_redacted_len": len(process.stdout),
             "stderr_redacted_len": len(process.stderr),
