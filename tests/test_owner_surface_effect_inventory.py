@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
 ACCOUNTS_LIFECYCLE = ROOT / "wild_boar_proxy" / "accounts_lifecycle.py"
+INSTALLER = ROOT / "wild_boar_proxy" / "installer.py"
 ROLLOUT = ROOT / "wild_boar_proxy" / "rollout.py"
 RUNTIME_HEALTH = ROOT / "wild_boar_proxy" / "runtime_health.py"
 RUNTIME_REPAIR = ROOT / "wild_boar_proxy" / "runtime_repair.py"
@@ -111,6 +112,12 @@ OWNER_SURFACES = {
         "run_rollout_stage_advance",
         SUBPROCESS_ADJACENT,
         frozenset({"run_rollout_stage_advance_impl"}),
+    ),
+    "run_installer_init": Surface(
+        INSTALLER,
+        "run_installer_init",
+        WRITE_ADJACENT,
+        frozenset({"run_installer_init_impl"}),
     ),
     "credential_status": Surface(
         CREDENTIALS,
@@ -315,6 +322,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (ROLLOUT, "run_rollout_evidence_capture"),
                 (ROLLOUT, "run_rollout_stage_prove"),
                 (ROLLOUT, "run_rollout_stage_advance"),
+                (INSTALLER, "run_installer_init"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),
@@ -576,6 +584,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
             ("run_rollout_evidence_capture", WRITE_ADJACENT),
             ("run_rollout_stage_prove", SUBPROCESS_ADJACENT),
             ("run_rollout_stage_advance", SUBPROCESS_ADJACENT),
+            ("run_installer_init", WRITE_ADJACENT),
             ("_run_credentials_command", WRITE_ADJACENT),
             ("main", DEFERRED_UNCLASSIFIED),
         ):

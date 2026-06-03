@@ -17346,7 +17346,24 @@ def build_installer_default_state_payload() -> dict[str, Any]:
     }
 
 
+def _installer_dependencies() -> Any:
+    from .installer import InstallerDependencies
+
+    return InstallerDependencies(
+        run_installer_init_impl=_run_installer_init_impl,
+    )
+
+
 def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
+    from .installer import run_installer_init as _run_installer_init
+
+    return _run_installer_init(
+        paths,
+        dependencies=_installer_dependencies(),
+    )
+
+
+def _run_installer_init_impl(paths: RuntimePaths) -> dict[str, Any]:
     from .external_models.integration import ensure_installed_layout, installer_managed_paths
     from .external_models.paths import ExternalModelsPaths
 

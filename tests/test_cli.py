@@ -18996,6 +18996,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            set(payload["installer_result"]),
+            {
+                "final_outcome",
+                "operator_wrapper_paths",
+                "owner_helper_paths",
+                "status",
+            },
+        )
+        self.assertEqual(
+            set(payload["external_models_result"]),
+            {
+                "final_outcome",
+                "root_dir",
+                "secrets_mode",
+                "status",
+            },
+        )
         self.assertTrue((fresh_managed / "backend-registry.json").is_file())
         self.assertTrue((fresh_managed / "supervisor-state.json").is_file())
         self.assertTrue((fresh_profile / "config.toml").is_file())
