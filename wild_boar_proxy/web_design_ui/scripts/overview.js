@@ -748,6 +748,25 @@ async function fetchReviewJson(path) {
   return response.json();
 }
 
+function webBootstrapValue(name) {
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") {
+    return "";
+  }
+  const node = document.querySelector(`meta[name="${name}"]`);
+  if (!node || typeof node.getAttribute !== "function") {
+    return "";
+  }
+  return String(node.getAttribute("content") || "");
+}
+
+function webPostHeaders(extraHeaders = {}) {
+  return {
+    ...extraHeaders,
+    Authorization: `Bearer ${webBootstrapValue("wbp-web-token")}`,
+    "X-WBP-CSRF": webBootstrapValue("wbp-csrf-token")
+  };
+}
+
 function operatorSetText(id, value) {
   const node = document.getElementById(id);
   if (node) {
@@ -1209,7 +1228,7 @@ async function runSafeAppCopyLiveAdmission() {
     const response = await fetch("api/codex/app-copy/live-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1249,7 +1268,7 @@ async function runOriginalCodexDryRun() {
     const response = await fetch("api/codex/original/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1282,7 +1301,7 @@ async function runOriginalCodexLaunch() {
     const response = await fetch("api/codex/original/launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1319,7 +1338,7 @@ async function runCodexCustomLaunchDryRun() {
     const response = await fetch("api/codex/custom/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1386,7 +1405,7 @@ async function runCodexCustomLaunch() {
     const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1411,7 +1430,7 @@ async function runCodexCustomLaunch() {
     const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1434,7 +1453,7 @@ async function runCodexCustomLaunch() {
     const response = await fetch("api/codex/custom/native-launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1572,7 +1591,7 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
     const response = await fetch("api/codex/custom/quick-start/config-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1642,7 +1661,7 @@ async function runQuickStartLaunchPreflight() {
     const response = await fetch("api/codex/custom/native-launch-preflight", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1748,7 +1767,7 @@ async function showCodexCustomWindow() {
     const response = await fetch("api/codex/custom/show-window", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({}),
       signal: controller?.signal
     });
@@ -1808,7 +1827,7 @@ async function confirmCodexCustomVisibleHistory() {
     const response = await fetch("api/codex/custom/visible-history/owner-confirmation", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -1857,7 +1876,7 @@ async function runSafeAppCopyLaunchDryRun() {
     const response = await fetch("api/codex/app-copy/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1894,7 +1913,7 @@ async function runSafeAppCopyLaunch() {
     const response = await fetch("api/codex/app-copy/launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -2377,7 +2396,7 @@ async function runQuickStartDeepSeekCoderCheck() {
     const response = await fetch("api/codex/custom/quick-start/deepseek-safe-worktree-check", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         api_model_id: apiModelId,
@@ -2439,7 +2458,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
     const response = await fetch("api/codex/custom/quick-start/deepseek-code-edit-proof", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         api_model_id: apiModelId,
@@ -2838,7 +2857,7 @@ async function refreshCodexCustomApiActionGate() {
     const response = await fetch("api/codex/custom/api-action-gate", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -2904,7 +2923,7 @@ async function runCodexCustomExecutionModeDryRun() {
     const response = await fetch("api/codex/custom/execution-mode-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         chatgpt_model_id: chatgptModelId,
@@ -2953,7 +2972,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
     const response = await fetch("api/codex/custom/api-only-deepseek/live-format", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -3014,7 +3033,7 @@ async function runCodexCustomSelectorIntentDryRun() {
     const response = await fetch("api/codex/custom/model-selector-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ chatgpt_model_id: chatgptModelId, api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -3052,7 +3071,7 @@ async function runCodexCustomModelDryRun() {
     const response = await fetch("api/codex/custom/model-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ model_id: modelId })
     });
     if (!response.ok) {
@@ -3199,7 +3218,7 @@ async function runCodexCustomAccountSmokeDryRun() {
     const response = await fetch("api/codex/custom/account-smoke-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ model_id: modelId })
     });
     if (!response.ok) {
@@ -3442,7 +3461,7 @@ async function postCodexCustomSessionAction(action, payload = {}) {
     const response = await fetch(url, {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -3599,7 +3618,8 @@ async function cleanupCodexCustomProductCoderWorktree() {
   try {
     const response = await fetch(`api/codex/custom/worktrees/${encodeURIComponent(worktreeId)}/cleanup`, {
       method: "POST",
-      cache: "no-store"
+      cache: "no-store",
+      headers: webPostHeaders()
     });
     if (!response.ok) {
       throw new Error(`product coder cleanup http ${response.status}`);
@@ -4963,7 +4983,7 @@ async function createCodexCustomRecoveryRollbackPoint() {
     const response = await fetch("api/codex/custom/recovery/rollback-point", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -5187,7 +5207,7 @@ async function createCodexCustomRecoveryRollbackApplyReceipt() {
     const response = await fetch("api/codex/custom/recovery/rollback-apply", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -5485,7 +5505,7 @@ async function runCodexCustomRecoveryStopCleanupLive() {
     const response = await fetch("api/codex/custom/recovery/stop-cleanup", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -6009,7 +6029,7 @@ async function runOperatorPrompt() {
     const response = await fetch("api/operator/run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ prompt, model_id: modelId })
     });
     if (!response.ok) {
@@ -6079,7 +6099,7 @@ async function postReviewCommand(commandId, payload = {}) {
   const response = await fetch("api/review-command", {
     method: "POST",
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ [commandField]: commandId, payload })
   });
   if (!response.ok) {
@@ -6667,7 +6687,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
     const response = await fetch("api/action", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(requestPayload),
       signal: activeActionAbortController?.signal
     });
@@ -6919,6 +6939,8 @@ function onboardLoginWindowHtml(model) {
     message,
     tone,
     serverOrigin: (typeof window !== "undefined" && window.location && typeof window.location.origin === "string") ? window.location.origin : "",
+    webToken: webBootstrapValue("wbp-web-token"),
+    csrfToken: webBootstrapValue("wbp-csrf-token"),
     deviceUrl: model?.deviceUrl || "",
     deviceCode: model?.deviceCode || "",
     status: model?.status || "",
@@ -7000,7 +7022,11 @@ function onboardLoginWindowHtml(model) {
         const response = await fetch(ACTION_URL, {
           method: "POST",
           cache: "no-store",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (MODEL.webToken || ""),
+            "X-WBP-CSRF": MODEL.csrfToken || ""
+          },
           body: JSON.stringify({ ui_action: uiAction, session_id: MODEL.sessionId })
         });
         if (!response.ok) {

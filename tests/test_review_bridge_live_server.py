@@ -22,6 +22,11 @@ from wild_boar_proxy.review_bridge_apply_admission import (
 )
 from wild_boar_proxy.review_bridge_packet_import import ReviewImportContext
 from wild_boar_proxy.web_design_live_server import build_handler
+from wild_boar_proxy.web_token import (
+    WEB_AUTH_HEADER,
+    WEB_CSRF_HEADER,
+    create_in_memory_web_token,
+)
 
 
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -29,6 +34,7 @@ IMPORT_CONTEXT = ReviewImportContext(
     project_id="project-alpha",
     baseline_hash="sha256:baseline-alpha",
 )
+WEB_TOKEN_STATE = create_in_memory_web_token()
 
 
 def free_port() -> int:
@@ -46,11 +52,22 @@ def post_json(url: str, payload: dict[str, object]) -> str:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=web_post_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     with NO_PROXY_OPENER.open(request, timeout=5) as response:
         return response.read().decode("utf-8")
+
+
+def web_post_headers(headers: dict[str, str] | None = None) -> dict[str, str]:
+    merged = dict(headers or {})
+    merged[WEB_AUTH_HEADER] = f"Bearer {WEB_TOKEN_STATE.token}"
+    merged[WEB_CSRF_HEADER] = WEB_TOKEN_STATE.csrf_token
+    return merged
+
+
+def build_review_handler(**kwargs: object) -> type:
+    return build_handler(web_token_state=WEB_TOKEN_STATE, **kwargs)
 
 
 def review_packet(**overrides: object) -> dict[str, object]:
@@ -90,7 +107,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
     def test_review_command_and_query_surfaces_stay_split(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(review_import_context=IMPORT_CONTEXT),
+            build_review_handler(review_import_context=IMPORT_CONTEXT),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -130,7 +147,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
     def test_review_command_requires_command_id_and_query_surface_rejects_post(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(review_import_context=IMPORT_CONTEXT),
+            build_review_handler(review_import_context=IMPORT_CONTEXT),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -142,7 +159,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             request = urllib.request.Request(
                 f"{base}/api/review-surface",
                 data=b"{}",
-                headers={"Content-Type": "application/json"},
+                headers=web_post_headers({"Content-Type": "application/json"}),
                 method="POST",
             )
             with self.assertRaises(urllib.error.HTTPError) as error:
@@ -156,7 +173,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
     def test_apply_exact_text_change_stays_not_enabled_through_http(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(review_import_context=IMPORT_CONTEXT),
+            build_review_handler(review_import_context=IMPORT_CONTEXT),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -205,7 +222,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
-                    build_handler(review_import_context=IMPORT_CONTEXT, static_dir=root),
+                    build_review_handler(review_import_context=IMPORT_CONTEXT, static_dir=root),
                 )
                 thread = threading.Thread(target=server.serve_forever, daemon=True)
                 thread.start()
@@ -254,7 +271,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
     def test_review_surface_does_not_expose_apply_preflight_without_explicit_context(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(review_import_context=IMPORT_CONTEXT),
+            build_review_handler(review_import_context=IMPORT_CONTEXT),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -293,7 +310,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             )
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
-                build_handler(
+                build_review_handler(
                     review_import_context=IMPORT_CONTEXT,
                     review_apply_context=apply_context,
                 ),
@@ -359,7 +376,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             )
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
-                build_handler(
+                build_review_handler(
                     review_import_context=IMPORT_CONTEXT,
                     review_apply_context=apply_context,
                 ),
@@ -424,7 +441,7 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             )
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
-                build_handler(
+                build_review_handler(
                     review_import_context=IMPORT_CONTEXT,
                     review_apply_context=apply_context,
                 ),

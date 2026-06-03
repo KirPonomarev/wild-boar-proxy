@@ -35,6 +35,20 @@ class WebDesignUiTests(unittest.TestCase):
             self.assertTrue((WEB_DESIGN_UI / "assets" / "icons" / "phosphor" / icon_ref).is_file(), icon_ref)
         self.assertNotIn("var(--mono)", css)
 
+    def test_all_post_fetches_attach_web_token_and_csrf_headers(self) -> None:
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        post_blocks = re.findall(
+            r"fetch\([^\n]+\{[\s\S]*?method: \"POST\"[\s\S]*?\n\s*\}\)",
+            js,
+        )
+
+        self.assertGreater(len(post_blocks), 20)
+        for block in post_blocks:
+            self.assertTrue(
+                "webPostHeaders" in block or '"X-WBP-CSRF"' in block,
+                block[:240],
+            )
+
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
             "healthy",

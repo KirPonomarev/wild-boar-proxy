@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import html
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
@@ -137,9 +138,15 @@ from wild_boar_proxy.web_ingress import (
     web_ingress_rejection_packet,
 )
 from wild_boar_proxy.web_token import (
+    WEB_CSRF_META_NAME,
     WEB_TOKEN_FILENAME,
+    WEB_TOKEN_META_NAME,
+    WebTokenState,
+    create_in_memory_web_token,
     create_web_token,
     delete_web_token,
+    web_post_csrf_valid,
+    web_post_token_valid,
 )
 from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
@@ -8441,6 +8448,7 @@ def build_handler(
     review_import_context: ReviewImportContext | None = None,
     review_apply_context: ReviewApplyContext | None = None,
     safe_worktree_repo_root: Path | None = None,
+    web_token_state: WebTokenState | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -8450,6 +8458,7 @@ def build_handler(
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
     codex_custom_safe_worktree_repo_root = safe_worktree_repo_root or ROOT
+    handler_web_token_state = web_token_state or create_in_memory_web_token()
     legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
@@ -10350,6 +10359,18 @@ def build_handler(
                     machine_error_code="WEB_INGRESS_ORIGIN_REJECTED",
                     human_message="Browser POST Origin must match this local Wild Boar Proxy server.",
                 )
+            if not web_post_token_valid(handler_web_token_state, self.headers):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.UNAUTHORIZED,
+                    machine_error_code="WEB_INGRESS_WEB_TOKEN_REJECTED",
+                    human_message="Web POST requests must include a valid local Wild Boar Proxy web token.",
+                )
+            if not web_post_csrf_valid(handler_web_token_state, self.headers):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.FORBIDDEN,
+                    machine_error_code="WEB_INGRESS_CSRF_REJECTED",
+                    human_message="Web POST requests must include a valid Wild Boar Proxy CSRF token.",
+                )
             _ = path
 
         def _codex_account_commands(self) -> dict[str, dict[str, Any]]:
@@ -10498,12 +10519,30 @@ def build_handler(
                 return
             content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             body = target.read_bytes()
+            if relative == "index.html" and content_type == "text/html":
+                body = self._with_web_bootstrap(body)
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _with_web_bootstrap(self, body: bytes) -> bytes:
+            try:
+                text = body.decode("utf-8")
+            except UnicodeDecodeError:
+                return body
+            marker = "</head>"
+            if marker not in text:
+                return body
+            tags = (
+                f'<meta name="{WEB_TOKEN_META_NAME}" '
+                f'content="{html.escape(handler_web_token_state.token, quote=True)}">'
+                f'<meta name="{WEB_CSRF_META_NAME}" '
+                f'content="{html.escape(handler_web_token_state.csrf_token, quote=True)}">'
+            )
+            return text.replace(marker, f"{tags}{marker}", 1).encode("utf-8")
 
         def _send_owner_login_sandbox_page(self, raw_query: str) -> None:
             query = parse_qs(raw_query)
@@ -12699,6 +12738,7 @@ def main(argv: list[str] | None = None) -> int:
                 launch_copy_contract=launch_copy_contract,
                 action_phase=args.action_phase,
                 owner_authorization_phrase=args.owner_authorization_phrase,
+                web_token_state=web_token_state,
             ),
         )
         server.serve_forever()

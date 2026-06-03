@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import http.client
 import os
+import re
 import socket
 import tempfile
 import threading
 import unittest
+import urllib.parse
 from http import HTTPStatus
 from pathlib import Path
 from unittest import mock
@@ -26,7 +28,11 @@ from wild_boar_proxy.ui_shell import (
     UiShellError,
 )
 from wild_boar_proxy.web_ingress import MAX_WEB_REQUEST_BODY_BYTES
-from wild_boar_proxy.web_token import WEB_TOKEN_FILENAME
+from wild_boar_proxy.web_token import (
+    WEB_FORM_CSRF_FIELD,
+    WEB_FORM_TOKEN_FIELD,
+    WEB_TOKEN_FILENAME,
+)
 from wild_boar_proxy.web_ui import (
     DashboardState,
     UiEvent,
@@ -45,6 +51,31 @@ def free_port() -> int:
     port = sock.getsockname()[1]
     sock.close()
     return port
+
+
+def web_ui_form_body(port: int, fields: dict[str, str]) -> str:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request("GET", "/")
+    response = conn.getresponse()
+    body = response.read().decode("utf-8")
+    conn.close()
+    if response.status != HTTPStatus.OK:
+        raise AssertionError(f"dashboard fetch failed: {response.status}")
+
+    def hidden_value(name: str) -> str:
+        pattern = rf'<input type="hidden" name="{re.escape(name)}" value="([^"]+)">'
+        match = re.search(pattern, body)
+        if match is None:
+            raise AssertionError(f"missing hidden field: {name}")
+        return match.group(1)
+
+    return urllib.parse.urlencode(
+        {
+            WEB_FORM_TOKEN_FIELD: hidden_value(WEB_FORM_TOKEN_FIELD),
+            WEB_FORM_CSRF_FIELD: hidden_value(WEB_FORM_CSRF_FIELD),
+            **fields,
+        }
+    )
 
 
 def runtime_snapshot() -> RuntimeSnapshot:
@@ -695,12 +726,26 @@ class WebUiTests(unittest.TestCase):
             conn.close()
             self.assertEqual(response.status, 200)
             self.assertIn("Wild Boar Proxy", body)
+            self.assertIn(WEB_FORM_TOKEN_FIELD, body)
+            self.assertIn(WEB_FORM_CSRF_FIELD, body)
+            forms = [
+                match.group(0)
+                for match in re.finditer(
+                    r'<form\b[^>]*\bmethod=(["\'])post\1[^>]*>.*?</form>',
+                    body,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+            ]
+            self.assertGreater(len(forms), 0)
+            for form in forms:
+                self.assertIn(WEB_FORM_TOKEN_FIELD, form)
+                self.assertIn(WEB_FORM_CSRF_FIELD, form)
 
             conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
             conn.request(
                 "POST",
                 "/action",
-                body="action=sync",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response = conn.getresponse()
@@ -722,7 +767,7 @@ class WebUiTests(unittest.TestCase):
             conn.request(
                 "POST",
                 "/",
-                body="action=sync",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response = conn.getresponse()
@@ -806,6 +851,70 @@ class WebUiTests(unittest.TestCase):
         self.assertEqual(bad_host.status, HTTPStatus.BAD_REQUEST)
         self.assertIn("WEB_INGRESS_HOST_REJECTED", bad_host_body)
         self.assertEqual(app.actions, [])
+
+    def test_http_handler_rejects_missing_or_invalid_form_tokens_without_action(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=sync",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            missing = conn.getresponse()
+            missing_body = missing.read().decode("utf-8")
+            conn.close()
+
+            bad_csrf_body = web_ui_form_body(server.server_port, {"action": "sync"})
+            bad_csrf_body = re.sub(
+                rf"({re.escape(WEB_FORM_CSRF_FIELD)}=)[^&]+",
+                r"\1wrong-csrf",
+                bad_csrf_body,
+            )
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body=bad_csrf_body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            bad_csrf = conn.getresponse()
+            bad_csrf_response_body = bad_csrf.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            valid = conn.getresponse()
+            valid.read()
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(missing.status, HTTPStatus.UNAUTHORIZED)
+        self.assertIn("WEB_INGRESS_WEB_TOKEN_REJECTED", missing_body)
+        self.assertEqual(bad_csrf.status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_CSRF_REJECTED", bad_csrf_response_body)
+        self.assertEqual(valid.status, HTTPStatus.OK)
+        self.assertEqual(app.actions, [{"action": "sync"}])
 
     def test_web_ui_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
         with self.assertRaises(SystemExit) as raised:

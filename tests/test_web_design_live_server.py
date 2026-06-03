@@ -6,6 +6,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import socket
 import sqlite3
 import subprocess
@@ -13,6 +14,7 @@ import threading
 import tempfile
 import time
 import unittest
+import urllib.parse
 import urllib.error
 import urllib.request
 from http import HTTPStatus
@@ -60,7 +62,13 @@ from wild_boar_proxy.web_design_live_server import (
     ui_action_metadata,
     _sandbox_action_runner_env,
 )
-from wild_boar_proxy.web_token import WEB_TOKEN_FILENAME
+from wild_boar_proxy.web_token import (
+    WEB_AUTH_HEADER,
+    WEB_CSRF_HEADER,
+    WEB_CSRF_META_NAME,
+    WEB_TOKEN_FILENAME,
+    WEB_TOKEN_META_NAME,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -388,6 +396,27 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, HTTPStatus.NOT_FOUND)
         self.assertNotIn("secret-web-token-should-not-leak", error_body)
+
+    def test_index_bootstrap_injects_web_tokens_without_static_asset_leak(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            index = fetch(f"{base}/")
+            token, csrf = _web_bootstrap_tokens(base)
+            script = fetch(f"{base}/scripts/overview.js")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertIn(f'<meta name="{WEB_TOKEN_META_NAME}"', index)
+        self.assertIn(f'<meta name="{WEB_CSRF_META_NAME}"', index)
+        self.assertIn(token, index)
+        self.assertIn(csrf, index)
+        self.assertNotIn(token, script)
+        self.assertNotIn(csrf, script)
 
     def test_web_design_main_rotates_runtime_web_token_and_deletes_on_shutdown(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6095,6 +6124,71 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             self.assertEqual(packet["changed_files"], [])
         self.assertEqual(same_origin_status, HTTPStatus.OK)
         self.assertEqual(same_origin_packet["status"], "ok")
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+    def test_web_ingress_rejects_missing_or_invalid_web_post_tokens_before_runner(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            try:
+                token, csrf = _web_bootstrap_tokens(base)
+                no_token_status, no_token_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                    web_auth=False,
+                )
+                bad_token_status, bad_token_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                    token_override="wrong-web-token",
+                )
+                bad_csrf_status, bad_csrf_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                    csrf_override="wrong-csrf-token",
+                )
+                valid_status, valid_packet = post_body_response(
+                    f"{base}/api/operator/run",
+                    body,
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(no_token_status, HTTPStatus.UNAUTHORIZED)
+        self.assertEqual(
+            no_token_packet["machine_error_code"],
+            "WEB_INGRESS_WEB_TOKEN_REJECTED",
+        )
+        self.assertEqual(bad_token_status, HTTPStatus.UNAUTHORIZED)
+        self.assertEqual(
+            bad_token_packet["machine_error_code"],
+            "WEB_INGRESS_WEB_TOKEN_REJECTED",
+        )
+        self.assertEqual(bad_csrf_status, HTTPStatus.FORBIDDEN)
+        self.assertEqual(bad_csrf_packet["machine_error_code"], "WEB_INGRESS_CSRF_REJECTED")
+        self.assertEqual(valid_status, HTTPStatus.OK)
+        self.assertEqual(valid_packet["status"], "ok")
+        for packet in (no_token_packet, bad_token_packet, bad_csrf_packet):
+            packet_text = json.dumps(packet)
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["source"], "web_ingress")
+            self.assertNotIn(token, packet_text)
+            self.assertNotIn(csrf, packet_text)
         self.assertEqual(
             created_sessions[0].run_payloads,
             [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
@@ -17332,22 +17426,75 @@ def fetch(url: str) -> str:
         return response.read().decode("utf-8")
 
 
-def post_json(url: str, payload: dict[str, object]) -> str:
+def _web_origin(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def _web_bootstrap_tokens(url: str) -> tuple[str, str]:
+    origin = _web_origin(url)
+    html = fetch(f"{origin}/")
+
+    def meta(name: str) -> str:
+        pattern = rf'<meta\s+name="{re.escape(name)}"\s+content="([^"]+)"'
+        match = re.search(pattern, html)
+        if match is None:
+            raise AssertionError(f"missing web bootstrap meta: {name}")
+        return match.group(1)
+
+    return (meta(WEB_TOKEN_META_NAME), meta(WEB_CSRF_META_NAME))
+
+
+def _web_post_headers(
+    url: str,
+    headers: dict[str, str] | None = None,
+    *,
+    web_auth: bool = True,
+    token_override: str | None = None,
+    csrf_override: str | None = None,
+) -> dict[str, str]:
+    merged = dict(headers or {})
+    if not web_auth:
+        return merged
+    token, csrf = _web_bootstrap_tokens(url)
+    merged[WEB_AUTH_HEADER] = f"Bearer {token if token_override is None else token_override}"
+    merged[WEB_CSRF_HEADER] = csrf if csrf_override is None else csrf_override
+    return merged
+
+
+def post_json(
+    url: str,
+    payload: dict[str, object],
+    *,
+    web_auth: bool = True,
+    token_override: str | None = None,
+    csrf_override: str | None = None,
+) -> str:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=_web_post_headers(
+            url,
+            {"Content-Type": "application/json"},
+            web_auth=web_auth,
+            token_override=token_override,
+            csrf_override=csrf_override,
+        ),
         method="POST",
     )
     with NO_PROXY_OPENER.open(request, timeout=10) as response:
         return response.read().decode("utf-8")
 
 
-def post_body(url: str, body: bytes) -> str:
+def post_body(url: str, body: bytes, *, web_auth: bool = True) -> str:
     request = urllib.request.Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=_web_post_headers(
+            url,
+            {"Content-Type": "application/json"},
+            web_auth=web_auth,
+        ),
         method="POST",
     )
     with NO_PROXY_OPENER.open(request, timeout=10) as response:
@@ -17359,11 +17506,20 @@ def post_body_response(
     body: bytes,
     *,
     headers: dict[str, str] | None = None,
+    web_auth: bool = True,
+    token_override: str | None = None,
+    csrf_override: str | None = None,
 ) -> tuple[int, dict[str, object]]:
     request = urllib.request.Request(
         url,
         data=body,
-        headers=headers or {"Content-Type": "application/json"},
+        headers=_web_post_headers(
+            url,
+            headers or {"Content-Type": "application/json"},
+            web_auth=web_auth,
+            token_override=token_override,
+            csrf_override=csrf_override,
+        ),
         method="POST",
     )
     try:
@@ -17381,11 +17537,17 @@ def raw_http_json_response(
     host: str,
     headers: dict[str, str] | None = None,
     body: bytes = b"",
+    web_auth: bool = True,
 ) -> tuple[int, dict[str, object]]:
+    merged_headers = dict(headers or {})
+    if method.upper() == "POST" and web_auth:
+        token, csrf = _web_bootstrap_tokens(f"http://127.0.0.1:{port}/")
+        merged_headers[WEB_AUTH_HEADER] = f"Bearer {token}"
+        merged_headers[WEB_CSRF_HEADER] = csrf
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     conn.putrequest(method, path, skip_host=True)
     conn.putheader("Host", host)
-    for key, value in (headers or {}).items():
+    for key, value in merged_headers.items():
         conn.putheader(key, value)
     conn.endheaders()
     if body:

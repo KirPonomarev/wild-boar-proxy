@@ -7,6 +7,7 @@ import argparse
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import deque
@@ -51,7 +52,16 @@ from .ui_shell import (
     run_stable_repair_and_refresh,
     run_sync_and_refresh,
 )
-from .web_token import create_web_token, delete_web_token
+from .web_token import (
+    WEB_FORM_CSRF_FIELD,
+    WEB_FORM_TOKEN_FIELD,
+    WebTokenState,
+    create_in_memory_web_token,
+    create_web_token,
+    delete_web_token,
+    web_form_csrf_valid,
+    web_form_token_valid,
+)
 
 
 @dataclass(frozen=True)
@@ -1053,12 +1063,20 @@ class WildBoarWebUi:
         return _with_events(state, tuple(self._events))
 
 
-def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
+def build_handler(
+    app: WildBoarWebUi,
+    web_token_state: WebTokenState | None = None,
+) -> type[BaseHTTPRequestHandler]:
+    handler_web_token_state = web_token_state or create_in_memory_web_token()
+
+    def render_with_web_tokens(state: DashboardState) -> str:
+        return _inject_web_form_tokens(render_dashboard(state), handler_web_token_state)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             if not self._admit_common_request():
                 return
-            self._send_html(render_dashboard(app.get_dashboard(path=self.path)))
+            self._send_html(render_with_web_tokens(app.get_dashboard(path=self.path)))
 
         def do_POST(self) -> None:  # noqa: N802
             length = self._admitted_form_body_length()
@@ -1069,7 +1087,26 @@ def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
                 key: values[-1]
                 for key, values in parse_qs(body, keep_blank_values=True).items()
             }
-            self._send_html(render_dashboard(app.post_action(parsed, path=self.path)))
+            if not web_form_token_valid(handler_web_token_state, parsed):
+                self._send_plain_rejection(
+                    HTTPStatus.UNAUTHORIZED,
+                    "WEB_INGRESS_WEB_TOKEN_REJECTED",
+                    "Form POST requests must include a valid local Wild Boar Proxy web token.",
+                )
+                return
+            if not web_form_csrf_valid(handler_web_token_state, parsed):
+                self._send_plain_rejection(
+                    HTTPStatus.FORBIDDEN,
+                    "WEB_INGRESS_CSRF_REJECTED",
+                    "Form POST requests must include a valid Wild Boar Proxy CSRF token.",
+                )
+                return
+            action_fields = {
+                key: value
+                for key, value in parsed.items()
+                if key not in {WEB_FORM_TOKEN_FIELD, WEB_FORM_CSRF_FIELD}
+            }
+            self._send_html(render_with_web_tokens(app.post_action(action_fields, path=self.path)))
 
         def log_message(self, fmt: str, *args: object) -> None:
             return
@@ -1162,6 +1199,27 @@ def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+def _web_hidden_inputs(web_token_state: WebTokenState) -> str:
+    token_name = html.escape(WEB_FORM_TOKEN_FIELD, quote=True)
+    csrf_name = html.escape(WEB_FORM_CSRF_FIELD, quote=True)
+    token_value = html.escape(web_token_state.token, quote=True)
+    csrf_value = html.escape(web_token_state.csrf_token, quote=True)
+    return (
+        f'<input type="hidden" name="{token_name}" value="{token_value}">'
+        f'<input type="hidden" name="{csrf_name}" value="{csrf_value}">'
+    )
+
+
+def _inject_web_form_tokens(body: str, web_token_state: WebTokenState) -> str:
+    hidden_inputs = _web_hidden_inputs(web_token_state)
+    return re.sub(
+        r'(<form\b[^>]*\bmethod=(["\'])post\2[^>]*>)',
+        lambda match: f"{match.group(1)}{hidden_inputs}",
+        body,
+        flags=re.IGNORECASE,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wild-boar-proxy-web-ui")
     parser.add_argument("--host", default="127.0.0.1")
@@ -1185,7 +1243,10 @@ def main(argv: list[str] | None = None) -> int:
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
     server = None
     try:
-        server = ThreadingHTTPServer((args.host, args.port), build_handler(WildBoarWebUi()))
+        server = ThreadingHTTPServer(
+            (args.host, args.port),
+            build_handler(WildBoarWebUi(), web_token_state=web_token_state),
+        )
         print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
         server.serve_forever()
     except KeyboardInterrupt:
