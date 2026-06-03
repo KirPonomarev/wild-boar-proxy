@@ -9,7 +9,6 @@ import json
 import re
 import shutil
 import shlex
-import subprocess
 import tempfile
 import threading
 import uuid
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from wild_boar_proxy.operator_surface import redact_text
+from wild_boar_proxy.process_runner import run_bounded_process
 
 from wild_boar_proxy.codex_account_selection import (
     ACCOUNT_CANDIDATE_PROVENANCE_STATUS,
@@ -63,6 +63,8 @@ PROMPT_RUN_ALLOWED_STATUSES = {
 }
 BOUNDED_RESPONSE_PREVIEW_CHARS = 240
 SESSION_SCHEMA_VERSION = 3
+SESSION_GIT_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+SESSION_GIT_OUTPUT_CAP_BYTES = 64 * 1024
 SESSION_CREATE_FORBIDDEN_FIELDS = {
     "api_key",
     "apikey",
@@ -440,13 +442,16 @@ def _run_git_command(
     timeout_seconds: int = 30,
 ) -> dict[str, Any]:
     try:
-        completed = subprocess.run(
+        result = run_bounded_process(
             ["git", *args],
-            cwd=str(repo_root),
-            text=True,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
+            env={
+                "PATH": SESSION_GIT_RUNTIME_PATH,
+                "NO_PROXY": "127.0.0.1,localhost,::1",
+                "no_proxy": "127.0.0.1,localhost,::1",
+            },
+            cwd=repo_root,
+            timeout_seconds=timeout_seconds,
+            output_cap_bytes=SESSION_GIT_OUTPUT_CAP_BYTES,
         )
     except Exception as exc:  # pragma: no cover - defensive host boundary
         return {
@@ -457,11 +462,11 @@ def _run_git_command(
             "timed_out": type(exc).__name__ == "TimeoutExpired",
         }
     return {
-        "ok": completed.returncode == 0,
-        "exit_code": completed.returncode,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
-        "timed_out": False,
+        "ok": result.exit_code == 0,
+        "exit_code": result.exit_code if result.exit_code is not None else 127,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "timed_out": result.timed_out,
     }
 
 

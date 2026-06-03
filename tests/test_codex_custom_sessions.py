@@ -4,17 +4,23 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy.codex_custom_sessions import (
     CodexCustomSessionManager,
+    SESSION_GIT_OUTPUT_CAP_BYTES,
+    SESSION_GIT_RUNTIME_PATH,
+    _run_git_command,
     forbidden_prompt_dry_run_fields,
     forbidden_prompt_run_fields,
     forbidden_session_create_fields,
 )
+from wild_boar_proxy.process_runner import BoundedProcessResult
 
 
 def command(packet: dict[str, object]) -> dict[str, object]:
@@ -36,6 +42,39 @@ def init_git_repo(path: Path) -> None:
         check=True,
         capture_output=True,
         text=True,
+    )
+
+
+def bounded_completed(
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="ok" if returncode == 0 else "error",
+        machine_error_code="OK" if returncode == 0 else "PROCESS_FAILED",
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=False,
+        duration_seconds=0.01,
+    )
+
+
+def bounded_timeout(*, stderr: str = "timed out") -> BoundedProcessResult:
+    return BoundedProcessResult(
+        status="error",
+        machine_error_code="PROCESS_TIMEOUT",
+        exit_code=None,
+        stdout="",
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=True,
+        duration_seconds=30.0,
     )
 
 
@@ -119,6 +158,111 @@ def api_snapshot(route_id: str = "wbp-web-primary-openrouter") -> dict[str, obje
 
 
 class CodexCustomSessionManagerTests(unittest.TestCase):
+    def test_session_git_command_uses_bounded_runner_with_deterministic_env(self) -> None:
+        observed_calls: list[dict[str, object]] = []
+        repo_root = Path("/tmp/wbp-session-repo")
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: int,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_completed(stdout="main\n")
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://example.invalid:1",
+                    "HTTPS_PROXY": "http://example.invalid:2",
+                    "ALL_PROXY": "http://example.invalid:3",
+                    "http_proxy": "http://example.invalid:4",
+                    "https_proxy": "http://example.invalid:5",
+                    "all_proxy": "http://example.invalid:6",
+                    "WBP_CURRENT_PROXY_URL": "http://example.invalid:7",
+                    "CODEX_HOME": "/tmp/ambient-codex-home",
+                    "OPENAI_API_KEY": "ambient-secret",
+                    "PATH": "/definitely/missing",
+                    "HOME": "/tmp/ambient-home",
+                },
+                clear=True,
+            ),
+            mock.patch(
+                "wild_boar_proxy.codex_custom_sessions.run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ),
+        ):
+            packet = _run_git_command(repo_root, ["branch", "--show-current"], timeout_seconds=17)
+
+        self.assertEqual(
+            packet,
+            {
+                "ok": True,
+                "exit_code": 0,
+                "stdout": "main\n",
+                "stderr": "",
+                "timed_out": False,
+            },
+        )
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(call["command"], ["git", "branch", "--show-current"])
+        self.assertEqual(call["cwd"], repo_root)
+        self.assertEqual(call["timeout_seconds"], 17)
+        self.assertEqual(call["output_cap_bytes"], SESSION_GIT_OUTPUT_CAP_BYTES)
+        env = call["env"]
+        self.assertEqual(env["PATH"], SESSION_GIT_RUNTIME_PATH)
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost,::1")
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "WBP_CURRENT_PROXY_URL",
+            "CODEX_HOME",
+            "OPENAI_API_KEY",
+            "HOME",
+        ):
+            self.assertNotIn(key, env)
+
+    def test_session_git_command_nonzero_and_timeout_do_not_green(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.codex_custom_sessions.run_bounded_process",
+            return_value=bounded_completed(returncode=2, stderr="fatal: nope\n"),
+        ):
+            failed = _run_git_command(Path("/tmp/repo"), ["status"])
+
+        self.assertFalse(failed["ok"])
+        self.assertEqual(failed["exit_code"], 2)
+        self.assertEqual(failed["stderr"], "fatal: nope\n")
+        self.assertFalse(failed["timed_out"])
+
+        with mock.patch(
+            "wild_boar_proxy.codex_custom_sessions.run_bounded_process",
+            return_value=bounded_timeout(stderr="git timed out"),
+        ):
+            timed_out = _run_git_command(Path("/tmp/repo"), ["worktree", "list"])
+
+        self.assertFalse(timed_out["ok"])
+        self.assertEqual(timed_out["exit_code"], 127)
+        self.assertEqual(timed_out["stderr"], "git timed out")
+        self.assertTrue(timed_out["timed_out"])
+
     def test_create_session_binds_server_model_and_selection_without_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
