@@ -10568,6 +10568,7 @@ def _rollout_dependencies() -> Any:
     return RolloutDependencies(
         run_rollout_rotation_inspect_impl=_run_rollout_rotation_inspect_impl,
         run_rollout_posture_inspect_impl=_run_rollout_posture_inspect_impl,
+        run_rollout_evidence_capture_impl=_run_rollout_evidence_capture_impl,
     )
 
 
@@ -11400,6 +11401,19 @@ def build_scale_gate_summary(
 
 
 def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, Any]:
+    from .rollout import run_rollout_evidence_capture as _run_rollout_evidence_capture
+
+    return _run_rollout_evidence_capture(
+        paths,
+        target,
+        dependencies=_rollout_dependencies(),
+    )
+
+
+def _run_rollout_evidence_capture_impl(
+    paths: RuntimePaths,
+    target: str,
+) -> dict[str, Any]:
     if target != SCALE_EVIDENCE_FIELD_TARGET:
         return build_command_payload(
             ok=False,

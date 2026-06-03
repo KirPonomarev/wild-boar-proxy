@@ -13504,6 +13504,39 @@ class CliTests(unittest.TestCase):
             ),
         )
         packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(
+            set(packet),
+            {
+                "accounts_summary",
+                "accounts_summary_status",
+                "blocked_reasons",
+                "claim_scope",
+                "claim_target",
+                "commit_hash",
+                "diagnostics_bundle_summary",
+                "diagnostics_redaction_status",
+                "environment_note",
+                "fallback_readiness_status",
+                "fallback_readiness_summary",
+                "final_outcome",
+                "observed_at_utc",
+                "packet_status",
+                "pool_counts",
+                "pool_counts_status",
+                "rotation_evidence_status",
+                "rotation_evidence_summary",
+                "runtime_attestation_retry_summary",
+                "runtime_attestation_status",
+                "runtime_attestation_summary",
+                "runtime_version",
+                "scale_gate_summary",
+                "schema_version",
+                "selected_backend_snapshot_status",
+                "selected_backend_snapshot_summary",
+                "state_serialization_status",
+                "strict_json_command_api_status",
+            },
+        )
         self.assertEqual(packet["claim_target"], "16")
         self.assertEqual(packet["claim_scope"], "field_evidence_observed_only")
         self.assertEqual(packet["packet_status"], "complete")

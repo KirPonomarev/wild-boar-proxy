@@ -15,6 +15,7 @@ class RolloutPaths(Protocol):
 class RolloutDependencies:
     run_rollout_rotation_inspect_impl: Callable[..., dict[str, Any]]
     run_rollout_posture_inspect_impl: Callable[..., dict[str, Any]]
+    run_rollout_evidence_capture_impl: Callable[..., dict[str, Any]]
 
 
 def run_rollout_rotation_inspect(
@@ -36,3 +37,12 @@ def run_rollout_posture_inspect(
     dependencies: RolloutDependencies,
 ) -> dict[str, Any]:
     return dependencies.run_rollout_posture_inspect_impl(paths, stage)
+
+
+def run_rollout_evidence_capture(
+    paths: RolloutPaths,
+    target: str,
+    *,
+    dependencies: RolloutDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_rollout_evidence_capture_impl(paths, target)

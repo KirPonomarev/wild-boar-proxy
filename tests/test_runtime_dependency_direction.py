@@ -637,14 +637,18 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         calls = _call_names(source)
         forbidden = {
             "build_command_payload",
+            "detect_changed_files_by_state",
             "dual_lock",
+            "export_scale_evidence_bundle",
             "get_stable_policy_drift",
+            "list_accounts",
             "materialize_selected_backend_snapshot_for_sync",
             "observe_status_proof_for_owner_path_under_lock",
             "read_json",
             "run_bounded_process",
             "run_healthcheck",
             "run_healthcheck_probe",
+            "run_healthcheck_repair",
             "run_policy_stage_set",
             "run_promote",
             "run_rollout_attestation_healthcheck",
@@ -653,8 +657,11 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "run_rollout_stage_prove",
             "run_stable_runtime_launcher_attempt",
             "run_sync_for_owner_path_under_lock",
+            "runtime_write_surface_candidates",
             "serialized_lock",
             "socket_is_listening",
+            "summarize_status",
+            "write_json_artifact",
             "write_json_atomic",
             "write_text_atomic",
         }
@@ -678,6 +685,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = rollout.RolloutDependencies(
             run_rollout_rotation_inspect_impl=fake_run_rollout_rotation_inspect_impl,
             run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
         )
 
         default_payload = rollout.run_rollout_rotation_inspect(
@@ -717,6 +725,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = rollout.RolloutDependencies(
             run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
             run_rollout_posture_inspect_impl=fake_run_rollout_posture_inspect_impl,
+            run_rollout_evidence_capture_impl=lambda *args, **kwargs: {},
         )
 
         payload = rollout.run_rollout_posture_inspect(
@@ -728,6 +737,35 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertEqual(payload["surface"], "rollout-posture-inspect")
         self.assertEqual(payload["stage"], "20")
         self.assertEqual(calls, [(("paths-sentinel", "20"), {})])
+
+    def test_rollout_evidence_capture_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_rollout_evidence_capture_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-evidence-capture",
+                "target": args[1],
+            }
+
+        dependencies = rollout.RolloutDependencies(
+            run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_evidence_capture_impl=fake_run_rollout_evidence_capture_impl,
+        )
+
+        payload = rollout.run_rollout_evidence_capture(
+            "paths-sentinel",
+            "16",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "rollout-evidence-capture")
+        self.assertEqual(payload["target"], "16")
+        self.assertEqual(calls, [(("paths-sentinel", "16"), {})])
 
     def test_rollout_rotation_inspect_facade_passes_runtime_dependency(
         self,
@@ -812,6 +850,45 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             [
                 (
                     ("paths-sentinel", "15"),
+                    {
+                        "dependencies": runtime_mod._rollout_dependencies(),
+                    },
+                )
+            ],
+        )
+
+    def test_rollout_evidence_capture_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_rollout_evidence_capture(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-evidence-capture",
+                "target": args[1],
+            }
+
+        with mock.patch.object(
+            rollout,
+            "run_rollout_evidence_capture",
+            side_effect=fake_rollout_evidence_capture,
+        ):
+            payload = runtime_mod.run_rollout_evidence_capture(
+                "paths-sentinel",
+                "16",
+            )
+
+        self.assertEqual(payload["surface"], "rollout-evidence-capture")
+        self.assertEqual(payload["target"], "16")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "16"),
                     {
                         "dependencies": runtime_mod._rollout_dependencies(),
                     },
