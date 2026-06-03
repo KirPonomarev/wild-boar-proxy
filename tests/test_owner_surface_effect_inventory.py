@@ -76,10 +76,10 @@ OWNER_SURFACES = {
         frozenset({"build_command_payload", "read_json"}),
     ),
     "list_accounts": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "list_accounts",
         READ,
-        frozenset({"build_command_payload", "read_json"}),
+        frozenset({"list_accounts_impl"}),
     ),
     "credential_status": Surface(
         CREDENTIALS,
@@ -278,7 +278,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertEqual(
             {
                 (RUNTIME, "mode_get"),
-                (RUNTIME, "list_accounts"),
+                (ACCOUNTS_LIFECYCLE, "list_accounts"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),
@@ -332,6 +332,19 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         calls = _call_names(_function(RUNTIME, "run_sync_for_owner_path_under_lock"))
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_list_accounts_impl_is_read_snapshot_without_runtime_mutation(
+        self,
+    ) -> None:
+        calls = _call_names(_function(RUNTIME, "_list_accounts_impl"))
+        source = _function_source(RUNTIME, "_list_accounts_impl")
+        forbidden = WRITE_PRIMITIVES | SUBPROCESS_PRIMITIVES | LOCK_PRIMITIVES
+
+        self.assertIn("build_command_payload", calls)
+        self.assertIn("read_json", calls)
+        self.assertIn("effect=EFFECT_READ", source)
+        self.assertIn("changed_files=[]", source)
+        self.assertEqual(set(), calls & forbidden)
 
     def test_stable_runtime_launcher_attempt_uses_bounded_runner_without_raw_subprocess(
         self,

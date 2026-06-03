@@ -10534,6 +10534,15 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
 
 
 def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
+    from .accounts_lifecycle import list_accounts as _list_accounts
+
+    return _list_accounts(
+        paths,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
+
+
+def _list_accounts_impl(paths: RuntimePaths) -> dict[str, Any]:
     registry = read_json(paths.registry_file)
     return build_command_payload(
         ok=True,
@@ -14390,6 +14399,7 @@ def _accounts_lifecycle_dependencies() -> Any:
     from .accounts_lifecycle import AccountLifecycleDependencies
 
     return AccountLifecycleDependencies(
+        list_accounts_impl=_list_accounts_impl,
         run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path,
         run_demote_impl=_run_demote_impl,
         run_onboard_impl=_run_onboard_impl,

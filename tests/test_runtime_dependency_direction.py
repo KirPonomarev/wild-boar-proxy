@@ -590,8 +590,10 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         )
         calls = _call_names(source)
         forbidden = {
+            "build_command_payload",
             "dual_lock",
             "materialize_selected_backend_snapshot_for_sync",
+            "read_json",
             "run_healthcheck_probe",
             "serialized_lock",
             "run_bounded_process",
@@ -600,6 +602,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         }
 
         self.assertEqual(calls & forbidden, set())
+        self.assertNotIn("EFFECT_READ", source)
 
     def test_accounts_lifecycle_hold_wrapper_passes_exact_owner_path_args(
         self,
@@ -617,6 +620,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             }
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
             run_onboard_impl=lambda *args, **kwargs: {},
@@ -661,6 +665,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             return {"status": "ok", "action": kwargs["action"]}
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
             run_onboard_impl=lambda *args, **kwargs: {},
@@ -735,6 +740,75 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ],
         )
 
+    def test_accounts_lifecycle_list_wrapper_passes_exact_impl_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_list_accounts_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "effect": "read",
+                "changed_files": [],
+            }
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=fake_list_accounts_impl,
+            run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=lambda *args, **kwargs: {},
+            run_promote_impl=lambda *args, **kwargs: {},
+            run_retire_impl=lambda *args, **kwargs: {},
+        )
+
+        payload = accounts_lifecycle.list_accounts(
+            "paths-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(calls, [(("paths-sentinel",), {})])
+
+    def test_accounts_lifecycle_list_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_lifecycle_list_accounts(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "effect": "read",
+                "changed_files": [],
+            }
+
+        with mock.patch.object(
+            accounts_lifecycle,
+            "list_accounts",
+            side_effect=fake_lifecycle_list_accounts,
+        ):
+            payload = runtime_mod.list_accounts("paths-sentinel")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel",),
+                    {"dependencies": runtime_mod._accounts_lifecycle_dependencies()},
+                )
+            ],
+        )
+
     def test_accounts_lifecycle_demote_wrapper_passes_exact_impl_args(
         self,
     ) -> None:
@@ -747,6 +821,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             return {"status": "ok", "transition": "demote"}
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=fake_run_demote_impl,
             run_onboard_impl=lambda *args, **kwargs: {},
@@ -776,6 +851,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             return {"status": "ok", "transition": "retire"}
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
             run_onboard_impl=lambda *args, **kwargs: {},
@@ -869,6 +945,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             }
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
             run_onboard_impl=fake_run_onboard_impl,
@@ -980,6 +1057,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             }
 
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            list_accounts_impl=lambda *args, **kwargs: {},
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
             run_onboard_impl=lambda *args, **kwargs: {},

@@ -13,11 +13,20 @@ class AccountLifecyclePaths(Protocol):
 
 @dataclass(frozen=True)
 class AccountLifecycleDependencies:
+    list_accounts_impl: Callable[..., dict[str, Any]]
     run_protective_lifecycle_owner_path: Callable[..., dict[str, Any]]
     run_demote_impl: Callable[..., dict[str, Any]]
     run_onboard_impl: Callable[..., dict[str, Any]]
     run_promote_impl: Callable[..., dict[str, Any]]
     run_retire_impl: Callable[..., dict[str, Any]]
+
+
+def list_accounts(
+    paths: AccountLifecyclePaths,
+    *,
+    dependencies: AccountLifecycleDependencies,
+) -> dict[str, Any]:
+    return dependencies.list_accounts_impl(paths)
 
 
 def run_hold(
