@@ -153,16 +153,10 @@ OWNER_SURFACES = {
         frozenset({"run_healthcheck"}),
     ),
     "run_onboard": Surface(
-        RUNTIME,
+        ACCOUNTS_LIFECYCLE,
         "run_onboard",
         SUBPROCESS_ADJACENT,
-        frozenset(
-            {
-                "serialized_lock",
-                "run_bounded_process",
-                "run_sync_for_owner_path_under_lock",
-            }
-        ),
+        frozenset({"run_onboard_impl"}),
     ),
     "run_promote": Surface(
         ACCOUNTS_LIFECYCLE,
@@ -293,7 +287,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "run_healthcheck"),
                 (RUNTIME_HEALTH, "run_healthcheck_probe"),
                 (RUNTIME_REPAIR, "run_healthcheck_repair"),
-                (RUNTIME, "run_onboard"),
+                (ACCOUNTS_LIFECYCLE, "run_onboard"),
                 (ACCOUNTS_LIFECYCLE, "run_promote"),
                 (ACCOUNTS_LIFECYCLE, "run_demote"),
                 (ACCOUNTS_LIFECYCLE, "run_hold"),
@@ -389,8 +383,8 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
     def test_onboard_uses_bounded_runner_without_raw_subprocess(self) -> None:
-        calls = _call_names(_function(RUNTIME, "run_onboard"))
-        source = _function_source(RUNTIME, "run_onboard")
+        calls = _call_names(_function(RUNTIME, "_run_onboard_impl"))
+        source = _function_source(RUNTIME, "_run_onboard_impl")
         self.assertIn("serialized_lock", calls)
         self.assertIn("run_bounded_process", calls)
         self.assertIn("run_sync_for_owner_path_under_lock", calls)
@@ -470,6 +464,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         for name in (
             "run_demote",
             "run_hold",
+            "run_onboard",
             "run_promote",
             "run_release",
             "run_retire",

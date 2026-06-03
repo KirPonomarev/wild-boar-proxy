@@ -14392,6 +14392,7 @@ def _accounts_lifecycle_dependencies() -> Any:
     return AccountLifecycleDependencies(
         run_protective_lifecycle_owner_path=run_protective_lifecycle_owner_path,
         run_demote_impl=_run_demote_impl,
+        run_onboard_impl=_run_onboard_impl,
         run_promote_impl=_run_promote_impl,
         run_retire_impl=_run_retire_impl,
     )
@@ -16706,6 +16707,28 @@ def classify_onboarded_backend_selection(
 
 
 def run_onboard(
+    paths: RuntimePaths,
+    *,
+    auth_ref: str | None,
+    loop: bool,
+    skip_login: bool,
+    no_sync: bool,
+    non_interactive: bool,
+) -> dict[str, Any]:
+    from .accounts_lifecycle import run_onboard as _run_onboard
+
+    return _run_onboard(
+        paths,
+        auth_ref=auth_ref,
+        loop=loop,
+        skip_login=skip_login,
+        no_sync=no_sync,
+        non_interactive=non_interactive,
+        dependencies=_accounts_lifecycle_dependencies(),
+    )
+
+
+def _run_onboard_impl(
     paths: RuntimePaths,
     *,
     auth_ref: str | None,

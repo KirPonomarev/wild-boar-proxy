@@ -591,6 +591,8 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         calls = _call_names(source)
         forbidden = {
             "dual_lock",
+            "materialize_selected_backend_snapshot_for_sync",
+            "run_healthcheck_probe",
             "serialized_lock",
             "run_bounded_process",
             "run_sync_for_owner_path_under_lock",
@@ -617,6 +619,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=lambda *args, **kwargs: {},
             run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
@@ -660,6 +663,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=fake_run_protective_owner_path,
             run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=lambda *args, **kwargs: {},
             run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
@@ -745,6 +749,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=fake_run_demote_impl,
+            run_onboard_impl=lambda *args, **kwargs: {},
             run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=lambda *args, **kwargs: {},
         )
@@ -773,6 +778,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=lambda *args, **kwargs: {},
             run_promote_impl=lambda *args, **kwargs: {},
             run_retire_impl=fake_run_retire_impl,
         )
@@ -843,6 +849,121 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ],
         )
 
+    def test_accounts_lifecycle_onboard_wrapper_passes_exact_impl_args(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_onboard_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "transition": "onboard",
+                "auth_ref": kwargs["auth_ref"],
+                "loop": kwargs["loop"],
+                "skip_login": kwargs["skip_login"],
+                "no_sync": kwargs["no_sync"],
+                "non_interactive": kwargs["non_interactive"],
+            }
+
+        dependencies = accounts_lifecycle.AccountLifecycleDependencies(
+            run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
+            run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=fake_run_onboard_impl,
+            run_promote_impl=lambda *args, **kwargs: {},
+            run_retire_impl=lambda *args, **kwargs: {},
+        )
+
+        payload = accounts_lifecycle.run_onboard(
+            "paths-sentinel",
+            auth_ref="auth-sentinel",
+            loop=True,
+            skip_login=True,
+            no_sync=True,
+            non_interactive=True,
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["transition"], "onboard")
+        self.assertEqual(payload["auth_ref"], "auth-sentinel")
+        self.assertIs(payload["loop"], True)
+        self.assertIs(payload["skip_login"], True)
+        self.assertIs(payload["no_sync"], True)
+        self.assertIs(payload["non_interactive"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel",),
+                    {
+                        "auth_ref": "auth-sentinel",
+                        "loop": True,
+                        "skip_login": True,
+                        "no_sync": True,
+                        "non_interactive": True,
+                    },
+                )
+            ],
+        )
+
+    def test_accounts_lifecycle_onboard_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_lifecycle_run_onboard(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "transition": "onboard",
+                "auth_ref": kwargs["auth_ref"],
+                "loop": kwargs["loop"],
+                "skip_login": kwargs["skip_login"],
+                "no_sync": kwargs["no_sync"],
+                "non_interactive": kwargs["non_interactive"],
+            }
+
+        with mock.patch.object(
+            accounts_lifecycle,
+            "run_onboard",
+            side_effect=fake_lifecycle_run_onboard,
+        ):
+            payload = runtime_mod.run_onboard(
+                "paths-sentinel",
+                auth_ref=None,
+                loop=False,
+                skip_login=False,
+                no_sync=False,
+                non_interactive=True,
+            )
+
+        self.assertEqual(payload["transition"], "onboard")
+        self.assertIsNone(payload["auth_ref"])
+        self.assertIs(payload["loop"], False)
+        self.assertIs(payload["skip_login"], False)
+        self.assertIs(payload["no_sync"], False)
+        self.assertIs(payload["non_interactive"], True)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel",),
+                    {
+                        "auth_ref": None,
+                        "loop": False,
+                        "skip_login": False,
+                        "no_sync": False,
+                        "non_interactive": True,
+                        "dependencies": runtime_mod._accounts_lifecycle_dependencies(),
+                    },
+                )
+            ],
+        )
+
     def test_accounts_lifecycle_promote_wrapper_passes_exact_impl_args(
         self,
     ) -> None:
@@ -861,6 +982,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = accounts_lifecycle.AccountLifecycleDependencies(
             run_protective_lifecycle_owner_path=lambda *args, **kwargs: {},
             run_demote_impl=lambda *args, **kwargs: {},
+            run_onboard_impl=lambda *args, **kwargs: {},
             run_promote_impl=fake_run_promote_impl,
             run_retire_impl=lambda *args, **kwargs: {},
         )
