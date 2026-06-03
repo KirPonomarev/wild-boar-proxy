@@ -36,6 +36,14 @@ STATE_TRANSACTION_INCOMPLETE = "STATE_TRANSACTION_INCOMPLETE"
 STATE_TRANSACTION_CLEAN = "STATE_TRANSACTION_CLEAN"
 STATE_TRANSACTION_FAILED_RECOVERABLE = "STATE_TRANSACTION_FAILED_RECOVERABLE"
 STATE_TRANSACTION_FAILED_BLOCKED = "STATE_TRANSACTION_FAILED_BLOCKED"
+STATE_TRANSACTION_ROLLBACK_COMPLETED = "STATE_TRANSACTION_ROLLBACK_COMPLETED"
+STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE = "STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE"
+STATE_TRANSACTION_ROLLBACK_BLOCKED = "STATE_TRANSACTION_ROLLBACK_BLOCKED"
+
+TRANSACTION_ROLLBACK_COMPLETED = "rollback_completed"
+TRANSACTION_ROLLBACK_NOT_AVAILABLE = "rollback_not_available"
+TRANSACTION_ROLLBACK_BLOCKED = "rollback_blocked"
+ROLLBACK_ID_PREFIX = "wbp-rb-"
 
 _VALID_STATES = frozenset(
     {
@@ -76,6 +84,11 @@ class TransactionMetadata:
     transaction_root: str
     files: tuple[TransactionFileRecord, ...]
     error: str | None = None
+    effect: str | None = None
+    scope: str | None = None
+    mutation_id: str | None = None
+    rollback_eligible: bool = False
+    rollback_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +131,17 @@ class TransactionCommitResult:
     transaction_root: str
     metadata_path: str
     file_count: int
+
+
+@dataclass(frozen=True)
+class TransactionRollbackResult:
+    rollback_available: bool
+    rollback_id: str | None
+    transaction_id: str | None
+    status: str
+    changed_files: tuple[str, ...]
+    blocked_reasons: tuple[str, ...]
+    machine_error_code: str
 
 
 @dataclass(frozen=True)
@@ -225,7 +249,7 @@ def _sha256_file(path: Path) -> str | None:
             for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
                 hasher.update(chunk)
         return hasher.hexdigest()
-    except FileNotFoundError:
+    except OSError:
         return None
 
 
@@ -288,6 +312,72 @@ def _require_path(value: object, *, field_name: str) -> str:
             machine_error_code=STATE_TRANSACTION_INVALID,
         )
     return value
+
+
+def _optional_metadata_text(value: object, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise StateTransactionError(
+            f"Transaction metadata {field_name} is invalid.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    return value
+
+
+def validate_rollback_id(rollback_id: str) -> str:
+    if (
+        not isinstance(rollback_id, str)
+        or not rollback_id.startswith(ROLLBACK_ID_PREFIX)
+        or "\x00" in rollback_id
+        or "/" in rollback_id
+        or "\\" in rollback_id
+    ):
+        raise StateTransactionError(
+            "Rollback id is invalid.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    return rollback_id
+
+
+def rollback_id_for_transaction(transaction_id: str) -> str:
+    validated_transaction_id = validate_transaction_id(transaction_id)
+    digest = hashlib.sha256(validated_transaction_id.encode("utf-8")).hexdigest()
+    return f"{ROLLBACK_ID_PREFIX}{digest[:20]}"
+
+
+def _validate_metadata_rollback_fields(metadata: TransactionMetadata) -> None:
+    if not isinstance(metadata.rollback_eligible, bool):
+        raise StateTransactionError(
+            "Transaction rollback eligibility flag is invalid.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    if metadata.effect is not None:
+        _optional_metadata_text(metadata.effect, field_name="effect")
+    if metadata.scope is not None:
+        _optional_metadata_text(metadata.scope, field_name="scope")
+    if metadata.mutation_id is not None:
+        _optional_metadata_text(metadata.mutation_id, field_name="mutation_id")
+    if metadata.rollback_id is not None:
+        validate_rollback_id(metadata.rollback_id)
+    if not metadata.rollback_eligible:
+        if metadata.rollback_id is not None:
+            raise StateTransactionError(
+                "Rollback id requires rollback-eligible transaction metadata.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
+        return
+    for field_name, value in (
+        ("effect", metadata.effect),
+        ("scope", metadata.scope),
+        ("mutation_id", metadata.mutation_id),
+        ("rollback_id", metadata.rollback_id),
+    ):
+        if value is None:
+            raise StateTransactionError(
+                f"Rollback-eligible transaction metadata is missing {field_name}.",
+                machine_error_code=STATE_TRANSACTION_INVALID,
+            )
 
 
 def _path_is_under(path: str, root: str) -> bool:
@@ -386,6 +476,12 @@ def _metadata_from_payload(payload: Mapping[str, object]) -> TransactionMetadata
             "Transaction metadata error is invalid.",
             machine_error_code=STATE_TRANSACTION_INVALID,
         )
+    rollback_eligible = payload.get("rollback_eligible", False)
+    if not isinstance(rollback_eligible, bool):
+        raise StateTransactionError(
+            "Transaction rollback eligibility flag is invalid.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
     return TransactionMetadata(
         schema_version=payload["schema_version"],  # type: ignore[arg-type]
         transaction_id=payload["transaction_id"],  # type: ignore[arg-type]
@@ -395,11 +491,22 @@ def _metadata_from_payload(payload: Mapping[str, object]) -> TransactionMetadata
         transaction_root=payload["transaction_root"],  # type: ignore[arg-type]
         files=tuple(files),
         error=error,
+        effect=_optional_metadata_text(payload.get("effect"), field_name="effect"),
+        scope=_optional_metadata_text(payload.get("scope"), field_name="scope"),
+        mutation_id=_optional_metadata_text(
+            payload.get("mutation_id"),
+            field_name="mutation_id",
+        ),
+        rollback_eligible=rollback_eligible,
+        rollback_id=_optional_metadata_text(
+            payload.get("rollback_id"),
+            field_name="rollback_id",
+        ),
     )
 
 
 def _metadata_to_payload(metadata: TransactionMetadata) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "schema_version": metadata.schema_version,
         "transaction_id": metadata.transaction_id,
         "state": metadata.state,
@@ -409,6 +516,17 @@ def _metadata_to_payload(metadata: TransactionMetadata) -> dict[str, object]:
         "files": [_file_record_to_payload(file_record) for file_record in metadata.files],
         "error": metadata.error,
     }
+    if metadata.effect is not None:
+        payload["effect"] = metadata.effect
+    if metadata.scope is not None:
+        payload["scope"] = metadata.scope
+    if metadata.mutation_id is not None:
+        payload["mutation_id"] = metadata.mutation_id
+    if metadata.rollback_eligible:
+        payload["rollback_eligible"] = metadata.rollback_eligible
+    if metadata.rollback_id is not None:
+        payload["rollback_id"] = metadata.rollback_id
+    return payload
 
 
 def validate_transaction_metadata(
@@ -462,6 +580,7 @@ def validate_transaction_metadata(
                 "Transaction file committed flag is invalid.",
                 machine_error_code=STATE_TRANSACTION_INVALID,
             )
+    _validate_metadata_rollback_fields(parsed)
     return parsed
 
 
@@ -982,6 +1101,11 @@ def _failed_metadata(
         transaction_root=metadata.transaction_root,
         files=files,
         error=error,
+        effect=metadata.effect,
+        scope=metadata.scope,
+        mutation_id=metadata.mutation_id,
+        rollback_eligible=metadata.rollback_eligible,
+        rollback_id=metadata.rollback_id,
     )
 
 
@@ -1001,6 +1125,11 @@ def _metadata_with_state(
         transaction_root=metadata.transaction_root,
         files=metadata.files if files is None else files,
         error=error,
+        effect=metadata.effect,
+        scope=metadata.scope,
+        mutation_id=metadata.mutation_id,
+        rollback_eligible=metadata.rollback_eligible,
+        rollback_id=metadata.rollback_id,
     )
 
 
@@ -1012,11 +1141,184 @@ def _call_failure_hook(
         failure_hook(point)
 
 
+def _rollback_result(
+    *,
+    rollback_available: bool,
+    rollback_id: str | None,
+    transaction_id: str | None,
+    status: str,
+    changed_files: tuple[str, ...] = (),
+    blocked_reasons: tuple[str, ...] = (),
+    machine_error_code: str,
+) -> TransactionRollbackResult:
+    return TransactionRollbackResult(
+        rollback_available=rollback_available,
+        rollback_id=rollback_id,
+        transaction_id=transaction_id,
+        status=status,
+        changed_files=changed_files,
+        blocked_reasons=blocked_reasons,
+        machine_error_code=machine_error_code,
+    )
+
+
+def _latest_rollback_eligible_metadata(
+    store_root: Path,
+) -> tuple[Path, TransactionMetadata] | None:
+    candidates: list[tuple[datetime, str, Path, TransactionMetadata]] = []
+    for metadata_path in list_transaction_metadata(store_root):
+        metadata = read_transaction_metadata(metadata_path)
+        if (
+            metadata.state != TRANSACTION_COMMITTED
+            or not metadata.rollback_eligible
+            or metadata.rollback_id is None
+        ):
+            continue
+        classification = classify_transaction_metadata(metadata)
+        if classification.classification != TRANSACTION_CLEAN:
+            continue
+        candidates.append(
+            (
+                _parse_utc(metadata.updated_at_utc),
+                metadata.transaction_id,
+                metadata_path,
+                metadata,
+            )
+        )
+    if not candidates:
+        return None
+    _, _, metadata_path, metadata = max(candidates, key=lambda item: (item[0], item[1]))
+    return metadata_path, metadata
+
+
+def _rollback_preflight_blocked_reasons(metadata: TransactionMetadata) -> tuple[str, ...]:
+    blocked_reasons: list[str] = []
+    for index, record in enumerate(metadata.files):
+        target = Path(record.target_path)
+        target_label = f"file_{index}:{target}"
+        if target.is_symlink() or not target.is_file():
+            _append_unique(blocked_reasons, f"{target_label}:target_not_regular_file")
+            continue
+        if _sha256_file(target) != record.sha256_after:
+            _append_unique(blocked_reasons, f"{target_label}:target_sha256_drift")
+            continue
+        if record.sha256_before is None:
+            continue
+        backup = Path(record.backup_path)
+        rollback_temp_path = backup.parent / f"{index:04d}.rollback.tmp"
+        if rollback_temp_path.exists() or rollback_temp_path.is_symlink():
+            _append_unique(blocked_reasons, f"{target_label}:rollback_temp_exists")
+            continue
+        if backup.is_symlink() or not backup.is_file():
+            _append_unique(blocked_reasons, f"{target_label}:backup_not_regular_file")
+            continue
+        if _sha256_file(backup) != record.sha256_before:
+            _append_unique(blocked_reasons, f"{target_label}:backup_sha256_mismatch")
+    return tuple(blocked_reasons)
+
+
+def rollback_latest_state_transaction(
+    transaction_root: Path,
+    *,
+    failure_hook: Callable[[str], None] | None = None,
+) -> TransactionRollbackResult:
+    root = Path(transaction_root)
+    if not root.is_absolute():
+        raise StateTransactionError(
+            "Transaction root must be absolute.",
+            machine_error_code=STATE_TRANSACTION_INVALID,
+        )
+    root = root.resolve(strict=False)
+    store_root = _transaction_store_root_for(root)
+    store_classification = classify_transaction_store(store_root)
+    if store_classification.classification != TRANSACTION_CLEAN:
+        return _rollback_result(
+            rollback_available=False,
+            rollback_id=None,
+            transaction_id=None,
+            status=TRANSACTION_ROLLBACK_BLOCKED,
+            blocked_reasons=(
+                f"transaction_store_{store_classification.classification}",
+            ),
+            machine_error_code=store_classification.machine_error_code,
+        )
+
+    latest = _latest_rollback_eligible_metadata(store_root)
+    if latest is None:
+        return _rollback_result(
+            rollback_available=False,
+            rollback_id=None,
+            transaction_id=None,
+            status=TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+            machine_error_code=STATE_TRANSACTION_ROLLBACK_NOT_AVAILABLE,
+        )
+
+    metadata_path, metadata = latest
+    blocked_reasons = _rollback_preflight_blocked_reasons(metadata)
+    if blocked_reasons:
+        return _rollback_result(
+            rollback_available=False,
+            rollback_id=metadata.rollback_id,
+            transaction_id=metadata.transaction_id,
+            status=TRANSACTION_ROLLBACK_BLOCKED,
+            blocked_reasons=blocked_reasons,
+            machine_error_code=STATE_TRANSACTION_ROLLBACK_BLOCKED,
+        )
+
+    changed_files: list[str] = []
+    try:
+        for index, record in reversed(tuple(enumerate(metadata.files))):
+            target = Path(record.target_path)
+            _call_failure_hook(failure_hook, "before_rollback_file")
+            if record.sha256_before is None:
+                target.unlink()
+                _fsync_parent_best_effort(target.parent)
+            else:
+                backup = Path(record.backup_path)
+                rollback_temp_path = backup.parent / f"{index:04d}.rollback.tmp"
+                try:
+                    _write_bytes_fsync(rollback_temp_path, backup.read_bytes())
+                    os.replace(rollback_temp_path, target)
+                    _fsync_parent_best_effort(target.parent)
+                finally:
+                    if rollback_temp_path.exists():
+                        rollback_temp_path.unlink()
+                        _fsync_parent_best_effort(rollback_temp_path.parent)
+            _call_failure_hook(failure_hook, "after_rollback_file")
+            _append_unique(changed_files, str(target))
+    except Exception as exc:  # noqa: BLE001
+        failed_metadata = _failed_metadata(
+            metadata,
+            state=TRANSACTION_FAILED_BLOCKED,
+            files=metadata.files,
+            error=str(exc) or exc.__class__.__name__,
+        )
+        write_transaction_metadata(metadata_path, failed_metadata)
+        raise StateTransactionError(
+            "Transaction rollback failed.",
+            machine_error_code=STATE_TRANSACTION_FAILED_BLOCKED,
+        ) from exc
+
+    return _rollback_result(
+        rollback_available=True,
+        rollback_id=metadata.rollback_id,
+        transaction_id=metadata.transaction_id,
+        status=TRANSACTION_ROLLBACK_COMPLETED,
+        changed_files=tuple(changed_files),
+        machine_error_code=STATE_TRANSACTION_ROLLBACK_COMPLETED,
+    )
+
+
 def commit_state_transaction(
     transaction_root: Path,
     transaction_id: str,
     writes: tuple[TransactionWrite, ...],
     *,
+    effect: str | None = None,
+    scope: str | None = None,
+    mutation_id: str | None = None,
+    rollback_eligible: bool = False,
+    rollback_id: str | None = None,
     failure_hook: Callable[[str], None] | None = None,
 ) -> TransactionCommitResult:
     root = Path(transaction_root)
@@ -1027,6 +1329,28 @@ def commit_state_transaction(
         )
     root = root.resolve(strict=False)
     validated_transaction_id = validate_transaction_id(transaction_id)
+    rollback_id_value = (
+        rollback_id_for_transaction(validated_transaction_id)
+        if rollback_eligible and rollback_id is None
+        else rollback_id
+    )
+    _validate_metadata_rollback_fields(
+        TransactionMetadata(
+            schema_version=TRANSACTION_METADATA_SCHEMA_VERSION,
+            transaction_id=validated_transaction_id,
+            state=TRANSACTION_PREPARING,
+            created_at_utc="2026-01-01T00:00:00+00:00",
+            updated_at_utc="2026-01-01T00:00:00+00:00",
+            transaction_root=str(root),
+            files=(),
+            error=None,
+            effect=effect,
+            scope=scope,
+            mutation_id=mutation_id,
+            rollback_eligible=rollback_eligible,
+            rollback_id=rollback_id_value,
+        )
+    )
     if not writes:
         raise StateTransactionError(
             "Transaction requires at least one write.",
@@ -1114,6 +1438,11 @@ def commit_state_transaction(
         transaction_root=str(root),
         files=tuple(records),
         error=None,
+        effect=effect,
+        scope=scope,
+        mutation_id=mutation_id,
+        rollback_eligible=rollback_eligible,
+        rollback_id=rollback_id_value,
     )
 
     _call_failure_hook(failure_hook, "before_metadata_write")

@@ -614,9 +614,330 @@ class StateTransactionMetadataTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), b"new")
         self.assertIsNotNone(record.sha256_before)
         self.assertEqual(Path(record.backup_path).read_bytes(), b"old")
+        self.assertFalse(metadata.rollback_eligible)
+        self.assertIsNone(metadata.rollback_id)
         result_fields = set(state_transaction.TransactionCommitResult.__dataclass_fields__)
         self.assertNotIn("rollback_available", result_fields)
         self.assertNotIn("rollback_id", result_fields)
+
+    def test_legacy_committed_metadata_without_rollback_fields_is_not_available(
+        self,
+    ) -> None:
+        self.write_store_metadata("txn-clean", state=state_transaction.TRANSACTION_COMMITTED)
+
+        metadata = state_transaction.read_transaction_metadata(
+            state_transaction.transaction_metadata_path(self.root / "transactions", "txn-clean")
+        )
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(metadata.rollback_eligible)
+        self.assertIsNone(metadata.rollback_id)
+        self.assertFalse(result.rollback_available)
+        self.assertIsNone(result.rollback_id)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_NOT_AVAILABLE)
+        self.assertEqual(result.changed_files, ())
+
+    def test_rollback_eligible_metadata_requires_truth_fields(self) -> None:
+        metadata = self.metadata(
+            state=state_transaction.TRANSACTION_COMMITTED,
+            files=(self.file_record(committed=True),),
+            error=None,
+        )
+        invalid_metadata = state_transaction.TransactionMetadata(
+            schema_version=metadata.schema_version,
+            transaction_id=metadata.transaction_id,
+            state=metadata.state,
+            created_at_utc=metadata.created_at_utc,
+            updated_at_utc=metadata.updated_at_utc,
+            transaction_root=metadata.transaction_root,
+            files=metadata.files,
+            error=metadata.error,
+            rollback_eligible=True,
+        )
+
+        with self.assertRaises(state_transaction.StateTransactionError) as raised:
+            state_transaction.validate_transaction_metadata(invalid_metadata)
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_transaction.STATE_TRANSACTION_INVALID,
+        )
+
+    def test_rollback_id_without_eligibility_is_invalid(self) -> None:
+        metadata = self.metadata(
+            state=state_transaction.TRANSACTION_COMMITTED,
+            files=(self.file_record(committed=True),),
+        )
+        invalid_metadata = state_transaction.TransactionMetadata(
+            schema_version=metadata.schema_version,
+            transaction_id=metadata.transaction_id,
+            state=metadata.state,
+            created_at_utc=metadata.created_at_utc,
+            updated_at_utc=metadata.updated_at_utc,
+            transaction_root=metadata.transaction_root,
+            files=metadata.files,
+            error=metadata.error,
+            rollback_id=state_transaction.rollback_id_for_transaction(
+                metadata.transaction_id
+            ),
+        )
+
+        with self.assertRaises(state_transaction.StateTransactionError) as raised:
+            state_transaction.validate_transaction_metadata(invalid_metadata)
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_transaction.STATE_TRANSACTION_INVALID,
+        )
+
+    def test_rollback_latest_replace_transaction_restores_backup(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-replace",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-replace",
+            rollback_eligible=True,
+        )
+        metadata = state_transaction.read_transaction_metadata(Path(commit_result.metadata_path))
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertTrue(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_COMPLETED)
+        self.assertEqual(
+            result.machine_error_code,
+            state_transaction.STATE_TRANSACTION_ROLLBACK_COMPLETED,
+        )
+        self.assertEqual(result.rollback_id, metadata.rollback_id)
+        self.assertEqual(result.transaction_id, "txn-replace")
+        self.assertEqual(result.changed_files, (str(target.resolve(strict=False)),))
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_rollback_latest_create_transaction_deletes_created_file(self) -> None:
+        target = self.root / "created.json"
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-create",
+            (self.transaction_write("created.json", b"created"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-create",
+            rollback_eligible=True,
+        )
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertTrue(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_COMPLETED)
+        self.assertEqual(result.changed_files, (str(target.resolve(strict=False)),))
+        self.assertFalse(target.exists())
+
+    def test_rollback_blocks_target_drift_without_writes(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-drift",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-drift",
+            rollback_eligible=True,
+        )
+        target.write_bytes(b"drift")
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertEqual(
+            result.machine_error_code,
+            state_transaction.STATE_TRANSACTION_ROLLBACK_BLOCKED,
+        )
+        self.assertIn("target_sha256_drift", result.blocked_reasons[0])
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(target.read_bytes(), b"drift")
+
+    def test_rollback_multifile_drift_blocks_before_any_write(self) -> None:
+        alpha = self.root / "alpha.json"
+        beta = self.root / "beta.json"
+        alpha.write_bytes(b"old-alpha")
+        beta.write_bytes(b"old-beta")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-multifile-drift",
+            (
+                self.transaction_write("alpha.json", b"new-alpha"),
+                self.transaction_write("beta.json", b"new-beta"),
+            ),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-multifile-drift",
+            rollback_eligible=True,
+        )
+        alpha.write_bytes(b"drift-alpha")
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertIn("target_sha256_drift", result.blocked_reasons[0])
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(alpha.read_bytes(), b"drift-alpha")
+        self.assertEqual(beta.read_bytes(), b"new-beta")
+
+    def test_rollback_blocks_missing_backup_without_writes(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-missing-backup",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-missing-backup",
+            rollback_eligible=True,
+        )
+        metadata = state_transaction.read_transaction_metadata(Path(commit_result.metadata_path))
+        Path(metadata.files[0].backup_path).unlink()
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertIn("backup_not_regular_file", result.blocked_reasons[0])
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_rollback_blocks_existing_rollback_temp_without_writes(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-rollback-temp",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-rollback-temp",
+            rollback_eligible=True,
+        )
+        metadata = state_transaction.read_transaction_metadata(Path(commit_result.metadata_path))
+        rollback_temp_path = Path(metadata.files[0].backup_path).parent / "0000.rollback.tmp"
+        rollback_temp_path.write_bytes(b"stale")
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertIn("rollback_temp_exists", result.blocked_reasons[0])
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_rollback_time_failure_marks_transaction_failed_blocked(self) -> None:
+        alpha = self.root / "alpha.json"
+        beta = self.root / "beta.json"
+        alpha.write_bytes(b"old-alpha")
+        beta.write_bytes(b"old-beta")
+        commit_result = state_transaction.commit_state_transaction(
+            self.root,
+            "txn-rollback-failure",
+            (
+                self.transaction_write("alpha.json", b"new-alpha"),
+                self.transaction_write("beta.json", b"new-beta"),
+            ),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-rollback-failure",
+            rollback_eligible=True,
+        )
+        after_rollback_calls = 0
+
+        def fail_after_first_apply(point: str) -> None:
+            nonlocal after_rollback_calls
+            if point != "after_rollback_file":
+                return
+            after_rollback_calls += 1
+            if after_rollback_calls == 1:
+                raise RuntimeError("rollback failure")
+
+        with self.assertRaises(state_transaction.StateTransactionError) as raised:
+            state_transaction.rollback_latest_state_transaction(
+                self.root,
+                failure_hook=fail_after_first_apply,
+            )
+
+        metadata = state_transaction.read_transaction_metadata(Path(commit_result.metadata_path))
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            state_transaction.STATE_TRANSACTION_FAILED_BLOCKED,
+        )
+        self.assertEqual(metadata.state, state_transaction.TRANSACTION_FAILED_BLOCKED)
+        self.assertEqual(metadata.error, "rollback failure")
+        self.assertEqual(alpha.read_bytes(), b"new-alpha")
+        self.assertEqual(beta.read_bytes(), b"old-beta")
+        self.assertEqual(
+            state_transaction.classify_transaction_store(
+                self.root / "transactions"
+            ).classification,
+            state_transaction.TRANSACTION_BLOCKED,
+        )
+
+    def test_rollback_blocks_when_transaction_store_is_not_clean(self) -> None:
+        target = self.root / "state.json"
+        target.write_bytes(b"old")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-eligible",
+            (self.transaction_write("state.json", b"new"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-store-block",
+            rollback_eligible=True,
+        )
+        self.write_store_metadata("txn-incomplete", state=state_transaction.TRANSACTION_PREPARED)
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertFalse(result.rollback_available)
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_BLOCKED)
+        self.assertEqual(result.machine_error_code, state_transaction.STATE_TRANSACTION_INCOMPLETE)
+        self.assertEqual(result.changed_files, ())
+        self.assertEqual(target.read_bytes(), b"new")
+
+    def test_rollback_latest_selection_uses_latest_eligible_committed_metadata(self) -> None:
+        alpha = self.root / "alpha.json"
+        beta = self.root / "beta.json"
+        alpha.write_bytes(b"old-alpha")
+        beta.write_bytes(b"old-beta")
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-001",
+            (self.transaction_write("alpha.json", b"new-alpha"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-alpha",
+            rollback_eligible=True,
+        )
+        state_transaction.commit_state_transaction(
+            self.root,
+            "txn-002",
+            (self.transaction_write("beta.json", b"new-beta"),),
+            effect="repair",
+            scope="state_transaction_test",
+            mutation_id="wbp-mut-beta",
+            rollback_eligible=True,
+        )
+
+        result = state_transaction.rollback_latest_state_transaction(self.root)
+
+        self.assertEqual(result.status, state_transaction.TRANSACTION_ROLLBACK_COMPLETED)
+        self.assertEqual(result.transaction_id, "txn-002")
+        self.assertEqual(alpha.read_bytes(), b"new-alpha")
+        self.assertEqual(beta.read_bytes(), b"old-beta")
 
     def test_commit_state_transaction_rejects_relative_root_invalid_id_and_empty_writes(self) -> None:
         with self.assertRaises(state_transaction.StateTransactionError):
