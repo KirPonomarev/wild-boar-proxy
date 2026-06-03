@@ -30,12 +30,83 @@ from wild_boar_proxy.operator_surface import (
     build_codex_config,
     build_stable_bridge_preflight_packet,
     forbidden_browser_fields,
+    protected_codex_surface_paths,
+    protected_snapshot,
     run_process_isolation_proof,
     select_server_issued_model,
 )
 
 
 class OperatorSurfaceTests(unittest.TestCase):
+    def test_operator_surface_config_runtime_config_uses_runtime_paths_from_env_at_creation_time(self) -> None:
+        with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
+            first_managed = Path(first_tmp) / "managed"
+            second_managed = Path(second_tmp) / "managed"
+
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "WBP_PROFILE_DIR": str(Path(first_tmp) / "profile"),
+                    "WBP_MANAGED_DIR": str(first_managed),
+                },
+            ):
+                first_config = OperatorSurfaceConfig()
+
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "WBP_PROFILE_DIR": str(Path(second_tmp) / "profile"),
+                    "WBP_MANAGED_DIR": str(second_managed),
+                },
+            ):
+                second_config = OperatorSurfaceConfig()
+
+        self.assertEqual(
+            first_config.runtime_config,
+            first_managed / "stable-runtime-config.generated.yaml",
+        )
+        self.assertEqual(
+            second_config.runtime_config,
+            second_managed / "stable-runtime-config.generated.yaml",
+        )
+        self.assertNotEqual(first_config.runtime_config, second_config.runtime_config)
+
+    def test_protected_codex_surface_paths_are_host_home_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir) / "owner-home"
+
+            paths = protected_codex_surface_paths(home)
+
+        self.assertEqual(paths["codex_config"], home / ".codex" / "config.toml")
+        self.assertEqual(paths["codex_auth"], home / ".codex" / "auth.json")
+        self.assertEqual(
+            paths["default_app_support_codex"],
+            home / "Library" / "Application Support" / "Codex",
+        )
+        self.assertEqual(
+            paths["default_cache_codex"],
+            home / "Library" / "Caches" / "com.openai.codex",
+        )
+        self.assertEqual(
+            paths["default_httpstorage_codex"],
+            home / "Library" / "HTTPStorages" / "com.openai.codex",
+        )
+
+    def test_protected_snapshot_redacts_injected_host_home_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir) / "owner-home"
+            with mock.patch("wild_boar_proxy.operator_surface.Path.home", return_value=home):
+                snapshot = protected_snapshot()
+
+        serialized = json.dumps(snapshot)
+        self.assertNotIn(str(home), serialized)
+        self.assertEqual(snapshot["codex_config"]["path_label"], "~/.codex/config.toml")
+        self.assertEqual(snapshot["codex_auth"]["path_label"], "~/.codex/auth.json")
+        self.assertEqual(
+            snapshot["default_app_support_codex"]["path_label"],
+            "~/Library/Application Support/Codex",
+        )
+
     def test_hybrid_openai_compat_adapter_honors_explicit_listen_port(self) -> None:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))

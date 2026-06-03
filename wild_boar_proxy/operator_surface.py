@@ -27,15 +27,12 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
-from wild_boar_proxy.runtime import RuntimeErrorInfo
+from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
 DEFAULT_MODEL = "gpt-5.3-codex"
 DEFAULT_CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
-DEFAULT_RUNTIME_CONFIG = (
-    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
-)
 FORBIDDEN_BROWSER_FIELD_NAMES = {
     "api_key",
     "apikey",
@@ -67,6 +64,33 @@ WINDOW_SMOKE_PHRASES = (
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
+
+
+def default_runtime_config_path() -> Path:
+    return RuntimePaths.from_env().stable_runtime_generated_config_file
+
+
+DEFAULT_RUNTIME_CONFIG = str(default_runtime_config_path())
+
+
+def protected_codex_surface_paths(home: Path | None = None) -> dict[str, Path]:
+    resolved_home = Path.home() if home is None else home.expanduser()
+    return {
+        "codex_config": resolved_home / ".codex" / "config.toml",
+        "codex_auth": resolved_home / ".codex" / "auth.json",
+        "default_app_support_codex": resolved_home
+        / "Library"
+        / "Application Support"
+        / "Codex",
+        "default_cache_codex": resolved_home
+        / "Library"
+        / "Caches"
+        / "com.openai.codex",
+        "default_httpstorage_codex": resolved_home
+        / "Library"
+        / "HTTPStorages"
+        / "com.openai.codex",
+    }
 BRIDGE_RESTART_ERROR_CODES = {
     "LOCAL_BRIDGE_DEAD",
     "LOCAL_BRIDGE_STREAM_DISCONNECTED",
@@ -2616,17 +2640,8 @@ def stat_hash(path: str) -> dict[str, Any]:
 
 def protected_snapshot() -> dict[str, dict[str, Any]]:
     return {
-        "codex_config": stat_hash("/Users/kirillponomarev/.codex/config.toml"),
-        "codex_auth": stat_hash("/Users/kirillponomarev/.codex/auth.json"),
-        "default_app_support_codex": stat_hash(
-            "/Users/kirillponomarev/Library/Application Support/Codex"
-        ),
-        "default_cache_codex": stat_hash(
-            "/Users/kirillponomarev/Library/Caches/com.openai.codex"
-        ),
-        "default_httpstorage_codex": stat_hash(
-            "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex"
-        ),
+        name: stat_hash(str(path))
+        for name, path in protected_codex_surface_paths().items()
     }
 
 
@@ -2683,7 +2698,7 @@ class OperatorSurfaceConfig:
     endpoint: str = DEFAULT_ENDPOINT
     default_model: str = DEFAULT_MODEL
     codex_bin: Path = Path(DEFAULT_CODEX_BIN)
-    runtime_config: Path = Path(DEFAULT_RUNTIME_CONFIG)
+    runtime_config: Path = field(default_factory=default_runtime_config_path)
     max_prompt_chars: int = 8000
     timeout_seconds: int = 180
 

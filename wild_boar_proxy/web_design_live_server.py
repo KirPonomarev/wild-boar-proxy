@@ -129,7 +129,6 @@ from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_co
 from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
     DEFAULT_CODEX_BIN,
-    DEFAULT_RUNTIME_CONFIG,
     HybridOpenAICompatAdapter,
     OperatorSurfaceSession,
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
@@ -138,6 +137,7 @@ from wild_boar_proxy.operator_surface import (
     build_stable_bridge_preflight_packet,
     clean_env,
     compare_snapshots,
+    default_runtime_config_path,
     extract_local_api_key,
     protected_snapshot,
     protected_surfaces_unchanged,
@@ -1976,7 +1976,7 @@ def _build_live_native_availability_lattice_packet(
     if not native_entries:
         return None
     try:
-        local_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+        local_api_key = extract_local_api_key(default_runtime_config_path())
     except RuntimeError:
         return None
     current_packets: list[dict[str, Any]] = []
@@ -2068,7 +2068,7 @@ class _CustomNativeBridgeLease:
             self.close()
             return downstream_endpoint
         try:
-            expected_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+            expected_api_key = extract_local_api_key(default_runtime_config_path())
         except RuntimeError:
             self.close()
             return downstream_endpoint
@@ -3756,7 +3756,7 @@ def _custom_native_stable_bridge_prewarm_packet(
         }
 
     try:
-        local_api_key = extract_local_api_key(Path(DEFAULT_RUNTIME_CONFIG))
+        local_api_key = extract_local_api_key(default_runtime_config_path())
     except RuntimeError as exc:
         return {
             "schema_version": 1,

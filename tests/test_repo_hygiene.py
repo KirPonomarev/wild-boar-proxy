@@ -9,6 +9,10 @@ FORBIDDEN_PLAN_FILE_PATTERN = re.compile(
     r"next_.*contour|.*next.*contour.*|handoff_to_next_contour)\."
     r"(md|json|txt)$"
 )
+FORBIDDEN_PERSONAL_PATH_LITERALS = (
+    "kirillponomarev",
+    "/Users/kirillponomarev",
+)
 
 
 class RepoHygieneTests(unittest.TestCase):
@@ -25,6 +29,28 @@ class RepoHygieneTests(unittest.TestCase):
             if FORBIDDEN_PLAN_FILE_PATTERN.search(path)
         ]
         self.assertEqual([], forbidden)
+
+    def test_tracked_production_package_does_not_store_personal_paths(self) -> None:
+        result = subprocess.run(
+            [
+                "git",
+                "grep",
+                "-n",
+                "-I",
+                *(
+                    argument
+                    for literal in FORBIDDEN_PERSONAL_PATH_LITERALS
+                    for argument in ("-e", literal)
+                ),
+                "--",
+                "wild_boar_proxy",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn(result.returncode, (0, 1), msg=result.stderr)
+        self.assertEqual("", result.stdout.strip(), msg=result.stdout)
 
 
 if __name__ == "__main__":
