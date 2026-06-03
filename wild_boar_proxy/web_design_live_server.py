@@ -77,6 +77,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_server_model_selection_and_reasoning_truth_packet,
     model_lane_classification_from_registry,
 )
+from wild_boar_proxy.external_models.contracts import route_id_validation_error
 from wild_boar_proxy.model_availability import (
     build_catalog_availability_lattice_packet,
     build_model_direct_preflight_packet,
@@ -223,12 +224,6 @@ API_CONNECTIONS_READONLY_COMMAND_IDS = (
     "external_models_routes_list",
 )
 ACCOUNT_ID_SAFE_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyz"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "0123456789"
-    "._-:@"
-)
-ROUTE_ID_SAFE_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789"
@@ -2198,6 +2193,9 @@ def _server_owned_api_route_spec_path(
     launch_copy_contract: LaunchCopyContract | None,
     route_id: str,
 ) -> Path:
+    route_id_error = route_id_validation_error(route_id)
+    if route_id_error:
+        raise ValueError(route_id_error)
     if launch_copy_contract is not None and launch_copy_contract.data_dir:
         external_dir = Path(launch_copy_contract.data_dir).expanduser() / "external-models"
     else:
@@ -2206,8 +2204,13 @@ def _server_owned_api_route_spec_path(
         external_dir = Path(
             source.get("WBP_EXTERNAL_MODELS_DIR", "~/.wild-boar-proxy/external-models")
         ).expanduser()
-    safe_route_id = "".join(char if char in ROUTE_ID_SAFE_CHARS else "-" for char in route_id)
-    return external_dir / "server-owned-route-specs" / f"{safe_route_id}.json"
+    spec_dir = external_dir / "server-owned-route-specs"
+    path = spec_dir / f"{route_id}.json"
+    spec_root = spec_dir.resolve()
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(spec_root):
+        raise ValueError("Server-owned route spec path must stay within server-owned-route-specs.")
+    return path
 
 
 def _write_server_owned_api_route_spec(path: Path, route: dict[str, Any]) -> None:
@@ -10734,12 +10737,8 @@ def _api_route_action_args(
             "UI_API_ROUTE_ID_REQUIRED",
         )
     route_id = route_id.strip()
-    if (
-        not route_id
-        or route_id in {".", ".."}
-        or len(route_id) > 96
-        or any(char not in ROUTE_ID_SAFE_CHARS for char in route_id)
-    ):
+    route_id_error = route_id_validation_error(route_id)
+    if route_id_error:
         return None, _unavailable_action(
             ui_action,
             f"{ui_action} получил небезопасный route_id.",
@@ -11530,11 +11529,31 @@ def _run_api_route_connect_action(
 
     route_spec = _server_owned_api_route_spec(runner)
     route_id = str(route_spec["route_id"])
-    route_spec_path = _server_owned_api_route_spec_path(
-        runner,
-        launch_copy_contract,
-        route_id,
-    )
+    try:
+        route_spec_path = _server_owned_api_route_spec_path(
+            runner,
+            launch_copy_contract,
+            route_id,
+        )
+    except ValueError as exc:
+        result = _api_route_connect_result(
+            status="integration_failure",
+            machine_error_code="UI_API_ROUTE_ID_INVALID",
+            human_message=str(exc),
+            next_action="user_action",
+            route_id=route_id,
+            connect_phase="route_id_invalid",
+            admission_mode="create",
+            preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
+            credential_status_result=credential_status_result,
+            credential_admit_result=credential_admit_result,
+            credential_phase=credential_phase,
+            add_result=None,
+            validate_result=None,
+        )
+        return _ui_action_response_from_result("api_route_connect", result)
     try:
         _write_server_owned_api_route_spec(route_spec_path, route_spec)
     except OSError as exc:

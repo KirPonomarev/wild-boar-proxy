@@ -2518,6 +2518,96 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_api_route_connect_server_owned_route_spec_path_is_canonical_and_contained(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            data_dir = root / "managed"
+            route_id = "wbp-AZ09_a.b-c"
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(root / "profile"),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+            runner = MappingRunner({})
+
+            path = live_server._server_owned_api_route_spec_path(
+                runner,
+                contract,
+                route_id,
+            )
+
+            spec_dir = data_dir / "external-models" / "server-owned-route-specs"
+            self.assertEqual(path.name, f"{route_id}.json")
+            self.assertEqual(path.parent, spec_dir)
+            self.assertTrue(path.resolve().is_relative_to(spec_dir.resolve()))
+
+    def test_api_route_connect_blocks_invalid_server_owned_route_id_before_spec_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            spec_dir = data_dir / "external-models" / "server-owned-route-specs"
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            runner = MappingRunner(payloads)
+            runner._env = {  # type: ignore[attr-defined]
+                "WBP_SERVER_OWNED_API_ROUTE_ID": "wbp-/../../escape",
+            }
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(result["action_role"], "api_route_admission")
+            self.assertEqual(result["result"]["machine_error_code"], "UI_API_ROUTE_ID_INVALID")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "route_id_invalid")
+            self.assertEqual(result["result"]["changed_files"], [])
+            self.assertFalse(spec_dir.exists())
+            self.assertFalse((root / "escape").exists())
+            self.assertEqual(
+                runner.calls,
+                [
+                    ("external-models", "status", "--json"),
+                    ("external-models", "models", "--json"),
+                    ("external-models", "routes", "list", "--json"),
+                    ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                ],
+            )
+            self.assertNotIn(
+                ("external-models", "routes", "add", "--file", "wbp--..-..-escape.json", "--json"),
+                runner.calls,
+            )
+            self.assertNotIn(
+                ("external-models", "routes", "validate", "--route", "wbp-/../../escape", "--json"),
+                runner.calls,
+            )
+
     def test_api_route_connect_adopts_existing_primary_route_without_add(self) -> None:
         payloads = live_payloads()
         runner = MappingRunner(payloads)
@@ -4156,6 +4246,76 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("external-models", "routes", "disable", "--route", "wbp-disabled", "--json"),
                 calls,
             )
+
+    def test_api_route_actions_accept_canonical_route_ids(self) -> None:
+        valid_route_ids = (
+            "wbp-a",
+            "wbp-AZ09",
+            "wbp-a_b.c-d",
+            "wbp-" + "a" * 128,
+        )
+        for route_id in valid_route_ids:
+            with self.subTest(route_id=route_id):
+                payloads = {
+                    **live_payloads(),
+                    ("external-models", "routes", "list", "--json"): routes_list_packet(
+                        route_id,
+                        enabled=True,
+                    ),
+                    (
+                        "external-models",
+                        "routes",
+                        "validate",
+                        "--route",
+                        route_id,
+                        "--json",
+                    ): command_packet(
+                        human_message="External-models route validation captured provider evidence.",
+                        data={"route_id": route_id, "verification_scope": "route_provider_only"},
+                    ),
+                }
+                runner = MappingRunner(payloads)
+
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "api_route_validate", "route_id": route_id},
+                )
+
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["result"]["machine_error_code"], "OK")
+                self.assertEqual(
+                    runner.calls,
+                    [
+                        ("external-models", "routes", "list", "--json"),
+                        ("external-models", "routes", "validate", "--route", route_id, "--json"),
+                    ],
+                )
+
+    def test_api_route_actions_reject_canonical_invalid_route_ids_before_lookup(self) -> None:
+        invalid_route_ids = (
+            "foo-a",
+            "wbp-",
+            "wbp-a/../b",
+            "wbp-a\\b",
+            "wbp-a..b",
+            "wbp-é",
+            "ｗbp-a",
+            "wbp-a\nb",
+            "wbp-" + "a" * 129,
+        )
+        for route_id in invalid_route_ids:
+            with self.subTest(route_id=route_id):
+                runner = MappingRunner(live_payloads())
+
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "api_route_validate", "route_id": route_id},
+                )
+
+                self.assertEqual(result["status"], "integration_failure")
+                self.assertEqual(result["action_role"], "blocked")
+                self.assertEqual(result["result"]["machine_error_code"], "UI_API_ROUTE_ID_INVALID")
+                self.assertEqual(runner.calls, [])
 
     def test_hold_release_actions_preflight_eligibility_and_execute_exact_commands(self) -> None:
         hold_runner = MappingRunner(live_payloads())
