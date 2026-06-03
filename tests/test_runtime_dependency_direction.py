@@ -647,8 +647,14 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "run_healthcheck_probe",
             "run_policy_stage_set",
             "run_promote",
+            "run_rollout_attestation_healthcheck",
+            "run_rollout_evidence_capture",
+            "run_rollout_stage_advance",
+            "run_rollout_stage_prove",
+            "run_stable_runtime_launcher_attempt",
             "run_sync_for_owner_path_under_lock",
             "serialized_lock",
+            "socket_is_listening",
             "write_json_atomic",
             "write_text_atomic",
         }
@@ -671,6 +677,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         dependencies = rollout.RolloutDependencies(
             run_rollout_rotation_inspect_impl=fake_run_rollout_rotation_inspect_impl,
+            run_rollout_posture_inspect_impl=lambda *args, **kwargs: {},
         )
 
         default_payload = rollout.run_rollout_rotation_inspect(
@@ -693,6 +700,34 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                 (("paths-sentinel",), {"lock_acquired": True}),
             ],
         )
+
+    def test_rollout_posture_inspect_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_rollout_posture_inspect_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-posture-inspect",
+                "stage": args[1],
+            }
+
+        dependencies = rollout.RolloutDependencies(
+            run_rollout_rotation_inspect_impl=lambda *args, **kwargs: {},
+            run_rollout_posture_inspect_impl=fake_run_rollout_posture_inspect_impl,
+        )
+
+        payload = rollout.run_rollout_posture_inspect(
+            "paths-sentinel",
+            "20",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "rollout-posture-inspect")
+        self.assertEqual(payload["stage"], "20")
+        self.assertEqual(calls, [(("paths-sentinel", "20"), {})])
 
     def test_rollout_rotation_inspect_facade_passes_runtime_dependency(
         self,
@@ -742,6 +777,45 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                         "dependencies": runtime_mod._rollout_dependencies(),
                     },
                 ),
+            ],
+        )
+
+    def test_rollout_posture_inspect_facade_passes_runtime_dependency(
+        self,
+    ) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_rollout_posture_inspect(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "rollout-posture-inspect",
+                "stage": args[1],
+            }
+
+        with mock.patch.object(
+            rollout,
+            "run_rollout_posture_inspect",
+            side_effect=fake_rollout_posture_inspect,
+        ):
+            payload = runtime_mod.run_rollout_posture_inspect(
+                "paths-sentinel",
+                "15",
+            )
+
+        self.assertEqual(payload["surface"], "rollout-posture-inspect")
+        self.assertEqual(payload["stage"], "15")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "15"),
+                    {
+                        "dependencies": runtime_mod._rollout_dependencies(),
+                    },
+                )
             ],
         )
 

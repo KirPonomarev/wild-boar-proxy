@@ -88,6 +88,12 @@ OWNER_SURFACES = {
         READ,
         frozenset({"run_rollout_rotation_inspect_impl"}),
     ),
+    "run_rollout_posture_inspect": Surface(
+        ROLLOUT,
+        "run_rollout_posture_inspect",
+        READ,
+        frozenset({"run_rollout_posture_inspect_impl"}),
+    ),
     "credential_status": Surface(
         CREDENTIALS,
         "credential_status",
@@ -287,6 +293,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (RUNTIME, "mode_get"),
                 (ACCOUNTS_LIFECYCLE, "list_accounts"),
                 (ROLLOUT, "run_rollout_rotation_inspect"),
+                (ROLLOUT, "run_rollout_posture_inspect"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),

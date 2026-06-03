@@ -12927,6 +12927,25 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["machine_error_code"], "INSUFFICIENT_ELIGIBLE_POOL")
         posture = payload["rollout_posture_result"]
+        self.assertEqual(
+            set(posture),
+            {
+                "attempted",
+                "blocker_code",
+                "candidate_summary",
+                "classification",
+                "final_outcome",
+                "normalization_decision_packet",
+                "policy_stage_summary",
+                "pool_count_summary",
+                "requested_stage",
+                "rotation_summary",
+                "runtime_truth_summary",
+                "schema_version",
+                "source_stage",
+                "status",
+            },
+        )
         self.assertEqual(posture["requested_stage"], "20")
         self.assertEqual(posture["source_stage"], "15")
         self.assertEqual(posture["classification"], "INSUFFICIENT_ELIGIBLE_POOL")

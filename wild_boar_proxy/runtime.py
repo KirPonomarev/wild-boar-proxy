@@ -10567,6 +10567,7 @@ def _rollout_dependencies() -> Any:
 
     return RolloutDependencies(
         run_rollout_rotation_inspect_impl=_run_rollout_rotation_inspect_impl,
+        run_rollout_posture_inspect_impl=_run_rollout_posture_inspect_impl,
     )
 
 
@@ -11798,6 +11799,19 @@ def summarize_rollout_posture_runtime_truth(
 
 
 def run_rollout_posture_inspect(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+    from .rollout import run_rollout_posture_inspect as _run_rollout_posture_inspect
+
+    return _run_rollout_posture_inspect(
+        paths,
+        stage,
+        dependencies=_rollout_dependencies(),
+    )
+
+
+def _run_rollout_posture_inspect_impl(
+    paths: RuntimePaths,
+    stage: str,
+) -> dict[str, Any]:
     requested_stage = str(stage).strip()
     stage_advance_config = {
         "15": {"source_stage": "10"},
