@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
 ACCOUNTS_LIFECYCLE = ROOT / "wild_boar_proxy" / "accounts_lifecycle.py"
+ROLLOUT = ROOT / "wild_boar_proxy" / "rollout.py"
 RUNTIME_HEALTH = ROOT / "wild_boar_proxy" / "runtime_health.py"
 RUNTIME_REPAIR = ROOT / "wild_boar_proxy" / "runtime_repair.py"
 EXTERNAL_MODELS = ROOT / "wild_boar_proxy" / "external_models" / "__init__.py"
@@ -80,6 +81,12 @@ OWNER_SURFACES = {
         "list_accounts",
         READ,
         frozenset({"list_accounts_impl"}),
+    ),
+    "run_rollout_rotation_inspect": Surface(
+        ROLLOUT,
+        "run_rollout_rotation_inspect",
+        READ,
+        frozenset({"run_rollout_rotation_inspect_impl"}),
     ),
     "credential_status": Surface(
         CREDENTIALS,
@@ -279,6 +286,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
             {
                 (RUNTIME, "mode_get"),
                 (ACCOUNTS_LIFECYCLE, "list_accounts"),
+                (ROLLOUT, "run_rollout_rotation_inspect"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),

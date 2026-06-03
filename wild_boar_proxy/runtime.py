@@ -10562,7 +10562,29 @@ def _list_accounts_impl(paths: RuntimePaths) -> dict[str, Any]:
     )
 
 
+def _rollout_dependencies() -> Any:
+    from .rollout import RolloutDependencies
+
+    return RolloutDependencies(
+        run_rollout_rotation_inspect_impl=_run_rollout_rotation_inspect_impl,
+    )
+
+
 def run_rollout_rotation_inspect(
+    paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
+    from .rollout import run_rollout_rotation_inspect as _run_rollout_rotation_inspect
+
+    return _run_rollout_rotation_inspect(
+        paths,
+        lock_acquired=lock_acquired,
+        dependencies=_rollout_dependencies(),
+    )
+
+
+def _run_rollout_rotation_inspect_impl(
     paths: RuntimePaths,
     *,
     lock_acquired: bool = False,
