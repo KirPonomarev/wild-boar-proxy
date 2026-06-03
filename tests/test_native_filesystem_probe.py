@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
 import wild_boar_proxy.native_filesystem_probe as native_fs_probe
+from wild_boar_proxy.process_runner import BoundedProcessResult
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -246,28 +247,123 @@ from tools.persistent_custom_profile_backup_repair_r1_probe import (
 )
 
 
+def bounded_process_result(
+    *,
+    returncode: int | None = 0,
+    stdout: str = "",
+    stderr: str = "",
+    machine_error_code: str | None = None,
+    timed_out: bool = False,
+) -> BoundedProcessResult:
+    resolved_code = machine_error_code or (
+        "OK" if returncode == 0 else "PROCESS_FAILED"
+    )
+    return BoundedProcessResult(
+        status="ok" if resolved_code == "OK" else "error",
+        machine_error_code=resolved_code,
+        exit_code=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=timed_out,
+        duration_seconds=0.01,
+    )
+
+
 class NativeFilesystemProbeTests(unittest.TestCase):
-    def test_codex_process_inventory_uses_ps_command_lines_with_spaced_user_data_dir(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=["ps"],
-            returncode=0,
-            stdout=(
-                " 101 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
-                " 102 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://\n"
-                " 104 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
-                " 103 /bin/zsh -c unrelated\n"
-            ),
-            stderr="",
-        )
+    def test_codex_process_inventory_uses_bounded_ps_with_deterministic_env(
+        self,
+    ) -> None:
+        observed_calls: list[dict[str, object]] = []
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            cwd: Path,
+            timeout_seconds: float,
+            output_cap_bytes: int,
+        ) -> BoundedProcessResult:
+            observed_calls.append(
+                {
+                    "command": command,
+                    "env": dict(env),
+                    "cwd": cwd,
+                    "timeout_seconds": timeout_seconds,
+                    "output_cap_bytes": output_cap_bytes,
+                }
+            )
+            return bounded_process_result(
+                stdout=(
+                    " 101 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
+                    " 102 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://\n"
+                    " 104 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data\n"
+                    " 103 /bin/zsh -c unrelated\n"
+                ),
+            )
+
         with mock.patch(
-            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
-            return_value=completed,
-        ) as run:
+            "wild_boar_proxy.native_filesystem_probe.run_bounded_process",
+            side_effect=fake_run_bounded_process,
+        ):
             lines = native_fs_probe._collect_codex_process_lines()
 
-        self.assertEqual(run.call_args.args[0], ["ps", "-axo", "pid=,command="])
+        self.assertEqual(len(observed_calls), 1)
+        call = observed_calls[0]
+        self.assertEqual(call["command"], ["ps", "-axo", "pid=,command="])
+        self.assertEqual(call["cwd"], native_fs_probe.NATIVE_PROCESS_INVENTORY_CWD)
+        self.assertEqual(
+            call["timeout_seconds"],
+            native_fs_probe.NATIVE_PROCESS_INVENTORY_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            call["output_cap_bytes"],
+            native_fs_probe.NATIVE_PROCESS_INVENTORY_OUTPUT_CAP_BYTES,
+        )
+        self.assertEqual(
+            call["env"],
+            {
+                "PATH": native_fs_probe.NATIVE_PROCESS_INVENTORY_RUNTIME_PATH,
+                "NO_PROXY": "127.0.0.1,localhost,::1",
+                "no_proxy": "127.0.0.1,localhost,::1",
+            },
+        )
         self.assertEqual(len(lines), 3)
         self.assertIn("wbp-custom-main/electron-user-data", lines[0])
+
+    def test_codex_process_inventory_returns_empty_on_bounded_runner_failures(
+        self,
+    ) -> None:
+        cases = (
+            bounded_process_result(
+                returncode=1,
+                stdout=" 101 /Applications/Codex.app/Contents/MacOS/Codex\n",
+            ),
+            bounded_process_result(
+                returncode=None,
+                machine_error_code="PROCESS_TIMEOUT",
+                timed_out=True,
+            ),
+            bounded_process_result(
+                returncode=None,
+                machine_error_code="PROCESS_NOT_FOUND",
+                stderr="missing ps",
+            ),
+        )
+        for result in cases:
+            with self.subTest(machine_error_code=result.machine_error_code):
+                with mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.run_bounded_process",
+                    return_value=result,
+                ):
+                    self.assertEqual(native_fs_probe._collect_codex_process_lines(), [])
+
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.run_bounded_process",
+            side_effect=RuntimeError("runner failed"),
+        ):
+            self.assertEqual(native_fs_probe._collect_codex_process_lines(), [])
 
     def test_remove_tree_with_retry_unlinks_runtime_tmp_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from .process_runner import PROCESS_OK, run_bounded_process
 from .runtime import (
     DETERMINISTIC_RUNTIME_PATH,
     RuntimePaths,
@@ -52,6 +53,10 @@ DEFAULT_CODEX_PROCESS_PATTERNS = (
     "Codex Helper",
     "Contents/Resources/codex app-server",
 )
+NATIVE_PROCESS_INVENTORY_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+NATIVE_PROCESS_INVENTORY_TIMEOUT_SECONDS = 5.0
+NATIVE_PROCESS_INVENTORY_OUTPUT_CAP_BYTES = 128 * 1024
+NATIVE_PROCESS_INVENTORY_CWD = Path("/")
 
 
 def utc_now() -> str:
@@ -1745,12 +1750,26 @@ def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> di
 
 
 def _collect_codex_process_lines() -> list[str]:
-    process = subprocess.run(
-        ["ps", "-axo", "pid=,command="],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        process = run_bounded_process(
+            ["ps", "-axo", "pid=,command="],
+            env={
+                "PATH": NATIVE_PROCESS_INVENTORY_RUNTIME_PATH,
+                "NO_PROXY": "127.0.0.1,localhost,::1",
+                "no_proxy": "127.0.0.1,localhost,::1",
+            },
+            cwd=NATIVE_PROCESS_INVENTORY_CWD,
+            timeout_seconds=NATIVE_PROCESS_INVENTORY_TIMEOUT_SECONDS,
+            output_cap_bytes=NATIVE_PROCESS_INVENTORY_OUTPUT_CAP_BYTES,
+        )
+    except Exception:
+        return []
+    if (
+        process.machine_error_code != PROCESS_OK
+        or process.timed_out
+        or process.exit_code != 0
+    ):
+        return []
     lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
     return [
         line

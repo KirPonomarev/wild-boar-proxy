@@ -14,6 +14,7 @@ CLI = ROOT / "wild_boar_proxy" / "cli.py"
 CLI_RUNNER = ROOT / "wild_boar_proxy" / "cli_runner.py"
 KEYCHAIN_PREFLIGHT = ROOT / "wild_boar_proxy" / "keychain_preflight.py"
 NATIVE_WINDOW_PROBE = ROOT / "wild_boar_proxy" / "native_window_probe.py"
+NATIVE_FILESYSTEM_PROBE = ROOT / "wild_boar_proxy" / "native_filesystem_probe.py"
 CODEX_CUSTOM_SESSIONS = ROOT / "wild_boar_proxy" / "codex_custom_sessions.py"
 OPERATOR_SURFACE = ROOT / "wild_boar_proxy" / "operator_surface.py"
 REVIEW_BRIDGE_PACKET_IMPORT = ROOT / "wild_boar_proxy" / "review_bridge_packet_import.py"
@@ -521,6 +522,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self,
     ) -> None:
         calls = _call_names(_function(REVIEW_BRIDGE_PACKET_IMPORT, "_git_head_sha"))
+        self.assertIn("run_bounded_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
+    def test_native_filesystem_process_inventory_uses_bounded_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(NATIVE_FILESYSTEM_PROBE, "_collect_codex_process_lines"))
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
