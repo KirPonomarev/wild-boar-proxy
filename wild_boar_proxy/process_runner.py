@@ -73,6 +73,43 @@ class DetachedProcessStartResult:
         }
 
 
+@dataclass(frozen=True)
+class DetachedProcessHandle:
+    _process: Any
+
+    @property
+    def pid(self) -> int:
+        return int(getattr(self._process, "pid", 0) or 0)
+
+    def poll(self) -> int | None:
+        return self._process.poll()
+
+
+@dataclass(frozen=True)
+class ObservableDetachedProcessStartResult:
+    status: str
+    machine_error_code: str
+    handle: DetachedProcessHandle | None
+    error: str
+    duration_seconds: float
+
+    @property
+    def pid(self) -> int | None:
+        if self.handle is None:
+            return None
+        return self.handle.pid
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "machine_error_code": self.machine_error_code,
+            "pid": self.pid,
+            "launch_observed": self.handle is not None,
+            "error": self.error,
+            "duration_seconds": self.duration_seconds,
+        }
+
+
 def _read_capped(handle, cap_bytes: int) -> tuple[str, bool]:
     handle.flush()
     handle.seek(0)
@@ -190,6 +227,70 @@ def start_detached_process(
         error="",
         duration_seconds=round(time.monotonic() - started, 3),
         process_observed_running=process_observed_running,
+    )
+
+
+def start_observable_detached_process(
+    command: Sequence[str | Path],
+    *,
+    env: Mapping[str, str],
+    cwd: Path | str | None = None,
+    stdout: Any = subprocess.DEVNULL,
+    stderr: Any = subprocess.DEVNULL,
+    text: bool = False,
+    shell: bool = False,
+) -> ObservableDetachedProcessStartResult:
+    if shell:
+        raise ValueError("shell=True is forbidden for detached process execution")
+    argv = [str(item) for item in command]
+    if not argv:
+        raise ValueError("command must not be empty")
+
+    started = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=stderr,
+            env=dict(env),
+            cwd=str(cwd) if cwd is not None else None,
+            start_new_session=True,
+            text=text,
+            shell=False,
+        )
+    except FileNotFoundError as exc:
+        return ObservableDetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_NOT_FOUND,
+            handle=None,
+            error=str(exc),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+    except OSError as exc:
+        return ObservableDetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_FAILED,
+            handle=None,
+            error=str(exc),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+
+    handle = DetachedProcessHandle(process)
+    if handle.pid <= 0:
+        return ObservableDetachedProcessStartResult(
+            status="error",
+            machine_error_code=PROCESS_FAILED,
+            handle=None,
+            error="detached process started without a valid pid",
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+    return ObservableDetachedProcessStartResult(
+        status="ok",
+        machine_error_code=PROCESS_OK,
+        handle=handle,
+        error="",
+        duration_seconds=round(time.monotonic() - started, 3),
     )
 
 

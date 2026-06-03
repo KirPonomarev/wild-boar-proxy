@@ -14,7 +14,7 @@ from pathlib import Path
 
 import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
 import wild_boar_proxy.native_filesystem_probe as native_fs_probe
-from wild_boar_proxy.process_runner import BoundedProcessResult
+from wild_boar_proxy.process_runner import BoundedProcessResult, PROCESS_FAILED, PROCESS_OK
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -4569,16 +4569,21 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             runtime_paths.stable_config = root / "stable.json"
             captured: dict[str, object] = {}
 
-            class _FakeProcess:
+            class _FakeHandle:
                 pid = 43210
 
                 def poll(self) -> int | None:
                     return None
 
-            def fake_popen(*args: object, **kwargs: object) -> _FakeProcess:
-                captured["args"] = args
+            def fake_start(command: object, **kwargs: object) -> mock.Mock:
+                captured["command"] = command
                 captured["kwargs"] = kwargs
-                return _FakeProcess()
+                return mock.Mock(
+                    status="ok",
+                    machine_error_code=PROCESS_OK,
+                    error="",
+                    handle=_FakeHandle(),
+                )
 
             with (
                 mock.patch.dict(
@@ -4594,8 +4599,8 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                     clear=True,
                 ),
                 mock.patch(
-                    "wild_boar_proxy.native_filesystem_probe.subprocess.Popen",
-                    side_effect=fake_popen,
+                    "wild_boar_proxy.native_filesystem_probe.start_observable_detached_process",
+                    side_effect=fake_start,
                 ),
                 mock.patch(
                     "wild_boar_proxy.native_filesystem_probe.collect_codex_process_inventory",
@@ -4610,9 +4615,13 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 )
 
         self.assertTrue(packet["custom_process_observed"])
-        self.assertEqual(captured["args"][0][0], str(layout.launcher_path))
-        self.assertEqual(captured["args"][0][1], "desktop")
-        self.assertEqual(captured["args"][0][2], str(root.resolve(strict=False)))
+        self.assertEqual(packet["launcher_pid"], 43210)
+        self.assertIsNone(packet["launcher_exit_code_early"])
+        self.assertEqual(packet["launcher_start_status"], "ok")
+        self.assertEqual(packet["launcher_machine_error_code"], PROCESS_OK)
+        self.assertEqual(captured["command"][0], str(layout.launcher_path))
+        self.assertEqual(captured["command"][1], "desktop")
+        self.assertEqual(captured["command"][2], str(root.resolve(strict=False)))
         env = captured["kwargs"]["env"]
         self.assertNotIn("CODEX_THREAD_ID", env)
         self.assertNotIn("CODEX_CI", env)
@@ -4624,6 +4633,55 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(env["WBP_STABLE_CONFIG"], str(runtime_paths.stable_config))
         self.assertEqual(env["WBP_RUNTIME_TMPDIR"], str(layout.tmp_root / "runtime-bind"))
         self.assertEqual(env["WBP_PYTHON_BIN"], sys.executable)
+
+    def test_launch_native_candidate_reports_structured_start_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = mock.Mock()
+            layout.tmp_root = root / "tmp"
+            layout.tmp_root.mkdir()
+            layout.profile_dir = root / "profile"
+            layout.profile_dir.mkdir()
+            layout.custom_user_data_dir = root / "electron-user-data"
+            layout.launcher_stdout = root / "launcher.stdout.log"
+            layout.launcher_stderr = root / "launcher.stderr.log"
+            layout.launcher_path = root / "launcher.sh"
+            runtime_paths = mock.Mock()
+            runtime_paths.managed_dir = root / "managed"
+            runtime_paths.stable_config = root / "stable.json"
+            inventory = {"custom_process_count": 0}
+
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.start_observable_detached_process",
+                    return_value=mock.Mock(
+                        status="error",
+                        machine_error_code=PROCESS_FAILED,
+                        error="no launch",
+                        handle=None,
+                    ),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.collect_codex_process_inventory",
+                    return_value=inventory,
+                ),
+            ):
+                packet = launch_native_candidate(
+                    repo_root=root,
+                    layout=layout,
+                    real_runtime_paths=runtime_paths,
+                    startup_wait_seconds=0.1,
+                )
+
+        self.assertFalse(packet["custom_process_observed"])
+        self.assertFalse(packet["custom_process_still_observed_after_wait"])
+        self.assertIsNone(packet["launcher_pid"])
+        self.assertIsNone(packet["launcher_exit_code_early"])
+        self.assertEqual(packet["launcher_start_status"], "error")
+        self.assertEqual(packet["launcher_machine_error_code"], PROCESS_FAILED)
+        self.assertEqual(packet["launcher_start_error"], "no launch")
+        self.assertEqual(packet["startup_inventory"], inventory)
+        self.assertEqual(packet["stability_inventory"], inventory)
 
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(

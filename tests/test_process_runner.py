@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -17,6 +18,7 @@ from wild_boar_proxy.process_runner import (
     PROCESS_TIMEOUT,
     BoundedProcessRunner,
     start_detached_process,
+    start_observable_detached_process,
 )
 
 
@@ -276,6 +278,57 @@ class BoundedProcessRunnerTests(unittest.TestCase):
                 env=os.environ,
                 observe_after_seconds=-0.1,
             )
+
+    def test_observable_detached_start_exposes_pid_and_poll_handle(self) -> None:
+        class _FakeProcess:
+            pid = 24680
+
+            def poll(self) -> int:
+                return 9
+
+        with mock.patch(
+            "wild_boar_proxy.process_runner.subprocess.Popen",
+            return_value=_FakeProcess(),
+        ) as popen:
+            result = start_observable_detached_process(
+                ["echo", "ok"],
+                env={"PATH": "/usr/bin:/bin"},
+                cwd="/tmp",
+                stdout=None,
+                stderr=None,
+                text=True,
+            )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.machine_error_code, PROCESS_OK)
+        self.assertEqual(result.pid, 24680)
+        self.assertIsNotNone(result.handle)
+        assert result.handle is not None
+        self.assertEqual(result.handle.poll(), 9)
+        kwargs = popen.call_args.kwargs
+        self.assertFalse(kwargs["shell"])
+        self.assertTrue(kwargs["start_new_session"])
+        self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+        self.assertEqual(kwargs["cwd"], "/tmp")
+        self.assertEqual(kwargs["env"], {"PATH": "/usr/bin:/bin"})
+        self.assertTrue(kwargs["text"])
+
+    def test_observable_detached_start_oserror_is_structured_failure(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.process_runner.subprocess.Popen",
+            side_effect=PermissionError("no observable launch"),
+        ):
+            result = start_observable_detached_process(["echo", "ok"], env=os.environ)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.machine_error_code, PROCESS_FAILED)
+        self.assertIsNone(result.pid)
+        self.assertIsNone(result.handle)
+        self.assertIn("no observable launch", result.error)
+
+    def test_observable_detached_start_shell_true_is_forbidden(self) -> None:
+        with self.assertRaises(ValueError):
+            start_observable_detached_process(["echo", "nope"], env=os.environ, shell=True)
 
 
 if __name__ == "__main__":

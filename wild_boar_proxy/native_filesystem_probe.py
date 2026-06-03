@@ -15,7 +15,6 @@ import os
 import shlex
 import shutil
 import signal
-import subprocess
 import sys
 import tempfile
 import time
@@ -24,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .process_runner import PROCESS_OK, run_bounded_process
+from .process_runner import PROCESS_OK, run_bounded_process, start_observable_detached_process
 from .runtime import (
     DETERMINISTIC_RUNTIME_PATH,
     RuntimePaths,
@@ -4355,15 +4354,38 @@ def launch_native_candidate(
     )
     stdout_handle = layout.launcher_stdout.open("w", encoding="utf-8")
     stderr_handle = layout.launcher_stderr.open("w", encoding="utf-8")
-    process = subprocess.Popen(
+    launch_start = start_observable_detached_process(
         [str(layout.launcher_path), "desktop", str(repo_root.resolve(strict=False))],
         cwd=str(repo_root),
         env=env,
         stdout=stdout_handle,
         stderr=stderr_handle,
-        start_new_session=True,
         text=True,
     )
+    if launch_start.handle is None:
+        stdout_handle.close()
+        stderr_handle.close()
+        failed_inventory = collect_codex_process_inventory(
+            custom_user_data_dir=str(layout.custom_user_data_dir)
+        )
+        return {
+            "captured_at_utc": utc_now(),
+            "launcher_pid": None,
+            "launcher_exit_code_early": None,
+            "launcher_start_status": launch_start.status,
+            "launcher_machine_error_code": launch_start.machine_error_code,
+            "launcher_start_error": launch_start.error,
+            "custom_process_observed": False,
+            "custom_process_still_observed_after_wait": False,
+            "post_observation_wait_seconds": post_observation_wait_seconds,
+            "startup_inventory": failed_inventory,
+            "stability_inventory": failed_inventory,
+            "launcher_stdout_path": str(layout.launcher_stdout),
+            "launcher_stderr_path": str(layout.launcher_stderr),
+            "launcher_stdout_size": layout.launcher_stdout.stat().st_size if layout.launcher_stdout.exists() else 0,
+            "launcher_stderr_size": layout.launcher_stderr.stat().st_size if layout.launcher_stderr.exists() else 0,
+        }
+    launcher_handle = launch_start.handle
     custom_observed = False
     deadline = time.time() + startup_wait_seconds
     last_inventory = collect_codex_process_inventory(
@@ -4377,7 +4399,7 @@ def launch_native_candidate(
         if inventory["custom_process_count"] > 0:
             custom_observed = True
             break
-        if process.poll() is not None:
+        if launcher_handle.poll() is not None:
             break
         time.sleep(0.5)
     stability_inventory = last_inventory
@@ -4391,8 +4413,11 @@ def launch_native_candidate(
     still_observed = stability_inventory["custom_process_count"] > 0
     return {
         "captured_at_utc": utc_now(),
-        "launcher_pid": process.pid,
-        "launcher_exit_code_early": process.poll(),
+        "launcher_pid": launcher_handle.pid,
+        "launcher_exit_code_early": launcher_handle.poll(),
+        "launcher_start_status": launch_start.status,
+        "launcher_machine_error_code": launch_start.machine_error_code,
+        "launcher_start_error": launch_start.error,
         "custom_process_observed": custom_observed,
         "custom_process_still_observed_after_wait": still_observed,
         "post_observation_wait_seconds": post_observation_wait_seconds,

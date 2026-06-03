@@ -533,6 +533,13 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("run_bounded_process", calls)
         self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
 
+    def test_native_filesystem_launch_candidate_uses_observable_detached_runner_without_raw_subprocess(
+        self,
+    ) -> None:
+        calls = _call_names(_function(NATIVE_FILESYSTEM_PROBE, "launch_native_candidate"))
+        self.assertIn("start_observable_detached_process", calls)
+        self.assertEqual(set(), calls & SUBPROCESS_PRIMITIVES)
+
     def test_ui_shell_json_command_runner_uses_bounded_runner_without_raw_subprocess(
         self,
     ) -> None:
