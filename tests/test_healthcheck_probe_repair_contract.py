@@ -221,6 +221,63 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def prepare_managed_last_known_good_refresh_case(self) -> None:
+        state = self.read_state()
+        state["effective_mode"] = "managed"
+        state["managed_port"] = 9999
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state.pop(runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD, None)
+        state.pop(runtime_mod.LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD, None)
+        self.write_state(state)
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:9999/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            "host: 127.0.0.1\nport: 9999\n",
+            encoding="utf-8",
+        )
+
+    def run_managed_last_known_good_refresh_repair(self) -> dict[str, Any]:
+        def fake_http_get_json(url: str, _api_key: str) -> dict[str, Any]:
+            if url.endswith("/models"):
+                return {"data": [{"id": "gpt-5.4"}]}
+            if url.endswith(runtime_mod.RUNTIME_IDENTITY_ENDPOINT_PATH):
+                state = self.read_state()
+                return {
+                    "schema_version": runtime_mod.RUNTIME_IDENTITY_SCHEMA_VERSION,
+                    "runtime_marker": "test-managed-runtime",
+                    "managed_config_identity": runtime_mod.get_managed_config_identity(
+                        self.paths
+                    ),
+                    "selected_backends_digest": runtime_mod.get_selected_backends_digest(
+                        state
+                    ),
+                    "runtime_version": "2",
+                    "issued_for_endpoint": "http://127.0.0.1:9999/v1",
+                }
+            raise AssertionError(f"unexpected GET {url}")
+
+        with (
+            mock.patch.object(runtime_mod, "socket_is_listening", return_value=True),
+            mock.patch.object(runtime_mod, "http_get_json", side_effect=fake_http_get_json),
+            mock.patch.object(
+                runtime_mod,
+                "http_post_json",
+                return_value={"output_text": "OK"},
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-02T00:00:00+00:00",
+            ),
+        ):
+            return runtime_mod.run_healthcheck_repair(self.paths)
+
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "wild_boar_proxy", *args],
@@ -389,6 +446,107 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         else:
             self.assertIsNone(payload["mutation_id"])
             self.assertEqual(ledger["status"], "not_mutated")
+
+    def test_healthcheck_repair_last_known_good_refresh_is_rollback_backed(
+        self,
+    ) -> None:
+        self.pid_file.unlink()
+        self.prepare_managed_last_known_good_refresh_case()
+
+        payload = self.run_managed_last_known_good_refresh_repair()
+
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [str(self.paths.state_file)])
+        self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
+        ledger = payload["mutation_ledger"]
+        self.assertEqual(
+            ledger["scope"],
+            runtime_mod.HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE,
+        )
+        self.assertTrue(ledger["rollback_available"])
+        self.assertRegex(ledger["rollback_id"], r"^wbp-rb-[0-9a-f]{20}$")
+        self.assertEqual(ledger["rollback_phase"], "last_transaction")
+        self.assertRegex(ledger["transaction_id"], r"^healthcheck-lkg-[0-9a-f]{20}$")
+        artifact_paths = {
+            record["path"] for record in ledger["transaction_store_artifacts"]
+        }
+        self.assertTrue(
+            any(path.endswith(".transaction.json") for path in artifact_paths)
+        )
+        self.assertTrue(any(path.endswith(".files") for path in artifact_paths))
+        self.assertTrue(artifact_paths.isdisjoint(set(payload["changed_files"])))
+
+        metadata_path = Path(
+            next(path for path in artifact_paths if path.endswith(".transaction.json"))
+        )
+        metadata = runtime_mod.state_transaction.read_transaction_metadata(metadata_path)
+        self.assertEqual(metadata.mutation_id, payload["mutation_id"])
+        self.assertEqual(metadata.rollback_id, ledger["rollback_id"])
+        self.assertEqual(metadata.scope, ledger["scope"])
+        self.assertTrue(metadata.rollback_eligible)
+        state = self.read_state()
+        self.assertEqual(
+            state[runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD],
+            "http://127.0.0.1:10808",
+        )
+
+        rollback = runtime_mod.state_transaction.rollback_latest_state_transaction(
+            self.managed_dir
+        )
+
+        self.assertTrue(rollback.rollback_available)
+        self.assertEqual(
+            rollback.machine_error_code,
+            runtime_mod.state_transaction.STATE_TRANSACTION_ROLLBACK_COMPLETED,
+        )
+        self.assertEqual(rollback.rollback_id, ledger["rollback_id"])
+        self.assertEqual(
+            rollback.changed_files,
+            (str(self.paths.state_file.resolve(strict=False)),),
+        )
+        rolled_back_state = self.read_state()
+        self.assertNotIn(
+            runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            rolled_back_state,
+        )
+
+    def test_healthcheck_repair_mixed_writes_do_not_claim_rollback_available(
+        self,
+    ) -> None:
+        self.prepare_managed_last_known_good_refresh_case()
+
+        payload = self.run_managed_last_known_good_refresh_repair()
+
+        self.assertIn(str(self.paths.state_file), payload["changed_files"])
+        self.assertIn(str(self.pid_file), payload["changed_files"])
+        ledger = payload["mutation_ledger"]
+        self.assertFalse(ledger["rollback_available"])
+        self.assertIsNone(ledger["rollback_id"])
+        self.assertEqual(ledger["rollback_phase"], "ledger_only")
+        self.assertEqual(ledger["scope"], "healthcheck_repair")
+        self.assertNotIn("transaction_id", ledger)
+        self.assertIn("transaction_store_artifacts", ledger)
+        self.assertEqual(
+            {record["path"] for record in ledger["changed_files"]},
+            set(payload["changed_files"]),
+        )
+
+    def test_healthcheck_repair_mutation_candidates_include_transaction_artifacts(
+        self,
+    ) -> None:
+        store = self.managed_dir / runtime_mod.state_transaction.TRANSACTION_STORE_DIRNAME
+        metadata_path = store / "txn-candidate.transaction.json"
+        work_root = store / "txn-candidate.files"
+        metadata_path.parent.mkdir(parents=True)
+        metadata_path.write_text("{}\n", encoding="utf-8")
+        work_root.mkdir()
+
+        candidates = runtime_mod.healthcheck_repair_mutation_surface_candidates(
+            self.paths
+        )
+
+        self.assertIn(metadata_path, candidates)
+        self.assertIn(work_root, candidates)
 
     def test_runtime_startup_lock_recovery_preserves_same_source_lock_path(self) -> None:
         captured: dict[str, Any] = {}

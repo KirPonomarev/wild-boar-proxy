@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 ROLLBACK_PHASE_LEDGER_ONLY = "ledger_only"
+ROLLBACK_PHASE_LAST_TRANSACTION = "last_transaction"
 KIND_FILE = "file"
 KIND_DIR = "dir"
 KIND_MISSING = "missing"
@@ -114,6 +115,14 @@ def build_mutation_ledger_fields(
     changed_files: Iterable[Pathish],
     before: Mapping[str, PathSnapshot],
     after: Mapping[str, PathSnapshot],
+    mutation_id: str | None = None,
+    rollback_available: bool = False,
+    rollback_id: str | None = None,
+    rollback_phase: str | None = None,
+    transaction_id: str | None = None,
+    transaction_store_artifacts: Iterable[Pathish] = (),
+    transaction_before: Mapping[str, PathSnapshot] | None = None,
+    transaction_after: Mapping[str, PathSnapshot] | None = None,
 ) -> dict[str, Any]:
     normalized_paths = _normalize_changed_paths(changed_files)
     records = [
@@ -124,23 +133,49 @@ def build_mutation_ledger_fields(
         )
         for path in normalized_paths
     ]
-    mutation_id = (
-        _build_mutation_id(effect=effect, scope=scope, records=records)
-        if records
-        else None
+    resolved_mutation_id = None
+    if records:
+        resolved_mutation_id = mutation_id or _build_mutation_id(
+            effect=effect,
+            scope=scope,
+            records=records,
+        )
+    transaction_before_snapshots = transaction_before or {}
+    transaction_after_snapshots = transaction_after or {}
+    transaction_artifact_records = [
+        build_mutation_record(
+            path,
+            before=transaction_before_snapshots.get(path),
+            after=transaction_after_snapshots.get(path),
+        )
+        for path in _normalize_changed_paths(transaction_store_artifacts)
+    ]
+    resolved_rollback_available = bool(records) and rollback_available
+    resolved_rollback_phase = (
+        rollback_phase
+        or (
+            ROLLBACK_PHASE_LAST_TRANSACTION
+            if resolved_rollback_available
+            else ROLLBACK_PHASE_LEDGER_ONLY
+        )
     )
+    ledger = {
+        "schema_version": 1,
+        "status": "mutated" if records else "not_mutated",
+        "effect": effect,
+        "scope": scope,
+        "changed_files": records,
+        "rollback_available": resolved_rollback_available,
+        "rollback_id": rollback_id if resolved_rollback_available else None,
+        "rollback_phase": resolved_rollback_phase,
+    }
+    if transaction_id is not None:
+        ledger["transaction_id"] = transaction_id
+    if transaction_artifact_records:
+        ledger["transaction_store_artifacts"] = transaction_artifact_records
     return {
-        "mutation_id": mutation_id,
-        "mutation_ledger": {
-            "schema_version": 1,
-            "status": "mutated" if records else "not_mutated",
-            "effect": effect,
-            "scope": scope,
-            "changed_files": records,
-            "rollback_available": False,
-            "rollback_id": None,
-            "rollback_phase": ROLLBACK_PHASE_LEDGER_ONLY,
-        },
+        "mutation_id": resolved_mutation_id,
+        "mutation_ledger": ledger,
     }
 
 
@@ -192,6 +227,21 @@ def _build_mutation_id(
 ) -> str:
     payload = json.dumps(
         {"effect": effect, "scope": scope, "records": records},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"wbp-mut-{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:20]}"
+
+
+def build_planned_mutation_id(
+    *, effect: str, scope: str, planned_records: Iterable[Mapping[str, Any]]
+) -> str:
+    payload = json.dumps(
+        {
+            "effect": effect,
+            "scope": scope,
+            "planned_records": list(planned_records),
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -254,9 +304,11 @@ __all__ = [
     "OPERATION_UNKNOWN",
     "PathSnapshot",
     "ROLLBACK_PHASE_LEDGER_ONLY",
+    "ROLLBACK_PHASE_LAST_TRANSACTION",
     "build_mutation_ledger",
     "build_mutation_ledger_fields",
     "build_mutation_record",
+    "build_planned_mutation_id",
     "classify_path_kind",
     "classify_path_kind_from_mode",
     "derive_operation",

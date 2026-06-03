@@ -398,6 +398,17 @@ class CurrentProxyOwnerPathActivationAttempt:
     process_result: dict[str, Any] | None
 
 
+@dataclass(frozen=True)
+class HealthcheckRepairRollbackEvidence:
+    scope: str
+    mutation_id: str
+    transaction_id: str
+    rollback_id: str
+    metadata_path: str
+    covered_changed_files: tuple[str, ...]
+    transaction_store_artifacts: tuple[str, ...]
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -3206,6 +3217,10 @@ STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME = "observed_source_selected"
 STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME = "observed_source_fallback"
 LAST_KNOWN_GOOD_PROXY_URL_FIELD = "last_known_good_proxy_url"
 LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD = "last_known_good_proxy_observed_at"
+HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE = (
+    "healthcheck_last_known_good_proxy_refresh"
+)
+HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_TRANSACTION_PREFIX = "healthcheck-lkg"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS = [
     "schema_version",
     "activation_method",
@@ -4043,6 +4058,125 @@ def build_last_known_good_proxy_surface(
     }
 
 
+def _path_is_under_root(path: Path, root: Path) -> bool:
+    resolved_path = path.expanduser().resolve(strict=False)
+    resolved_root = root.expanduser().resolve(strict=False)
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError:
+        return False
+    return True
+
+
+def _resolved_path_key(path: str | os.PathLike[str]) -> str:
+    return str(Path(path).expanduser().resolve(strict=False))
+
+
+def _json_transaction_payload(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def _healthcheck_last_known_good_planned_record(
+    target: Path,
+    *,
+    before: mutation_ledger.PathSnapshot,
+    payload: bytes,
+) -> dict[str, Any]:
+    after_sha256 = hashlib.sha256(payload).hexdigest()
+    return {
+        "path": str(target.expanduser().resolve(strict=False)),
+        "operation": (
+            mutation_ledger.OPERATION_CREATE
+            if before.kind == mutation_ledger.KIND_MISSING
+            else mutation_ledger.OPERATION_REPLACE
+        ),
+        "before_kind": before.kind,
+        "after_kind": mutation_ledger.KIND_FILE,
+        "before_sha256": before.sha256,
+        "after_sha256": after_sha256,
+    }
+
+
+def _healthcheck_last_known_good_transaction_id(mutation_id: str) -> str:
+    digest = mutation_id.removeprefix("wbp-mut-")
+    return f"{HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_TRANSACTION_PREFIX}-{digest}"
+
+
+def _transaction_store_artifact_paths(
+    metadata: state_transaction.TransactionMetadata,
+    metadata_path: Path,
+) -> tuple[str, ...]:
+    artifact_paths: list[str] = [
+        str(metadata_path.resolve(strict=False)),
+        str(
+            (
+                metadata_path.parent
+                / f"{metadata.transaction_id}{state_transaction.TRANSACTION_WORK_DIR_SUFFIX}"
+            ).resolve(strict=False)
+        ),
+    ]
+    for record in metadata.files:
+        backup_path = Path(record.backup_path)
+        if backup_path.exists():
+            artifact_paths.append(str(backup_path.resolve(strict=False)))
+    return tuple(dict.fromkeys(artifact_paths))
+
+
+def _commit_last_known_good_proxy_refresh_transaction(
+    paths: RuntimePaths,
+    live_state: dict[str, Any],
+) -> HealthcheckRepairRollbackEvidence | None:
+    transaction_root = paths.managed_dir.expanduser().resolve(strict=False)
+    target = paths.state_file.expanduser().resolve(strict=False)
+    if not _path_is_under_root(target, transaction_root):
+        return None
+
+    payload = _json_transaction_payload(live_state)
+    before_snapshot = mutation_ledger.snapshot_path(target)
+    planned_record = _healthcheck_last_known_good_planned_record(
+        target,
+        before=before_snapshot,
+        payload=payload,
+    )
+    mutation_id = mutation_ledger.build_planned_mutation_id(
+        effect=EFFECT_REPAIR,
+        scope=HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE,
+        planned_records=[planned_record],
+    )
+    transaction_id = _healthcheck_last_known_good_transaction_id(mutation_id)
+    commit_result = state_transaction.commit_state_transaction(
+        transaction_root,
+        transaction_id,
+        (state_transaction.TransactionWrite(target_path=str(target), payload=payload),),
+        effect=EFFECT_REPAIR,
+        scope=HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE,
+        mutation_id=mutation_id,
+        rollback_eligible=True,
+    )
+    metadata_path = Path(commit_result.metadata_path)
+    metadata = state_transaction.read_transaction_metadata(metadata_path)
+    if (
+        metadata.mutation_id != mutation_id
+        or metadata.rollback_id is None
+        or metadata.scope != HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE
+    ):
+        raise RuntimeErrorInfo(
+            "Healthcheck repair transaction metadata does not match planned mutation.",
+            machine_error_code=state_transaction.STATE_TRANSACTION_INVALID,
+            severity="fatal",
+            operator_action="stop",
+        )
+    return HealthcheckRepairRollbackEvidence(
+        scope=HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE,
+        mutation_id=mutation_id,
+        transaction_id=metadata.transaction_id,
+        rollback_id=metadata.rollback_id,
+        metadata_path=str(metadata_path.resolve(strict=False)),
+        covered_changed_files=tuple(record.target_path for record in metadata.files),
+        transaction_store_artifacts=_transaction_store_artifact_paths(metadata, metadata_path),
+    )
+
+
 def refresh_last_known_good_proxy_from_healthcheck(
     paths: RuntimePaths,
     state: dict[str, Any],
@@ -4050,6 +4184,7 @@ def refresh_last_known_good_proxy_from_healthcheck(
     current_proxy_url: str,
     attestation_ok: bool,
     reported_effective_mode: str,
+    rollback_evidence_out: list[HealthcheckRepairRollbackEvidence] | None = None,
 ) -> dict[str, Any]:
     if not attestation_ok or reported_effective_mode != "managed":
         return state
@@ -4071,7 +4206,15 @@ def refresh_last_known_good_proxy_from_healthcheck(
         live_state[LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD] = refreshed_state[
             LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD
         ]
-        write_json_atomic(paths.state_file, live_state)
+        rollback_evidence = (
+            _commit_last_known_good_proxy_refresh_transaction(paths, live_state)
+            if rollback_evidence_out is not None
+            else None
+        )
+        if rollback_evidence is None:
+            write_json_atomic(paths.state_file, live_state)
+        elif rollback_evidence_out is not None:
+            rollback_evidence_out.append(rollback_evidence)
     return refreshed_state
 
 
@@ -8606,6 +8749,9 @@ def run_healthcheck(
     owner_command_surface = (
         "healthcheck --repair --json" if effect == EFFECT_REPAIR else "healthcheck --json"
     )
+    rollback_evidence: list[HealthcheckRepairRollbackEvidence] | None = (
+        [] if effect == EFFECT_REPAIR else None
+    )
     if allow_stale_pid_cleanup:
         clear_stale_managed_pid_if_needed(paths)
     startup_contract_owner_result: StartupContractRepairOwnerPathResult | None = None
@@ -9173,6 +9319,7 @@ def run_healthcheck(
             current_proxy_url=current_proxy_url,
             attestation_ok=ok,
             reported_effective_mode=reported_effective_mode,
+            rollback_evidence_out=rollback_evidence,
         )
     current_proxy_url = get_reported_current_proxy_url(
         paths, state, reported_effective_mode
@@ -9360,14 +9507,53 @@ def run_healthcheck(
             changed_files, startup_contract_owner_result.changed_files
         )
     if effect == EFFECT_REPAIR:
+        transaction_evidence = rollback_evidence[0] if rollback_evidence else None
+        changed_file_keys = {_resolved_path_key(path) for path in changed_files}
+        covered_file_keys = (
+            {
+                _resolved_path_key(path)
+                for path in transaction_evidence.covered_changed_files
+            }
+            if transaction_evidence is not None
+            else set()
+        )
+        rollback_covered = (
+            transaction_evidence is not None
+            and changed_file_keys == covered_file_keys
+            and len(changed_files) == len(transaction_evidence.covered_changed_files)
+        )
+        ledger_scope = (
+            transaction_evidence.scope if rollback_covered else "healthcheck_repair"
+        )
+        transaction_artifacts = (
+            transaction_evidence.transaction_store_artifacts
+            if transaction_evidence is not None
+            else ()
+        )
         mutation_after = mutation_ledger.snapshot_paths(changed_files)
+        transaction_artifact_after = mutation_ledger.snapshot_paths(transaction_artifacts)
         extra.update(
             mutation_ledger.build_mutation_ledger_fields(
                 effect=EFFECT_REPAIR,
-                scope="healthcheck_repair",
+                scope=ledger_scope,
                 changed_files=changed_files,
                 before=mutation_before,
                 after=mutation_after,
+                mutation_id=(
+                    transaction_evidence.mutation_id if rollback_covered else None
+                ),
+                rollback_available=rollback_covered,
+                rollback_id=(
+                    transaction_evidence.rollback_id if rollback_covered else None
+                ),
+                transaction_id=(
+                    transaction_evidence.transaction_id
+                    if rollback_covered
+                    else None
+                ),
+                transaction_store_artifacts=transaction_artifacts,
+                transaction_before=mutation_before,
+                transaction_after=transaction_artifact_after,
             )
         )
 

@@ -189,6 +189,29 @@ must remain non-actionable:
 - `rollback_id=null`
 - `rollback_phase=ledger_only`
 
+Phase 2 may expose rollback readiness for a narrow command-owned P0 transaction
+only when the command packet, mutation ledger, and transaction metadata all
+refer to the same mutation:
+
+- `mutation_id` equals transaction metadata `mutation_id`
+- `mutation_ledger.rollback_available=true`
+- `mutation_ledger.rollback_id` equals transaction metadata `rollback_id`
+- `mutation_ledger.rollback_phase=last_transaction`
+- `mutation_ledger.transaction_id` names the committed transaction metadata
+
+For Phase 2 healthcheck repair wiring, this currently applies only to the
+`healthcheck_last_known_good_proxy_refresh` scope. The compatibility
+`changed_files` field remains a `list[str]` of top-level owner truth-state
+changes. Transaction-store writes are accounted separately through
+`mutation_ledger.transaction_store_artifacts`; they must not be hidden, but they
+also must not be treated as owner truth-state changes.
+
+If a repair packet includes any changed top-level path that is not covered by
+the rollback-eligible transaction metadata, rollback fields must stay
+non-actionable (`rollback_available=false`, `rollback_id=null`,
+`rollback_phase=ledger_only`) and `mutation_ledger.transaction_id` must be
+absent. Phase 2 does not add `rollback --mutation-id <id> --json`.
+
 ## Severity classes
 
 - `recoverable`
