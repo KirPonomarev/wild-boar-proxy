@@ -74,6 +74,27 @@ TEST_CODEX_DEVICE_CODE = "WBP-1234"
 REAL_CODEX_CUSTOM_SESSION_MANAGER = live_server.CodexCustomSessionManager
 
 
+def bounded_process_result(
+    *,
+    machine_error_code: str = live_server.PROCESS_OK,
+    exit_code: int | None = 0,
+    stdout: str = "",
+    stderr: str = "",
+    timed_out: bool = False,
+) -> live_server.BoundedProcessResult:
+    return live_server.BoundedProcessResult(
+        status="ok" if machine_error_code == live_server.PROCESS_OK else "error",
+        machine_error_code=machine_error_code,
+        exit_code=exit_code,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_truncated=False,
+        stderr_truncated=False,
+        timed_out=timed_out,
+        duration_seconds=0.01,
+    )
+
+
 class StableProbeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models":
@@ -6069,6 +6090,183 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(app_copy_rejected["browser_forbidden_fields_rejected"])
         self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
         self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
+
+    def test_git_probe_skips_bounded_runner_outside_git_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            with mock.patch.object(live_server, "run_bounded_process") as runner:
+                status = live_server._git_probe_file_status(repo_root, "probe.txt")
+
+        runner.assert_not_called()
+        self.assertFalse(status["git_probe_attempted"])
+        self.assertFalse(status["probe_file_ignored_by_git"])
+        self.assertFalse(status["probe_file_visible_to_git_status"])
+        self.assertFalse(status["git_diff_name_status_only_expected"])
+        self.assertEqual(status["git_status_short_for_probe_file"], "")
+
+    def test_git_probe_uses_bounded_runner_with_sanitized_env_and_repo_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / ".git").mkdir()
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "PATH": "/usr/bin:/bin",
+                        "HOME": "/tmp/ambient-home",
+                        "CODEX_HOME": "/tmp/ambient-codex",
+                        "OPENAI_API_KEY": "sk-should-not-leak",
+                    },
+                    clear=True,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "run_bounded_process",
+                    side_effect=[
+                        bounded_process_result(exit_code=0),
+                        bounded_process_result(exit_code=0, stdout=""),
+                    ],
+                ) as runner,
+            ):
+                status = live_server._git_probe_file_status(repo_root, "probe.txt")
+
+        self.assertEqual(runner.call_count, 2)
+        first_args, first_kwargs = runner.call_args_list[0]
+        second_args, second_kwargs = runner.call_args_list[1]
+        self.assertEqual(first_args[0], ["git", "check-ignore", "-q", "--", "probe.txt"])
+        self.assertEqual(second_args[0], ["git", "status", "--short", "--", "probe.txt"])
+        for kwargs in (first_kwargs, second_kwargs):
+            self.assertEqual(kwargs["cwd"], repo_root)
+            self.assertEqual(kwargs["timeout_seconds"], live_server.WEB_GIT_PROBE_TIMEOUT_SECONDS)
+            self.assertEqual(kwargs["env"], {"PATH": "/usr/bin:/bin"})
+            self.assertNotIn("shell", kwargs)
+        self.assertTrue(status["git_probe_attempted"])
+        self.assertTrue(status["probe_file_ignored_by_git"])
+        self.assertFalse(status["probe_file_visible_to_git_status"])
+        self.assertTrue(status["git_diff_name_status_only_expected"])
+        self.assertEqual(status["git_status_short_for_probe_file"], "")
+
+    def test_git_probe_check_ignore_exit_one_is_normal_not_ignored_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / ".git").mkdir()
+            with mock.patch.object(
+                live_server,
+                "run_bounded_process",
+                side_effect=[
+                    bounded_process_result(
+                        machine_error_code=live_server.PROCESS_FAILED,
+                        exit_code=1,
+                    ),
+                    bounded_process_result(exit_code=0, stdout="?? probe.txt\n"),
+                ],
+            ):
+                status = live_server._git_probe_file_status(repo_root, "probe.txt")
+
+        self.assertTrue(status["git_probe_attempted"])
+        self.assertFalse(status["probe_file_ignored_by_git"])
+        self.assertTrue(status["probe_file_visible_to_git_status"])
+        self.assertFalse(status["git_diff_name_status_only_expected"])
+        self.assertEqual(status["git_status_short_for_probe_file"], "?? probe.txt")
+
+    def test_git_probe_check_ignore_failures_do_not_claim_ignored_or_expected_state(self) -> None:
+        cases = (
+            (
+                "exit-two",
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_FAILED,
+                    exit_code=2,
+                    stderr="fatal",
+                ),
+            ),
+            (
+                "timeout",
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_TIMEOUT,
+                    exit_code=None,
+                    timed_out=True,
+                ),
+            ),
+            (
+                "not-found",
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_NOT_FOUND,
+                    exit_code=None,
+                ),
+            ),
+        )
+        for name, ignored_result in cases:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    repo_root = Path(temp_dir)
+                    (repo_root / ".git").mkdir()
+                    with mock.patch.object(
+                        live_server,
+                        "run_bounded_process",
+                        side_effect=[
+                            ignored_result,
+                            bounded_process_result(exit_code=0, stdout=""),
+                        ],
+                    ):
+                        status = live_server._git_probe_file_status(repo_root, "probe.txt")
+
+                self.assertTrue(status["git_probe_attempted"])
+                self.assertFalse(status["probe_file_ignored_by_git"])
+                self.assertFalse(status["probe_file_visible_to_git_status"])
+                self.assertFalse(status["git_diff_name_status_only_expected"])
+                self.assertEqual(status["git_status_short_for_probe_file"], "")
+
+    def test_git_probe_incomplete_bounded_results_do_not_claim_expected_git_diff_state(self) -> None:
+        cases = (
+            (
+                "ignored-confirmed-status-timeout",
+                bounded_process_result(exit_code=0),
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_TIMEOUT,
+                    exit_code=None,
+                    stdout="?? leaked.txt\n",
+                    timed_out=True,
+                ),
+            ),
+            (
+                "git-not-found",
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_NOT_FOUND,
+                    exit_code=None,
+                ),
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_NOT_FOUND,
+                    exit_code=None,
+                    stdout="?? leaked.txt\n",
+                ),
+            ),
+            (
+                "ignored-confirmed-status-nonzero",
+                bounded_process_result(exit_code=0),
+                bounded_process_result(
+                    machine_error_code=live_server.PROCESS_FAILED,
+                    exit_code=2,
+                    stdout="?? leaked.txt\n",
+                    stderr="fatal",
+                ),
+            ),
+        )
+        for name, ignored_result, visible_result in cases:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    repo_root = Path(temp_dir)
+                    (repo_root / ".git").mkdir()
+                    with mock.patch.object(
+                        live_server,
+                        "run_bounded_process",
+                        side_effect=[ignored_result, visible_result],
+                    ):
+                        status = live_server._git_probe_file_status(repo_root, "probe.txt")
+
+                self.assertTrue(status["git_probe_attempted"])
+                self.assertFalse(status["probe_file_visible_to_git_status"])
+                self.assertFalse(status["git_diff_name_status_only_expected"])
+                self.assertEqual(status["git_status_short_for_probe_file"], "")
 
     def test_original_launch_prechecks_do_not_call_bounded_runner(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

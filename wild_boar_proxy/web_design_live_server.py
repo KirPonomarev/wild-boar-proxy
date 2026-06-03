@@ -18,7 +18,6 @@ from pathlib import Path
 from queue import Empty, Queue
 import socket
 import sqlite3
-import subprocess
 from threading import RLock, Thread
 from typing import Any, Callable
 import urllib.error
@@ -1011,6 +1010,7 @@ LEGACY_IMPORT_CONFIRM_INVALID_CODE = "UI_LEGACY_IMPORT_CONFIRM_INVALID"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 ORIGINAL_CODEX_SYSTEM_OPEN_TIMEOUT_SECONDS = 5.0
 ORIGINAL_CODEX_SYSTEM_OPEN_CWD = Path("/")
+WEB_GIT_PROBE_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -1204,6 +1204,13 @@ def _safe_app_copy_helper_env(contract: LaunchCopyContract) -> dict[str, str]:
     env["WBP_PROFILE_DIR"] = profile_dir
     env["WBP_MANAGED_DIR"] = data_dir
     env["WBP_APP_COPY_HELPER"] = "1"
+    return env
+
+
+def _git_probe_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    if os.environ.get("PATH"):
+        env["PATH"] = str(os.environ["PATH"])
     return env
 
 
@@ -6149,33 +6156,28 @@ def _git_probe_file_status(repo_root: Path, expected_file: str) -> dict[str, Any
     if not git_dir.exists():
         return status
     status["git_probe_attempted"] = True
-    try:
-        ignored = subprocess.run(
-            ["git", "check-ignore", "-q", "--", expected_file],
-            cwd=str(repo_root),
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-        )
-        status["probe_file_ignored_by_git"] = ignored.returncode == 0
-        visible = subprocess.run(
-            ["git", "status", "--short", "--", expected_file],
-            cwd=str(repo_root),
-            check=False,
-            text=True,
-            capture_output=True,
-            timeout=5,
-        )
-        probe_status = visible.stdout.strip() if visible.returncode == 0 else ""
-        status["git_status_short_for_probe_file"] = probe_status
-        status["probe_file_visible_to_git_status"] = bool(probe_status)
-        status["git_diff_name_status_only_expected"] = (
-            status["probe_file_ignored_by_git"] is True
-            and status["probe_file_visible_to_git_status"] is False
-        )
-    except (OSError, subprocess.SubprocessError):
-        return status
+    env = _git_probe_env()
+    ignored = run_bounded_process(
+        ["git", "check-ignore", "-q", "--", expected_file],
+        env=env,
+        cwd=repo_root,
+        timeout_seconds=WEB_GIT_PROBE_TIMEOUT_SECONDS,
+    )
+    status["probe_file_ignored_by_git"] = ignored.exit_code == 0
+    visible = run_bounded_process(
+        ["git", "status", "--short", "--", expected_file],
+        env=env,
+        cwd=repo_root,
+        timeout_seconds=WEB_GIT_PROBE_TIMEOUT_SECONDS,
+    )
+    probe_status = visible.stdout.strip() if visible.exit_code == 0 else ""
+    status["git_status_short_for_probe_file"] = probe_status
+    status["probe_file_visible_to_git_status"] = bool(probe_status)
+    status["git_diff_name_status_only_expected"] = (
+        status["probe_file_ignored_by_git"] is True
+        and visible.exit_code == 0
+        and status["probe_file_visible_to_git_status"] is False
+    )
     return status
 
 
