@@ -63,6 +63,14 @@ from wild_boar_proxy.web_design_live_server import (
     _sandbox_action_runner_env,
 )
 from wild_boar_proxy.web_rate_limit import WEB_RATE_LIMIT_MACHINE_ERROR_CODE, WebPostRateLimiter
+from wild_boar_proxy.web_route_table import (
+    CANONICAL_ROUTE_EFFECTS,
+    EFFECT_MUTATE,
+    EFFECT_READ,
+    EFFECT_REPAIR,
+    EFFECT_SOURCE_UI_ACTION_REGISTRY,
+    WebRouteTable,
+)
 from wild_boar_proxy.web_token import (
     WEB_AUTH_HEADER,
     WEB_CSRF_HEADER,
@@ -5966,6 +5974,158 @@ class DualLaneFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession
             },
             "secret_value_recorded": False,
         }
+
+
+class WebDesignRouteEffectRegistryTests(unittest.TestCase):
+    @staticmethod
+    def _handler_block(start_marker: str, end_marker: str) -> str:
+        source = Path(live_server.__file__).read_text(encoding="utf-8")
+        start = source.index(start_marker)
+        end = source.index(end_marker, start)
+        return source[start:end]
+
+    def test_registry_covers_current_exact_get_and_post_dispatch_paths(self) -> None:
+        get_block = self._handler_block("        def _handle_get", "        def do_POST")
+        post_block = self._handler_block("        def _handle_post", "        def log_message")
+        handled_get_paths = set(re.findall(r'if parsed\.path == "([^"]+)"', get_block))
+        handled_post_paths = set(re.findall(r'if parsed\.path == "([^"]+)"', post_block))
+        handled_post_paths.update(re.findall(r'if parsed\.path != "([^"]+)"', post_block))
+        registered_get_paths = {
+            route.path
+            for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+            if route.method == "GET" and not route.prefix
+        }
+        registered_post_paths = {
+            route.path
+            for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+            if route.method == "POST" and not route.prefix
+        }
+
+        self.assertEqual(handled_get_paths, registered_get_paths)
+        self.assertEqual(handled_post_paths, registered_post_paths)
+
+    def test_registry_specs_have_canonical_effects_and_post_auth_policy(self) -> None:
+        for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes:
+            self.assertIn(route.effect, CANONICAL_ROUTE_EFFECTS)
+            self.assertTrue(route.body_kind)
+            self.assertTrue(route.browser_field_policy)
+            if route.method == "POST":
+                self.assertTrue(route.auth_required, route.path)
+
+    def test_registry_dynamic_prefixes_and_queryless_lookup(self) -> None:
+        action = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "POST",
+            "/api/action?attempt=1",
+        )
+        session_get = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "GET",
+            "/api/codex/custom/sessions/session-1/transcript",
+        )
+        session_post = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "POST",
+            "/api/codex/custom/sessions/session-1/prompt",
+        )
+        worktree_cleanup = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "POST",
+            "/api/codex/custom/worktrees/session-1/cleanup",
+        )
+
+        self.assertIsNotNone(action)
+        assert action is not None
+        self.assertEqual(action.path, "/api/action")
+        self.assertIsNotNone(session_get)
+        assert session_get is not None
+        self.assertTrue(session_get.prefix)
+        self.assertEqual(session_get.effect, EFFECT_READ)
+        self.assertIsNotNone(session_post)
+        assert session_post is not None
+        self.assertTrue(session_post.prefix)
+        self.assertEqual(session_post.effect, EFFECT_MUTATE)
+        self.assertIsNotNone(worktree_cleanup)
+        assert worktree_cleanup is not None
+        self.assertTrue(worktree_cleanup.prefix)
+        self.assertEqual(worktree_cleanup.effect, EFFECT_REPAIR)
+
+    def test_api_action_is_multiplexed_by_ui_action_effect_registry(self) -> None:
+        action_route = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("POST", "/api/action")
+        self.assertIsNotNone(action_route)
+        assert action_route is not None
+        self.assertEqual(action_route.effect_source, EFFECT_SOURCE_UI_ACTION_REGISTRY)
+        self.assertEqual(action_route.multiplexed_by, "ui_action")
+        self.assertEqual(action_route.effect, EFFECT_MUTATE)
+        self.assertEqual(
+            set(live_server.UI_ACTION_ALLOWLIST),
+            set(live_server.UI_ACTION_EFFECT_REGISTRY),
+        )
+        for effect in live_server.UI_ACTION_EFFECT_REGISTRY.values():
+            self.assertIn(effect, CANONICAL_ROUTE_EFFECTS)
+
+    def test_unregistered_post_route_rejects_before_body_dispatch(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            status, packet = post_body_response(
+                f"{base}/api/not-registered",
+                b"{not-json",
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(status, HTTPStatus.NOT_FOUND)
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["source"], "web_ingress")
+        self.assertEqual(packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
+        self.assertEqual(packet["changed_files"], [])
+
+    def test_registered_post_routes_are_behaviorally_required_before_dispatch(self) -> None:
+        cases = (
+            ("/api/operator/run", lambda route: route.method == "POST" and route.path == "/api/operator/run"),
+            ("/api/action", lambda route: route.method == "POST" and route.path == "/api/action"),
+            (
+                "/api/codex/custom/sessions/session-1/prompt",
+                lambda route: route.method == "POST"
+                and route.prefix
+                and route.path == "/api/codex/custom/sessions/",
+            ),
+            (
+                "/api/codex/custom/worktrees/session-1/cleanup",
+                lambda route: route.method == "POST"
+                and route.prefix
+                and route.path == "/api/codex/custom/worktrees/",
+            ),
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            for path, remove_route in cases:
+                reduced_table = WebRouteTable(
+                    route
+                    for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+                    if not remove_route(route)
+                )
+                with self.subTest(path=path), mock.patch.object(
+                    live_server,
+                    "WEB_DESIGN_LIVE_ROUTE_TABLE",
+                    reduced_table,
+                ):
+                    status, packet = post_body_response(
+                        f"{base}{path}",
+                        b"{not-json",
+                    )
+
+                self.assertEqual(status, HTTPStatus.NOT_FOUND)
+                self.assertEqual(packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
+                self.assertEqual(packet["changed_files"], [])
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
 
 
 class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):

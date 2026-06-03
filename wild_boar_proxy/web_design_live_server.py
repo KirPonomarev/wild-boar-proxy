@@ -142,6 +142,25 @@ from wild_boar_proxy.web_rate_limit import (
     WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
     WebPostRateLimiter,
 )
+from wild_boar_proxy.web_route_table import (
+    BODY_KIND_JSON,
+    BODY_KIND_NONE,
+    BODY_KIND_OPTIONAL_JSON,
+    BODY_KIND_SPECIAL_JSON,
+    BROWSER_FIELD_POLICY_JSON_VALIDATED,
+    BROWSER_FIELD_POLICY_NONE,
+    BROWSER_FIELD_POLICY_QUERY_VALIDATED,
+    BROWSER_FIELD_POLICY_UI_ACTION_REGISTRY,
+    EFFECT_MUTATE,
+    EFFECT_PROBE,
+    EFFECT_READ,
+    EFFECT_REPAIR,
+    EFFECT_SOURCE_DYNAMIC_SUBACTION,
+    EFFECT_SOURCE_ROUTE,
+    EFFECT_SOURCE_UI_ACTION_REGISTRY,
+    RouteSpec,
+    WebRouteTable,
+)
 from wild_boar_proxy.web_token import (
     WEB_CSRF_META_NAME,
     WEB_TOKEN_FILENAME,
@@ -935,6 +954,240 @@ UI_ACTION_ALLOWLIST = {
         "human_meaning": "Показать token-bound import lane и выполнить legacy import только после explicit confirm без browser-owned path truth.",
     },
 }
+
+UI_ACTION_EFFECT_REGISTRY = {
+    "refresh_health_detail": EFFECT_PROBE,
+    "export_diagnostics": EFFECT_MUTATE,
+    "stable_repair_plan": EFFECT_PROBE,
+    "onboard_account_dry_run": EFFECT_PROBE,
+    "onboard_account": EFFECT_MUTATE,
+    "account_login_status": EFFECT_PROBE,
+    "account_login_complete": EFFECT_MUTATE,
+    "account_login_cancel": EFFECT_MUTATE,
+    "validate_account": EFFECT_PROBE,
+    "recheck_account": EFFECT_PROBE,
+    "promote_account": EFFECT_MUTATE,
+    "demote_account": EFFECT_MUTATE,
+    "retire_account": EFFECT_MUTATE,
+    "hold_account": EFFECT_MUTATE,
+    "release_account": EFFECT_MUTATE,
+    "api_route_validate": EFFECT_PROBE,
+    "api_route_connect": EFFECT_MUTATE,
+    "api_route_credential_check": EFFECT_PROBE,
+    "api_route_check": EFFECT_PROBE,
+    "api_route_allow": EFFECT_MUTATE,
+    "api_route_disable": EFFECT_MUTATE,
+    "api_route_remove": EFFECT_MUTATE,
+    "api_route_profile": EFFECT_READ,
+    "api_route_evidence_capture": EFFECT_MUTATE,
+    "quick_start_check_all": EFFECT_PROBE,
+    "sync_runtime": EFFECT_MUTATE,
+    "set_mode_stable": EFFECT_MUTATE,
+    "set_mode_managed": EFFECT_MUTATE,
+    "launch_smoke": EFFECT_PROBE,
+    "launch_client_dispatch": EFFECT_MUTATE,
+    "launch_custom_client_native": EFFECT_MUTATE,
+    "show_custom_client_native": EFFECT_REPAIR,
+    "setup_discovery": EFFECT_PROBE,
+    "legacy_import_discovery": EFFECT_PROBE,
+    "legacy_import": EFFECT_MUTATE,
+}
+
+
+def _get_route(path: str) -> RouteSpec:
+    return RouteSpec(
+        method="GET",
+        path=path,
+        effect=EFFECT_READ,
+        auth_required=False,
+        body_kind=BODY_KIND_NONE,
+        browser_field_policy=BROWSER_FIELD_POLICY_QUERY_VALIDATED,
+    )
+
+
+def _post_route(
+    path: str,
+    effect: str,
+    *,
+    body_kind: str = BODY_KIND_JSON,
+    browser_field_policy: str = BROWSER_FIELD_POLICY_JSON_VALIDATED,
+    effect_source: str = EFFECT_SOURCE_ROUTE,
+    multiplexed_by: str | None = None,
+) -> RouteSpec:
+    return RouteSpec(
+        method="POST",
+        path=path,
+        effect=effect,
+        auth_required=True,
+        body_kind=body_kind,
+        browser_field_policy=browser_field_policy,
+        effect_source=effect_source,
+        multiplexed_by=multiplexed_by,
+    )
+
+
+def _post_prefix_route(
+    path: str,
+    effect: str,
+    *,
+    body_kind: str = BODY_KIND_JSON,
+    effect_source: str = EFFECT_SOURCE_DYNAMIC_SUBACTION,
+    multiplexed_by: str | None = None,
+) -> RouteSpec:
+    return RouteSpec(
+        method="POST",
+        path=path,
+        effect=effect,
+        auth_required=True,
+        body_kind=body_kind,
+        browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+        prefix=True,
+        effect_source=effect_source,
+        multiplexed_by=multiplexed_by,
+    )
+
+
+WEB_DESIGN_LIVE_ROUTES = (
+    _get_route("/owner-login/sandbox"),
+    _get_route("/api/live-readonly"),
+    _get_route("/api/accounts-readonly"),
+    _get_route("/api/api-connections-readonly"),
+    _get_route("/api/actions"),
+    _get_route("/api/operator/status"),
+    _get_route("/api/operator/models"),
+    _get_route("/api/operator/transcript"),
+    _get_route("/api/review-surface"),
+    _get_route("/api/review-commands"),
+    _get_route("/api/codex/launch-modes"),
+    _get_route("/api/codex/original/status"),
+    _get_route("/api/codex/custom/status"),
+    _get_route("/api/codex/custom/models"),
+    _get_route("/api/codex/custom/model-selector"),
+    _get_route("/api/codex/custom/api-compat"),
+    _get_route("/api/codex/custom/api-action-gate"),
+    _get_route("/api/codex/custom/accounts"),
+    _get_route("/api/codex/custom/account-selection"),
+    _get_route("/api/codex/custom/sessions"),
+    _get_route("/api/codex/custom/recovery/contract"),
+    _get_route("/api/codex/custom/recovery/admitted-session-actions"),
+    _get_route("/api/codex/custom/recovery/stop-cleanup/preflight"),
+    _get_route("/api/codex/custom/recovery/process-kill/preflight"),
+    _get_route("/api/codex/custom/recovery/operator-ready"),
+    _get_route("/api/codex/custom/recovery/rollback-process-owner-contract"),
+    _get_route("/api/codex/custom/recovery/rollback-point-dry-run"),
+    _get_route("/api/codex/custom/recovery/rollback-point-create-admission"),
+    _get_route("/api/codex/custom/recovery/rollback-point/verify"),
+    _get_route("/api/codex/custom/recovery/rollback-apply/admission-dry-run"),
+    _get_route("/api/codex/custom/recovery/rollback-apply/live-preflight"),
+    _get_route("/api/codex/custom/recovery/rollback-apply/receipt/verify"),
+    _get_route("/api/codex/custom/window-prompt-trace"),
+    _get_route("/api/codex/custom/window-input-route-trace"),
+    _get_route("/api/codex/custom/bridge-failure-recovery-truth"),
+    _get_route("/api/codex/custom/stable-bridge-preflight"),
+    _get_route("/api/codex/custom/live-bridge-stability"),
+    _get_route("/api/codex/custom/chatgpt-plus-api-coder-trace"),
+    _get_route("/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof"),
+    _get_route("/api/codex/custom/quick-start/deepseek-code-edit-proof"),
+    _get_route("/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth"),
+    _get_route("/api/codex/custom/quick-start/deepseek-route-bound-edit-proof"),
+    _get_route("/api/codex/custom/persistent-profile"),
+    _get_route("/api/codex/custom/persistent-relaunch-profile"),
+    _get_route("/api/codex/custom/stable-profile-history-persistence"),
+    _get_route("/api/codex/custom/persistent-profile-history-proof"),
+    RouteSpec(
+        method="GET",
+        path="/api/codex/custom/sessions/",
+        effect=EFFECT_READ,
+        auth_required=False,
+        body_kind=BODY_KIND_NONE,
+        browser_field_policy=BROWSER_FIELD_POLICY_NONE,
+        prefix=True,
+        effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
+        multiplexed_by="custom_session_action",
+    ),
+    _post_route(
+        "/api/operator/run",
+        EFFECT_MUTATE,
+        effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
+        multiplexed_by="operator_prompt",
+    ),
+    _post_route(
+        "/api/review-command",
+        EFFECT_MUTATE,
+        effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
+        multiplexed_by="command_id",
+    ),
+    _post_route("/api/codex/original/launch-dry-run", EFFECT_READ),
+    _post_route("/api/codex/original/launch", EFFECT_MUTATE),
+    _post_route("/api/codex/custom/launch-dry-run", EFFECT_READ),
+    _post_route("/api/codex/custom/launch", EFFECT_MUTATE),
+    _post_route("/api/codex/custom/native-launch-preflight", EFFECT_PROBE),
+    _post_route("/api/codex/custom/native-launch", EFFECT_MUTATE),
+    _post_route("/api/codex/custom/show-window", EFFECT_REPAIR, body_kind=BODY_KIND_OPTIONAL_JSON),
+    _post_route("/api/codex/custom/visible-history/owner-confirmation", EFFECT_PROBE),
+    _post_route("/api/codex/custom/visible-history/relaunch-owner-confirmation", EFFECT_PROBE),
+    _post_route("/api/codex/app-copy/launch-dry-run", EFFECT_READ),
+    _post_route("/api/codex/app-copy/live-admission", EFFECT_PROBE),
+    _post_route("/api/codex/app-copy/launch", EFFECT_MUTATE),
+    _post_route("/api/codex/custom/model-dry-run", EFFECT_READ),
+    _post_route("/api/codex/custom/model-selector-dry-run", EFFECT_READ),
+    _post_route("/api/codex/custom/api-action-gate", EFFECT_PROBE),
+    _post_route("/api/codex/custom/execution-mode-dry-run", EFFECT_READ),
+    _post_route("/api/codex/custom/server-model-selection-truth", EFFECT_PROBE),
+    _post_route("/api/codex/custom/quick-start/config-admission", EFFECT_PROBE),
+    _post_route("/api/codex/custom/chatgpt-plus-api-slot-truth", EFFECT_PROBE),
+    _post_route("/api/codex/custom/api-only-executor-truth", EFFECT_PROBE),
+    _post_route("/api/codex/custom/api-only-deepseek/live-format", EFFECT_PROBE),
+    _post_route("/api/codex/custom/quick-start/deepseek-safe-worktree-check", EFFECT_PROBE),
+    _post_route("/api/codex/custom/quick-start/deepseek-code-edit-proof", EFFECT_PROBE),
+    _post_route(
+        "/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth",
+        EFFECT_PROBE,
+    ),
+    _post_route("/api/codex/custom/quick-start/deepseek-route-bound-edit-proof", EFFECT_PROBE),
+    _post_route(
+        "/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof",
+        EFFECT_PROBE,
+    ),
+    _post_route("/api/codex/custom/stable-profile-history-persistence", EFFECT_PROBE),
+    _post_route("/api/codex/custom/account-smoke-dry-run", EFFECT_PROBE),
+    _post_route("/api/codex/custom/sessions", EFFECT_MUTATE),
+    _post_route(
+        "/api/codex/custom/recovery/rollback-point",
+        EFFECT_MUTATE,
+        body_kind=BODY_KIND_SPECIAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/recovery/rollback-apply",
+        EFFECT_REPAIR,
+        body_kind=BODY_KIND_SPECIAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/recovery/stop-cleanup",
+        EFFECT_REPAIR,
+        body_kind=BODY_KIND_SPECIAL_JSON,
+    ),
+    _post_prefix_route(
+        "/api/codex/custom/worktrees/",
+        EFFECT_REPAIR,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+        multiplexed_by="worktree_cleanup_action",
+    ),
+    _post_prefix_route(
+        "/api/codex/custom/sessions/",
+        EFFECT_MUTATE,
+        body_kind=BODY_KIND_JSON,
+        multiplexed_by="custom_session_action",
+    ),
+    _post_route(
+        "/api/action",
+        EFFECT_MUTATE,
+        browser_field_policy=BROWSER_FIELD_POLICY_UI_ACTION_REGISTRY,
+        effect_source=EFFECT_SOURCE_UI_ACTION_REGISTRY,
+        multiplexed_by="ui_action",
+    ),
+)
+WEB_DESIGN_LIVE_ROUTE_TABLE = WebRouteTable(WEB_DESIGN_LIVE_ROUTES)
 
 LIVE_READONLY_ACTION_PHASE = "live_readonly"
 SANDBOX_ACTION_PHASE = "sandbox_actions"
@@ -10334,7 +10587,7 @@ def build_handler(
                     human_message="HTTP Host must target this local Wild Boar Proxy server.",
                 )
 
-        def _admit_post_request(self, path: str) -> None:
+        def _admit_post_request(self, path: str) -> RouteSpec:
             self._admit_common_request()
             length, length_error = parse_content_length(self.headers)
             if length_error is not None:
@@ -10390,6 +10643,14 @@ def build_handler(
                     machine_error_code=WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
                     human_message="Web POST request rate limit exceeded.",
                 )
+            route_spec = WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("POST", path)
+            if route_spec is None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.NOT_FOUND,
+                    machine_error_code="WEB_ROUTE_NOT_REGISTERED",
+                    human_message="Web POST route is not registered in the route effect registry.",
+                )
+            return route_spec
 
         def _codex_account_commands(self) -> dict[str, dict[str, Any]]:
             return {
