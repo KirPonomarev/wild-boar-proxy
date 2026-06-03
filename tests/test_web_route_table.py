@@ -75,10 +75,34 @@ class WebRouteTableTests(unittest.TestCase):
             auth_required=False,
             body_kind=BODY_KIND_NONE,
             browser_field_policy=BROWSER_FIELD_POLICY_NONE,
+            handler_id="get_api_status",
         )
 
         with self.assertRaises(ValueError):
             WebRouteTable([route, route])
+
+    def test_duplicate_get_handler_ids_are_rejected(self) -> None:
+        first = RouteSpec(
+            method="GET",
+            path="/api/first",
+            effect=EFFECT_READ,
+            auth_required=False,
+            body_kind=BODY_KIND_NONE,
+            browser_field_policy=BROWSER_FIELD_POLICY_NONE,
+            handler_id="get_duplicate",
+        )
+        second = RouteSpec(
+            method="GET",
+            path="/api/second",
+            effect=EFFECT_READ,
+            auth_required=False,
+            body_kind=BODY_KIND_NONE,
+            browser_field_policy=BROWSER_FIELD_POLICY_NONE,
+            handler_id="get_duplicate",
+        )
+
+        with self.assertRaises(ValueError):
+            WebRouteTable([first, second])
 
     def test_duplicate_post_handler_ids_are_rejected(self) -> None:
         first = RouteSpec(
@@ -124,6 +148,17 @@ class WebRouteTableTests(unittest.TestCase):
                 auth_required=True,
                 body_kind=BODY_KIND_JSON,
                 browser_field_policy=BROWSER_FIELD_POLICY_JSON_VALIDATED,
+            )
+
+    def test_get_routes_require_handler_id(self) -> None:
+        with self.assertRaises(ValueError):
+            RouteSpec(
+                method="GET",
+                path="/api/status",
+                effect=EFFECT_READ,
+                auth_required=False,
+                body_kind=BODY_KIND_NONE,
+                browser_field_policy=BROWSER_FIELD_POLICY_NONE,
             )
 
 

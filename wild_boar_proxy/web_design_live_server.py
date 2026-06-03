@@ -1002,6 +1002,7 @@ def _get_route(path: str) -> RouteSpec:
         auth_required=False,
         body_kind=BODY_KIND_NONE,
         browser_field_policy=BROWSER_FIELD_POLICY_QUERY_VALIDATED,
+        handler_id=_route_handler_id("GET", path),
     )
 
 
@@ -1112,6 +1113,7 @@ WEB_DESIGN_LIVE_ROUTES = (
         prefix=True,
         effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
         multiplexed_by="custom_session_action",
+        handler_id=_route_handler_id("GET", "/api/codex/custom/sessions/", prefix=True),
     ),
     _post_route(
         "/api/operator/run",
@@ -9061,6 +9063,7 @@ def build_handler(
         )
 
     class Handler(BaseHTTPRequestHandler):
+        GET_ROUTE_DISPATCH_TABLE: dict[str, str] = {}
         POST_ROUTE_DISPATCH_TABLE: dict[str, str] = {}
 
         def do_GET(self) -> None:
@@ -9072,543 +9075,686 @@ def build_handler(
         def _handle_get(self) -> None:
             self._admit_common_request()
             parsed = urlparse(self.path)
-            if parsed.path == "/owner-login/sandbox":
-                self._send_owner_login_sandbox_page(parsed.query)
+            route_spec = WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("GET", parsed.path)
+            if route_spec is not None:
+                self._dispatch_get_route(route_spec, self.path)
                 return
-            if parsed.path == "/api/live-readonly":
-                self._send_json(build_live_readonly_snapshot(readonly_runner))
-                return
-            if parsed.path == "/api/accounts-readonly":
-                self._send_json(build_accounts_readonly_snapshot(accounts_readonly_runner))
-                return
-            if parsed.path == "/api/api-connections-readonly":
-                self._send_json(
-                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            if self._is_api_request_path(parsed.path):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.NOT_FOUND,
+                    machine_error_code="WEB_ROUTE_NOT_REGISTERED",
+                    human_message="Web GET API route is not registered in the route effect registry.",
                 )
                 return
-            if parsed.path == "/api/actions":
-                self._send_json(
-                    ui_action_metadata(
-                        launch_client_path=launch_client_path,
-                        launch_copy_contract=launch_copy_contract,
-                        action_phase=action_phase,
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                        legacy_import_token_store=legacy_import_token_store,
-                    )
-                )
-                return
-            if parsed.path == "/api/operator/status":
-                self._send_json(operator_surface_session.status_payload())
-                return
-            if parsed.path == "/api/operator/models":
-                models = operator_surface_session.probe_models()
-                self._send_json(
-                    {
-                        "schema_version": 1,
-                        "status": "ok" if models.get("ok") else "degraded",
-                        "source": "operator_surface",
-                        "captured_at_utc": models.get("captured_at_utc", ""),
-                        "model_ids": models.get("model_ids", []),
-                        "server_issued": True,
-                        "machine_error_code": "OK" if models.get("ok") else "OPERATOR_MODELS_UNAVAILABLE",
-                    }
-                )
-                return
-            if parsed.path == "/api/operator/transcript":
-                self._send_json(operator_surface_session.transcript_payload())
-                return
-            if parsed.path == "/api/review-surface":
-                self._send_json(
-                    review_query_bridge.get_review_surface(
-                        parse_qs(parsed.query, keep_blank_values=True) if parsed.query else None
-                    )
-                )
-                return
-            if parsed.path == "/api/review-commands":
-                self._send_json(
-                    {
-                        "status": "ok",
-                        "machine_error_code": "OK",
-                        "commands": review_allowlist_metadata(),
-                    }
-                )
-                return
-            if parsed.path == "/api/codex/launch-modes":
-                self._send_json(build_launch_modes_packet(operator_surface_session.status_payload()))
-                return
-            if parsed.path == "/api/codex/original/status":
-                self._send_json(build_original_status_packet())
-                return
-            if parsed.path == "/api/codex/custom/status":
-                def build_custom_status_snapshot() -> dict[str, Any]:
-                    return build_custom_status_packet(operator_surface_session.status_payload())
+            self._send_static(parsed.path)
 
-                self._send_json(
-                    _run_custom_codex_readonly_snapshot(
-                        endpoint=parsed.path,
-                        timeout_scope="custom_status_readonly_snapshot",
-                        build_snapshot=build_custom_status_snapshot,
-                    )
+        def _dispatch_get_route(self, route_spec: RouteSpec, request_path: str) -> None:
+            handler_id = str(route_spec.handler_id or "").strip()
+            if not handler_id:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_GET_ROUTE_HANDLER_ID_MISSING",
+                    human_message="Registered Web GET route is missing its handler binding.",
                 )
-                return
-            if parsed.path == "/api/codex/custom/models":
-                def build_models_snapshot() -> dict[str, Any]:
-                    api_snapshot = build_api_connections_readonly_snapshot(
-                        api_connections_readonly_runner
-                    )
-                    operator_status, operator_status_timeout = _bounded_operator_status_payload(
-                        operator_surface_session
-                    )
-                    packet = build_custom_model_registry_packet(
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                    if operator_status_timeout:
-                        packet = _mark_operator_status_timeout_fallback(packet)
-                    return packet
+            dispatcher_name = type(self).GET_ROUTE_DISPATCH_TABLE.get(handler_id)
+            if dispatcher_name is None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_GET_ROUTE_DISPATCH_MISSING",
+                    human_message="Registered Web GET route is not bound in the dispatch table.",
+                )
+            dispatcher = getattr(self, dispatcher_name, None)
+            if not callable(dispatcher):
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    machine_error_code="WEB_GET_ROUTE_DISPATCH_TARGET_MISSING",
+                    human_message="Registered Web GET route dispatch target is unavailable.",
+                )
+            dispatcher(request_path)
 
-                self._send_json(
-                    _run_custom_codex_readonly_snapshot(
-                        endpoint=parsed.path,
-                        timeout_scope="custom_models_readonly_snapshot",
-                        build_snapshot=build_models_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/model-selector":
-                def build_selector_snapshot() -> dict[str, Any]:
-                    api_snapshot = build_api_connections_readonly_snapshot(
-                        api_connections_readonly_runner
-                    )
-                    operator_status, operator_status_timeout = _bounded_operator_status_payload(
-                        operator_surface_session
-                    )
-                    packet = build_dual_lane_model_selection_ui_packet(
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                    if operator_status_timeout:
-                        packet = _mark_operator_status_timeout_fallback(packet)
-                    return packet
+        def _is_api_request_path(self, request_path: str) -> bool:
+            return request_path == "/api" or request_path.startswith("/api/")
 
-                self._send_json(
-                    _run_custom_codex_readonly_snapshot(
-                        endpoint=parsed.path,
-                        timeout_scope="custom_model_selector_readonly_snapshot",
-                        build_snapshot=build_selector_snapshot,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/api-compat":
-                self._send_json(
-                    build_custom_api_compat_packet(operator_surface_session.status_payload())
-                )
-                return
-            if parsed.path == "/api/codex/custom/api-action-gate":
-                def build_api_action_gate_snapshot() -> dict[str, Any]:
-                    api_snapshot = build_api_connections_readonly_snapshot(
-                        api_connections_readonly_runner
-                    )
-                    operator_status = operator_surface_session.status_payload()
-                    availability_lattice_packet = _build_live_native_availability_lattice_packet(
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                    )
-                    return build_custom_api_action_gate_packet(
-                        {},
-                        operator_status,
-                        api_snapshot=api_snapshot,
-                        availability_lattice_packet=availability_lattice_packet,
-                        owner_authorized=codex_custom_live_prompt_authorized,
-                    )
+        def _handle_get_owner_login_sandbox(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_owner_login_sandbox_page(parsed.query)
+            return
 
-                self._send_json(
-                    _run_custom_codex_readonly_snapshot(
-                        endpoint=parsed.path,
-                        timeout_scope="custom_api_action_gate_readonly_snapshot",
-                        build_snapshot=build_api_action_gate_snapshot,
-                    )
+        def _handle_get_api_live_readonly(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_live_readonly_snapshot(readonly_runner))
+            return
+
+        def _handle_get_api_accounts_readonly(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_accounts_readonly_snapshot(accounts_readonly_runner))
+            return
+
+        def _handle_get_api_api_connections_readonly(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            )
+            return
+
+        def _handle_get_api_actions(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                ui_action_metadata(
+                    launch_client_path=launch_client_path,
+                    launch_copy_contract=launch_copy_contract,
+                    action_phase=action_phase,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    legacy_import_token_store=legacy_import_token_store,
                 )
-                return
-            if parsed.path == "/api/codex/custom/accounts":
-                self._send_json(build_accounts_truth_packet(self._codex_account_commands()))
-                return
-            if parsed.path == "/api/codex/custom/account-selection":
-                self._send_json(
-                    build_account_selection_packet(
-                        self._codex_account_commands(),
-                        operator_surface_session.status_payload(),
-                    )
+            )
+            return
+
+        def _handle_get_api_operator_status(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(operator_surface_session.status_payload())
+            return
+
+        def _handle_get_api_operator_models(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            models = operator_surface_session.probe_models()
+            self._send_json(
+                {
+                    "schema_version": 1,
+                    "status": "ok" if models.get("ok") else "degraded",
+                    "source": "operator_surface",
+                    "captured_at_utc": models.get("captured_at_utc", ""),
+                    "model_ids": models.get("model_ids", []),
+                    "server_issued": True,
+                    "machine_error_code": "OK" if models.get("ok") else "OPERATOR_MODELS_UNAVAILABLE",
+                }
+            )
+            return
+
+        def _handle_get_api_operator_transcript(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(operator_surface_session.transcript_payload())
+            return
+
+        def _handle_get_api_review_surface(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                review_query_bridge.get_review_surface(
+                    parse_qs(parsed.query, keep_blank_values=True) if parsed.query else None
                 )
-                return
-            if parsed.path == "/api/codex/custom/sessions":
-                self._send_json(codex_custom_sessions.list_packet())
-                return
-            if parsed.path == "/api/codex/custom/recovery/contract":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
+            )
+            return
+
+        def _handle_get_api_review_commands(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "commands": review_allowlist_metadata(),
+                }
+            )
+            return
+
+        def _handle_get_api_codex_launch_modes(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_launch_modes_packet(operator_surface_session.status_payload()))
+            return
+
+        def _handle_get_api_codex_original_status(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_original_status_packet())
+            return
+
+        def _handle_get_api_codex_custom_status(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            def build_custom_status_snapshot() -> dict[str, Any]:
+                return build_custom_status_packet(operator_surface_session.status_payload())
+
+            self._send_json(
+                _run_custom_codex_readonly_snapshot(
+                    endpoint=parsed.path,
+                    timeout_scope="custom_status_readonly_snapshot",
+                    build_snapshot=build_custom_status_snapshot,
                 )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
+            )
+            return
+
+        def _handle_get_api_codex_custom_models(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            def build_models_snapshot() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(
                     api_connections_readonly_runner
                 )
-                self._send_json(
-                    build_custom_recovery_contract_packet(
-                        original_status=original_status,
-                        custom_status=custom_status,
-                        accounts_readonly=accounts_readonly,
-                        api_readonly=api_readonly,
-                    )
+                operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
                 )
-                return
-            if parsed.path == "/api/codex/custom/recovery/admitted-session-actions":
-                self._send_json(build_recovery_admitted_session_actions_packet())
-                return
-            if parsed.path == "/api/codex/custom/recovery/stop-cleanup/preflight":
-                self._send_json(
-                    build_stop_cleanup_preflight_packet(
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        )
+                packet = build_custom_model_registry_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                if operator_status_timeout:
+                    packet = _mark_operator_status_timeout_fallback(packet)
+                return packet
+
+            self._send_json(
+                _run_custom_codex_readonly_snapshot(
+                    endpoint=parsed.path,
+                    timeout_scope="custom_models_readonly_snapshot",
+                    build_snapshot=build_models_snapshot,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_model_selector(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            def build_selector_snapshot() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
+                operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                packet = build_dual_lane_model_selection_ui_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                if operator_status_timeout:
+                    packet = _mark_operator_status_timeout_fallback(packet)
+                return packet
+
+            self._send_json(
+                _run_custom_codex_readonly_snapshot(
+                    endpoint=parsed.path,
+                    timeout_scope="custom_model_selector_readonly_snapshot",
+                    build_snapshot=build_selector_snapshot,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_api_compat(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_api_compat_packet(operator_surface_session.status_payload())
+            )
+            return
+
+        def _handle_get_api_codex_custom_api_action_gate(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            def build_api_action_gate_snapshot() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                return build_custom_api_action_gate_packet(
+                    {},
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+
+            self._send_json(
+                _run_custom_codex_readonly_snapshot(
+                    endpoint=parsed.path,
+                    timeout_scope="custom_api_action_gate_readonly_snapshot",
+                    build_snapshot=build_api_action_gate_snapshot,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_accounts(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_accounts_truth_packet(self._codex_account_commands()))
+            return
+
+        def _handle_get_api_codex_custom_account_selection(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_account_selection_packet(
+                    self._codex_account_commands(),
+                    operator_surface_session.status_payload(),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_sessions(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(codex_custom_sessions.list_packet())
+            return
+
+        def _handle_get_api_codex_custom_recovery_contract(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            original_status = build_original_status_packet()
+            custom_status = build_custom_status_packet(
+                operator_surface_session.status_payload()
+            )
+            accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+            api_readonly = build_api_connections_readonly_snapshot(
+                api_connections_readonly_runner
+            )
+            self._send_json(
+                build_custom_recovery_contract_packet(
+                    original_status=original_status,
+                    custom_status=custom_status,
+                    accounts_readonly=accounts_readonly,
+                    api_readonly=api_readonly,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_admitted_session_actions(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_recovery_admitted_session_actions_packet())
+            return
+
+        def _handle_get_api_codex_custom_recovery_stop_cleanup_preflight(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_stop_cleanup_preflight_packet(
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
                         if parsed.query
-                        else None,
+                        else None
                     )
+                    if parsed.query
+                    else None,
                 )
-                return
-            if parsed.path == "/api/codex/custom/recovery/process-kill/preflight":
-                self._send_json(
-                    build_process_kill_preflight_packet(
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_process_kill_preflight(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_process_kill_preflight_packet(
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
                         if parsed.query
-                        else None,
+                        else None
                     )
+                    if parsed.query
+                    else None,
                 )
-                return
-            if parsed.path == "/api/codex/custom/recovery/operator-ready":
-                packet = build_operator_ready_packet()
-                if parsed.query:
-                    packet = {
-                        **packet,
-                        "status": "blocked",
-                        "machine_error_code": (
-                            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BROWSER_FIELD_REJECTED"
-                        ),
-                        "forbidden_fields": sorted(
-                            parse_qs(parsed.query, keep_blank_values=True).keys()
-                        ),
-                        "browser_forbidden_fields_rejected": True,
-                        "bounded_local_operator_surface_ready": False,
-                        "final_verdict": (
-                            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED"
-                        ),
-                        "next_action": "remove_forbidden_browser_fields",
-                    }
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_operator_ready(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            packet = build_operator_ready_packet()
+            if parsed.query:
+                packet = {
+                    **packet,
+                    "status": "blocked",
+                    "machine_error_code": (
+                        "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BROWSER_FIELD_REJECTED"
+                    ),
+                    "forbidden_fields": sorted(
+                        parse_qs(parsed.query, keep_blank_values=True).keys()
+                    ),
+                    "browser_forbidden_fields_rejected": True,
+                    "bounded_local_operator_surface_ready": False,
+                    "final_verdict": (
+                        "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED"
+                    ),
+                    "next_action": "remove_forbidden_browser_fields",
+                }
+            self._send_json(packet)
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_process_owner_contract(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            original_status = build_original_status_packet()
+            custom_status = build_custom_status_packet(
+                operator_surface_session.status_payload()
+            )
+            accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+            api_readonly = build_api_connections_readonly_snapshot(
+                api_connections_readonly_runner
+            )
+            contract_packet = build_custom_recovery_contract_packet(
+                original_status=original_status,
+                custom_status=custom_status,
+                accounts_readonly=accounts_readonly,
+                api_readonly=api_readonly,
+            )
+            self._send_json(
+                build_custom_recovery_rollback_process_owner_contract_packet(
+                    contract_packet=contract_packet,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_point_dry_run(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            original_status = build_original_status_packet()
+            custom_status = build_custom_status_packet(
+                operator_surface_session.status_payload()
+            )
+            accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+            api_readonly = build_api_connections_readonly_snapshot(
+                api_connections_readonly_runner
+            )
+            contract_packet = build_custom_recovery_contract_packet(
+                original_status=original_status,
+                custom_status=custom_status,
+                accounts_readonly=accounts_readonly,
+                api_readonly=api_readonly,
+            )
+            rollback_process_owner_contract = (
+                build_custom_recovery_rollback_process_owner_contract_packet(
+                    contract_packet=contract_packet,
+                )
+            )
+            self._send_json(
+                build_custom_recovery_rollback_point_dry_run_packet(
+                    rollback_process_owner_contract=rollback_process_owner_contract,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_point_create_admission(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_rollback_point_create_admission_packet())
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_point_verify(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_recovery_rollback_point_verify_packet(
+                    browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_apply_admission_dry_run(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_rollback_apply_admission_dry_run_packet(
+                    browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_apply_live_preflight(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_rollback_apply_live_preflight_packet(
+                    browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_recovery_rollback_apply_receipt_verify(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_recovery_rollback_apply_receipt_verify_packet(
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_window_prompt_trace(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_window_prompt_trace_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_window_input_route_trace(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_window_input_route_trace_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_bridge_failure_recovery_truth(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_bridge_failure_recovery_truth_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_stable_bridge_preflight(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_stable_bridge_preflight_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    expected_bridge_port=custom_native_bridge_lease.bridge_port,
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_live_bridge_stability(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_live_bridge_stability_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    expected_bridge_port=custom_native_bridge_lease.bridge_port,
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_chatgpt_plus_api_coder_trace(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_quick_start_chatgpt_plus_deepseek_file_edit_proof(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_quick_start_deepseek_code_edit_proof(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_deepseek_code_edit_reproduction_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_quick_start_api_only_deepseek_live_code_edit_truth(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_api_only_deepseek_live_code_edit_truth_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_quick_start_deepseek_route_bound_edit_proof(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_deepseek_route_bound_real_edit_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                    repo_root=ROOT,
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_persistent_profile(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_persistent_profile_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_persistent_relaunch_profile(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(
+                build_custom_codex_persistent_relaunch_profile_packet(
+                    first_launch_packet=custom_native_launch_state["previous_packet"],
+                    second_launch_packet=custom_native_launch_state["last_packet"],
+                    browser_payload=(
+                        parse_qs(parsed.query, keep_blank_values=True)
+                        if parsed.query
+                        else None
+                    ),
+                )
+            )
+            return
+
+        def _handle_get_api_codex_custom_stable_profile_history_persistence(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            payload = (
+                parse_qs(parsed.query, keep_blank_values=True)
+                if parsed.query
+                else {}
+            )
+            action = _payload_first_text(payload, "action", "prove_after")
+            if action == "capture_before":
+                packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    browser_payload=payload,
+                )
+                if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
+                    custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
                 self._send_json(packet)
                 return
-            if parsed.path == "/api/codex/custom/recovery/rollback-process-owner-contract":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
+            self._send_json(
+                build_custom_codex_stable_profile_history_persistence_packet(
+                    first_launch_packet=custom_native_launch_state["previous_packet"],
+                    second_launch_packet=custom_native_launch_state["last_packet"],
+                    before_history_snapshot=custom_native_launch_state[
+                        "history_before_snapshot"
+                    ],
+                    browser_payload=payload,
                 )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
+            )
+            return
+
+        def _handle_get_api_codex_custom_persistent_profile_history_proof(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            payload = (
+                parse_qs(parsed.query, keep_blank_values=True)
+                if parsed.query
+                else {}
+            )
+            self._send_json(
+                build_custom_codex_persistent_profile_history_proof_packet(
+                    first_launch_packet=custom_native_launch_state["previous_packet"],
+                    second_launch_packet=custom_native_launch_state["last_packet"],
+                    before_history_snapshot=custom_native_launch_state[
+                        "history_before_snapshot"
+                    ],
+                    browser_payload=payload,
                 )
-                contract_packet = build_custom_recovery_contract_packet(
-                    original_status=original_status,
-                    custom_status=custom_status,
-                    accounts_readonly=accounts_readonly,
-                    api_readonly=api_readonly,
-                )
-                self._send_json(
-                    build_custom_recovery_rollback_process_owner_contract_packet(
-                        contract_packet=contract_packet,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-point-dry-run":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
-                )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                contract_packet = build_custom_recovery_contract_packet(
-                    original_status=original_status,
-                    custom_status=custom_status,
-                    accounts_readonly=accounts_readonly,
-                    api_readonly=api_readonly,
-                )
-                rollback_process_owner_contract = (
-                    build_custom_recovery_rollback_process_owner_contract_packet(
-                        contract_packet=contract_packet,
-                    )
-                )
-                self._send_json(
-                    build_custom_recovery_rollback_point_dry_run_packet(
-                        rollback_process_owner_contract=rollback_process_owner_contract,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-point-create-admission":
-                self._send_json(build_rollback_point_create_admission_packet())
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-point/verify":
-                self._send_json(
-                    build_custom_recovery_rollback_point_verify_packet(
-                        browser_payload=parse_qs(parsed.query) if parsed.query else None,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-apply/admission-dry-run":
-                self._send_json(
-                    build_rollback_apply_admission_dry_run_packet(
-                        browser_payload=parse_qs(parsed.query) if parsed.query else None,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-apply/live-preflight":
-                self._send_json(
-                    build_rollback_apply_live_preflight_packet(
-                        browser_payload=parse_qs(parsed.query) if parsed.query else None,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/recovery/rollback-apply/receipt/verify":
-                self._send_json(
-                    build_custom_recovery_rollback_apply_receipt_verify_packet(
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/window-prompt-trace":
-                self._send_json(
-                    build_custom_codex_window_prompt_trace_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/window-input-route-trace":
-                self._send_json(
-                    build_custom_codex_window_input_route_trace_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/bridge-failure-recovery-truth":
-                self._send_json(
-                    build_custom_codex_bridge_failure_recovery_truth_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/stable-bridge-preflight":
-                self._send_json(
-                    build_custom_codex_stable_bridge_preflight_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        expected_bridge_port=custom_native_bridge_lease.bridge_port,
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/live-bridge-stability":
-                self._send_json(
-                    build_custom_codex_live_bridge_stability_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        expected_bridge_port=custom_native_bridge_lease.bridge_port,
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/chatgpt-plus-api-coder-trace":
-                self._send_json(
-                    build_custom_codex_chatgpt_plus_api_coder_trace_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof":
-                self._send_json(
-                    build_custom_codex_chatgpt_plus_deepseek_file_edit_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/deepseek-code-edit-proof":
-                self._send_json(
-                    build_custom_codex_deepseek_code_edit_reproduction_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/api-only-deepseek-live-code-edit-truth":
-                self._send_json(
-                    build_api_only_deepseek_live_code_edit_truth_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/quick-start/deepseek-route-bound-edit-proof":
-                self._send_json(
-                    build_custom_codex_deepseek_route_bound_real_edit_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        bridge_trace_packet=custom_native_bridge_lease.trace_snapshot(),
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                        repo_root=ROOT,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/persistent-profile":
-                self._send_json(
-                    build_custom_codex_persistent_profile_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/persistent-relaunch-profile":
-                self._send_json(
-                    build_custom_codex_persistent_relaunch_profile_packet(
-                        first_launch_packet=custom_native_launch_state["previous_packet"],
-                        second_launch_packet=custom_native_launch_state["last_packet"],
-                        browser_payload=(
-                            parse_qs(parsed.query, keep_blank_values=True)
-                            if parsed.query
-                            else None
-                        ),
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/stable-profile-history-persistence":
-                payload = (
-                    parse_qs(parsed.query, keep_blank_values=True)
-                    if parsed.query
-                    else {}
-                )
-                action = _payload_first_text(payload, "action", "prove_after")
-                if action == "capture_before":
-                    packet = build_custom_codex_stable_profile_history_before_snapshot_packet(
-                        last_launch_packet=custom_native_launch_state["last_packet"],
-                        browser_payload=payload,
-                    )
-                    if packet.get("status") == "ok" and isinstance(packet.get("snapshot"), dict):
-                        custom_native_launch_state["history_before_snapshot"] = packet["snapshot"]
-                    self._send_json(packet)
-                    return
-                self._send_json(
-                    build_custom_codex_stable_profile_history_persistence_packet(
-                        first_launch_packet=custom_native_launch_state["previous_packet"],
-                        second_launch_packet=custom_native_launch_state["last_packet"],
-                        before_history_snapshot=custom_native_launch_state[
-                            "history_before_snapshot"
-                        ],
-                        browser_payload=payload,
-                    )
-                )
-                return
-            if parsed.path == "/api/codex/custom/persistent-profile-history-proof":
-                payload = (
-                    parse_qs(parsed.query, keep_blank_values=True)
-                    if parsed.query
-                    else {}
-                )
-                self._send_json(
-                    build_custom_codex_persistent_profile_history_proof_packet(
-                        first_launch_packet=custom_native_launch_state["previous_packet"],
-                        second_launch_packet=custom_native_launch_state["last_packet"],
-                        before_history_snapshot=custom_native_launch_state[
-                            "history_before_snapshot"
-                        ],
-                        browser_payload=payload,
-                    )
-                )
-                return
+            )
+            return
+
+        def _handle_get_api_codex_custom_sessions_prefix(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
             custom_session = self._custom_session_route(parsed.path)
-            if custom_session is not None:
-                session_id, action = custom_session
-                if action == "":
-                    self._send_json(codex_custom_sessions.get_packet(session_id))
-                    return
-                if action == "transcript":
-                    self._send_json(codex_custom_sessions.transcript_packet(session_id))
-                    return
-            self._send_static(parsed.path)
+            if custom_session is None:
+                raise _HttpIngressRejection(
+                    status=HTTPStatus.NOT_FOUND,
+                    machine_error_code="WEB_ROUTE_NOT_REGISTERED",
+                    human_message="Web GET API route is not registered in the route effect registry.",
+                )
+            session_id, action = custom_session
+            if action == "":
+                self._send_json(codex_custom_sessions.get_packet(session_id))
+                return
+            if action == "transcript":
+                self._send_json(codex_custom_sessions.transcript_packet(session_id))
+                return
+            raise _HttpIngressRejection(
+                status=HTTPStatus.NOT_FOUND,
+                machine_error_code="WEB_ROUTE_NOT_REGISTERED",
+                human_message="Web GET API route is not registered in the route effect registry.",
+            )
 
         def do_POST(self) -> None:
             try:
@@ -10944,6 +11090,11 @@ def build_handler(
             self.end_headers()
             self.wfile.write(body)
 
+    Handler.GET_ROUTE_DISPATCH_TABLE = {
+        str(route.handler_id): f"_handle_{route.handler_id}"
+        for route in WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+        if route.method == "GET" and route.handler_id
+    }
     Handler.POST_ROUTE_DISPATCH_TABLE = {
         str(route.handler_id): f"_handle_{route.handler_id}"
         for route in WEB_DESIGN_LIVE_ROUTE_TABLE.routes

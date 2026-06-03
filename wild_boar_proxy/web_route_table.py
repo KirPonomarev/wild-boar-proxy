@@ -60,8 +60,8 @@ class RouteSpec:
             raise ValueError("path must start with /")
         if self.effect not in CANONICAL_ROUTE_EFFECTS:
             raise ValueError(f"unsupported route effect: {self.effect}")
-        if method == "POST" and not handler_id:
-            raise ValueError("POST routes must declare handler_id")
+        if not handler_id:
+            raise ValueError(f"{method} routes must declare handler_id")
         if self.prefix and not path.endswith("/"):
             raise ValueError("prefix routes must end with /")
         if not self.body_kind:
@@ -84,18 +84,18 @@ class WebRouteTable:
         self._routes = tuple(routes)
         exact: dict[tuple[str, str], RouteSpec] = {}
         prefix: dict[tuple[str, str], RouteSpec] = {}
-        post_handler_ids: set[str] = set()
+        handler_ids_by_method: dict[str, set[str]] = {}
         for route in self._routes:
             bucket = prefix if route.prefix else exact
             key = (route.method, route.path)
             if key in bucket:
                 raise ValueError(f"duplicate route spec: {route.method} {route.path}")
             bucket[key] = route
-            if route.method == "POST":
-                handler_id = str(route.handler_id or "")
-                if handler_id in post_handler_ids:
-                    raise ValueError(f"duplicate POST route handler_id: {handler_id}")
-                post_handler_ids.add(handler_id)
+            handler_id = str(route.handler_id or "")
+            method_handler_ids = handler_ids_by_method.setdefault(route.method, set())
+            if handler_id in method_handler_ids:
+                raise ValueError(f"duplicate {route.method} route handler_id: {handler_id}")
+            method_handler_ids.add(handler_id)
         self._exact = exact
         self._prefixes = tuple(
             sorted(

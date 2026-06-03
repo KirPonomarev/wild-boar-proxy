@@ -5984,39 +5984,82 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         end = source.index(end_marker, start)
         return source[start:end]
 
-    def test_registry_covers_current_exact_get_paths_and_post_dispatch_bindings(self) -> None:
-        get_block = self._handler_block("        def _handle_get", "        def do_POST")
-        handled_get_paths = set(re.findall(r'if parsed\.path == "([^"]+)"', get_block))
-        registered_get_paths = {
-            route.path
-            for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
-            if route.method == "GET" and not route.prefix
-        }
-        registered_post_handler_ids = {
-            route.handler_id
-            for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
-            if route.method == "POST"
-        }
+    @staticmethod
+    def _representative_get_path(route) -> str:
+        if route.prefix and route.path == "/api/codex/custom/sessions/":
+            return "/api/codex/custom/sessions/probe-session/transcript"
+        return route.path
+
+    def test_registry_routes_have_get_and_post_dispatch_bindings(self) -> None:
         handler = build_handler(runner=mock.Mock())
 
-        self.assertEqual(handled_get_paths, registered_get_paths)
-        self.assertEqual(set(handler.POST_ROUTE_DISPATCH_TABLE), registered_post_handler_ids)
-        self.assertEqual(
-            len(set(handler.POST_ROUTE_DISPATCH_TABLE.values())),
-            len(registered_post_handler_ids),
-        )
-        for handler_id, dispatcher_name in handler.POST_ROUTE_DISPATCH_TABLE.items():
-            self.assertEqual(dispatcher_name, f"_handle_{handler_id}")
-            self.assertTrue(callable(getattr(handler, dispatcher_name, None)))
+        for method, dispatch_table in (
+            ("GET", handler.GET_ROUTE_DISPATCH_TABLE),
+            ("POST", handler.POST_ROUTE_DISPATCH_TABLE),
+        ):
+            registered_handler_ids = {
+                route.handler_id
+                for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+                if route.method == method
+            }
+            with self.subTest(method=method):
+                self.assertEqual(set(dispatch_table), registered_handler_ids)
+                self.assertEqual(len(set(dispatch_table.values())), len(registered_handler_ids))
+                for handler_id, dispatcher_name in dispatch_table.items():
+                    self.assertEqual(dispatcher_name, f"_handle_{handler_id}")
+                    self.assertTrue(callable(getattr(handler, dispatcher_name, None)))
+
+    def test_registered_get_routes_dispatch_to_their_bound_handlers(self) -> None:
+        handler = build_handler(runner=mock.Mock())
+        get_routes = [
+            route
+            for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+            if route.method == "GET"
+        ]
+
+        def make_probe(handler_id: str):
+            def probe(self, request_path: str) -> None:
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "handler_id": handler_id,
+                        "request_path": request_path,
+                    }
+                )
+
+            return probe
+
+        for route in get_routes:
+            handler_id = str(route.handler_id)
+            dispatcher_name = handler.GET_ROUTE_DISPATCH_TABLE[handler_id]
+            setattr(handler, dispatcher_name, make_probe(handler_id))
+
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            for route in get_routes:
+                path = self._representative_get_path(route)
+                with self.subTest(path=route.path, handler_id=route.handler_id):
+                    packet = json.loads(fetch(f"{base}{path}"))
+                    self.assertEqual(packet["status"], "ok")
+                    self.assertEqual(packet["handler_id"], route.handler_id)
+                    self.assertEqual(packet["request_path"], path)
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
 
     def test_registry_specs_have_canonical_effects_and_post_auth_policy(self) -> None:
         for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes:
             self.assertIn(route.effect, CANONICAL_ROUTE_EFFECTS)
             self.assertTrue(route.body_kind)
             self.assertTrue(route.browser_field_policy)
+            if route.method in {"GET", "POST"}:
+                self.assertTrue(route.handler_id, route.path)
             if route.method == "POST":
                 self.assertTrue(route.auth_required, route.path)
-                self.assertTrue(route.handler_id, route.path)
 
     def test_registry_dynamic_prefixes_and_queryless_lookup(self) -> None:
         action = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
@@ -6086,6 +6129,150 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         self.assertEqual(packet["source"], "web_ingress")
         self.assertEqual(packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
         self.assertEqual(packet["changed_files"], [])
+
+    def test_registered_get_routes_are_behaviorally_required_before_dispatch(self) -> None:
+        cases = (
+            ("/api/live-readonly", lambda route: route.method == "GET" and route.path == "/api/live-readonly"),
+            (
+                "/api/codex/custom/sessions/session-1/transcript",
+                lambda route: route.method == "GET"
+                and route.prefix
+                and route.path == "/api/codex/custom/sessions/",
+            ),
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            for path, remove_route in cases:
+                reduced_table = WebRouteTable(
+                    route
+                    for route in live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.routes
+                    if not remove_route(route)
+                )
+                with self.subTest(path=path), mock.patch.object(
+                    live_server,
+                    "WEB_DESIGN_LIVE_ROUTE_TABLE",
+                    reduced_table,
+                ):
+                    try:
+                        fetch(f"{base}{path}")
+                    except urllib.error.HTTPError as exc:
+                        status = HTTPStatus(exc.code)
+                        packet = json.loads(exc.read().decode("utf-8"))
+                    else:
+                        self.fail("removed GET registry route should reject")
+                    self.assertEqual(status, HTTPStatus.NOT_FOUND)
+                    self.assertEqual(packet["status"], "rejected")
+                    self.assertEqual(packet["source"], "web_ingress")
+                    self.assertEqual(packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
+                    self.assertEqual(packet["changed_files"], [])
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+    def test_missing_get_dispatch_binding_rejects_before_handler_dispatch(self) -> None:
+        handler = build_handler(runner=mock.Mock())
+        route = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("GET", "/api/live-readonly")
+        self.assertIsNotNone(route)
+        assert route is not None
+        binding = route.handler_id
+        self.assertTrue(binding)
+        handler.GET_ROUTE_DISPATCH_TABLE = {
+            key: value for key, value in handler.GET_ROUTE_DISPATCH_TABLE.items() if key != binding
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            try:
+                fetch(f"{base}/api/live-readonly")
+            except urllib.error.HTTPError as exc:
+                status = HTTPStatus(exc.code)
+                packet = json.loads(exc.read().decode("utf-8"))
+            else:
+                self.fail("missing GET dispatch binding should reject")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(status, HTTPStatus.INTERNAL_SERVER_ERROR)
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["source"], "web_ingress")
+        self.assertEqual(packet["machine_error_code"], "WEB_GET_ROUTE_DISPATCH_MISSING")
+        self.assertEqual(packet["changed_files"], [])
+
+    def test_unknown_api_get_route_does_not_fall_through_to_static_success(self) -> None:
+        with tempfile.TemporaryDirectory() as static_dir:
+            static_root = Path(static_dir)
+            (static_root / "index.html").write_text("index-ok", encoding="utf-8")
+            (static_root / "asset.txt").write_text("asset-ok", encoding="utf-8")
+            (static_root / "api").mkdir()
+            (static_root / "api" / "not-registered").write_text(
+                "static-api-asset-should-not-serve",
+                encoding="utf-8",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(static_dir=static_root),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                static_asset = fetch(f"{base}/asset.txt")
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    fetch(f"{base}/api/not-registered")
+                api_packet = json.loads(raised.exception.read().decode("utf-8"))
+                with self.assertRaises(urllib.error.HTTPError) as prefix_raised:
+                    fetch(f"{base}/api/codex/custom/sessions/session-1/not-registered")
+                prefix_packet = json.loads(prefix_raised.exception.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(static_asset, "asset-ok")
+        self.assertEqual(raised.exception.code, HTTPStatus.NOT_FOUND)
+        self.assertEqual(api_packet["status"], "rejected")
+        self.assertEqual(api_packet["source"], "web_ingress")
+        self.assertEqual(api_packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
+        self.assertEqual(api_packet["changed_files"], [])
+        self.assertNotIn("static-api-asset-should-not-serve", json.dumps(api_packet))
+        self.assertEqual(prefix_raised.exception.code, HTTPStatus.NOT_FOUND)
+        self.assertEqual(prefix_packet["status"], "rejected")
+        self.assertEqual(prefix_packet["source"], "web_ingress")
+        self.assertEqual(prefix_packet["machine_error_code"], "WEB_ROUTE_NOT_REGISTERED")
+        self.assertEqual(prefix_packet["changed_files"], [])
+
+    def test_get_dispatch_table_preserves_representative_outputs(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            live_readonly = json.loads(fetch(f"{base}/api/live-readonly"))
+            operator_status = json.loads(fetch(f"{base}/api/operator/status"))
+            custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
+            sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+            transcript = json.loads(
+                fetch(f"{base}/api/codex/custom/sessions/session-missing/transcript")
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(live_readonly["status"], "ok")
+        self.assertEqual(operator_status["status"]["status"], "ok")
+        self.assertIn(custom_status["status"], {"ok", "degraded"})
+        self.assertEqual(sessions["status"], "ok")
+        self.assertEqual(transcript["status"], "rejected")
+        self.assertEqual(transcript["machine_error_code"], "SESSION_NOT_FOUND")
 
     def test_registered_post_routes_are_behaviorally_required_before_dispatch(self) -> None:
         cases = (
