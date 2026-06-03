@@ -19097,6 +19097,25 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(
+            set(payload["legacy_import_result"]),
+            {
+                "final_outcome",
+                "rollback_attempted",
+                "rollback_outcome",
+                "source_dir",
+                "status",
+                "transaction_phase",
+            },
+        )
+        self.assertEqual(
+            set(payload["external_models_result"]),
+            {
+                "final_outcome",
+                "imported_files",
+                "status",
+            },
+        )
+        self.assertEqual(
             payload["legacy_import_result"]["final_outcome"], "import_completed"
         )
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
@@ -19272,6 +19291,25 @@ class CliTests(unittest.TestCase):
             {"INVALID_JSON_FILE", "LEGACY_IMPORT_VERIFY_FAILED"},
         )
         legacy_result = payload["legacy_import_result"]
+        self.assertEqual(
+            set(legacy_result),
+            {
+                "final_outcome",
+                "rollback_attempted",
+                "rollback_outcome",
+                "source_dir",
+                "status",
+                "transaction_phase",
+            },
+        )
+        self.assertEqual(
+            set(payload["external_models_result"]),
+            {
+                "final_outcome",
+                "imported_files",
+                "status",
+            },
+        )
         self.assertTrue(legacy_result["rollback_attempted"])
         self.assertEqual(legacy_result["rollback_outcome"], "completed")
         self.assertEqual(

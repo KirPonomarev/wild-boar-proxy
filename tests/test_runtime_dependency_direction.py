@@ -722,9 +722,13 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "ensure_installed_layout",
             "ensure_repo_owned_operator_wrapper_chain",
             "ensure_repo_owned_owner_helper_chain",
+            "import_legacy_layout",
             "installer_managed_paths",
             "installer_operator_wrapper_paths",
             "installer_owner_helper_paths",
+            "read_json",
+            "read_text",
+            "restore_path_state",
             "serialized_lock",
             "snapshot_path_states",
             "write_json_atomic",
@@ -934,6 +938,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         dependencies = installer.InstallerDependencies(
             run_installer_init_impl=fake_run_installer_init_impl,
+            run_legacy_import_impl=lambda *args, **kwargs: {},
         )
 
         payload = installer.run_installer_init(
@@ -944,6 +949,36 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertEqual(payload["surface"], "installer-init")
         self.assertEqual(payload["paths"], "paths-sentinel")
         self.assertEqual(calls, [(("paths-sentinel",), {})])
+
+    def test_legacy_import_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_legacy_import_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "legacy-import",
+                "paths": args[0],
+                "source_dir": args[1],
+            }
+
+        dependencies = installer.InstallerDependencies(
+            run_installer_init_impl=lambda *args, **kwargs: {},
+            run_legacy_import_impl=fake_run_legacy_import_impl,
+        )
+
+        payload = installer.run_legacy_import(
+            "paths-sentinel",
+            "source-dir-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "legacy-import")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["source_dir"], "source-dir-sentinel")
+        self.assertEqual(calls, [(("paths-sentinel", "source-dir-sentinel"), {})])
 
     def test_rollout_rotation_inspect_facade_passes_runtime_dependency(
         self,
@@ -1195,6 +1230,45 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             [
                 (
                     ("paths-sentinel",),
+                    {
+                        "dependencies": runtime_mod._installer_dependencies(),
+                    },
+                )
+            ],
+        )
+
+    def test_legacy_import_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_legacy_import(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "legacy-import",
+                "paths": args[0],
+                "source_dir": args[1],
+            }
+
+        with mock.patch.object(
+            installer,
+            "run_legacy_import",
+            side_effect=fake_legacy_import,
+        ):
+            payload = runtime_mod.run_legacy_import(
+                "paths-sentinel",
+                "source-dir-sentinel",
+            )
+
+        self.assertEqual(payload["surface"], "legacy-import")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["source_dir"], "source-dir-sentinel")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "source-dir-sentinel"),
                     {
                         "dependencies": runtime_mod._installer_dependencies(),
                     },

@@ -119,6 +119,12 @@ OWNER_SURFACES = {
         WRITE_ADJACENT,
         frozenset({"run_installer_init_impl"}),
     ),
+    "run_legacy_import": Surface(
+        INSTALLER,
+        "run_legacy_import",
+        WRITE_ADJACENT,
+        frozenset({"run_legacy_import_impl"}),
+    ),
     "credential_status": Surface(
         CREDENTIALS,
         "credential_status",
@@ -323,6 +329,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (ROLLOUT, "run_rollout_stage_prove"),
                 (ROLLOUT, "run_rollout_stage_advance"),
                 (INSTALLER, "run_installer_init"),
+                (INSTALLER, "run_legacy_import"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),
@@ -585,6 +592,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
             ("run_rollout_stage_prove", SUBPROCESS_ADJACENT),
             ("run_rollout_stage_advance", SUBPROCESS_ADJACENT),
             ("run_installer_init", WRITE_ADJACENT),
+            ("run_legacy_import", WRITE_ADJACENT),
             ("_run_credentials_command", WRITE_ADJACENT),
             ("main", DEFERRED_UNCLASSIFIED),
         ):

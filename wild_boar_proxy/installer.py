@@ -14,6 +14,7 @@ class InstallerPaths(Protocol):
 @dataclass(frozen=True)
 class InstallerDependencies:
     run_installer_init_impl: Callable[..., dict[str, Any]]
+    run_legacy_import_impl: Callable[..., dict[str, Any]]
 
 
 def run_installer_init(
@@ -22,3 +23,12 @@ def run_installer_init(
     dependencies: InstallerDependencies,
 ) -> dict[str, Any]:
     return dependencies.run_installer_init_impl(paths)
+
+
+def run_legacy_import(
+    paths: InstallerPaths,
+    source_dir_raw: str,
+    *,
+    dependencies: InstallerDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_legacy_import_impl(paths, source_dir_raw)

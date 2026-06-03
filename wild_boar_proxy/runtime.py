@@ -17351,6 +17351,7 @@ def _installer_dependencies() -> Any:
 
     return InstallerDependencies(
         run_installer_init_impl=_run_installer_init_impl,
+        run_legacy_import_impl=_run_legacy_import_impl,
     )
 
 
@@ -17429,6 +17430,16 @@ def _run_installer_init_impl(paths: RuntimePaths) -> dict[str, Any]:
 
 
 def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
+    from .installer import run_legacy_import as _run_legacy_import
+
+    return _run_legacy_import(
+        paths,
+        source_dir_raw,
+        dependencies=_installer_dependencies(),
+    )
+
+
+def _run_legacy_import_impl(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
     from .external_models.integration import import_legacy_layout, installer_managed_paths
     from .external_models.paths import ExternalModelsPaths
 
