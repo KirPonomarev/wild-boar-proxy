@@ -1640,23 +1640,46 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        for required_field in (
-            "status",
-            "exit_code",
-            "human_message",
-            "machine_error_code",
-            "changed_files",
-            "next_action",
-        ):
-            self.assertIn(required_field, payload)
+        self.assertEqual(
+            set(payload),
+            {
+                "status",
+                "exit_code",
+                "human_message",
+                "machine_error_code",
+                "changed_files",
+                "next_action",
+                "liveness",
+                "severity",
+                "operator_action",
+                "package_result",
+            },
+        )
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "none")
         self.assertEqual(payload["severity"], "recoverable")
         package_result = payload["package_result"]
+        self.assertEqual(
+            set(package_result),
+            {
+                "status",
+                "source_root",
+                "artifact_path",
+                "manifest_path",
+                "metadata_path",
+                "artifact_sha256",
+                "included_file_count",
+            },
+        )
         self.assertEqual(package_result["status"], "built")
         artifact_path = output_dir.resolve() / "experimental-package.tar.gz"
         manifest_path = output_dir.resolve() / "experimental-package.manifest.json"
         metadata_path = output_dir.resolve() / "experimental-package.metadata.json"
+        self.assertEqual(package_result["source_root"], str(ROOT.resolve()))
+        self.assertEqual(package_result["artifact_path"], str(artifact_path))
+        self.assertEqual(package_result["manifest_path"], str(manifest_path))
+        self.assertEqual(package_result["metadata_path"], str(metadata_path))
         self.assertTrue(artifact_path.is_file())
         self.assertTrue(manifest_path.is_file())
         self.assertTrue(metadata_path.is_file())
@@ -1826,12 +1849,44 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
         verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(
+            set(verify_payload),
+            {
+                "status",
+                "exit_code",
+                "human_message",
+                "machine_error_code",
+                "changed_files",
+                "next_action",
+                "liveness",
+                "severity",
+                "operator_action",
+                "package_result",
+            },
+        )
+        self.assertEqual(
+            set(verify_payload["package_result"]),
+            {
+                "status",
+                "manifest_path",
+                "artifact_path",
+                "artifact_sha256_expected",
+                "artifact_sha256_observed",
+                "checksum_match",
+                "boundary_check",
+            },
+        )
         self.assertEqual(verify_payload["status"], "ok")
         self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertEqual(verify_payload["next_action"], "none")
         self.assertEqual(verify_payload["severity"], "recoverable")
         self.assertTrue(verify_payload["package_result"]["checksum_match"])
         self.assertEqual(
             verify_payload["package_result"]["boundary_check"]["status"], "passed"
+        )
+        self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["violating_entries"],
+            [],
         )
         self.assertEqual(verify_payload["changed_files"], [])
 
@@ -1862,6 +1917,10 @@ class CliTests(unittest.TestCase):
         verify_payload = json.loads(verify_result.stdout)
         self.assertEqual(verify_payload["status"], "error")
         self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertEqual(
+            verify_payload["package_result"]["status"], "checksum_mismatch"
+        )
         self.assertFalse(verify_payload["package_result"]["checksum_match"])
 
     def test_package_experimental_verify_rejects_boundary_violation(self) -> None:
@@ -1913,9 +1972,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             verify_payload["package_result"]["status"], "boundary_invalid"
         )
-        self.assertIn(
-            "wild_boar_proxy/external_models/secrets.env",
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertIs(verify_payload["package_result"]["checksum_match"], True)
+        self.assertEqual(
             verify_payload["package_result"]["violating_entries"],
+            ["wild_boar_proxy/external_models/secrets.env"],
         )
 
     def test_package_experimental_verify_rejects_symlink_boundary_bypass(self) -> None:
@@ -1964,9 +2025,10 @@ class CliTests(unittest.TestCase):
         verify_payload = json.loads(verify_result.stdout)
         self.assertEqual(verify_payload["status"], "error")
         self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID")
-        self.assertIn(
-            "wild_boar_proxy/link",
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertEqual(
             verify_payload["package_result"]["violating_entries"],
+            ["wild_boar_proxy/link"],
         )
 
     def test_package_launchable_build_success_reports_changed_files(self) -> None:
