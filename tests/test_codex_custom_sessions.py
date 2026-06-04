@@ -118,6 +118,25 @@ def api_snapshot(route_id: str = "wbp-web-primary-openrouter") -> dict[str, obje
     }
 
 
+def deepseek_api_snapshot(route_id: str = "wbp-deepseek-v4-pro-max") -> dict[str, object]:
+    return {
+        "status": "ok",
+        "source": "api_connections_readonly",
+        "primary_truth_ok": True,
+        "routes": [
+            {
+                "route_id": route_id,
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "enabled": True,
+                "secret_ref": "DEEPSEEK_API_KEY",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                "api_parameter_sent": True,
+            }
+        ],
+    }
+
+
 class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_create_session_binds_server_model_and_selection_without_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1150,6 +1169,215 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertEqual(
             packet["coding_packet_summary"]["machine_error_code"],
             "RUNTIME_MODEL_ID_MISMATCH",
+        )
+
+    def test_custom_codex_three_modes_prove_session_slot_dispatch_without_fallback(
+        self,
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id.startswith("wbp-deepseek")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_C6_DEEPSEEK_OK"
+                if route_backed
+                else "WBP_C6_CHATGPT_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            chatgpt_only = manager.create_packet(
+                {"primary_model_id": "gpt-5.3-codex"},
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            api_only = manager.create_packet(
+                {"primary_model_id": "wbp-deepseek-v4-pro-max"},
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            mixed = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+
+            chatgpt_packet = manager.prompt_packet(
+                chatgpt_only["session"]["session_id"],
+                {"prompt": "Reply ChatGPT only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+            api_blocked_without_owner = manager.prompt_packet(
+                api_only["session"]["session_id"],
+                {"prompt": "Reply DeepSeek only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=False,
+            )
+            api_packet = manager.prompt_packet(
+                api_only["session"]["session_id"],
+                {"prompt": "Reply DeepSeek only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+            mixed_packet = manager.mixed_slot_dispatch_probe_packet(
+                mixed["session"]["session_id"],
+                {},
+                runner,
+                owner_authorized=True,
+            )
+
+        self.assertEqual(chatgpt_only["status"], "ok")
+        self.assertEqual(api_only["status"], "ok")
+        self.assertEqual(mixed["status"], "ok")
+        self.assertEqual(chatgpt_only["session"]["role_slot_binding_count"], 1)
+        self.assertEqual(api_only["session"]["role_slot_binding_count"], 1)
+        self.assertEqual(mixed["session"]["role_slot_binding_count"], 2)
+        self.assertEqual(
+            chatgpt_only["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "gpt_account",
+        )
+        self.assertEqual(
+            chatgpt_only["session"]["role_slots"]["coding_agent_model_slot"][
+                "binding_status"
+            ],
+            "unbound",
+        )
+        self.assertEqual(
+            api_only["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "route_backed",
+        )
+        self.assertEqual(
+            api_only["session"]["role_slots"]["coding_agent_model_slot"][
+                "binding_status"
+            ],
+            "unbound",
+        )
+        self.assertEqual(
+            mixed["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "gpt_account",
+        )
+        self.assertEqual(
+            mixed["session"]["role_slots"]["coding_agent_model_slot"][
+                "selected_source_class"
+            ],
+            "route_backed",
+        )
+
+        for packet in (chatgpt_packet, api_packet):
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["live_prompt_full_success"])
+            self.assertTrue(packet["runtime_slot_dispatch_proven"])
+            self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertFalse(packet["fallback_attempted"])
+            self.assertFalse(packet["raw_backend_exposed"])
+            self.assertFalse(packet["raw_backend_id_exposed"])
+            self.assertFalse(packet["raw_auth_ref_exposed"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertFalse(packet["current_codex_touched"])
+
+        self.assertEqual(api_blocked_without_owner["status"], "blocked")
+        self.assertEqual(
+            api_blocked_without_owner["machine_error_code"],
+            "OWNER_AUTHORIZATION_REQUIRED",
+        )
+        self.assertFalse(api_blocked_without_owner["live_prompt_admitted"])
+        self.assertFalse(api_blocked_without_owner["live_prompt_executed"])
+        self.assertFalse(api_blocked_without_owner["prompt_runner_called"])
+        self.assertFalse(api_blocked_without_owner["fallback_attempted"])
+
+        self.assertEqual(chatgpt_packet["model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_packet["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(chatgpt_packet["configured_provider"], "cliproxy")
+        self.assertEqual(chatgpt_packet["selected_source_class"], "gpt_account")
+        self.assertEqual(chatgpt_packet["selected_source_provenance"], "backend_proven")
+        self.assertTrue(chatgpt_packet["selected_backend_server_issued"])
+        self.assertFalse(chatgpt_packet["selected_route_server_issued"])
+
+        self.assertEqual(api_packet["model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(api_packet["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(api_packet["configured_provider"], "external_route")
+        self.assertEqual(api_packet["selected_source_class"], "route_backed")
+        self.assertEqual(api_packet["selected_source_provenance"], "route_proven")
+        self.assertFalse(api_packet["selected_backend_server_issued"])
+        self.assertTrue(api_packet["selected_route_server_issued"])
+
+        self.assertEqual(mixed_packet["status"], "ok")
+        self.assertEqual(
+            mixed_packet["final_status"],
+            "CHATGPT_PLUS_API_SLOT_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(mixed_packet["same_session_dispatch_proven"])
+        self.assertTrue(mixed_packet["primary_dispatch_proven"])
+        self.assertTrue(mixed_packet["coding_dispatch_proven"])
+        self.assertEqual(mixed_packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(mixed_packet["coding_agent_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(mixed_packet["primary_executed_slot_id"], "primary_model_slot")
+        self.assertEqual(mixed_packet["coding_executed_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(mixed_packet["primary_configured_provider"], "cliproxy")
+        self.assertEqual(mixed_packet["coding_configured_provider"], "external_route")
+        self.assertEqual(mixed_packet["primary_selected_source_provenance"], "backend_proven")
+        self.assertEqual(mixed_packet["coding_selected_source_provenance"], "route_proven")
+        self.assertFalse(mixed_packet["chatgpt_only_calls_api"])
+        self.assertFalse(mixed_packet["api_only_calls_chatgpt"])
+        self.assertFalse(mixed_packet["fallback_used"])
+        self.assertFalse(mixed_packet["fallback_attempted"])
+        self.assertFalse(mixed_packet["parallel_slot_execution_proven"])
+        self.assertFalse(mixed_packet["fanout_execution_proven"])
+        self.assertFalse(mixed_packet["ui_label_counts_as_runtime_truth"])
+        self.assertFalse(mixed_packet["model_self_report_counts_as_runtime_truth"])
+        self.assertFalse(mixed_packet["raw_backend_details_exposed"])
+        self.assertFalse(mixed_packet["secret_value_exposed"])
+
+        self.assertEqual(
+            [(call["model_id"], call["slot_id"]) for call in calls],
+            [
+                ("gpt-5.3-codex", "primary_model_slot"),
+                ("wbp-deepseek-v4-pro-max", "primary_model_slot"),
+                ("gpt-5.3-codex", "primary_model_slot"),
+                ("wbp-deepseek-v4-pro-max", "coding_agent_model_slot"),
+            ],
         )
 
     def test_prompt_run_can_dispatch_bound_reviewer_slot_without_primary_swap(self) -> None:
