@@ -1741,18 +1741,15 @@ def run_current_proxy_owner_path_activation(
 
 
 def get_desired_mode(paths: RuntimePaths) -> str:
-    mode = read_text(paths.runtime_mode_file, default="stable")
-    return mode if mode in {"stable", "managed"} else "stable"
+    from .runtime_modes import get_desired_mode as _get_desired_mode
+
+    return _get_desired_mode(paths)
 
 
 def get_effective_mode(paths: RuntimePaths, state: dict[str, Any]) -> str:
-    mode = read_text(paths.runtime_effective_mode_file)
-    if mode in {"stable", "managed"}:
-        return mode
-    state_mode = state.get("effective_mode")
-    if state_mode in {"stable", "managed"}:
-        return str(state_mode)
-    return "stable"
+    from .runtime_modes import get_effective_mode as _get_effective_mode
+
+    return _get_effective_mode(paths, state)
 
 
 def read_effective_mode_artifact(paths: RuntimePaths) -> str:
@@ -1763,19 +1760,19 @@ def read_effective_mode_artifact(paths: RuntimePaths) -> str:
 def reconcile_effective_mode_for_reporting(
     effective_mode: str, *, listener_ok: bool
 ) -> str:
-    if effective_mode == "managed" and not listener_ok:
-        return "stable"
-    return effective_mode
+    from .runtime_modes import (
+        reconcile_effective_mode_for_reporting as _reconcile_effective_mode_for_reporting,
+    )
+
+    return _reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
 
 
 def get_endpoint(paths: RuntimePaths, effective_mode: str) -> tuple[str, int, str]:
-    if effective_mode == "managed":
-        host = read_yaml_value(paths.managed_config_file, "host") or "127.0.0.1"
-        port = int(read_yaml_value(paths.managed_config_file, "port") or "8320")
-    else:
-        host = read_yaml_value(paths.stable_config, "host") or "127.0.0.1"
-        port = int(read_yaml_value(paths.stable_config, "port") or "8318")
-    return host, port, f"http://{host}:{port}/v1"
+    from .runtime_modes import get_endpoint as _get_endpoint
+
+    return _get_endpoint(paths, effective_mode)
 
 
 def get_selected_backends_digest(state: dict[str, Any]) -> str:

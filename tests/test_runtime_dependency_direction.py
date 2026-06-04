@@ -2329,6 +2329,89 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(after, before)
 
+    def test_runtime_mode_read_helper_facades_delegate_to_modes_module(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            with mock.patch.object(
+                runtime_modes, "get_desired_mode", return_value="managed"
+            ) as helper:
+                self.assertEqual(runtime_mod.get_desired_mode(paths), "managed")
+            helper.assert_called_once_with(paths)
+
+            state = {"effective_mode": "stable"}
+            with mock.patch.object(
+                runtime_modes, "get_effective_mode", return_value="managed"
+            ) as helper:
+                self.assertEqual(runtime_mod.get_effective_mode(paths, state), "managed")
+            helper.assert_called_once_with(paths, state)
+
+            endpoint = ("127.0.0.1", 9999, "http://127.0.0.1:9999/v1")
+            with mock.patch.object(
+                runtime_modes, "get_endpoint", return_value=endpoint
+            ) as helper:
+                self.assertEqual(runtime_mod.get_endpoint(paths, "managed"), endpoint)
+            helper.assert_called_once_with(paths, "managed")
+
+            with mock.patch.object(
+                runtime_modes,
+                "reconcile_effective_mode_for_reporting",
+                return_value="stable",
+            ) as helper:
+                self.assertEqual(
+                    runtime_mod.reconcile_effective_mode_for_reporting(
+                        "managed", listener_ok=False
+                    ),
+                    "stable",
+                )
+            helper.assert_called_once_with("managed", listener_ok=False)
+
+    def test_runtime_mode_read_helper_facades_match_modes_module_edges(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.runtime_mode_file.write_text("unknown\n", encoding="utf-8")
+            paths.runtime_effective_mode_file.write_text("unknown\n", encoding="utf-8")
+            state = {"effective_mode": "managed"}
+
+            self.assertEqual(runtime_mod.get_desired_mode(paths), "stable")
+            self.assertEqual(
+                runtime_mod.get_desired_mode(paths),
+                runtime_modes.get_desired_mode(paths),
+            )
+            self.assertEqual(runtime_mod.get_effective_mode(paths, state), "managed")
+            self.assertEqual(
+                runtime_mod.get_effective_mode(paths, state),
+                runtime_modes.get_effective_mode(paths, state),
+            )
+
+            for effective_mode in ("stable", "managed"):
+                with self.subTest(effective_mode=effective_mode):
+                    self.assertEqual(
+                        runtime_mod.get_endpoint(paths, effective_mode),
+                        runtime_modes.get_endpoint(paths, effective_mode),
+                    )
+
+            self.assertEqual(
+                runtime_mod.reconcile_effective_mode_for_reporting(
+                    "managed", listener_ok=False
+                ),
+                "stable",
+            )
+            self.assertEqual(
+                runtime_mod.reconcile_effective_mode_for_reporting(
+                    "managed", listener_ok=True
+                ),
+                "managed",
+            )
+            self.assertEqual(
+                runtime_mod.reconcile_effective_mode_for_reporting(
+                    "stable", listener_ok=False
+                ),
+                runtime_modes.reconcile_effective_mode_for_reporting(
+                    "stable", listener_ok=False
+                ),
+            )
+
     def test_runtime_health_probe_facade_matches_direct_health_module(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _status_runtime_paths(Path(temp_dir))
