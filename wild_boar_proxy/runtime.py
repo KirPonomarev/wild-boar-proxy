@@ -138,8 +138,11 @@ LEGACY_PROXY_REPROBE_EXCLUDED_PORTS = {
     8319,
     8320,
     8321,
+    8765,
+    8788,
     9150,
     9151,
+    50555,
     49157,
 }
 PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
@@ -7216,6 +7219,26 @@ def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
     return host, port
 
 
+def is_proxy_reprobe_candidate_eligible(candidate: str) -> bool:
+    parsed = parse_local_proxy_candidate(candidate)
+    if parsed is None:
+        return False
+    _, port = parsed
+    return port not in LEGACY_PROXY_REPROBE_EXCLUDED_PORTS
+
+
+def proxy_reprobe_excluded_ports_for_state(state: dict[str, Any]) -> set[int]:
+    ports = set(LEGACY_PROXY_REPROBE_EXCLUDED_PORTS)
+    for key in ("managed_port", "stable_port"):
+        try:
+            port = int(state.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= port <= 65535:
+            ports.add(port)
+    return ports
+
+
 def parse_dynamic_local_listener_candidates(raw_output: str) -> list[str]:
     ports: list[int] = []
     seen_ports: set[int] = set()
@@ -7264,10 +7287,15 @@ def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
 
     candidates: list[str] = []
     seen: set[str] = set()
+    excluded_ports = proxy_reprobe_excluded_ports_for_state(state)
     for candidate in raw_candidates:
         if not candidate or candidate in seen:
             continue
-        if parse_local_proxy_candidate(candidate) is None:
+        parsed_candidate = parse_local_proxy_candidate(candidate)
+        if parsed_candidate is None:
+            continue
+        _, candidate_port = parsed_candidate
+        if candidate_port in excluded_ports:
             continue
         candidates.append(candidate)
         seen.add(candidate)
@@ -7277,6 +7305,8 @@ def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
 
 
 def probe_proxy_candidate(candidate: str) -> bool:
+    if not is_proxy_reprobe_candidate_eligible(candidate):
+        return False
     parsed = parse_local_proxy_candidate(candidate)
     if parsed is None:
         return False

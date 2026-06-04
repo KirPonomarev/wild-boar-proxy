@@ -6007,6 +6007,9 @@ class CliTests(unittest.TestCase):
             "\n".join(
                 [
                     "cliproxy 1 user 10u IPv4 0t0 TCP 127.0.0.1:8318 (LISTEN)",
+                    "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8765 (LISTEN)",
+                    "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8788 (LISTEN)",
+                    "bridge 1 user 10u IPv4 0t0 TCP 127.0.0.1:50555 (LISTEN)",
                     "vpn 2 user 11u IPv4 0t0 TCP localhost:10808 (LISTEN)",
                     "random 3 user 12u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
                     "random 4 user 13u IPv4 0t0 TCP localhost:18081 (LISTEN)",
@@ -6023,6 +6026,46 @@ class CliTests(unittest.TestCase):
                 "socks5h://127.0.0.1:10808",
                 "socks5h://127.0.0.1:18080",
                 "socks5h://127.0.0.1:18081",
+            ],
+        )
+
+    def test_get_proxy_reprobe_candidates_filters_control_ports_from_all_sources(
+        self,
+    ) -> None:
+        state = {
+            "current_proxy_url": "http://127.0.0.1:8765",
+            "last_known_good_proxy_url": "http://127.0.0.1:50555",
+        }
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        "http://127.0.0.1:8788,http://127.0.0.1:18080"
+                    ),
+                },
+                clear=False,
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "discover_dynamic_local_proxy_candidates",
+                return_value=[
+                    "http://127.0.0.1:8765",
+                    "http://127.0.0.1:19002",
+                    "socks5h://127.0.0.1:8788",
+                ],
+            ),
+        ):
+            candidates = runtime_mod.get_proxy_reprobe_candidates(state)
+        self.assertEqual(
+            candidates,
+            [
+                "http://127.0.0.1:18080",
+                "http://127.0.0.1:10808",
+                "http://127.0.0.1:10809",
+                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:10809",
+                "http://127.0.0.1:19002",
             ],
         )
 
@@ -6054,6 +6097,101 @@ class CliTests(unittest.TestCase):
                 "http://127.0.0.1:19002",
                 "socks5h://127.0.0.1:19002",
             ],
+        )
+
+    def test_probe_proxy_candidate_rejects_control_port_before_socket_probe(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            runtime_mod,
+            "socket_is_listening",
+            side_effect=AssertionError("control port must not be socket-probed"),
+        ):
+            self.assertFalse(
+                runtime_mod.probe_proxy_candidate("http://127.0.0.1:8788")
+            )
+
+    def test_healthcheck_does_not_treat_web_control_listener_as_proxy_candidate(
+        self,
+    ) -> None:
+        port = free_port()
+        web_control_port = 8788
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: "
+                    "connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+
+        def fake_socket_is_listening(host: str, candidate_port: int) -> bool:
+            if candidate_port == port:
+                return True
+            if candidate_port == web_control_port:
+                return True
+            return False
+
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with (
+                mock.patch.dict(os.environ, self.env(), clear=False),
+                mock.patch.object(
+                    runtime_mod,
+                    "discover_dynamic_local_proxy_candidates",
+                    return_value=[
+                        f"http://127.0.0.1:{web_control_port}",
+                        f"socks5h://127.0.0.1:{web_control_port}",
+                    ],
+                ),
+                mock.patch.object(
+                    runtime_mod,
+                    "socket_is_listening",
+                    side_effect=fake_socket_is_listening,
+                ),
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                payload = runtime_mod.run_healthcheck(
+                    paths,
+                    allow_recovery=False,
+                    allow_last_known_good_proxy_write=False,
+                    allow_current_proxy_auto_adoption=False,
+                    allow_stable_fallback_write=False,
+                    allow_stale_pid_cleanup=False,
+                )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+
+        self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
+        self.assertNotIn(
+            f"http://127.0.0.1:{web_control_port}",
+            payload["proxy_reprobe"]["candidates"],
+        )
+        self.assertNotIn(
+            f"socks5h://127.0.0.1:{web_control_port}",
+            payload["proxy_reprobe"]["candidates"],
         )
 
     def test_healthcheck_responses_probe_emits_x_session_id(self) -> None:
