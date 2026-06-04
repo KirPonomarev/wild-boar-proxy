@@ -17017,6 +17017,7 @@ def _run_onboard_impl(
         "sync_attempted": False,
         "sync_outcome": "not_attempted",
         "status_observed": None,
+        "fsm_transition": None,
         "lifecycle_admission": None,
         "external_command_exit_code": external_exit_code,
         "external_command_status": "not_invoked",
@@ -17229,6 +17230,28 @@ def _run_onboard_impl(
             severity="fatal",
             operator_action="stop",
         )
+
+    if selection_status == "selected_unique_backend":
+        onboard_precondition = (
+            accounts_lifecycle.classify_onboard_lifecycle_precondition()
+        )
+        onboarding_result["fsm_transition"] = onboard_precondition
+        if (
+            onboard_precondition["transition_status"]
+            != accounts_lifecycle.ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+            or onboard_precondition["target_state"]
+            != accounts_lifecycle.ACCOUNT_LIFECYCLE_STATE_RESERVE
+            or onboard_precondition["onboard_precondition_status"]
+            != accounts_lifecycle.ACCOUNT_LIFECYCLE_PRECONDITION_NEW_AUTH_TO_RESERVE
+        ):
+            onboarding_result["final_outcome"] = "import_failed"
+            return build_onboard_payload(
+                ok=False,
+                human_message="Onboarding lifecycle admission did not prove new auth to reserve.",
+                machine_error_code="ONBOARD_RESERVE_FIRST_VIOLATION",
+                severity="fatal",
+                operator_action="stop",
+            )
 
     with serialized_lock(paths):
         validate_process_result = run_bounded_process(

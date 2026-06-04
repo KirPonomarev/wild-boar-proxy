@@ -210,6 +210,40 @@ class AccountLifecycleFsmTests(unittest.TestCase):
                 self.assertEqual(result["target_state"], "reserve")
                 self.assertNotEqual(result["target_state"], "active")
 
+    def test_onboard_precondition_adapter_maps_new_auth_to_reserve(self) -> None:
+        result = accounts_lifecycle.classify_onboard_lifecycle_precondition()
+
+        self.assertEqual(result["effective_state"], "new_auth")
+        self.assertEqual(result["transition_status"], "allowed")
+        self.assertEqual(result["target_state"], "reserve")
+        self.assertEqual(result["precondition_status"], "new_auth_to_reserve")
+        self.assertEqual(result["onboard_precondition_status"], "new_auth_to_reserve")
+        self.assertIs(result["mapped_to_packet_vocabulary"], True)
+
+    def test_onboard_precondition_adapter_rejects_non_new_auth_sources(self) -> None:
+        for source_state in ("reserve", "active", "held_reserve", "retired"):
+            with self.subTest(source_state=source_state):
+                result = accounts_lifecycle.classify_onboard_lifecycle_precondition(
+                    source_state
+                )
+                self.assertEqual(
+                    result["onboard_precondition_status"],
+                    "invalid_lifecycle_precondition",
+                )
+                self.assertIs(result["mapped_to_packet_vocabulary"], False)
+
+    def test_onboard_adapter_keeps_runtime_proof_out_of_fsm(self) -> None:
+        result = accounts_lifecycle.classify_onboard_lifecycle_precondition()
+
+        self.assertNotIn("selected_backend_id", result)
+        self.assertNotIn("reserve_first_enforced", result)
+        self.assertNotIn("active_routing_changed", result)
+        self.assertNotIn("validate_attempted", result)
+        self.assertNotIn("sync_attempted", result)
+        self.assertNotIn("status_observed", result)
+        self.assertNotIn("machine_error_code", result)
+        self.assertNotIn("human_message", result)
+
     def test_promote_precondition_adapter_maps_packet_vocabulary(self) -> None:
         cases = (
             ("reserve", False, "reserve", "eligible_reserve_backend", True),
@@ -351,6 +385,7 @@ class AccountLifecycleFsmTests(unittest.TestCase):
             "classify_account_lifecycle_state",
             "classify_account_lifecycle_transition",
             "classify_protective_lifecycle_precondition",
+            "classify_onboard_lifecycle_precondition",
             "classify_promote_lifecycle_precondition",
             "classify_demote_lifecycle_precondition",
             "classify_retire_lifecycle_precondition",

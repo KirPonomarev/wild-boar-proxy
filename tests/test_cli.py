@@ -10039,6 +10039,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
         )
+        fsm_transition = onboarding["fsm_transition"]
+        self.assertEqual(fsm_transition["source_state"], "new_auth")
+        self.assertEqual(fsm_transition["requested_action"], "onboard")
+        self.assertEqual(fsm_transition["transition_status"], "allowed")
+        self.assertEqual(fsm_transition["target_state"], "reserve")
+        self.assertEqual(
+            fsm_transition["onboard_precondition_status"], "new_auth_to_reserve"
+        )
         self.assertIsNotNone(onboarding["status_observed"])
         self.assertEqual(onboarding["lifecycle_admission"]["status"], "blocked")
         self.assertEqual(
@@ -10090,11 +10098,75 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
         self.assertEqual(onboarding["selected_backend_id"], "backend-existing")
         self.assertEqual(onboarding["selection_status"], "selected_existing_backend")
+        self.assertEqual(onboarding["new_backend_ids"], [])
         self.assertEqual(
             onboarding["final_outcome"], "explicit_existing_auth_adopted_to_reserve"
         )
+        self.assertIsNone(onboarding["fsm_transition"])
         self.assertTrue(onboarding["validate_attempted"])
         self.assertFalse(onboarding["sync_attempted"])
+
+    def test_accounts_onboard_requires_fsm_new_auth_to_reserve_for_new_backend(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-fsm-denied-auth.json"
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-fsm-denied",
+                                auth_ref=auth_ref,
+                            )
+                        ]
+                    )
+                },
+                clear=False,
+            ), mock.patch.object(
+                runtime_mod.accounts_lifecycle,
+                "classify_onboard_lifecycle_precondition",
+                return_value={
+                    "source_state": "new_auth",
+                    "requested_action": "onboard",
+                    "transition_status": "forbidden",
+                    "target_state": "",
+                    "precondition_status": "invalid_lifecycle_precondition",
+                    "terminal": False,
+                    "return_path_allowed": True,
+                    "requires_validation_sync_policy": False,
+                    "effective_state": "new_auth",
+                    "onboard_precondition_status": (
+                        "invalid_lifecycle_precondition"
+                    ),
+                    "mapped_to_packet_vocabulary": False,
+                },
+            ):
+                payload = runtime_mod.run_onboard(
+                    paths,
+                    auth_ref=auth_ref,
+                    loop=False,
+                    skip_login=False,
+                    no_sync=True,
+                    non_interactive=True,
+                )
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "ONBOARD_RESERVE_FIRST_VIOLATION"
+        )
+        self.assertEqual(payload["operator_action"], "stop")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "backend-fsm-denied")
+        self.assertEqual(onboarding["selection_status"], "selected_unique_backend")
+        self.assertEqual(
+            onboarding["fsm_transition"]["onboard_precondition_status"],
+            "invalid_lifecycle_precondition",
+        )
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["final_outcome"], "import_failed")
 
     def test_accounts_onboard_passes_derived_runtime_paths_to_owner_helpers(
         self,

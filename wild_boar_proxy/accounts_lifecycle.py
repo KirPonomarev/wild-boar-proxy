@@ -110,6 +110,8 @@ ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_NOT_RETIRABLE = (
 )
 ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
 
+ACCOUNT_LIFECYCLE_ONBOARD_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
+
 
 class AccountLifecyclePaths(Protocol):
     pass
@@ -303,6 +305,32 @@ def classify_protective_lifecycle_precondition(
         "mapped_to_packet_vocabulary": (
             protective_status
             != ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID
+        ),
+    }
+
+
+def classify_onboard_lifecycle_precondition(
+    source_state: str = ACCOUNT_LIFECYCLE_STATE_NEW_AUTH,
+) -> dict[str, Any]:
+    transition = classify_account_lifecycle_transition(
+        source_state, ACCOUNT_LIFECYCLE_ACTION_ONBOARD
+    )
+    onboard_status = ACCOUNT_LIFECYCLE_ONBOARD_PRECONDITION_INVALID
+
+    if (
+        transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+        and transition["target_state"] == ACCOUNT_LIFECYCLE_STATE_RESERVE
+        and transition["precondition_status"]
+        == ACCOUNT_LIFECYCLE_PRECONDITION_NEW_AUTH_TO_RESERVE
+    ):
+        onboard_status = ACCOUNT_LIFECYCLE_PRECONDITION_NEW_AUTH_TO_RESERVE
+
+    return {
+        **transition,
+        "effective_state": source_state,
+        "onboard_precondition_status": onboard_status,
+        "mapped_to_packet_vocabulary": (
+            onboard_status != ACCOUNT_LIFECYCLE_ONBOARD_PRECONDITION_INVALID
         ),
     }
 
