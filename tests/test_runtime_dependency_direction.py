@@ -2298,6 +2298,142 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ],
         )
 
+    def test_runtime_launch_readiness_surface_facade_matches_health_module(self) -> None:
+        kwargs = {
+            "owner_command_surface": "healthcheck --json",
+            "delegated_from_status": False,
+            "listener_ok": True,
+            "models_ok": True,
+            "responses_ok": False,
+            "base_url_match": True,
+            "effective_mode_match": True,
+            "model_match": True,
+            "proxy_url_match": True,
+            "machine_error_code": "AUTH_UNAVAILABLE",
+            "error_detail": "responses probe failed",
+            "auth_pool_hygiene": {
+                "status": "launch_capable_empty",
+                "launch_capable_backend_count": 0,
+            },
+            "identity_proof_required": True,
+            "identity_proof_ok": False,
+            "identity_failure_reason": "missing_runtime_identity",
+        }
+
+        facade_payload = runtime_mod.build_launch_readiness_surface(**kwargs)
+        direct_payload = runtime_health.build_launch_readiness_surface(**kwargs)
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "blocked")
+        self.assertEqual(facade_payload["blocking_reason"], "usable_auth_pool_empty")
+        self.assertIn("runtime_identity_unproven", facade_payload["failed_checks"])
+
+    def test_runtime_launch_readiness_surface_facade_delegates_to_health_module(
+        self,
+    ) -> None:
+        kwargs = {
+            "owner_command_surface": "healthcheck --json",
+            "delegated_from_status": False,
+            "listener_ok": True,
+            "models_ok": True,
+            "responses_ok": True,
+            "base_url_match": True,
+            "effective_mode_match": True,
+            "model_match": True,
+            "proxy_url_match": True,
+            "machine_error_code": "OK",
+            "error_detail": "",
+            "auth_pool_hygiene": {
+                "status": "launch_capable_available",
+                "launch_capable_backend_count": 15,
+            },
+            "identity_proof_required": False,
+            "identity_proof_ok": True,
+            "identity_failure_reason": "",
+        }
+        expected = {"surface": "health-readiness"}
+
+        with mock.patch.object(
+            runtime_health,
+            "build_launch_readiness_surface",
+            return_value=expected,
+        ) as builder:
+            payload = runtime_mod.build_launch_readiness_surface(**kwargs)
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(**kwargs)
+
+    def test_runtime_deterministic_recovery_result_facade_matches_repair_module(
+        self,
+    ) -> None:
+        kwargs = {
+            "owner_command_surface": "healthcheck --repair --json",
+            "delegated_from_status": False,
+            "attempted": True,
+            "entry_lane": "stable_service_disabled",
+            "outcome": "recovery_failed_before_stable_healthy",
+            "re_enable_method": "bounded_healthcheck_owner_retry",
+            "selected_source_kind": "approved_repair_target",
+            "selected_source_path": "/tmp/wbp-target",
+            "generated_config_regenerated": True,
+            "snapshot_refreshed": False,
+            "fallback_reason": "stable_listener_unreachable_after_recovery",
+            "live_runtime_observation_confirmed": False,
+            "confirmation_basis": "live_runtime_observation_not_confirmed",
+            "effectful_claim_allowed": False,
+            "process_result": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "launcher failed",
+            },
+        }
+
+        facade_payload = runtime_mod.build_deterministic_stable_recovery_result(
+            **kwargs
+        )
+        direct_payload = runtime_repair.build_deterministic_stable_recovery_result(
+            **kwargs
+        )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "failed")
+        self.assertEqual(facade_payload["guardrail_status"], "blocked")
+        self.assertEqual(facade_payload["process_result"], kwargs["process_result"])
+
+    def test_runtime_deterministic_recovery_result_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        kwargs = {
+            "owner_command_surface": "healthcheck --repair --json",
+            "delegated_from_status": False,
+            "attempted": False,
+            "entry_lane": "not_invoked",
+            "outcome": "not_invoked",
+            "re_enable_method": "",
+            "selected_source_kind": "",
+            "selected_source_path": "",
+            "generated_config_regenerated": False,
+            "snapshot_refreshed": False,
+            "fallback_reason": "",
+            "live_runtime_observation_confirmed": False,
+            "confirmation_basis": "",
+            "effectful_claim_allowed": False,
+            "process_result": None,
+        }
+        expected = {"surface": "repair-recovery-result"}
+
+        with mock.patch.object(
+            runtime_repair,
+            "build_deterministic_stable_recovery_result",
+            return_value=expected,
+        ) as builder:
+            payload = runtime_mod.build_deterministic_stable_recovery_result(
+                **kwargs
+            )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(**kwargs)
+
     def test_runtime_mode_get_facade_matches_direct_modes_module(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _runtime_paths(Path(temp_dir))
