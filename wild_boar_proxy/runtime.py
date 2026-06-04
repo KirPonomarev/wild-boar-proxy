@@ -7455,6 +7455,16 @@ def _startup_contract_runtime_followup_safe(
     core_result: state_startup_contract.StartupContractCoreResult,
 ) -> bool:
     if (
+        core_result.temp_recovery.temp_recovery_outcome
+        == state_startup_recovery.TEMP_RECOVERY_BLOCKED
+    ):
+        return False
+    if (
+        core_result.lock_recovery.lock_slice_recovery_outcome
+        == state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED
+    ):
+        return False
+    if (
         core_result.schema_assessment.schema_slice_outcome
         == state_startup_schema.SCHEMA_SLICE_BLOCKED
     ):
@@ -8569,11 +8579,15 @@ def run_healthcheck(
     rollback_evidence: list[HealthcheckRepairRollbackEvidence] | None = (
         [] if effect == EFFECT_REPAIR else None
     )
-    if allow_stale_pid_cleanup:
-        clear_stale_managed_pid_if_needed(paths)
     startup_contract_owner_result: StartupContractRepairOwnerPathResult | None = None
     if effect == EFFECT_REPAIR:
         startup_contract_owner_result = run_startup_contract_repair_owner_path(paths)
+    startup_runtime_followup_safe = (
+        startup_contract_owner_result is None
+        or startup_contract_owner_result.runtime_followup_safe
+    )
+    if allow_stale_pid_cleanup and startup_runtime_followup_safe:
+        clear_stale_managed_pid_if_needed(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -8596,6 +8610,7 @@ def run_healthcheck(
     )
     if (
         allow_stable_fallback_write
+        and startup_runtime_followup_safe
         and reported_effective_mode == "stable"
         and stale_managed_residue
     ):
@@ -8621,7 +8636,7 @@ def run_healthcheck(
         listener_ok = socket_is_listening(host, port)
 
     recovery_result: dict[str, Any] | None = None
-    if allow_recovery:
+    if allow_recovery and startup_runtime_followup_safe:
         recovery_result = build_deterministic_stable_recovery_result(
             owner_command_surface=owner_command_surface,
             delegated_from_status=False,
@@ -8639,7 +8654,7 @@ def run_healthcheck(
             effectful_claim_allowed=False,
         )
     recovery_attempt: StableRuntimeLaunchAttempt | None = None
-    if allow_recovery:
+    if allow_recovery and startup_runtime_followup_safe:
         reported_effective_mode = reconcile_effective_mode_for_reporting(
             effective_mode, listener_ok=listener_ok
         )
@@ -8865,6 +8880,7 @@ def run_healthcheck(
     if (
         not ok
         and allow_current_proxy_auto_adoption
+        and startup_runtime_followup_safe
         and proxy_reprobe is not None
         and proxy_reprobe["found_candidate"]
     ):
@@ -9129,7 +9145,7 @@ def run_healthcheck(
     previous_last_known_good_proxy_observed_at = str(
         state.get(LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD) or ""
     )
-    if allow_last_known_good_proxy_write:
+    if allow_last_known_good_proxy_write and startup_runtime_followup_safe:
         state = refresh_last_known_good_proxy_from_healthcheck(
             paths,
             state,

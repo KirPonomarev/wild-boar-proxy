@@ -1005,6 +1005,72 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         )
         self.assertEqual(payload["startup_contract_repair_result"]["guardrail_status"], "blocked")
 
+    def test_healthcheck_repair_dirty_transaction_blocks_before_runtime_writes(
+        self,
+    ) -> None:
+        metadata_path = self.write_incomplete_transaction_metadata()
+        before = self.truth_snapshot({"transaction-metadata": metadata_path})
+
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        after = self.truth_snapshot({"transaction-metadata": metadata_path})
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["mutation_ledger"]["status"], "not_mutated")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
+        self.assertIn(
+            "startup_contract_blocked",
+            payload["runtime_guardrails"]["failed_checks"],
+        )
+        startup_result = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_result["status"], "blocked")
+        self.assertEqual(
+            startup_result["temp_recovery_outcome"],
+            runtime_mod.state_startup_recovery.TEMP_RECOVERY_BLOCKED,
+        )
+        self.assertIn(
+            runtime_mod.state_startup_recovery.REASON_TRANSACTION_INCOMPLETE,
+            startup_result["blocking_reasons"],
+        )
+        self.assertFalse(startup_result["effectful_claim_allowed"])
+        self.assertTrue(self.pid_file.exists())
+        assert_no_truth_mutation(before, after)
+
+    def test_healthcheck_repair_blocked_lock_blocks_before_runtime_writes(
+        self,
+    ) -> None:
+        self.paths.lock_file.write_text("{not-json\n", encoding="utf-8")
+        before = self.truth_snapshot({"runtime-lock": self.paths.lock_file})
+
+        payload = runtime_mod.run_healthcheck_repair(self.paths)
+
+        after = self.truth_snapshot({"runtime-lock": self.paths.lock_file})
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["mutation_ledger"]["status"], "not_mutated")
+        startup_result = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_result["status"], "blocked")
+        self.assertEqual(
+            startup_result["lock_slice_recovery_outcome"],
+            runtime_mod.state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED,
+        )
+        self.assertFalse(startup_result["effectful_claim_allowed"])
+        self.assertTrue(self.paths.lock_file.exists())
+        self.assertTrue(self.pid_file.exists())
+        assert_no_truth_mutation(before, after)
+
     def test_lock_file_owner_path_materializes_structured_lock_carrier(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
 
