@@ -422,6 +422,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertIn(f'<meta name="{WEB_TOKEN_META_NAME}"', index)
         self.assertIn(f'<meta name="{WEB_CSRF_META_NAME}"', index)
+        self.assertIn('data-source="live"', index)
+        self.assertNotIn('data-source="fixture"', index)
         self.assertIn(token, index)
         self.assertIn(csrf, index)
         self.assertNotIn(token, script)

@@ -545,7 +545,15 @@ function stateFromLocation() {
 
 function sourceFromLocation() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("source") === "live" ? "live" : "fixture";
+  const source = params.get("source");
+  if (source === "live") {
+    return "live";
+  }
+  if (source === "fixture") {
+    return "fixture";
+  }
+  const desktop = document.querySelector(".desktop");
+  return desktop?.dataset?.source === "live" ? "live" : "fixture";
 }
 
 function screenFromLocation() {

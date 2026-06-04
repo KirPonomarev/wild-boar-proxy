@@ -276,6 +276,12 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('fetch("api/accounts-readonly"', js)
         self.assertIn('fetch("api/api-connections-readonly"', js)
         self.assertIn('fetch("api/actions"', js)
+        self.assertIn('if (source === "fixture")', js)
+        self.assertIn('return desktop?.dataset?.source === "live" ? "live" : "fixture";', js)
+        self.assertLess(
+            js.index('if (source === "fixture")'),
+            js.index('return desktop?.dataset?.source === "live" ? "live" : "fixture";'),
+        )
         self.assertIn('snapshot.source === "live_readonly"', js)
         self.assertIn('safeSnapshot.source === "accounts_readonly"', js)
         self.assertIn('safeSnapshot.state_id || safeSnapshot.ui_state', js)

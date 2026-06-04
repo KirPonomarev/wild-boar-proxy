@@ -11041,6 +11041,8 @@ def build_handler(
             marker = "</head>"
             if marker not in text:
                 return body
+            if static_root == WEB_DESIGN_UI.resolve():
+                text = text.replace('data-source="fixture"', 'data-source="live"', 1)
             tags = (
                 f'<meta name="{WEB_TOKEN_META_NAME}" '
                 f'content="{html.escape(handler_web_token_state.token, quote=True)}">'
