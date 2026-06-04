@@ -174,6 +174,9 @@ LAUNCHABLE_PACKAGE_MANIFEST_NAME = "launchable-package.manifest.json"
 LAUNCHABLE_PACKAGE_METADATA_NAME = "launchable-package.metadata.json"
 LAUNCHABLE_PACKAGE_EXECUTABLE_NAME = "WildBoarProxy"
 LAUNCHABLE_PACKAGE_ARTIFACT_KIND = "macos_app_bundle"
+LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY = "web_design_live_server_local_only"
+LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT = "wild_boar_proxy.desktop_web_shell"
+LAUNCHABLE_PACKAGE_LEGACY_TK_ENTRYPOINT = "wild_boar_proxy.ui_shell"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
 EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "CANON.md"
@@ -5455,7 +5458,15 @@ def render_launchable_package_launcher_script(runtime_executable: Path) -> str:
             "  shift",
             '  exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell --smoke-packaged-continuity-json "$@"',
             "fi",
-            'exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell "$@"',
+            'if [ "${1:-}" = "--smoke-web-shell-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy.desktop_web_shell --smoke-json "$@"',
+            "fi",
+            'if [ "${1:-}" = "--tk-shell" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell "$@"',
+            "fi",
+            'exec "$PYTHON_EXE" -m wild_boar_proxy.desktop_web_shell "$@"',
         ]
     )
 
@@ -5832,6 +5843,17 @@ def _run_package_launchable_build_impl(
             "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
             "runtime_executable": str(runtime_executable),
             "runtime_probe": runtime_probe,
+            "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
+            "desktop_shell_entrypoint": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
+            "default_desktop_surface": "web_design_live_server",
+            "legacy_tk_shell_entrypoint": LAUNCHABLE_PACKAGE_LEGACY_TK_ENTRYPOINT,
+            "local_only_bind_required": True,
+            "public_bind_allowed": False,
+            "web_security_boundary": {
+                "token_bootstrap": "preserved",
+                "csrf_bootstrap": "preserved",
+                "browser_secret_embedding": "forbidden",
+            },
             "allowlist": {
                 "top_level_dirs": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS),
                 "root_file_suffixes": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES),
@@ -5886,6 +5908,11 @@ def _run_package_launchable_build_impl(
                 "embedded_file_count": len(package_files),
                 "runtime_executable": str(runtime_executable),
                 "runtime_tkinter_available": runtime_probe["tkinter_available"] is True,
+                "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
+                "desktop_shell_entrypoint": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
+                "default_desktop_surface": "web_design_live_server",
+                "local_only_bind_required": True,
+                "public_bind_allowed": False,
             }
         },
     )
@@ -6044,6 +6071,11 @@ def _run_package_launchable_verify_impl(
     runtime_probe = metadata.get("runtime_probe")
     if isinstance(runtime_probe, dict):
         runtime_tkinter_available = runtime_probe.get("tkinter_available") is True
+    desktop_shell_strategy = str(metadata.get("desktop_shell_strategy", ""))
+    desktop_shell_entrypoint = str(metadata.get("desktop_shell_entrypoint", ""))
+    default_desktop_surface = str(metadata.get("default_desktop_surface", ""))
+    local_only_bind_required = metadata.get("local_only_bind_required") is True
+    public_bind_allowed = metadata.get("public_bind_allowed") is True
     runtime_path_exists = False
     runtime_path_executable = False
     if runtime_executable:
@@ -6080,6 +6112,11 @@ def _run_package_launchable_verify_impl(
                     "runtime_path_exists": runtime_path_exists,
                     "runtime_path_executable": runtime_path_executable,
                     "runtime_tkinter_available": runtime_tkinter_available,
+                    "desktop_shell_strategy": desktop_shell_strategy,
+                    "desktop_shell_entrypoint": desktop_shell_entrypoint,
+                    "default_desktop_surface": default_desktop_surface,
+                    "local_only_bind_required": local_only_bind_required,
+                    "public_bind_allowed": public_bind_allowed,
                 }
             },
         )
@@ -6108,6 +6145,11 @@ def _run_package_launchable_verify_impl(
                 "runtime_path_exists": runtime_path_exists,
                 "runtime_path_executable": runtime_path_executable,
                 "runtime_tkinter_available": runtime_tkinter_available,
+                "desktop_shell_strategy": desktop_shell_strategy,
+                "desktop_shell_entrypoint": desktop_shell_entrypoint,
+                "default_desktop_surface": default_desktop_surface,
+                "local_only_bind_required": local_only_bind_required,
+                "public_bind_allowed": public_bind_allowed,
             }
         },
     )
