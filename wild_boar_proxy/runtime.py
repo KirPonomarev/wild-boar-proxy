@@ -14731,8 +14731,15 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="user_action",
             )
 
-        if previous_manual_hold:
-            demote_result["precondition_status"] = "backend_held"
+        demote_precondition = accounts_lifecycle.classify_demote_lifecycle_precondition(
+            previous_pool, previous_manual_hold
+        )
+        precondition_status = str(demote_precondition["demote_precondition_status"])
+        if precondition_status == "invalid_lifecycle_precondition":
+            precondition_status = "backend_not_active"
+        demote_result["precondition_status"] = precondition_status
+
+        if precondition_status == "backend_held":
             demote_result["final_outcome"] = "precondition_failed"
             return build_demote_payload(
                 ok=False,
@@ -14741,8 +14748,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="user_action",
             )
 
-        if previous_pool == "retired":
-            demote_result["precondition_status"] = "backend_retired"
+        if precondition_status == "backend_retired":
             demote_result["final_outcome"] = "precondition_failed"
             return build_demote_payload(
                 ok=False,
@@ -14751,8 +14757,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="user_action",
             )
 
-        if previous_pool == "reserve":
-            demote_result["precondition_status"] = "already_reserve"
+        if precondition_status == "already_reserve":
             demote_result["reserve_return_confirmed"] = bool(
                 backend_id not in set(before_routing_ids)
                 and backend_id not in set(before_selected_backend_ids)
@@ -14774,7 +14779,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="none",
             )
 
-        if previous_pool != "active":
+        if precondition_status != "eligible_active_backend_for_demote":
             demote_result["precondition_status"] = "backend_not_active"
             demote_result["final_outcome"] = "precondition_failed"
             return build_demote_payload(
@@ -14784,7 +14789,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="user_action",
             )
 
-        demote_result["precondition_status"] = "eligible_active_backend_for_demote"
+        demote_result["precondition_status"] = precondition_status
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
         demote_result["rollback_point_captured"] = True
         process_result = run_bounded_process(

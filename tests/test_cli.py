@@ -17203,6 +17203,113 @@ class CliTests(unittest.TestCase):
         self.assertEqual(demote["precondition_status"], "backend_retired")
         self.assertEqual(demote["final_outcome"], "precondition_failed")
 
+    def test_accounts_demote_preconditions_use_fsm_adapter(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-demote-spy-reserve",
+                auth_ref="/tmp/codex-demote-spy-reserve.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-demote-spy-retired",
+                auth_ref="/tmp/codex-demote-spy-retired.json",
+                pool="retired",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-demote-spy-retired-held",
+                auth_ref="/tmp/codex-demote-spy-retired-held.json",
+                pool="retired",
+                manual_hold=True,
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-demote-spy-invalid",
+                auth_ref="/tmp/codex-demote-spy-invalid.json",
+                pool="hold",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        original = (
+            runtime_mod.accounts_lifecycle.classify_demote_lifecycle_precondition
+        )
+        calls: list[tuple[str, bool]] = []
+
+        def spy(pool: str, manual_hold: bool):
+            calls.append((pool, manual_hold))
+            if pool == "active" and not manual_hold:
+                return {"demote_precondition_status": "backend_held"}
+            return original(pool, manual_hold)
+
+        cases = (
+            ("backend-a", "backend_held", "precondition_failed", "error"),
+            (
+                "backend-demote-spy-reserve",
+                "already_reserve",
+                "already_reserve",
+                "ok",
+            ),
+            (
+                "backend-demote-spy-retired",
+                "backend_retired",
+                "precondition_failed",
+                "error",
+            ),
+            (
+                "backend-demote-spy-retired-held",
+                "backend_retired",
+                "precondition_failed",
+                "error",
+            ),
+            (
+                "backend-demote-spy-invalid",
+                "backend_not_active",
+                "precondition_failed",
+                "error",
+            ),
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod.accounts_lifecycle,
+                "classify_demote_lifecycle_precondition",
+                side_effect=spy,
+            ), mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=AssertionError("precondition test must not demote"),
+            ):
+                for backend_id, precondition, outcome, status in cases:
+                    with self.subTest(backend_id=backend_id):
+                        payload = runtime_mod.run_demote(paths, backend_id)
+                        self.assertEqual(payload["status"], status)
+                        demote = payload["demote_result"]
+                        self.assertEqual(
+                            demote["precondition_status"], precondition
+                        )
+                        self.assertEqual(demote["final_outcome"], outcome)
+                        self.assertEqual(
+                            demote["external_command_status"], "not_invoked"
+                        )
+
+        self.assertEqual(
+            calls,
+            [
+                ("active", False),
+                ("reserve", False),
+                ("retired", False),
+                ("retired", True),
+                ("hold", False),
+            ],
+        )
+
     def test_accounts_demote_status_verification_failure_rolls_back(self) -> None:
         port = free_port()
         before_registry = (self.managed_dir / "backend-registry.json").read_text(

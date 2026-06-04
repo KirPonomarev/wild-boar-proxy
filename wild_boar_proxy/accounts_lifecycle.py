@@ -87,6 +87,13 @@ ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID = (
     "invalid_lifecycle_precondition"
 )
 
+ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_ELIGIBLE = (
+    "eligible_active_backend_for_demote"
+)
+ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_BACKEND_HELD = "backend_held"
+ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_NOT_ACTIVE = "backend_not_active"
+ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
+
 
 class AccountLifecyclePaths(Protocol):
     pass
@@ -280,6 +287,47 @@ def classify_protective_lifecycle_precondition(
         "mapped_to_packet_vocabulary": (
             protective_status
             != ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID
+        ),
+    }
+
+
+def classify_demote_lifecycle_precondition(
+    pool: str, manual_hold: bool
+) -> dict[str, Any]:
+    effective_state = classify_account_lifecycle_state(pool, manual_hold)
+    transition = classify_account_lifecycle_transition(
+        effective_state, ACCOUNT_LIFECYCLE_ACTION_DEMOTE
+    )
+    demote_status = ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_INVALID
+
+    transition_precondition = str(transition["precondition_status"])
+
+    if transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED:
+        demote_status = ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED
+    elif transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_RESERVE:
+        demote_status = ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_RESERVE
+    elif (
+        transition_precondition
+        == ACCOUNT_LIFECYCLE_PRECONDITION_HELD_RELEASE_REQUIRED
+    ):
+        demote_status = ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_BACKEND_HELD
+    elif (
+        transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+        and transition["target_state"] == ACCOUNT_LIFECYCLE_STATE_RESERVE
+    ):
+        demote_status = ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_ELIGIBLE
+    elif (
+        transition_precondition
+        == ACCOUNT_LIFECYCLE_PRECONDITION_NOT_LIFECYCLE_ACTION
+    ):
+        demote_status = ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_NOT_ACTIVE
+
+    return {
+        **transition,
+        "effective_state": effective_state,
+        "demote_precondition_status": demote_status,
+        "mapped_to_packet_vocabulary": (
+            demote_status != ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_INVALID
         ),
     }
 
