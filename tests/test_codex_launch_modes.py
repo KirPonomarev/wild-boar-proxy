@@ -449,6 +449,27 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertEqual(packet["last_process_isolation_proof"]["status"], "passed")
         self.assertFalse(packet["last_process_isolation_proof"]["fresh_truth"])
 
+    def test_custom_status_uses_exact_claim_gate_blocked_status_not_substring(self) -> None:
+        ready_models = {"model_ids": ["gpt-5.3-codex"], "server_issued": True}
+
+        blocked = build_custom_status_packet(
+            {
+                "claim_gate": {"status": "blocked_by_policy_drift"},
+                "models": ready_models,
+            }
+        )
+        unblocked = build_custom_status_packet(
+            {
+                "claim_gate": {"status": "unblocked"},
+                "models": ready_models,
+            }
+        )
+
+        self.assertEqual(blocked["status"], "degraded")
+        self.assertEqual(blocked["machine_error_code"], "CLAIM_GATE_BLOCKED")
+        self.assertEqual(unblocked["status"], "ok")
+        self.assertEqual(unblocked["machine_error_code"], "OK")
+
 
 if __name__ == "__main__":
     unittest.main()

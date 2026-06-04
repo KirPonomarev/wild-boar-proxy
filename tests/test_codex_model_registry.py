@@ -1186,6 +1186,48 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(proven["asar_touched"])
         self.assertTrue(proven["codex_compatible_response_shape"])
 
+    def test_api_only_deepseek_live_route_format_blocks_wrong_mode_and_wrong_model(self) -> None:
+        wrong_mode = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "chatgpt_only", "api_model_id": "wbp-deepseek-v3"},
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+            owner_authorized=True,
+        )
+        wrong_model = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "api_only", "api_model_id": "wbp-openrouter-gpt"},
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-openrouter-gpt",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    }
+                ]
+            },
+            owner_authorized=True,
+        )
+
+        self.assertEqual(wrong_mode["status"], "blocked")
+        self.assertEqual(
+            wrong_mode["machine_error_code"],
+            "API_ONLY_DEEPSEEK_REQUIRES_API_ONLY_MODE",
+        )
+        self.assertFalse(wrong_mode["api_line_used_as_executor"])
+        self.assertFalse(wrong_mode["provider_called"])
+        self.assertFalse(wrong_mode["live_call_attempted"])
+        self.assertFalse(wrong_mode["fallback_attempted"])
+
+        self.assertEqual(wrong_model["status"], "blocked")
+        self.assertEqual(wrong_model["machine_error_code"], "API_ONLY_DEEPSEEK_MODEL_REQUIRED")
+        self.assertFalse(wrong_model["deepseek_selected_from_server_catalog"])
+        self.assertFalse(wrong_model["api_line_used_as_executor"])
+        self.assertFalse(wrong_model["provider_called"])
+        self.assertFalse(wrong_model["live_call_attempted"])
+        self.assertFalse(wrong_model["fallback_attempted"])
+
     def test_api_only_deepseek_live_route_format_rejects_browser_backend_fields(self) -> None:
         packet = build_api_only_deepseek_live_route_format_packet(
             {
