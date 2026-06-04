@@ -1767,6 +1767,15 @@ Field meaning rules:
   evaluated or attempted current-proxy adoption
 - `proxy_reprobe_adoption_result` must remain nested owner-path truth rather
   than a top-level current-proxy truth surface
+- packets with `PROXY_PATH_BROKEN` or `PROXY_REPROBE_FAILED` may expose
+  `proxy_path_recovery_hint` as a command-packet-only summary for app-visible
+  blocked/action truth
+- `proxy_path_recovery_hint` must not start repair, claim recovery, persist new
+  metadata, or replace `proxy_reprobe`, `last_known_good_proxy`, or
+  `proxy_reprobe_adoption_result` evidence
+- materialized `last_known_good_proxy` may inform `proxy_path_recovery_hint`, but
+  must not by itself change top-level `machine_error_code` or make
+  `healthcheck --repair --json` an immediately allowed repair surface
 - that contract may expose an external launcher-path surface for
   `WBP_LAUNCHER_SCRIPT`, but launcher-path presence alone must not be treated as
   proof of current-proxy consumer capability

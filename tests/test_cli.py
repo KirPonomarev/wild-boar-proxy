@@ -4558,6 +4558,21 @@ class CliTests(unittest.TestCase):
             f"http://127.0.0.1:{candidate_port}", payload["proxy_reprobe"]["candidates"]
         )
         self.assertEqual(payload["last_known_good_proxy"]["status"], "declared_not_materialized")
+        recovery_hint = payload["proxy_path_recovery_hint"]
+        self.assertEqual(recovery_hint["status"], "blocked")
+        self.assertEqual(recovery_hint["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertEqual(recovery_hint["reason"], "no_bounded_local_proxy_candidate")
+        self.assertEqual(recovery_hint["next_action"], "start_local_proxy_then_reprobe")
+        self.assertEqual(
+            recovery_hint["allowed_next_commands"],
+            ["healthcheck --json", "status --json"],
+        )
+        self.assertFalse(recovery_hint["candidate_available"])
+        self.assertFalse(recovery_hint["last_known_good_available"])
+        self.assertFalse(recovery_hint["repair_owner_surface_recommended"])
+        self.assertNotIn("repair_owner_surface", recovery_hint)
+        self.assertNotIn("owner_authorization_required", recovery_hint)
+        self.assertTrue(recovery_hint["false_green_without_live_reproof_forbidden"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertNotIn("last_known_good_proxy_url", state)
         self.assertNotIn("last_known_good_proxy_observed_at", state)
@@ -4610,12 +4625,26 @@ class CliTests(unittest.TestCase):
             ProbeHandler.response_payload = None
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["changed_files"], [])
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "materialized")
         self.assertEqual(last_known_good["proxy_url"], last_known_good_url)
         self.assertFalse(last_known_good["matches_current_proxy_url"])
+        recovery_hint = payload["proxy_path_recovery_hint"]
+        self.assertEqual(recovery_hint["status"], "blocked")
+        self.assertEqual(recovery_hint["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertEqual(recovery_hint["reason"], "last_known_good_proxy_available")
+        self.assertEqual(
+            recovery_hint["next_action"],
+            "restore_or_start_last_known_good_proxy_then_reprobe",
+        )
+        self.assertFalse(recovery_hint["candidate_available"])
+        self.assertTrue(recovery_hint["last_known_good_available"])
+        self.assertEqual(recovery_hint["last_known_good_status"], "materialized")
+        self.assertFalse(recovery_hint["repair_owner_surface_recommended"])
+        self.assertNotIn("repair_owner_surface", recovery_hint)
+        self.assertNotIn("owner_authorization_required", recovery_hint)
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["last_known_good_proxy_url"], last_known_good_url)
         self.assertEqual(
@@ -4724,6 +4753,24 @@ class CliTests(unittest.TestCase):
         self.assertFalse(adoption_result["current_proxy_url_rewritten"])
         self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
         self.assertTrue(adoption_result["rollback_restored"])
+        recovery_hint = payload["proxy_path_recovery_hint"]
+        self.assertEqual(recovery_hint["status"], "blocked")
+        self.assertEqual(recovery_hint["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(recovery_hint["reason"], "bounded_local_candidate_available")
+        self.assertEqual(recovery_hint["next_action"], "inspect_proxy_repair_failure")
+        self.assertTrue(recovery_hint["candidate_available"])
+        self.assertEqual(
+            recovery_hint["working_candidate"],
+            f"http://127.0.0.1:{candidate_port}",
+        )
+        self.assertTrue(recovery_hint["repair_owner_surface_recommended"])
+        self.assertTrue(recovery_hint["owner_authorization_required"])
+        self.assertTrue(recovery_hint["adoption_attempted"])
+        self.assertEqual(
+            recovery_hint["adoption_outcome"],
+            "sync_owner_path_live_reproof_failed",
+        )
+        self.assertFalse(recovery_hint["live_runtime_observation_confirmed"])
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertIn(
             str(self.managed_dir / "managed-config.yaml"), payload["changed_files"]
@@ -4790,6 +4837,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["current_proxy_url"], expected_proxy_url)
+        self.assertNotIn("proxy_path_recovery_hint", payload)
         adoption_result = payload["proxy_reprobe_adoption_result"]
         self.assertTrue(adoption_result["attempted"])
         self.assertTrue(adoption_result["prerequisite_materialized"])
@@ -5740,6 +5788,7 @@ class CliTests(unittest.TestCase):
         recovery = payload["deterministic_stable_recovery_result"]
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
+        self.assertNotIn("proxy_path_recovery_hint", payload)
         self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["status"], "failed")
@@ -6151,6 +6200,21 @@ class CliTests(unittest.TestCase):
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{lkg_candidate_port}",
         )
+        recovery_hint = payload["proxy_path_recovery_hint"]
+        self.assertEqual(recovery_hint["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(recovery_hint["reason"], "bounded_local_candidate_available")
+        self.assertEqual(
+            recovery_hint["next_action"], "run_healthcheck_repair_if_authorized"
+        )
+        self.assertTrue(recovery_hint["candidate_available"])
+        self.assertEqual(
+            recovery_hint["working_candidate"],
+            f"http://127.0.0.1:{lkg_candidate_port}",
+        )
+        self.assertEqual(
+            recovery_hint["repair_owner_surface"], "healthcheck --repair --json"
+        )
+        self.assertTrue(recovery_hint["owner_authorization_required"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
             state["last_known_good_proxy_url"], f"http://127.0.0.1:{lkg_candidate_port}"

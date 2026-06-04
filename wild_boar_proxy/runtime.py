@@ -3716,6 +3716,89 @@ def build_last_known_good_proxy_surface(
     }
 
 
+PROXY_PATH_FAILURE_CODES = {"PROXY_PATH_BROKEN", "PROXY_REPROBE_FAILED"}
+
+
+def build_proxy_path_recovery_hint(
+    *,
+    machine_error_code: str,
+    owner_command_surface: str,
+    proxy_reprobe: dict[str, Any] | None,
+    last_known_good_proxy: dict[str, Any],
+    proxy_reprobe_adoption_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    candidate_available = bool(
+        isinstance(proxy_reprobe, dict) and proxy_reprobe.get("found_candidate") is True
+    )
+    working_candidate = (
+        str(proxy_reprobe.get("working_candidate") or "")
+        if isinstance(proxy_reprobe, dict)
+        else ""
+    )
+    last_known_good_status = str(last_known_good_proxy.get("status", "unknown"))
+    last_known_good_available = last_known_good_status == "materialized"
+    adoption_attempted = bool(
+        isinstance(proxy_reprobe_adoption_result, dict)
+        and proxy_reprobe_adoption_result.get("attempted") is True
+    )
+    adoption_outcome = (
+        str(proxy_reprobe_adoption_result.get("adoption_outcome", ""))
+        if isinstance(proxy_reprobe_adoption_result, dict)
+        else ""
+    )
+    live_runtime_observation_confirmed = bool(
+        isinstance(proxy_reprobe_adoption_result, dict)
+        and proxy_reprobe_adoption_result.get("live_runtime_observation_confirmed")
+        is True
+    )
+
+    if candidate_available:
+        reason = "bounded_local_candidate_available"
+        next_action = (
+            "inspect_proxy_repair_failure"
+            if owner_command_surface == "healthcheck --repair --json"
+            else "run_healthcheck_repair_if_authorized"
+        )
+        allowed_next_commands = [
+            "healthcheck --repair --json",
+            "healthcheck --json",
+            "status --json",
+        ]
+        repair_owner_surface_recommended = True
+    elif last_known_good_available:
+        reason = "last_known_good_proxy_available"
+        next_action = "restore_or_start_last_known_good_proxy_then_reprobe"
+        allowed_next_commands = ["healthcheck --json", "status --json"]
+        repair_owner_surface_recommended = False
+    else:
+        reason = "no_bounded_local_proxy_candidate"
+        next_action = "start_local_proxy_then_reprobe"
+        allowed_next_commands = ["healthcheck --json", "status --json"]
+        repair_owner_surface_recommended = False
+
+    hint = {
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "reason": reason,
+        "next_action": next_action,
+        "operator_action": "user_action",
+        "allowed_next_commands": allowed_next_commands,
+        "candidate_available": candidate_available,
+        "working_candidate": working_candidate,
+        "last_known_good_available": last_known_good_available,
+        "last_known_good_status": last_known_good_status,
+        "repair_owner_surface_recommended": repair_owner_surface_recommended,
+        "adoption_attempted": adoption_attempted,
+        "adoption_outcome": adoption_outcome,
+        "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
+        "false_green_without_live_reproof_forbidden": True,
+    }
+    if repair_owner_surface_recommended:
+        hint["repair_owner_surface"] = "healthcheck --repair --json"
+        hint["owner_authorization_required"] = True
+    return hint
+
+
 def _path_is_under_root(path: Path, root: Path) -> bool:
     resolved_path = path.expanduser().resolve(strict=False)
     resolved_root = root.expanduser().resolve(strict=False)
@@ -8756,19 +8839,19 @@ def run_healthcheck(
                     "Runtime attestation failed because the outbound proxy path is broken; "
                     "a local proxy candidate is reachable."
                 )
-            elif last_known_good_proxy["status"] == "materialized":
-                machine_error_code = "PROXY_PATH_BROKEN"
-                human_message = (
-                    "Runtime attestation failed because the outbound proxy path is broken; "
-                    "a previously materialized local proxy snapshot is preserved, but "
-                    "no bounded live candidate is currently reachable."
-                )
             else:
                 machine_error_code = "PROXY_REPROBE_FAILED"
-                human_message = (
-                    "Runtime attestation failed because the outbound proxy path is broken; "
-                    "no bounded local proxy candidate is reachable."
-                )
+                if last_known_good_proxy["status"] == "materialized":
+                    human_message = (
+                        "Runtime attestation failed because the outbound proxy path is broken; "
+                        "a previously materialized local proxy snapshot is preserved, but "
+                        "no bounded live candidate is currently reachable."
+                    )
+                else:
+                    human_message = (
+                        "Runtime attestation failed because the outbound proxy path is broken; "
+                        "no bounded local proxy candidate is reachable."
+                    )
         else:
             machine_error_code = (
                 classify_http_failure_machine_error(error_detail)
@@ -9200,6 +9283,10 @@ def run_healthcheck(
             )
         )
     )
+    current_proxy_adoption_contract = build_current_proxy_adoption_contract(paths)
+    last_known_good_proxy_surface = build_last_known_good_proxy_surface(
+        paths, state, current_proxy_url
+    )
     extra = {
         "desired_mode": desired_mode,
         "effective_mode": reported_effective_mode,
@@ -9219,11 +9306,17 @@ def run_healthcheck(
         extra["proxy_reprobe"] = proxy_reprobe
     if proxy_reprobe_adoption_result is not None:
         extra["proxy_reprobe_adoption_result"] = proxy_reprobe_adoption_result
-    extra["current_proxy_adoption_contract"] = build_current_proxy_adoption_contract(paths)
+    extra["current_proxy_adoption_contract"] = current_proxy_adoption_contract
     extra["last_known_good_proxy_contract"] = build_last_known_good_proxy_contract(paths)
-    extra["last_known_good_proxy"] = build_last_known_good_proxy_surface(
-        paths, state, current_proxy_url
-    )
+    extra["last_known_good_proxy"] = last_known_good_proxy_surface
+    if machine_error_code in PROXY_PATH_FAILURE_CODES:
+        extra["proxy_path_recovery_hint"] = build_proxy_path_recovery_hint(
+            machine_error_code=machine_error_code,
+            owner_command_surface=owner_command_surface,
+            proxy_reprobe=proxy_reprobe,
+            last_known_good_proxy=last_known_good_proxy_surface,
+            proxy_reprobe_adoption_result=proxy_reprobe_adoption_result,
+        )
     extra["deterministic_stable_recovery_contract"] = (
         build_deterministic_stable_recovery_contract(paths)
     )
