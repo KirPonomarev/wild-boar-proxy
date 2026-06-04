@@ -46,6 +46,25 @@ def sample_route(
     }
 
 
+def sample_direct_deepseek_route(
+    route_id: str = "wbp-deepseek-v3",
+    *,
+    base_url: str = "https://api.deepseek.com/v1",
+    upstream_model: str = "deepseek-chat",
+    cost_class: str = "paid_or_free_limited",
+) -> dict[str, object]:
+    return sample_route(
+        route_id=route_id,
+        base_url=base_url,
+        upstream_model=upstream_model,
+        cost_class=cost_class,
+    ) | {
+        "display_name": "DeepSeek direct",
+        "provider": "deepseek",
+        "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+    }
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
         handle.bind(("127.0.0.1", 0))
@@ -411,6 +430,151 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(status_credential["provider"], "deepseek")
         self.assertEqual(status_credential["credential_ref"], "DEEPSEEK_API_KEY")
         self.assertNotIn("deepseek-owner-key", status_result.stdout)
+
+    def test_direct_deepseek_route_validate_check_and_live_format_prove_no_fallback(
+        self,
+    ) -> None:
+        secret_value = "deepseek-owner-key"
+        with mocked_provider(
+            expected_token=secret_value,
+            models=["deepseek-chat"],
+            smoke_payload={
+                "id": "chatcmpl-direct-deepseek-test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "API_ONLY_DEEPSEEK_READY",
+                        },
+                    }
+                ],
+            },
+        ) as (base_url, server):
+            admit_result = self.run_cli(
+                "external-models",
+                "credentials",
+                "admit",
+                "--provider",
+                "deepseek",
+                "--source",
+                "owner-env",
+                "--json",
+                extra_env={"DEEPSEEK_API_KEY": secret_value},
+            )
+            admit_payload = self.parse_payload(admit_result)
+            self.assertEqual(admit_payload["status"], "ok")
+            credential_result = admit_payload["data"]["credential_result"]
+            self.assertEqual(credential_result["provider"], "deepseek")
+            self.assertEqual(credential_result["credential_ref"], "DEEPSEEK_API_KEY")
+            self.assertFalse(credential_result["secret_value_exposed"])
+            self.assertNotIn(secret_value, admit_result.stdout)
+            self.assertFalse(
+                packets.command_packet_has_secret_leak(
+                    admit_payload,
+                    secret_values=[secret_value],
+                )
+            )
+
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_direct_deepseek_route(base_url=base_url)),
+            )
+
+            validate_result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            validate_payload = self.parse_payload(validate_result)
+            self.assertEqual(validate_payload["status"], "ok")
+            self.assertEqual(validate_payload["data"]["provider"], "deepseek")
+            self.assertEqual(validate_payload["data"]["effective_model"], "deepseek-chat")
+            self.assertEqual(validate_payload["data"]["verification_scope"], "route_provider_only")
+            self.assertFalse(validate_payload["data"]["listener_proven"])
+            self.assertTrue(validate_payload["data"]["runtime_claim_blocked"])
+            self.assertNotIn(secret_value, validate_result.stdout)
+            self.assertFalse(
+                packets.command_packet_has_secret_leak(
+                    validate_payload,
+                    secret_values=[secret_value],
+                )
+            )
+            validate_evidence = json.loads(
+                Path(validate_payload["data"]["evidence_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(validate_evidence["result"]["provider"], "deepseek")
+            self.assertFalse(validate_evidence["result"]["fallback_used"])
+            self.assertEqual(validate_evidence["result"]["fallback_chain"], ["wbp-deepseek-v3"])
+
+            check_result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            check_payload = self.parse_payload(check_result)
+            check_request_payload = server.last_request_payload  # type: ignore[attr-defined]
+            self.assertEqual(check_payload["status"], "ok")
+            self.assertEqual(check_payload["data"]["provider"], "deepseek")
+            self.assertEqual(check_payload["data"]["effective_model"], "deepseek-chat")
+            self.assertFalse(check_payload["data"]["fallback_used"])
+            self.assertEqual(check_payload["data"]["fallback_chain"], ["wbp-deepseek-v3"])
+            self.assertEqual(check_payload["data"]["request_count"], 1)
+            self.assertEqual(check_request_payload["model"], "deepseek-chat")
+            self.assertNotIn(secret_value, check_result.stdout)
+            self.assertFalse(
+                packets.command_packet_has_secret_leak(
+                    check_payload,
+                    secret_values=[secret_value],
+                )
+            )
+
+            request_count_before_live = server.request_count  # type: ignore[attr-defined]
+            live_result = self.run_cli(
+                "external-models",
+                "live-format-check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Return exactly: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+            )
+            live_request_payload = server.last_request_payload  # type: ignore[attr-defined]
+            request_count_after_live = server.request_count  # type: ignore[attr-defined]
+
+        live_payload = self.parse_payload(live_result)
+        self.assertEqual(live_payload["status"], "ok")
+        self.assertEqual(live_payload["effect"], "probe")
+        self.assertEqual(live_payload["changed_files"], [])
+        self.assertEqual(live_payload["data"]["provider"], "deepseek")
+        self.assertEqual(live_payload["data"]["effective_model"], "deepseek-chat")
+        self.assertFalse(live_payload["data"]["fallback_used"])
+        self.assertEqual(live_payload["data"]["fallback_chain"], ["wbp-deepseek-v3"])
+        self.assertTrue(live_payload["data"]["expected_text_observed"])
+        self.assertEqual(live_payload["data"]["response_shape"], "choices_message")
+        self.assertFalse(live_payload["data"]["state_written"])
+        self.assertFalse(live_payload["data"]["evidence_written"])
+        self.assertFalse(live_payload["data"]["file_mutation_attempted"])
+        self.assertEqual(request_count_after_live, request_count_before_live + 1)
+        self.assertEqual(live_request_payload["model"], "deepseek-chat")
+        self.assertNotIn(secret_value, live_result.stdout)
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(
+                live_payload,
+                secret_values=[secret_value],
+            )
+        )
 
     def test_mistral_credentials_admit_and_status_use_generic_provider_spec(self) -> None:
         admit_result = self.run_cli(
