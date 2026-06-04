@@ -2898,30 +2898,57 @@ class CliTests(unittest.TestCase):
             snapshot[str(path)] = path.read_text(encoding="utf-8")
         return snapshot
 
-    def truth_tree_snapshot(self) -> dict[str, dict[str, object]]:
-        return snapshot_truth_tree(
-            {
-                "stable_config": self.stable_dir / "config.yaml",
-                "backend_registry": self.managed_dir / "backend-registry.json",
-                "supervisor_state": self.managed_dir / "supervisor-state.json",
-                "approved_repair_target": (
-                    self.managed_dir / "approved-repair-target.json"
-                ),
-                "target_switch_transaction": (
-                    self.managed_dir / "target-switch-transaction.json"
-                ),
-                "stable_runtime_generated_config": (
-                    self.managed_dir / "stable-runtime-config.generated.yaml"
-                ),
-                "managed_config": self.managed_dir / "managed-config.yaml",
-                "managed_pid": self.managed_dir / "managed-proxy.pid",
-                "profile_config": self.profile_dir / "config.toml",
-                "runtime_mode": self.profile_dir / "runtime-mode.txt",
-                "runtime_effective_mode": (
-                    self.profile_dir / "runtime-effective-mode.txt"
-                ),
-            }
+    def truth_tree_snapshot(
+        self,
+        extra_paths: dict[str, Path] | None = None,
+    ) -> dict[str, dict[str, object]]:
+        paths = {
+            "stable_config": self.stable_dir / "config.yaml",
+            "backend_registry": self.managed_dir / "backend-registry.json",
+            "supervisor_state": self.managed_dir / "supervisor-state.json",
+            "approved_repair_target": (
+                self.managed_dir / "approved-repair-target.json"
+            ),
+            "target_switch_transaction": (
+                self.managed_dir / "target-switch-transaction.json"
+            ),
+            "stable_runtime_generated_config": (
+                self.managed_dir / "stable-runtime-config.generated.yaml"
+            ),
+            "managed_config": self.managed_dir / "managed-config.yaml",
+            "managed_pid": self.managed_dir / "managed-proxy.pid",
+            "profile_config": self.profile_dir / "config.toml",
+            "runtime_mode": self.profile_dir / "runtime-mode.txt",
+            "runtime_effective_mode": (
+                self.profile_dir / "runtime-effective-mode.txt"
+            ),
+        }
+        if extra_paths is not None:
+            paths.update(extra_paths)
+        return snapshot_truth_tree(paths)
+
+    def write_incomplete_transaction_metadata(
+        self,
+        transaction_id: str = "txn-incomplete-cli",
+    ) -> Path:
+        metadata_path = runtime_mod.state_transaction.transaction_metadata_path(
+            self.managed_dir / runtime_mod.state_transaction.TRANSACTION_STORE_DIRNAME,
+            transaction_id,
         )
+        runtime_mod.state_transaction.write_transaction_metadata(
+            metadata_path,
+            runtime_mod.state_transaction.TransactionMetadata(
+                schema_version=runtime_mod.state_transaction.TRANSACTION_METADATA_SCHEMA_VERSION,
+                transaction_id=transaction_id,
+                state=runtime_mod.state_transaction.TRANSACTION_PREPARING,
+                created_at_utc="2026-06-03T00:00:00+00:00",
+                updated_at_utc="2026-06-03T00:00:01+00:00",
+                transaction_root=str(self.managed_dir.resolve(strict=False)),
+                files=(),
+                error=None,
+            ),
+        )
+        return metadata_path
 
     def configure_dynamic_proxy_gate(self, *, expected_proxy_url: str) -> None:
         ProbeHandler.dynamic_state_file = str(self.managed_dir / "supervisor-state.json")
@@ -3813,6 +3840,84 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertIn("reconciled to", payload["last_error"])
         self.assertEqual(payload["pool_summary"]["selected_backend_ids"], [])
+
+    def test_healthcheck_repair_cli_dirty_transaction_blocks_before_runtime_writes(
+        self,
+    ) -> None:
+        metadata_path = self.write_incomplete_transaction_metadata()
+        pid_file = self.managed_dir / "managed-proxy.pid"
+        pid_file.write_text("999999\n", encoding="utf-8")
+        before = self.truth_tree_snapshot({"transaction_metadata": metadata_path})
+
+        result = self.run_cli("healthcheck", "--repair", "--json")
+        payload = self.parse_strict_json_object(result.stdout)
+
+        after = self.truth_tree_snapshot({"transaction_metadata": metadata_path})
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["mutation_ledger"]["status"], "not_mutated")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
+        startup_repair = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_repair["status"], "blocked")
+        self.assertEqual(
+            startup_repair["temp_recovery_outcome"],
+            runtime_mod.state_startup_recovery.TEMP_RECOVERY_BLOCKED,
+        )
+        self.assertIn(
+            runtime_mod.state_startup_recovery.REASON_TRANSACTION_INCOMPLETE,
+            startup_repair["blocking_reasons"],
+        )
+        self.assertFalse(startup_repair["effectful_claim_allowed"])
+        self.assertTrue(pid_file.exists())
+        self.assertEqual(before, after)
+
+    def test_healthcheck_repair_cli_blocked_lock_blocks_before_runtime_writes(
+        self,
+    ) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text("{not-json\n", encoding="utf-8")
+        pid_file = self.managed_dir / "managed-proxy.pid"
+        pid_file.write_text("999999\n", encoding="utf-8")
+        before = self.truth_tree_snapshot({"runtime_lock": lock_file})
+
+        result = self.run_cli("healthcheck", "--repair", "--json")
+        payload = self.parse_strict_json_object(result.stdout)
+
+        after = self.truth_tree_snapshot({"runtime_lock": lock_file})
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, payload["exit_code"])
+        self.assertNotEqual(payload["status"], "ok")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_startup_contract.STATE_STARTUP_CONTRACT_BLOCKED,
+        )
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["mutation_ledger"]["status"], "not_mutated")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
+        self.assertIn(
+            "startup_contract_blocked",
+            payload["runtime_guardrails"]["failed_checks"],
+        )
+        startup_repair = payload["startup_contract_repair_result"]
+        self.assertEqual(startup_repair["status"], "blocked")
+        self.assertEqual(
+            startup_repair["lock_slice_recovery_outcome"],
+            runtime_mod.state_startup_lock.LOCK_SLICE_RECOVERY_BLOCKED,
+        )
+        self.assertFalse(startup_repair["effectful_claim_allowed"])
+        self.assertTrue(lock_file.exists())
+        self.assertTrue(pid_file.exists())
+        self.assertEqual(before, after)
 
     def test_status_reports_registry_lifecycle_counts_when_state_is_stale(self) -> None:
         managed_port = free_port()
