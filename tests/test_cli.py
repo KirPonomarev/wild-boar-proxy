@@ -768,6 +768,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "probe")
         self.assertEqual(payload["exit_code"], 0)
         self.assertEqual(payload["command"], ["validate", "backend-a"])
         self.assertEqual(payload["changed_files"], [])
@@ -791,6 +792,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "ACCOUNTS_COMMAND_FAILED")
+        self.assertEqual(payload["effect"], "probe")
         self.assertEqual(payload["exit_code"], 9)
         self.assertEqual(payload["command"], ["validate", "backend-a"])
         process_result = payload["process_result"]
@@ -9727,6 +9729,7 @@ class CliTests(unittest.TestCase):
             self.assertIn(field, payload)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["next_action"], "login_complete")
         self.assertEqual(payload["provider"], "sandbox")
         login_session_id = payload["login_session_id"]
@@ -10060,6 +10063,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(started.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["provider"], "codex")
         self.assertEqual(payload["mode"], "device")
         self.assertEqual(payload["next_action"], "wait_for_login")
@@ -10185,6 +10189,8 @@ class CliTests(unittest.TestCase):
             "--json",
         )
         session_id = json.loads(started.stdout)["session_id"]
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        session_before_status = session_path.read_text(encoding="utf-8")
         ready_file.write_text("ready\n", encoding="utf-8")
         deadline = time.time() + 5
         payload = {}
@@ -10197,9 +10203,15 @@ class CliTests(unittest.TestCase):
                 break
             time.sleep(0.05)
         self.assertEqual(payload["status"], "ok", payload)
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["next_action"], "accounts_onboard")
         self.assertEqual(payload["login_result"]["status"], "auth_materialized")
         self.assertTrue(payload["login_result"]["auth_materialized"])
+        self.assertEqual(
+            session_path.read_text(encoding="utf-8"),
+            session_before_status,
+        )
 
         cancelled = self.run_cli(
             "accounts", "login", "cancel", "--session", session_id, "--json"
@@ -10239,6 +10251,8 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(started.returncode, 0, started.stderr)
         session_id = json.loads(started.stdout)["session_id"]
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        session_before_status = session_path.read_text(encoding="utf-8")
 
         status = self.run_cli(
             "accounts", "login", "status", "--session", session_id, "--json"
@@ -10247,6 +10261,8 @@ class CliTests(unittest.TestCase):
         payload = json.loads(status.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LOGIN_HANDOFF_PROCESS_EXITED")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["next_action"], "retry")
         self.assertEqual(payload["login_result"]["status"], "failed")
         self.assertFalse(payload["login_result"]["auth_materialized"])
@@ -10255,6 +10271,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             payload["login_result"]["failure_reason"],
             "device_handoff_process_exited_before_auth_materialized",
+        )
+        self.assertEqual(
+            session_path.read_text(encoding="utf-8"),
+            session_before_status,
         )
 
         completed = self.run_cli(
@@ -10305,6 +10325,7 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["machine_error_code"], "LOGIN_AUTH_NOT_MATERIALIZED")
+        self.assertEqual(payload["effect"], "mutate")
 
         cancelled = self.run_cli(
             "accounts", "login", "cancel", "--session", session_id, "--json"
@@ -10372,6 +10393,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["next_action"], "accounts_refresh")
         self.assertEqual(payload["provider"], "codex")
         self.assertEqual(payload["login_result"]["status"], "completed")
@@ -10421,6 +10443,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
         payload = json.loads(cancelled.stdout)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertTrue(payload["login_result"]["used"] is False)
         self.assertEqual(payload["login_result"]["status"], "cancelled")
         session_payload = json.loads(
@@ -10456,6 +10479,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
         self.assertEqual(onboarding["selected_backend_id"], "backend-new")
@@ -20741,6 +20765,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, "managed listener should remain absent")
         payload = self.parse_strict_json_object(result.stdout)
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
@@ -20775,6 +20800,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["exit_code"], 7)
         self.assertEqual(payload["last_error"], "bounded sync command failed")
         process_result = payload["process_result"]
@@ -20802,6 +20828,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "SYNC_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["exit_code"], 1)
         process_result = payload["process_result"]
         self.assertEqual(process_result["status"], "error")
@@ -20859,6 +20886,7 @@ class CliTests(unittest.TestCase):
             runtime_mod.OWNER_PATH_SYNC_PROCESS_OUTPUT_CAP_BYTES,
         )
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["process_result"]["machine_error_code"], "OK")
 
     def test_sync_rejects_socket_only_managed_listener_without_runtime_identity(
@@ -20895,6 +20923,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertNotEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["effective_mode"], "managed")
         self.assertNotEqual(payload["liveness"], "healthy")
         self.assertEqual(result.stderr.strip(), "sync-managed-socket-only")
@@ -20947,6 +20976,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertNotEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["effective_mode"], "managed")
         self.assertNotEqual(payload["liveness"], "healthy")
         self.assertEqual(result.stderr.strip(), "sync-managed-foreign-openai")
@@ -21047,6 +21077,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
 
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         snapshot = state.get("selected_backend_snapshot")

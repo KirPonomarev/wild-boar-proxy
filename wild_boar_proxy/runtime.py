@@ -4542,7 +4542,7 @@ def load_login_session(
 
 
 def refresh_codex_login_session(
-    paths: RuntimePaths, login_session_id: str
+    paths: RuntimePaths, login_session_id: str, *, persist: bool = True
 ) -> tuple[dict[str, Any], list[str]]:
     session_path, session = load_login_session(paths, login_session_id)
     stdout_path = codex_login_session_stdout_path(paths, login_session_id)
@@ -4594,7 +4594,7 @@ def refresh_codex_login_session(
         "expired",
     }:
         pid = int(session.get("pid", 0) or 0)
-        if pid > 0:
+        if persist and pid > 0:
             terminate_login_session_pid(pid)
         session["state"] = "expired"
         changed = True
@@ -4629,8 +4629,10 @@ def refresh_codex_login_session(
             )
             changed = True
 
-    if changed:
+    if changed and persist:
         write_json_atomic(session_path, session)
+    if not persist:
+        return session, []
     return session, detect_changed_files_by_state(before, [session_path, stdout_path, stderr_path])
 
 
@@ -10096,6 +10098,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             severity="recoverable",
             operator_action="retry",
             changed_files=changed_files,
+            effect=EFFECT_MUTATE,
             extra={
                 "desired_mode": desired_mode,
                 "effective_mode": reported_effective_mode,
@@ -10116,6 +10119,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             severity="recoverable",
             operator_action="retry",
             changed_files=changed_files,
+            effect=EFFECT_MUTATE,
             extra={
                 "desired_mode": desired_mode,
                 "effective_mode": reported_effective_mode,
@@ -10148,6 +10152,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 post_sync_probe.get("operator_action", "retry") or "retry"
             ),
             changed_files=changed_files,
+            effect=EFFECT_MUTATE,
             extra={
                 "desired_mode": desired_mode,
                 "effective_mode": str(
@@ -10198,6 +10203,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         severity="recoverable",
         operator_action="none" if listener_ok else "retry",
         changed_files=changed_files,
+        effect=EFFECT_MUTATE,
         extra={
             "desired_mode": desired_mode,
             "effective_mode": reported_effective_mode,
@@ -13257,6 +13263,7 @@ def run_accounts_command(
         severity="recoverable",
         operator_action="none" if ok else "retry",
         changed_files=changed_files,
+        effect=EFFECT_PROBE,
         extra={"command": arguments, "process_result": process_payload},
         exit_code=0 if ok else process_exit_code,
     )
@@ -13277,6 +13284,7 @@ def build_codex_login_start_payload(
         severity="recoverable",
         operator_action="none",
         changed_files=changed_files,
+        effect=EFFECT_MUTATE,
         extra={
             "next_action": "wait_for_login",
             "provider": "codex",
@@ -13304,6 +13312,7 @@ def run_accounts_login_start(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
                 extra={
                     "provider": provider,
                     "mode": mode or "",
@@ -13345,6 +13354,7 @@ def run_accounts_login_start(
                 severity="fatal",
                 operator_action="stop",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
                 extra={
                     "provider": "codex",
                     "mode": "device",
@@ -13369,6 +13379,7 @@ def run_accounts_login_start(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
         if not paths.stable_config.exists():
             return build_command_payload(
@@ -13379,6 +13390,7 @@ def run_accounts_login_start(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
 
         login_session_id = f"codex-{uuid.uuid4().hex}"
@@ -13464,6 +13476,7 @@ def run_accounts_login_start(
                 severity="recoverable",
                 operator_action="retry",
                 changed_files=changed_files,
+                effect=EFFECT_MUTATE,
                 extra={
                     "provider": "codex",
                     "mode": "device",
@@ -13527,6 +13540,7 @@ def run_accounts_login_start(
             severity="recoverable",
             operator_action="retry",
             changed_files=changed_files,
+            effect=EFFECT_MUTATE,
             extra={
                 "provider": "codex",
                 "mode": "device",
@@ -13545,6 +13559,7 @@ def run_accounts_login_start(
             severity="recoverable",
             operator_action="user_action",
             changed_files=[],
+            effect=EFFECT_MUTATE,
             extra={
                 "provider": provider,
                 "supported_providers": ["sandbox", "codex"],
@@ -13588,6 +13603,7 @@ def run_accounts_login_start(
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(before, [session_dir, session_path]),
+        effect=EFFECT_MUTATE,
         extra={
             "next_action": "login_complete",
             "provider": provider,
@@ -13626,13 +13642,16 @@ def run_accounts_login_status(paths: RuntimePaths, login_session_id: str) -> dic
             severity=exc.severity,
             operator_action=exc.operator_action,
             changed_files=[],
+            effect=EFFECT_READ,
             exit_code=exc.exit_code,
         )
 
     provider = str(session.get("provider", ""))
     changed_files: list[str] = []
     if provider == "codex":
-        session, changed_files = refresh_codex_login_session(paths, login_session_id)
+        session, changed_files = refresh_codex_login_session(
+            paths, login_session_id, persist=False
+        )
     elif provider == "sandbox" and sandbox_login_session_expired(session):
         session["state"] = "expired"
     else:
@@ -13682,6 +13701,7 @@ def run_accounts_login_status(paths: RuntimePaths, login_session_id: str) -> dic
         severity="recoverable",
         operator_action=operator_action,
         changed_files=changed_files,
+        effect=EFFECT_READ,
         extra={
             "next_action": next_action,
             "provider": provider,
@@ -13710,6 +13730,7 @@ def run_accounts_login_complete(
             severity=exc.severity,
             operator_action=exc.operator_action,
             changed_files=[],
+            effect=EFFECT_MUTATE,
             exit_code=exc.exit_code,
         )
 
@@ -13728,6 +13749,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=refresh_changed,
+                effect=EFFECT_MUTATE,
             )
         if current_state == "cancelled":
             return build_command_payload(
@@ -13738,6 +13760,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=refresh_changed,
+                effect=EFFECT_MUTATE,
             )
         if current_state == "expired":
             return build_command_payload(
@@ -13748,6 +13771,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=refresh_changed,
+                effect=EFFECT_MUTATE,
             )
         if current_state == "failed":
             failure_reason = str(session.get("failure_reason", ""))
@@ -13767,6 +13791,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="retry",
                 changed_files=refresh_changed,
+                effect=EFFECT_MUTATE,
                 extra={
                     "provider": "codex",
                     "session_id": login_session_id,
@@ -13783,6 +13808,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="retry",
                 changed_files=refresh_changed,
+                effect=EFFECT_MUTATE,
                 extra={
                     "provider": "codex",
                     "session_id": login_session_id,
@@ -13834,6 +13860,7 @@ def run_accounts_login_complete(
             severity=str(onboard_payload.get("severity", "recoverable")),
             operator_action=str(onboard_payload.get("operator_action", "retry")),
             changed_files=changed_files,
+            effect=EFFECT_MUTATE,
             extra=extra,
             exit_code=int(onboard_payload.get("exit_code", 1) or 1)
             if onboard_payload.get("status") != "ok"
@@ -13855,6 +13882,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
         if sandbox_login_session_expired(session):
             return build_command_payload(
@@ -13865,6 +13893,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
         if bool(session.get("used")):
             return build_command_payload(
@@ -13875,6 +13904,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
         if str(session.get("state", "")) != (state or ""):
             return build_command_payload(
@@ -13885,6 +13915,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
         if proof != "sandbox-ok":
             return build_command_payload(
@@ -13895,6 +13926,7 @@ def run_accounts_login_complete(
                 severity="recoverable",
                 operator_action="user_action",
                 changed_files=[],
+                effect=EFFECT_MUTATE,
             )
 
         auth_dir.mkdir(parents=True, exist_ok=True)
@@ -13915,6 +13947,7 @@ def run_accounts_login_complete(
         changed_files=detect_changed_files_by_state(
             before, [session_dir, session_path, auth_dir, auth_path, paths.auth_file]
         ),
+        effect=EFFECT_MUTATE,
         extra={
             "next_action": "accounts_onboard",
             "provider": "sandbox",
@@ -13946,6 +13979,7 @@ def run_accounts_login_cancel(paths: RuntimePaths, login_session_id: str) -> dic
             severity=exc.severity,
             operator_action=exc.operator_action,
             changed_files=[],
+            effect=EFFECT_MUTATE,
             exit_code=exc.exit_code,
         )
 
@@ -13958,6 +13992,7 @@ def run_accounts_login_cancel(paths: RuntimePaths, login_session_id: str) -> dic
             severity="recoverable",
             operator_action="user_action",
             changed_files=[],
+            effect=EFFECT_MUTATE,
         )
 
     stdout_path = codex_login_session_stdout_path(paths, login_session_id)
@@ -13979,6 +14014,7 @@ def run_accounts_login_cancel(paths: RuntimePaths, login_session_id: str) -> dic
         changed_files=detect_changed_files_by_state(
             before, [session_path, stdout_path, stderr_path]
         ),
+        effect=EFFECT_MUTATE,
         extra={
             "next_action": "none",
             "provider": "codex",
@@ -14259,6 +14295,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             changed_files=detect_changed_files(
                 before, runtime_write_surface_candidates(paths)
             ),
+            effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
         )
@@ -14733,6 +14770,7 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             changed_files=detect_changed_files(
                 before, runtime_write_surface_candidates(paths)
             ),
+            effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
         )
@@ -15336,6 +15374,7 @@ def run_protective_lifecycle_owner_path(
             changed_files=detect_changed_files(
                 before, runtime_write_surface_candidates(paths)
             ),
+            effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
         )
@@ -16717,6 +16756,7 @@ def _run_onboard_impl(
             changed_files=detect_changed_files(
                 before, runtime_write_surface_candidates(paths)
             ),
+            effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
         )

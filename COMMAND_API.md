@@ -157,6 +157,28 @@ Current `read` surfaces:
 When `effect=read`, `changed_files` must be `[]` and the command must not write
 runtime truth state.
 
+`sync --json` is a `mutate` surface. It may refresh runtime truth state, managed
+config, runtime effective-mode artifacts, selected-backend snapshots, and
+managed pid files. Any real mutation must be reported through `changed_files`;
+lock/preflight failures that do not mutate still keep `effect=mutate` because
+the command path is mutation-capable.
+
+Account owner surfaces use the same command-path effect rule:
+
+- `accounts validate <id> --json` is `probe`
+- `accounts onboard --json` is `mutate`
+- `accounts login start --provider <provider> ... --json` is `mutate`
+- `accounts login status --session <id> --json` is `read`
+- `accounts login complete --session <id> ... --json` is `mutate`
+- `accounts login cancel --session <id> --json` is `mutate`
+- `accounts promote|demote|hold|release|retire <id> --json` are `mutate`
+
+`accounts login status --session <id> --json` must not persist session refresh
+observations or terminate session processes. It may report device handoff,
+stale-process, expiry, and auth-materialization observations from owner-managed
+session/log/auth surfaces, but persisted session mutation belongs to the
+`start`, `complete`, and `cancel` owner surfaces.
+
 `status --json` is a read-only snapshot surface. It may summarize persisted
 state, registry, config, and cached contract surfaces, but it must not delegate
 to live healthcheck, recovery, launcher, or owner-path mutation. Its
