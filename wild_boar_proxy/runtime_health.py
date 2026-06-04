@@ -59,6 +59,69 @@ HEALTHCHECK_PROBE_CONTRACT: Final = HealthcheckProbeContract(
 )
 
 
+def build_native_auth_recovery_hint_from_inputs(
+    *,
+    machine_error_code: str,
+    launch_capable_backend_count: int,
+    selected_backend_observed_count: int,
+    selected_backend_runtime_loaded_count: int,
+    selected_backend_observation_source: str,
+) -> dict[str, Any]:
+    base_packet = {
+        "launch_capable_backend_count": launch_capable_backend_count,
+        "selected_backend_observed_count": selected_backend_observed_count,
+        "selected_backend_runtime_loaded_count": (
+            selected_backend_runtime_loaded_count
+        ),
+        "selected_backend_observation_source": selected_backend_observation_source,
+        "selection_gap_detected": (
+            selected_backend_runtime_loaded_count <= 0
+            and selected_backend_observed_count > 0
+        ),
+        "api_fallback_counts_as_native_recovery": False,
+        "claim_scope": "bounded_native_auth_recovery_only",
+    }
+    if machine_error_code != "AUTH_UNAVAILABLE":
+        return {
+            "status": "not_needed",
+            "machine_error_code": machine_error_code or "OK",
+            "owner_action_required": False,
+            "next_action": "none",
+            "command_surface": "",
+            "reason": "",
+            **base_packet,
+        }
+    if launch_capable_backend_count <= 0:
+        return {
+            "status": "blocked_no_launch_capable_backend",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "inspect_accounts_inventory",
+            "command_surface": "accounts list --json",
+            "reason": "auth_unavailable_without_launch_capable_backend",
+            **base_packet,
+        }
+    if selected_backend_observed_count <= 0:
+        return {
+            "status": "sync_recommended",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "sync",
+            "command_surface": "sync --json",
+            "reason": "launch_capable_available_without_selected_backend_observation",
+            **base_packet,
+        }
+    return {
+        "status": "owner_action_required",
+        "machine_error_code": machine_error_code,
+        "owner_action_required": True,
+        "next_action": "accounts_login_start",
+        "command_surface": "accounts login start --provider codex --mode device --json",
+        "reason": "auth_unavailable_after_selected_backend_observation",
+        **base_packet,
+    }
+
+
 def build_launch_readiness_surface(
     *,
     owner_command_surface: str,

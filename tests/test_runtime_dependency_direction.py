@@ -726,11 +726,15 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             "clear_stale_managed_pid_if_needed",
             "reconcile_stable_fallback",
             "refresh_last_known_good_proxy_from_healthcheck",
+            "run_accounts_login_start",
             "run_current_proxy_owner_path_activation",
             "run_healthcheck_repair",
+            "run_sync",
             "run_stable_runtime_launcher_attempt",
             "run_startup_contract_repair_owner_path",
+            "write_json_atomic",
             "write_stable_runtime_consumer_snapshot",
+            "write_text_atomic",
         }
 
         self.assertEqual(calls & forbidden, set())
@@ -2422,6 +2426,188 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         self.assertIs(payload, expected)
         builder.assert_called_once_with(**kwargs)
+
+    def test_runtime_native_auth_recovery_hint_facade_matches_health_module(self) -> None:
+        auth_pool_hygiene = {
+            "launch_capable_backend_count": 15,
+            "selected_backend_ids_observed": ["backend-b", "backend-a"],
+            "selected_backend_ids_runtime_loaded": [],
+            "selected_backend_observation_source": "runtime_state.selected_backend_snapshot",
+        }
+
+        facade_payload = runtime_mod.build_native_auth_recovery_hint(
+            machine_error_code="AUTH_UNAVAILABLE",
+            auth_pool_hygiene=auth_pool_hygiene,
+        )
+        direct_payload = runtime_health.build_native_auth_recovery_hint_from_inputs(
+            machine_error_code="AUTH_UNAVAILABLE",
+            launch_capable_backend_count=15,
+            selected_backend_observed_count=2,
+            selected_backend_runtime_loaded_count=0,
+            selected_backend_observation_source=(
+                "runtime_state.selected_backend_snapshot"
+            ),
+        )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "owner_action_required")
+        self.assertEqual(facade_payload["next_action"], "accounts_login_start")
+        self.assertEqual(
+            facade_payload["command_surface"],
+            "accounts login start --provider codex --mode device --json",
+        )
+        self.assertTrue(facade_payload["selection_gap_detected"])
+
+    def test_runtime_native_auth_recovery_hint_facade_delegates_to_health_module(
+        self,
+    ) -> None:
+        expected = {"surface": "native-auth-recovery-hint"}
+
+        with mock.patch.object(
+            runtime_health,
+            "build_native_auth_recovery_hint_from_inputs",
+            return_value=expected,
+        ) as builder:
+            payload = runtime_mod.build_native_auth_recovery_hint(
+                machine_error_code="AUTH_UNAVAILABLE",
+                auth_pool_hygiene={
+                    "launch_capable_backend_count": "3",
+                    "selected_backend_ids_observed": ["backend-b", 4, "", "backend-a"],
+                    "selected_backend_ids_runtime_loaded": ["backend-a"],
+                    "selected_backend_observation_source": "runtime_state",
+                },
+            )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(
+            machine_error_code="AUTH_UNAVAILABLE",
+            launch_capable_backend_count=3,
+            selected_backend_observed_count=2,
+            selected_backend_runtime_loaded_count=1,
+            selected_backend_observation_source="runtime_state",
+        )
+
+    def test_runtime_native_auth_recovery_hint_from_inputs_reports_branches(
+        self,
+    ) -> None:
+        cases = (
+            {
+                "case_name": "not_needed_blank_code",
+                "machine_error_code": "",
+                "launch_capable_backend_count": 0,
+                "selected_backend_observed_count": 0,
+                "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": "",
+                "status": "not_needed",
+                "reported_code": "OK",
+                "next_action": "none",
+                "command_surface": "",
+                "reason": "",
+                "owner_action_required": False,
+                "selection_gap_detected": False,
+            },
+            {
+                "case_name": "not_needed_proxy_path_broken",
+                "machine_error_code": "PROXY_PATH_BROKEN",
+                "launch_capable_backend_count": 3,
+                "selected_backend_observed_count": 1,
+                "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": "runtime_state",
+                "status": "not_needed",
+                "reported_code": "PROXY_PATH_BROKEN",
+                "next_action": "none",
+                "command_surface": "",
+                "reason": "",
+                "owner_action_required": False,
+                "selection_gap_detected": True,
+            },
+            {
+                "case_name": "blocked_no_launch_capable_backend",
+                "machine_error_code": "AUTH_UNAVAILABLE",
+                "launch_capable_backend_count": 0,
+                "selected_backend_observed_count": 0,
+                "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": "",
+                "status": "blocked_no_launch_capable_backend",
+                "reported_code": "AUTH_UNAVAILABLE",
+                "next_action": "inspect_accounts_inventory",
+                "command_surface": "accounts list --json",
+                "reason": "auth_unavailable_without_launch_capable_backend",
+                "owner_action_required": False,
+                "selection_gap_detected": False,
+            },
+            {
+                "case_name": "sync_recommended",
+                "machine_error_code": "AUTH_UNAVAILABLE",
+                "launch_capable_backend_count": 3,
+                "selected_backend_observed_count": 0,
+                "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": "",
+                "status": "sync_recommended",
+                "reported_code": "AUTH_UNAVAILABLE",
+                "next_action": "sync",
+                "command_surface": "sync --json",
+                "reason": "launch_capable_available_without_selected_backend_observation",
+                "owner_action_required": False,
+                "selection_gap_detected": False,
+            },
+            {
+                "case_name": "owner_action_required",
+                "machine_error_code": "AUTH_UNAVAILABLE",
+                "launch_capable_backend_count": 15,
+                "selected_backend_observed_count": 1,
+                "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": (
+                    "runtime_state.selected_backend_snapshot"
+                ),
+                "status": "owner_action_required",
+                "reported_code": "AUTH_UNAVAILABLE",
+                "next_action": "accounts_login_start",
+                "command_surface": (
+                    "accounts login start --provider codex --mode device --json"
+                ),
+                "reason": "auth_unavailable_after_selected_backend_observation",
+                "owner_action_required": True,
+                "selection_gap_detected": True,
+            },
+        )
+
+        for case in cases:
+            with self.subTest(case=case["case_name"]):
+                payload = runtime_health.build_native_auth_recovery_hint_from_inputs(
+                    machine_error_code=str(case["machine_error_code"]),
+                    launch_capable_backend_count=int(
+                        case["launch_capable_backend_count"]
+                    ),
+                    selected_backend_observed_count=int(
+                        case["selected_backend_observed_count"]
+                    ),
+                    selected_backend_runtime_loaded_count=int(
+                        case["selected_backend_runtime_loaded_count"]
+                    ),
+                    selected_backend_observation_source=str(
+                        case["selected_backend_observation_source"]
+                    ),
+                )
+
+                self.assertEqual(payload["status"], case["status"])
+                self.assertEqual(payload["machine_error_code"], case["reported_code"])
+                self.assertEqual(payload["next_action"], case["next_action"])
+                self.assertEqual(payload["command_surface"], case["command_surface"])
+                self.assertEqual(payload["reason"], case["reason"])
+                self.assertEqual(
+                    payload["owner_action_required"],
+                    case["owner_action_required"],
+                )
+                self.assertEqual(
+                    payload["selection_gap_detected"],
+                    case["selection_gap_detected"],
+                )
+                self.assertFalse(payload["api_fallback_counts_as_native_recovery"])
+                self.assertEqual(
+                    payload["claim_scope"],
+                    "bounded_native_auth_recovery_only",
+                )
 
     def test_runtime_guardrail_surface_facade_matches_health_module(self) -> None:
         launch_readiness = {
