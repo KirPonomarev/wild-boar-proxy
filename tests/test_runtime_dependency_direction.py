@@ -2681,6 +2681,125 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertIs(payload, expected)
         builder.assert_called_once_with(paths)
 
+    def test_runtime_stable_runtime_launcher_handoff_contract_facade_matches_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            facade_payload = runtime_mod.build_stable_runtime_launcher_handoff_contract(
+                paths
+            )
+            direct_payload = (
+                runtime_repair.build_stable_runtime_launcher_handoff_contract(paths)
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "contract_ready")
+        self.assertEqual(
+            facade_payload["handoff_method"], "process_local_env_override"
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+            runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+        )
+        self.assertEqual(
+            facade_payload["env_var"],
+            runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+        )
+        self.assertTrue(facade_payload["baseline_config_rewrite_forbidden"])
+        self.assertTrue(facade_payload["generic_config_routing_forbidden"])
+
+    def test_runtime_stable_runtime_launcher_handoff_contract_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            expected = {"surface": "stable-runtime-launcher-handoff"}
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_launcher_handoff_contract",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_stable_runtime_launcher_handoff_contract(
+                    paths
+                )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(paths)
+
+    def test_runtime_stable_runtime_effective_truth_contract_facade_matches_repair_module(
+        self,
+    ) -> None:
+        facade_payload = runtime_mod.build_stable_runtime_effective_truth_contract()
+        direct_payload = runtime_repair.build_stable_runtime_effective_truth_contract()
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "contract_ready")
+        self.assertEqual(
+            facade_payload["truth_source"],
+            "live_runtime_observation_plus_snapshot_evidence",
+        )
+        self.assertFalse(facade_payload["desired_source_alone_sufficient"])
+        self.assertFalse(facade_payload["generated_config_existence_alone_sufficient"])
+        self.assertFalse(
+            facade_payload["activation_evidence_snapshot_alone_sufficient"]
+        )
+        self.assertTrue(facade_payload["live_runtime_observation_required"])
+
+    def test_runtime_stable_runtime_effective_truth_contract_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = {"surface": "stable-runtime-effective-truth"}
+
+        with mock.patch.object(
+            runtime_repair,
+            "build_stable_runtime_effective_truth_contract",
+            return_value=expected,
+        ) as builder:
+            payload = runtime_mod.build_stable_runtime_effective_truth_contract()
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with()
+
+    def test_runtime_stable_runtime_consumer_contract_uses_repair_contract_facades(
+        self,
+    ) -> None:
+        launcher_handoff = {"surface": "launcher-handoff"}
+        effective_truth = {"surface": "effective-truth"}
+
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_launcher_handoff_contract",
+                return_value=launcher_handoff,
+            ) as launcher_builder,
+            mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_effective_truth_contract",
+                return_value=effective_truth,
+            ) as truth_builder,
+        ):
+            paths = _runtime_paths(Path(temp_dir))
+            registry = {
+                "backends": [],
+                "pool_policy": {},
+                "stable_default_backend_id": "",
+            }
+            policy_drift = {"status": "aligned"}
+            state = {}
+
+            payload = runtime_mod.build_stable_runtime_consumer_contract(
+                paths, registry, policy_drift, state
+            )
+
+        self.assertIs(payload["launcher_handoff_contract"], launcher_handoff)
+        self.assertIs(payload["effective_truth_contract"], effective_truth)
+        launcher_builder.assert_called_once_with(paths)
+        truth_builder.assert_called_once_with()
+
     def test_runtime_startup_contract_repair_contract_facade_matches_repair_module(
         self,
     ) -> None:

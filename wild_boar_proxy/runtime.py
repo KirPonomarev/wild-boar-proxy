@@ -3461,16 +3461,11 @@ def build_stable_runtime_generated_config_surface(
 def build_stable_runtime_launcher_handoff_contract(
     paths: RuntimePaths,
 ) -> dict[str, Any]:
-    return {
-        "status": "contract_ready",
-        "handoff_method": "process_local_env_override",
-        "env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
-        "generated_config_file": str(paths.stable_runtime_generated_config_file),
-        "scope": "launcher_subprocess_only",
-        "recovery_scope": "explicit_stable_runtime_recovery_only",
-        "baseline_config_rewrite_forbidden": True,
-        "generic_config_routing_forbidden": True,
-    }
+    from .runtime_repair import (
+        build_stable_runtime_launcher_handoff_contract as _build_contract,
+    )
+
+    return _build_contract(paths)
 
 
 def build_stable_runtime_activation_evidence_surface(
@@ -3522,15 +3517,11 @@ def build_stable_runtime_activation_evidence_surface(
 
 
 def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:
-    return {
-        "status": "contract_ready",
-        "truth_source": "live_runtime_observation_plus_snapshot_evidence",
-        "desired_source_alone_sufficient": False,
-        "generated_config_existence_alone_sufficient": False,
-        "activation_evidence_snapshot_alone_sufficient": False,
-        "live_runtime_observation_required": True,
-        "baseline_config_is_observation_surface": True,
-    }
+    from .runtime_repair import (
+        build_stable_runtime_effective_truth_contract as _build_contract,
+    )
+
+    return _build_contract()
 
 
 def build_deterministic_stable_recovery_contract(
