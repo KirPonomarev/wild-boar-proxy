@@ -2519,3 +2519,128 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(after, before)
+
+    def test_runtime_delegated_health_status_summary_facade_delegates_to_status_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _status_runtime_paths(Path(temp_dir))
+            health_payload = {"status": "ok"}
+            expected_payload = {"status": "delegated"}
+
+            with mock.patch.object(
+                runtime_status,
+                "build_delegated_health_status_summary_payload",
+                return_value=expected_payload,
+            ) as builder:
+                payload = runtime_mod.summarize_status(
+                    paths, health_payload=health_payload
+                )
+
+        self.assertEqual(payload, expected_payload)
+        builder.assert_called_once()
+        args = builder.call_args.args
+        kwargs = builder.call_args.kwargs
+        self.assertEqual(args, (paths, health_payload))
+        self.assertIsInstance(
+            kwargs["dependencies"], runtime_status.StatusSnapshotDependencies
+        )
+
+    def test_runtime_delegated_health_status_summary_matches_direct_status_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _status_runtime_paths(Path(temp_dir))
+            health_payload = runtime_mod.run_healthcheck_probe(paths)
+
+            facade_payload = runtime_mod.summarize_status(
+                paths, health_payload=health_payload
+            )
+            direct_payload = (
+                runtime_status.build_delegated_health_status_summary_payload(
+                    paths,
+                    health_payload,
+                    dependencies=runtime_mod._status_snapshot_dependencies(),
+                )
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["changed_files"], [])
+        self.assertEqual(facade_payload["attestation_summary"]["status"], "error")
+        self.assertEqual(
+            facade_payload["attestation_summary"]["attestation_source"],
+            "healthcheck --json",
+        )
+        self.assertIs(
+            facade_payload["launch_readiness"]["delegated_from_status"], True
+        )
+        self.assertIs(
+            facade_payload["runtime_guardrails"]["delegated_from_status"], True
+        )
+        self.assertEqual(
+            facade_payload["runtime_guardrails"]["owner_command_surface"],
+            "status --json",
+        )
+
+    def test_runtime_delegated_health_status_summary_does_not_write_runtime_inputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _status_runtime_paths(Path(temp_dir))
+            health_payload = runtime_mod.build_command_payload(
+                ok=False,
+                human_message="Synthetic health payload.",
+                machine_error_code="LISTENER_DOWN",
+                liveness="down",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=[],
+                exit_code=1,
+                extra={
+                    "effective_mode": "stable",
+                    "endpoint": "http://127.0.0.1:1/v1",
+                    "attestation": {
+                        "attestation_source": "healthcheck --json",
+                        "observed_at_utc": "2026-06-01T00:00:00+00:00",
+                    },
+                },
+            )
+            tracked_paths = [
+                paths.registry_file,
+                paths.state_file,
+                paths.config_toml,
+                paths.runtime_mode_file,
+                paths.runtime_effective_mode_file,
+                paths.stable_config,
+                paths.managed_config_file,
+                paths.repair_target_reference_file,
+                paths.stable_runtime_generated_config_file,
+                runtime_mod.managed_pid_path(paths),
+            ]
+            before = _snapshot_files(tracked_paths)
+
+            with (
+                mock.patch.object(
+                    runtime_mod,
+                    "run_healthcheck",
+                    side_effect=AssertionError("delegated adapter must not probe"),
+                ),
+                mock.patch.object(
+                    runtime_mod,
+                    "run_healthcheck_probe",
+                    side_effect=AssertionError("delegated adapter must not probe"),
+                ),
+                mock.patch.object(
+                    runtime_mod,
+                    "run_healthcheck_repair",
+                    side_effect=AssertionError("delegated adapter must not repair"),
+                ),
+            ):
+                payload = runtime_mod.summarize_status(
+                    paths, health_payload=health_payload
+                )
+
+            after = _snapshot_files(tracked_paths)
+
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(after, before)
