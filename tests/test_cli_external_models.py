@@ -214,6 +214,7 @@ class ExternalModelsCliTests(unittest.TestCase):
             "liveness",
             "severity",
             "operator_action",
+            "effect",
             "data",
             "timestamp_utc",
         ):
@@ -235,9 +236,11 @@ class ExternalModelsCliTests(unittest.TestCase):
         add_payload = self.parse_payload(add_result)
         self.assertEqual(add_payload["status"], "ok")
         self.assertEqual(add_payload["machine_error_code"], "OK")
+        self.assertEqual(add_payload["effect"], "mutate")
 
         list_result = self.run_cli("external-models", "routes", "list", "--json")
         list_payload = self.parse_payload(list_result)
+        self.assertEqual(list_payload["effect"], "read")
         self.assertEqual(list_payload["data"]["count"], 1)
         self.assertEqual(list_payload["data"]["routes"][0]["route_id"], "wbp-deepseek-v3")
 
@@ -250,6 +253,7 @@ class ExternalModelsCliTests(unittest.TestCase):
             "wbp-deepseek-v3",
         )
         disable_payload = self.parse_payload(disable_result)
+        self.assertEqual(disable_payload["effect"], "mutate")
         self.assertTrue(disable_payload["data"]["enabled"] is False)
 
         remove_result = self.run_cli(
@@ -262,6 +266,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         remove_payload = self.parse_payload(remove_result)
         self.assertEqual(remove_payload["status"], "ok")
+        self.assertEqual(remove_payload["effect"], "mutate")
         routes_payload = json.loads((self.external_dir / "routes.json").read_text())
         self.assertEqual(routes_payload["routes"], [])
 
@@ -706,6 +711,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         payload = self.parse_payload(profile_result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
         self.assertFalse(payload["data"]["writes_external_config"])
         self.assertFalse(payload["data"]["profile_ready"])
         self.assertIsNone(payload["data"]["base_url"])
@@ -730,6 +736,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         )
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
         evidence_path = Path(payload["data"]["evidence_path"])
         self.assertTrue(evidence_path.exists())
         evidence_payload = json.loads(evidence_path.read_text(encoding="utf-8"))
@@ -739,6 +746,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         result = self.run_cli("external-models", "status", "--json")
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["data"]["foundation_phase"], "C3")
         self.assertEqual(payload["data"]["adapter_state"], "stopped")
         self.assertFalse(payload["data"]["listener_proven"])
@@ -762,6 +770,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         start_payload = self.parse_payload(start_result)
         self.assertEqual(start_payload["status"], "ok")
         self.assertEqual(start_payload["machine_error_code"], "OK")
+        self.assertEqual(start_payload["effect"], "mutate")
         self.assertFalse(start_payload["data"]["listener_proven"])
         self.assertTrue(start_payload["data"]["runtime_claim_blocked"])
         self.assertNotIn("test-key", start_result.stdout)
@@ -781,9 +790,11 @@ class ExternalModelsCliTests(unittest.TestCase):
         second_start = self.run_cli("external-models", "start", "--json")
         second_payload = self.parse_payload(second_start)
         self.assertEqual(second_payload["machine_error_code"], "already_running")
+        self.assertEqual(second_payload["effect"], "mutate")
 
         status_result = self.run_cli("external-models", "status", "--json")
         status_payload = self.parse_payload(status_result)
+        self.assertEqual(status_payload["effect"], "read")
         self.assertEqual(status_payload["data"]["adapter_state"], "started")
         self.assertFalse(status_payload["data"]["listener_proven"])
         self.assertTrue(status_payload["data"]["runtime_claim_blocked"])
@@ -791,6 +802,7 @@ class ExternalModelsCliTests(unittest.TestCase):
 
         models_result = self.run_cli("external-models", "models", "--json")
         models_payload = self.parse_payload(models_result)
+        self.assertEqual(models_payload["effect"], "read")
         self.assertEqual(models_payload["data"]["models"][0]["synthetic_adapter_state"], "started")
         self.assertFalse(models_payload["data"]["models"][0]["profile_ready"])
 
@@ -803,6 +815,7 @@ class ExternalModelsCliTests(unittest.TestCase):
             "wbp-deepseek-v3",
         )
         profile_payload = self.parse_payload(profile_result)
+        self.assertEqual(profile_payload["effect"], "read")
         self.assertFalse(profile_payload["data"]["profile_ready"])
         self.assertFalse(profile_payload["data"]["listener_proven"])
         self.assertTrue(profile_payload["data"]["runtime_claim_blocked"])
@@ -811,6 +824,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         stop_result = self.run_cli("external-models", "stop", "--json")
         stop_payload = self.parse_payload(stop_result)
         self.assertEqual(stop_payload["status"], "ok")
+        self.assertEqual(stop_payload["effect"], "mutate")
         self.assertFalse(stop_payload["data"]["listener_proven"])
         stopped_state = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(stopped_state["adapter"]["state"], "stopped")
@@ -883,6 +897,7 @@ class ExternalModelsCliTests(unittest.TestCase):
             )
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["data"]["validation_kind"], "provider_route_validate")
         self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
         self.assertEqual(payload["data"]["route_state"], "model_visible")
@@ -977,6 +992,7 @@ class ExternalModelsCliTests(unittest.TestCase):
             request_payload = server.last_request_payload  # type: ignore[attr-defined]
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["data"]["check_kind"], "provider_route_smoke")
         self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
         self.assertEqual(payload["data"]["route_state"], "verified")
@@ -1051,6 +1067,7 @@ class ExternalModelsCliTests(unittest.TestCase):
 
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "probe")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["data"]["check_kind"], "api_only_live_route_format")
         self.assertEqual(payload["data"]["verification_scope"], "route_provider_only_no_write")
