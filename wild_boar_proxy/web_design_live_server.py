@@ -961,7 +961,7 @@ UI_ACTION_EFFECT_REGISTRY = {
     "stable_repair_plan": EFFECT_PROBE,
     "onboard_account_dry_run": EFFECT_PROBE,
     "onboard_account": EFFECT_MUTATE,
-    "account_login_status": EFFECT_PROBE,
+    "account_login_status": EFFECT_READ,
     "account_login_complete": EFFECT_MUTATE,
     "account_login_cancel": EFFECT_MUTATE,
     "validate_account": EFFECT_PROBE,
@@ -11867,6 +11867,9 @@ def _action_result(
         "changed_files": changed_files,
         "data": data if isinstance(data, dict) else {},
     }
+    packet_effect = packet.get("effect") if isinstance(packet, dict) else None
+    if packet_effect in {EFFECT_READ, EFFECT_PROBE, EFFECT_MUTATE, EFFECT_REPAIR}:
+        payload["command_effect"] = packet_effect
     if ui_action in {"onboard_account_dry_run", "account_login_complete"}:
         payload["onboarding"] = _onboarding_summary(packet, command_status=str(result["status"]))
     return payload

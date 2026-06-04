@@ -2177,7 +2177,19 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "failed")
 
     def test_account_login_status_action_executes_exact_command(self) -> None:
-        runner = MappingRunner(live_payloads())
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                (
+                    "accounts",
+                    "login",
+                    "status",
+                    "--session",
+                    TEST_CODEX_LOGIN_SESSION_ID,
+                    "--json",
+                ): codex_login_status_packet(effect=EFFECT_READ),
+            }
+        )
 
         result = run_ui_action(
             runner,
@@ -2188,6 +2200,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["session_id"], TEST_CODEX_LOGIN_SESSION_ID)
+        self.assertEqual(live_server.UI_ACTION_EFFECT_REGISTRY["account_login_status"], EFFECT_READ)
+        self.assertEqual(result["result"]["command_effect"], EFFECT_READ)
         self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "auth_materialized")
         self.assertEqual(
             runner.calls,
