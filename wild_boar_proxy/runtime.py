@@ -29,6 +29,7 @@ from typing import Any
 
 from . import process_runner as _process_runner
 from . import (
+    accounts_lifecycle,
     mutation_ledger,
     state_lock,
     state_startup_contract,
@@ -15593,7 +15594,17 @@ def _protective_lifecycle_precondition_result(
             "operator_action": "user_action",
         }
 
-    if previous_pool == "retired":
+    protective_precondition = (
+        accounts_lifecycle.classify_protective_lifecycle_precondition(
+            previous_pool, previous_manual_hold, action
+        )
+    )
+    precondition_status = str(
+        protective_precondition["protective_precondition_status"]
+    )
+    transition_result["precondition_status"] = precondition_status
+
+    if precondition_status == "backend_retired":
         transition_result["precondition_status"] = "backend_retired"
         transition_result["final_outcome"] = "precondition_failed"
         return {
@@ -15605,7 +15616,7 @@ def _protective_lifecycle_precondition_result(
             "operator_action": "user_action",
         }
 
-    if action == "hold" and previous_manual_hold:
+    if precondition_status == "already_held":
         transition_result["precondition_status"] = "already_held"
         transition_result["final_outcome"] = "already_held"
         return {
@@ -15615,7 +15626,7 @@ def _protective_lifecycle_precondition_result(
             "operator_action": "none",
         }
 
-    if action == "release" and not previous_manual_hold:
+    if precondition_status == "not_on_hold":
         transition_result["precondition_status"] = "not_on_hold"
         transition_result["final_outcome"] = "not_on_hold"
         return {
@@ -15625,12 +15636,19 @@ def _protective_lifecycle_precondition_result(
             "operator_action": "user_action",
         }
 
-    transition_result["precondition_status"] = (
-        "eligible_backend_for_hold"
-        if action == "hold"
-        else "eligible_backend_for_release"
-    )
-    return None
+    if precondition_status in {
+        "eligible_backend_for_hold",
+        "eligible_backend_for_release",
+    }:
+        return None
+
+    transition_result["final_outcome"] = "precondition_failed"
+    return {
+        "ok": False,
+        "human_message": "Lifecycle target backend is not eligible for this transition.",
+        "machine_error_code": f"{failure_prefix}_PRECONDITION_FAILED",
+        "operator_action": "user_action",
+    }
 
 
 def run_protective_lifecycle_owner_path(

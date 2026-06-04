@@ -77,6 +77,16 @@ ACCOUNT_LIFECYCLE_PRECONDITION_INVALID_SOURCE_STATE = "invalid_source_state"
 ACCOUNT_LIFECYCLE_PRECONDITION_INVALID_ACTION = "invalid_action"
 ACCOUNT_LIFECYCLE_PRECONDITION_NOT_LIFECYCLE_ACTION = "not_lifecycle_action"
 
+ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_HOLD_ELIGIBLE = (
+    "eligible_backend_for_hold"
+)
+ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_RELEASE_ELIGIBLE = (
+    "eligible_backend_for_release"
+)
+ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID = (
+    "invalid_lifecycle_precondition"
+)
+
 
 class AccountLifecyclePaths(Protocol):
     pass
@@ -228,6 +238,49 @@ def classify_account_lifecycle_transition(
     return {
         **base,
         "precondition_status": ACCOUNT_LIFECYCLE_PRECONDITION_NOT_LIFECYCLE_ACTION,
+    }
+
+
+def classify_protective_lifecycle_precondition(
+    pool: str, manual_hold: bool, action: str
+) -> dict[str, Any]:
+    effective_state = classify_account_lifecycle_state(pool, manual_hold)
+    transition = classify_account_lifecycle_transition(effective_state, action)
+    protective_status = ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID
+
+    transition_precondition = str(transition["precondition_status"])
+
+    if transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED:
+        protective_status = ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED
+    elif (
+        action == ACCOUNT_LIFECYCLE_ACTION_HOLD
+        and transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+    ):
+        protective_status = ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_HOLD_ELIGIBLE
+    elif (
+        action == ACCOUNT_LIFECYCLE_ACTION_HOLD
+        and transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_HELD
+    ):
+        protective_status = ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_HELD
+    elif (
+        action == ACCOUNT_LIFECYCLE_ACTION_RELEASE
+        and transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+    ):
+        protective_status = ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_RELEASE_ELIGIBLE
+    elif (
+        action == ACCOUNT_LIFECYCLE_ACTION_RELEASE
+        and transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_NOT_ON_HOLD
+    ):
+        protective_status = ACCOUNT_LIFECYCLE_PRECONDITION_NOT_ON_HOLD
+
+    return {
+        **transition,
+        "effective_state": effective_state,
+        "protective_precondition_status": protective_status,
+        "mapped_to_packet_vocabulary": (
+            protective_status
+            != ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID
+        ),
     }
 
 

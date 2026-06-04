@@ -150,6 +150,66 @@ class AccountLifecycleFsmTests(unittest.TestCase):
                 self.assertEqual(transition["transition_status"], "allowed")
                 self.assertEqual(transition["target_state"], "reserve")
 
+    def test_protective_precondition_adapter_maps_packet_vocabulary(self) -> None:
+        cases = (
+            ("reserve", False, "hold", "reserve", "eligible_backend_for_hold", True),
+            ("active", False, "hold", "active", "eligible_backend_for_hold", True),
+            ("reserve", True, "hold", "held_reserve", "already_held", True),
+            ("active", True, "hold", "held_active", "already_held", True),
+            (
+                "reserve",
+                True,
+                "release",
+                "held_reserve",
+                "eligible_backend_for_release",
+                True,
+            ),
+            (
+                "active",
+                True,
+                "release",
+                "held_active",
+                "eligible_backend_for_release",
+                True,
+            ),
+            ("reserve", False, "release", "reserve", "not_on_hold", True),
+            ("active", False, "release", "active", "not_on_hold", True),
+            ("retired", False, "hold", "retired", "backend_retired", True),
+            ("retired", True, "release", "retired", "backend_retired", True),
+            (
+                "unexpected",
+                False,
+                "hold",
+                "invalid_pool",
+                "invalid_lifecycle_precondition",
+                False,
+            ),
+        )
+
+        for pool, manual_hold, action, state, precondition, mapped in cases:
+            with self.subTest(pool=pool, manual_hold=manual_hold, action=action):
+                result = (
+                    accounts_lifecycle.classify_protective_lifecycle_precondition(
+                        pool, manual_hold, action
+                    )
+                )
+                self.assertEqual(result["effective_state"], state)
+                self.assertEqual(
+                    result["protective_precondition_status"], precondition
+                )
+                self.assertIs(result["mapped_to_packet_vocabulary"], mapped)
+
+    def test_protective_release_adapter_never_targets_active(self) -> None:
+        for pool in ("reserve", "active"):
+            with self.subTest(pool=pool):
+                result = (
+                    accounts_lifecycle.classify_protective_lifecycle_precondition(
+                        pool, True, "release"
+                    )
+                )
+                self.assertEqual(result["target_state"], "reserve")
+                self.assertNotEqual(result["target_state"], "active")
+
     def test_fsm_helpers_are_pure(self) -> None:
         forbidden_calls = {
             "Path",
@@ -167,6 +227,7 @@ class AccountLifecycleFsmTests(unittest.TestCase):
         for function in (
             "classify_account_lifecycle_state",
             "classify_account_lifecycle_transition",
+            "classify_protective_lifecycle_precondition",
         ):
             with self.subTest(function=function):
                 calls = _call_names(_function(ACCOUNTS_LIFECYCLE, function))

@@ -17820,6 +17820,66 @@ class CliTests(unittest.TestCase):
         self.assertFalse(hold["rollback_point_captured"])
         self.assertFalse(hold["sync_attempted"])
 
+    def test_protective_lifecycle_preconditions_use_fsm_adapter(self) -> None:
+        original = (
+            runtime_mod.accounts_lifecycle.classify_protective_lifecycle_precondition
+        )
+        calls: list[tuple[str, bool, str]] = []
+
+        def spy(pool: str, manual_hold: bool, action: str):
+            calls.append((pool, manual_hold, action))
+            return original(pool, manual_hold, action)
+
+        cases = (
+            ("hold", "active", False, None, "eligible_backend_for_hold"),
+            ("release", "active", True, None, "eligible_backend_for_release"),
+            ("hold", "active", True, True, "already_held"),
+            ("release", "active", False, False, "not_on_hold"),
+            ("hold", "retired", False, False, "backend_retired"),
+        )
+
+        with mock.patch.object(
+            runtime_mod.accounts_lifecycle,
+            "classify_protective_lifecycle_precondition",
+            side_effect=spy,
+        ):
+            for action, pool, manual_hold, ok, precondition in cases:
+                with self.subTest(action=action, pool=pool, manual_hold=manual_hold):
+                    transition_result = {
+                        "precondition_status": "pending",
+                        "final_outcome": "pending_preconditions",
+                    }
+                    plan = {
+                        "transition_result": transition_result,
+                        "backend_matches": [{"id": "backend-a"}],
+                        "previous_pool": pool,
+                        "previous_manual_hold": manual_hold,
+                        "failure_prefix": action.upper(),
+                    }
+
+                    blocked = runtime_mod._protective_lifecycle_precondition_result(
+                        plan, action=action
+                    )
+
+                    self.assertEqual(
+                        transition_result["precondition_status"], precondition
+                    )
+                    if ok is None:
+                        self.assertIsNone(blocked)
+                    else:
+                        self.assertEqual(blocked["ok"], ok)
+
+        self.assertEqual(
+            calls,
+            [
+                ("active", False, "hold"),
+                ("active", True, "release"),
+                ("active", True, "hold"),
+                ("active", False, "release"),
+                ("retired", False, "hold"),
+            ],
+        )
+
     def test_accounts_hold_dry_run_returns_plan_without_writes_or_subprocess(
         self,
     ) -> None:
