@@ -358,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
             output_path = output_path.resolve()
             if _is_relative_to(output_path, audit_root):
                 raise RuntimeError("refusing to write manifest under audit_results")
+            if _is_relative_to(output_path, repo_root):
+                raise RuntimeError("refusing to write manifest under repository root")
             output_path.write_bytes(payload)
         else:
             sys.stdout.buffer.write(payload)

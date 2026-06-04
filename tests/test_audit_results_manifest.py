@@ -193,7 +193,8 @@ class AuditResultsManifestTests(unittest.TestCase):
 
     def test_cli_check_redaction_writes_metadata_only_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = Path(temp_dir)
+            repo_root = Path(temp_dir) / "repo"
+            repo_root.mkdir()
             _git(repo_root, "init")
             audit_dir = repo_root / "audit_results"
             audit_dir.mkdir()
@@ -202,7 +203,7 @@ class AuditResultsManifestTests(unittest.TestCase):
                 f"token={secret}\npath=/Users/kirillponomarev/private\n",
                 encoding="utf-8",
             )
-            output = repo_root / "manifest.json"
+            output = Path(temp_dir) / "manifest.json"
 
             result = subprocess.run(
                 [
@@ -223,6 +224,34 @@ class AuditResultsManifestTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertNotIn(secret, payload)
         self.assertNotIn("/Users/kirillponomarev", payload)
+
+    def test_cli_refuses_to_write_manifest_under_repo_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            _git(repo_root, "init")
+            audit_dir = repo_root / "audit_results"
+            audit_dir.mkdir()
+            output = repo_root / "manifest.json"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BUILDER_PATH),
+                    "--root",
+                    str(repo_root),
+                    "--output",
+                    str(output),
+                    "--check-redaction",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            output_exists = output.exists()
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("refusing to write manifest under repository root", result.stderr)
+        self.assertFalse(output_exists)
 
     def test_cli_refuses_to_write_manifest_under_audit_results(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
