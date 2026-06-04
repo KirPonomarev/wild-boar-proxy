@@ -16142,7 +16142,7 @@ def _run_promote_impl(
             machine_error_code="MISSING_ACCOUNTS_BIN",
             operator_action="user_action",
         )
-    before = snapshot_known_files(paths)
+    before: dict[Path, dict[str, Any]] = {}
     command = ["promote", backend_id]
     promotion_result: dict[str, Any] = {
         "status": "owner_path_emitted",
@@ -16262,12 +16262,18 @@ def _run_promote_impl(
 
     mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
     with mutation_lock:
+        before = snapshot_known_files(paths)
         before_registry = read_json(paths.registry_file)
         before_state = read_json(paths.state_file, required=False)
         backend_matches = get_registry_backends_by_id(before_registry, backend_id)
         selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
         previous_pool = (
             str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+        )
+        previous_manual_hold = bool(
+            selected_backend.get("manual_hold", False)
+            if isinstance(selected_backend, dict)
+            else False
         )
         promotion_result["previous_pool"] = previous_pool
 
@@ -16291,8 +16297,17 @@ def _run_promote_impl(
                 operator_action="user_action",
             )
 
-        if bool(selected_backend.get("manual_hold", False)):
-            promotion_result["precondition_status"] = "backend_on_hold"
+        promote_precondition = (
+            accounts_lifecycle.classify_promote_lifecycle_precondition(
+                previous_pool, previous_manual_hold
+            )
+        )
+        precondition_status = str(promote_precondition["promote_precondition_status"])
+        if precondition_status == "invalid_lifecycle_precondition":
+            precondition_status = "backend_not_reserve"
+        promotion_result["precondition_status"] = precondition_status
+
+        if precondition_status == "backend_on_hold":
             promotion_result["final_outcome"] = "precondition_failed"
             return build_promote_payload(
                 ok=False,
@@ -16301,8 +16316,7 @@ def _run_promote_impl(
                 operator_action="user_action",
             )
 
-        if previous_pool == "retired":
-            promotion_result["precondition_status"] = "backend_retired"
+        if precondition_status == "backend_retired":
             promotion_result["final_outcome"] = "precondition_failed"
             return build_promote_payload(
                 ok=False,
@@ -16311,7 +16325,7 @@ def _run_promote_impl(
                 operator_action="user_action",
             )
 
-        if previous_pool != "reserve":
+        if precondition_status != "eligible_reserve_backend":
             promotion_result["precondition_status"] = "backend_not_reserve"
             promotion_result["final_outcome"] = "precondition_failed"
             return build_promote_payload(
@@ -16321,6 +16335,7 @@ def _run_promote_impl(
                 operator_action="user_action",
             )
 
+        promotion_result["precondition_status"] = precondition_status
         pool_policy = summarize_promotion_pool_policy(before_registry)
         promotion_result["pool_policy_status"] = str(pool_policy.get("status", "invalid"))
         promotion_result["pool_policy_observed"] = pool_policy

@@ -87,6 +87,11 @@ ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID = (
     "invalid_lifecycle_precondition"
 )
 
+ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_ELIGIBLE = "eligible_reserve_backend"
+ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_BACKEND_ON_HOLD = "backend_on_hold"
+ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_NOT_RESERVE = "backend_not_reserve"
+ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
+
 ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_ELIGIBLE = (
     "eligible_active_backend_for_demote"
 )
@@ -298,6 +303,46 @@ def classify_protective_lifecycle_precondition(
         "mapped_to_packet_vocabulary": (
             protective_status
             != ACCOUNT_LIFECYCLE_PROTECTIVE_PRECONDITION_INVALID
+        ),
+    }
+
+
+def classify_promote_lifecycle_precondition(
+    pool: str, manual_hold: bool
+) -> dict[str, Any]:
+    effective_state = classify_account_lifecycle_state(pool, manual_hold)
+    transition = classify_account_lifecycle_transition(
+        effective_state, ACCOUNT_LIFECYCLE_ACTION_PROMOTE
+    )
+    promote_status = ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_INVALID
+
+    transition_precondition = str(transition["precondition_status"])
+
+    if transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED:
+        promote_status = ACCOUNT_LIFECYCLE_PRECONDITION_BACKEND_RETIRED
+    elif (
+        transition_precondition
+        == ACCOUNT_LIFECYCLE_PRECONDITION_HELD_RELEASE_REQUIRED
+    ):
+        promote_status = ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_BACKEND_ON_HOLD
+    elif (
+        transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_CONDITIONAL
+        and transition["target_state"] == ACCOUNT_LIFECYCLE_STATE_ACTIVE
+        and bool(transition["requires_validation_sync_policy"])
+    ):
+        promote_status = ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_ELIGIBLE
+    elif (
+        transition_precondition
+        == ACCOUNT_LIFECYCLE_PRECONDITION_NOT_LIFECYCLE_ACTION
+    ):
+        promote_status = ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_NOT_RESERVE
+
+    return {
+        **transition,
+        "effective_state": effective_state,
+        "promote_precondition_status": promote_status,
+        "mapped_to_packet_vocabulary": (
+            promote_status != ACCOUNT_LIFECYCLE_PROMOTE_PRECONDITION_INVALID
         ),
     }
 

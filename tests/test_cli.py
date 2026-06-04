@@ -11739,6 +11739,194 @@ class CliTests(unittest.TestCase):
         self.assertFalse(promotion["validate_attempted"])
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 
+    def test_accounts_promote_preconditions_use_fsm_adapter(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].extend(
+            [
+                self.build_backend(
+                    backend_id="backend-held-active-promote",
+                    auth_ref="/tmp/codex-held-active-promote.json",
+                    pool="active",
+                    manual_hold=True,
+                ),
+                self.build_backend(
+                    backend_id="backend-reserve-promote-precondition",
+                    auth_ref="/tmp/codex-reserve-promote-precondition.json",
+                    pool="reserve",
+                ),
+                self.build_backend(
+                    backend_id="backend-held-reserve-promote",
+                    auth_ref="/tmp/codex-held-reserve-promote.json",
+                    pool="reserve",
+                    manual_hold=True,
+                ),
+                self.build_backend(
+                    backend_id="backend-retired-promote-precondition",
+                    auth_ref="/tmp/codex-retired-promote-precondition.json",
+                    pool="retired",
+                ),
+                self.build_backend(
+                    backend_id="backend-retired-held-promote",
+                    auth_ref="/tmp/codex-retired-held-promote.json",
+                    pool="retired",
+                    manual_hold=True,
+                ),
+                self.build_backend(
+                    backend_id="backend-invalid-promote-precondition",
+                    auth_ref="/tmp/codex-invalid-promote-precondition.json",
+                    pool="hold",
+                ),
+            ]
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        calls: list[tuple[str, bool]] = []
+
+        def fake_promote_precondition(pool: str, manual_hold: bool) -> dict[str, str]:
+            calls.append((pool, manual_hold))
+            if pool == "retired":
+                return {"promote_precondition_status": "backend_retired"}
+            if manual_hold:
+                return {"promote_precondition_status": "backend_on_hold"}
+            if pool == "hold":
+                return {
+                    "promote_precondition_status": "invalid_lifecycle_precondition"
+                }
+            if pool == "reserve":
+                return {"promote_precondition_status": "backend_not_reserve"}
+            return {"promote_precondition_status": "backend_on_hold"}
+
+        def fail_if_policy_runs(*_args, **_kwargs):
+            raise AssertionError("promote policy should not run")
+
+        def fail_if_subprocess_runs(*_args, **_kwargs):
+            raise AssertionError("promote subprocess should not run")
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod.accounts_lifecycle,
+                "classify_promote_lifecycle_precondition",
+                side_effect=fake_promote_precondition,
+            ), mock.patch.object(
+                runtime_mod,
+                "summarize_promotion_pool_policy",
+                side_effect=fail_if_policy_runs,
+            ) as policy, mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fail_if_subprocess_runs,
+            ) as run_process:
+                cases = (
+                    (
+                        "backend-a",
+                        "backend_on_hold",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-held-active-promote",
+                        "backend_on_hold",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-reserve-promote-precondition",
+                        "backend_not_reserve",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-held-reserve-promote",
+                        "backend_on_hold",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-retired-promote-precondition",
+                        "backend_retired",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-retired-held-promote",
+                        "backend_retired",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-invalid-promote-precondition",
+                        "backend_not_reserve",
+                        "PROMOTION_PRECONDITION_FAILED",
+                    ),
+                )
+                for backend_id, precondition, machine_error_code in cases:
+                    with self.subTest(backend_id=backend_id):
+                        payload = runtime_mod.run_promote(paths, backend_id)
+                        promotion = payload["promotion_result"]
+                        self.assertEqual(
+                            promotion["precondition_status"], precondition
+                        )
+                        self.assertEqual(
+                            promotion["final_outcome"], "precondition_failed"
+                        )
+                        self.assertEqual(
+                            payload["machine_error_code"], machine_error_code
+                        )
+
+                policy.assert_not_called()
+                run_process.assert_not_called()
+
+        self.assertEqual(
+            calls,
+            [
+                ("active", False),
+                ("active", True),
+                ("reserve", False),
+                ("reserve", True),
+                ("retired", False),
+                ("retired", True),
+                ("hold", False),
+            ],
+        )
+
+    def test_accounts_promote_snapshots_changed_files_under_serialized_lock(
+        self,
+    ) -> None:
+        lock_state = {"entered": False, "snapshot_checked": False}
+        original_snapshot = runtime_mod.snapshot_known_files
+
+        class TrackingLock:
+            def __enter__(self):
+                lock_state["entered"] = True
+
+            def __exit__(self, exc_type, exc, tb):
+                lock_state["entered"] = False
+                return False
+
+        def snapshot_under_lock(paths):
+            self.assertTrue(lock_state["entered"])
+            lock_state["snapshot_checked"] = True
+            return original_snapshot(paths)
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "serialized_lock",
+                return_value=TrackingLock(),
+            ), mock.patch.object(
+                runtime_mod,
+                "snapshot_known_files",
+                side_effect=snapshot_under_lock,
+            ), mock.patch.object(
+                runtime_mod.accounts_lifecycle,
+                "classify_promote_lifecycle_precondition",
+                return_value={"promote_precondition_status": "backend_not_reserve"},
+            ), mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=AssertionError("promote subprocess should not run"),
+            ):
+                payload = runtime_mod.run_promote(paths, "backend-a")
+
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
+        self.assertTrue(lock_state["snapshot_checked"])
+
     def test_accounts_promote_blocks_when_active_target_is_already_reached(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
