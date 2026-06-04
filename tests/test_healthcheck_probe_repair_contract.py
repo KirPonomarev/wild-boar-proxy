@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from tools.truth_tree_harness import assert_no_truth_mutation, snapshot_truth_tree
+from tools.truth_tree_harness import (
+    assert_declared_mutations_match,
+    assert_no_truth_mutation,
+    snapshot_truth_tree,
+)
 from wild_boar_proxy import runtime as runtime_mod
 
 
@@ -69,7 +73,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.profile_dir / "auth.json").write_text(
-            json.dumps({"OPENAI_API_KEY": "sk-healthcheck-probe-secret"}) + "\n",
+            json.dumps({"OPENAI_API_KEY": "test-healthcheck-probe-secret"}) + "\n",
             encoding="utf-8",
         )
         backend_auth = self.auth_dir / "backend-a.json"
@@ -188,20 +192,23 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         env["no_proxy"] = "*"
         return env
 
-    def truth_snapshot(self) -> dict[str, dict[str, Any]]:
-        return snapshot_truth_tree(
-            {
-                "backend-registry.json": self.managed_dir / "backend-registry.json",
-                "supervisor-state.json": self.managed_dir / "supervisor-state.json",
-                "managed-config.yaml": self.managed_dir / "managed-config.yaml",
-                "runtime-mode.txt": self.profile_dir / "runtime-mode.txt",
-                "runtime-effective-mode.txt": (
-                    self.profile_dir / "runtime-effective-mode.txt"
-                ),
-                "config.toml": self.profile_dir / "config.toml",
-                "managed-proxy.pid": self.pid_file,
-            }
-        )
+    def truth_snapshot(
+        self, extra_paths: dict[str, Path] | None = None
+    ) -> dict[str, dict[str, Any]]:
+        paths = {
+            "backend-registry.json": self.managed_dir / "backend-registry.json",
+            "supervisor-state.json": self.managed_dir / "supervisor-state.json",
+            "managed-config.yaml": self.managed_dir / "managed-config.yaml",
+            "runtime-mode.txt": self.profile_dir / "runtime-mode.txt",
+            "runtime-effective-mode.txt": (
+                self.profile_dir / "runtime-effective-mode.txt"
+            ),
+            "config.toml": self.profile_dir / "config.toml",
+            "managed-proxy.pid": self.pid_file,
+        }
+        if extra_paths is not None:
+            paths.update(extra_paths)
+        return snapshot_truth_tree(paths)
 
     def read_registry(self) -> dict[str, Any]:
         return json.loads((self.managed_dir / "backend-registry.json").read_text())
@@ -454,6 +461,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         stale.write_text("old\n", encoding="utf-8")
         os.utime(stale, (1, 1))
 
+        before = self.truth_snapshot({"stale-temp": stale})
         payload = runtime_mod.run_healthcheck(
             self.paths,
             allow_recovery=False,
@@ -463,8 +471,10 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             allow_stale_pid_cleanup=False,
             effect=runtime_mod.EFFECT_REPAIR,
         )
+        after = self.truth_snapshot({"stale-temp": stale})
 
         self.assertIn(str(stale), payload["changed_files"])
+        assert_declared_mutations_match(before, after, payload["changed_files"])
         self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
         ledger = payload["mutation_ledger"]
         self.assertEqual(ledger["status"], "mutated")
