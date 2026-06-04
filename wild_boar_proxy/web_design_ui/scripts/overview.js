@@ -496,6 +496,44 @@ let snapshotCommandLedgerState = {
   entries: [],
   hasWarnings: false
 };
+const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";
+const CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS = Object.freeze({
+  primary_model_slot: "Codex",
+  coding_agent_model_slot: "DIP",
+  agent_1_display: "1",
+  agent_2_display: "2"
+});
+const CODEX_CUSTOM_AGENT_ALIAS_SLOTS = Object.freeze([
+  {
+    slot_id: "primary_model_slot",
+    input_id: "quickStartPrimaryAgentAliasInput",
+    default_label: "Codex",
+    runtime_lane: "chatgpt",
+    display_only: true
+  },
+  {
+    slot_id: "coding_agent_model_slot",
+    input_id: "quickStartCodingAgentAliasInput",
+    default_label: "DIP",
+    runtime_lane: "deepseek_api",
+    display_only: true
+  },
+  {
+    slot_id: "agent_1_display",
+    input_id: "quickStartAgentOneAliasInput",
+    default_label: "1",
+    runtime_lane: "display",
+    display_only: true
+  },
+  {
+    slot_id: "agent_2_display",
+    input_id: "quickStartAgentTwoAliasInput",
+    default_label: "2",
+    runtime_lane: "display",
+    display_only: true
+  }
+]);
+let codexCustomAgentAliases = { ...CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS };
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -780,6 +818,115 @@ function operatorSetText(id, value) {
   if (node) {
     node.textContent = String(value ?? "-");
   }
+}
+
+function normalizeCodexCustomAgentAliasLabel(value, fallback) {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 24);
+  return normalized || fallback;
+}
+
+function normalizedCodexCustomAgentAliases(value = {}) {
+  const aliases = {};
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    aliases[slot.slot_id] = normalizeCodexCustomAgentAliasLabel(
+      value[slot.slot_id],
+      slot.default_label
+    );
+  }
+  return aliases;
+}
+
+function codexCustomAgentAliasRoleMap(aliases = codexCustomAgentAliases) {
+  return CODEX_CUSTOM_AGENT_ALIAS_SLOTS.map((slot) => ({
+    slot_id: slot.slot_id,
+    label: normalizeCodexCustomAgentAliasLabel(aliases[slot.slot_id], slot.default_label),
+    runtime_lane: slot.runtime_lane,
+    display_only: true
+  }));
+}
+
+function codexCustomAgentAliasMetadataPacket(source = "render") {
+  return {
+    status: "ok",
+    packet_kind: "codex_custom_agent_aliases",
+    source,
+    alias_scope: "ui_display_metadata_only",
+    config_kind: CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND,
+    persisted_in_browser_storage: false,
+    semantic_alias_routing_enabled: false,
+    runtime_dispatch_changed: false,
+    session_manager_changed: false,
+    provider_selection_changed: false,
+    command_surface_changed: false,
+    changed_files: [],
+    role_map: codexCustomAgentAliasRoleMap()
+  };
+}
+
+function renderCodexCustomAgentAliases(source = "render") {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    const node = document.getElementById(slot.input_id);
+    if (node) {
+      node.value = codexCustomAgentAliases[slot.slot_id];
+    }
+  }
+  const primary = codexCustomAgentAliases.primary_model_slot;
+  const coding = codexCustomAgentAliases.coding_agent_model_slot;
+  const agentOne = codexCustomAgentAliases.agent_1_display;
+  const agentTwo = codexCustomAgentAliases.agent_2_display;
+  operatorSetText("quickStartAgentAliasPreview", `${primary}/ChatGPT · ${coding}/DeepSeek · ${agentOne}/${agentTwo} labels`);
+  const packet = codexCustomAgentAliasMetadataPacket(source);
+  const packetNode = document.getElementById("quickStartAgentAliasPacket");
+  if (packetNode) {
+    packetNode.textContent = `alias metadata · ${packet.alias_scope} · dispatch changed: ${packet.runtime_dispatch_changed} · roles: ${packet.role_map.length}`;
+    packetNode.dataset.aliasScope = packet.alias_scope;
+    packetNode.dataset.runtimeDispatchChanged = String(packet.runtime_dispatch_changed);
+    packetNode.dataset.semanticAliasRoutingEnabled = String(packet.semantic_alias_routing_enabled);
+    packetNode.dataset.roleMapCount = String(packet.role_map.length);
+  }
+  const scope = document.getElementById("quickStartAgentAliasScope");
+  if (scope?.lastElementChild) {
+    scope.lastElementChild.textContent = "display only";
+  }
+}
+
+function collectCodexCustomAgentAliasesFromInputs() {
+  const aliases = {};
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    const node = document.getElementById(slot.input_id);
+    aliases[slot.slot_id] = normalizeCodexCustomAgentAliasLabel(
+      node ? node.value : "",
+      slot.default_label
+    );
+  }
+  return normalizedCodexCustomAgentAliases(aliases);
+}
+
+function saveCodexCustomAgentAliasesFromUi() {
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("operator_saved");
+}
+
+function resetCodexCustomAgentAliasesFromUi() {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  renderCodexCustomAgentAliases("operator_reset");
+}
+
+function setupCodexCustomAgentAliases() {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  renderCodexCustomAgentAliases("bootstrap");
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    document.getElementById(slot.input_id)?.addEventListener("input", () => {
+      codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+      renderCodexCustomAgentAliases("editing");
+    });
+  }
+  document.getElementById("quickStartAgentAliasesSaveAction")?.addEventListener("click", () => saveCodexCustomAgentAliasesFromUi());
+  document.getElementById("quickStartAgentAliasesResetAction")?.addEventListener("click", () => resetCodexCustomAgentAliasesFromUi());
 }
 
 function codexLaunchSetText(id, value) {
@@ -3533,6 +3680,7 @@ function renderCodexCustomSessionPacket(packet) {
     chipVisual = "amber";
   }
   codexCustomSessionsSetChip(chipVisual, chipLabel || "unknown");
+  const aliasMetadata = codexCustomAgentAliasMetadataPacket("session_render");
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
@@ -3544,6 +3692,12 @@ function renderCodexCustomSessionPacket(packet) {
       model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
       current_execution_slot_id: session?.current_execution_slot_id || packet?.current_execution_slot_id || "",
       current_execution_path_source: session?.current_execution_path_source || packet?.current_execution_path_source || "",
+      alias_scope: aliasMetadata.alias_scope,
+      alias_role_map: aliasMetadata.role_map,
+      semantic_alias_routing_enabled: aliasMetadata.semantic_alias_routing_enabled,
+      runtime_dispatch_changed: aliasMetadata.runtime_dispatch_changed,
+      session_manager_changed: aliasMetadata.session_manager_changed,
+      provider_selection_changed: aliasMetadata.provider_selection_changed,
       role_slot_binding_proven: session?.role_slot_binding_proven === true || packet?.role_slot_binding_proven === true,
       role_slot_binding_count: session?.role_slot_binding_count ?? packet?.role_slot_binding_packet?.role_slot_binding_count ?? 0,
       slot_catalog_revalidated: slotCatalogRevalidated,
@@ -12684,6 +12838,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialScreen = screenFromLocation();
   await loadActionMetadata();
   applyActionAvailability();
+  setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
   sourcePicker.value = initialSource;
   picker.value = initialState;

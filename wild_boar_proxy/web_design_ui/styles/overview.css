@@ -28,7 +28,8 @@
   --radius-card: 18px;
   --radius-button: 12px;
   --radius-chip: 999px;
-  --font-ui: "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --c7-design-source: "iosevka-clean-minimal-shell";
+  --font-ui: "Iosevka Term Local", "Iosevka Term", "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
   --font-mono: var(--font-ui);
 }
 
@@ -7590,6 +7591,106 @@ button:disabled {
   transform: translateY(-50%);
 }
 
+.quick-start-alias-card {
+  background: rgba(232, 233, 218, .46);
+  border: 1px solid rgba(217, 208, 195, .92);
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.quick-start-alias-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.quick-start-alias-head div > strong {
+  display: block;
+}
+
+.quick-start-alias-head strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.quick-start-alias-head div > span {
+  color: var(--secondary);
+  display: none;
+  font-size: 11px;
+  line-height: 15px;
+  margin-top: 2px;
+}
+
+.quick-start-alias-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-start-alias-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.quick-start-alias-grid label > span {
+  color: var(--secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: 13px;
+  text-transform: uppercase;
+}
+
+.quick-start-alias-grid input {
+  background: rgba(246, 241, 234, .92);
+  border: 1px solid rgba(217, 208, 195, .86);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  min-height: 30px;
+  min-width: 0;
+  padding-inline: 10px;
+  width: 100%;
+}
+
+.quick-start-alias-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-start-alias-preview,
+.quick-start-alias-packet {
+  overflow-wrap: anywhere;
+}
+
+.quick-start-alias-preview {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.quick-start-alias-packet {
+  background: rgba(252, 250, 247, .72);
+  border: 1px solid rgba(217, 208, 195, .66);
+  border-radius: 10px;
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 13px;
+  min-height: 28px;
+  overflow: hidden;
+  padding: 8px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quick-start-history-checklist {
   align-items: center;
   border-top: 1px solid rgba(217, 208, 195, .86);
@@ -7796,6 +7897,7 @@ button:disabled {
   .quick-start-connect-tile strong,
   .quick-start-connection-status strong,
   .quick-start-route-grid select,
+  .quick-start-alias-grid input,
   .desktop[data-screen="quick-start"] .button {
     font-size: 12px;
   }

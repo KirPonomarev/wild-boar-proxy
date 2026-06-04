@@ -294,6 +294,40 @@
                 </label>
               </div>
 
+              <div class="quick-start-alias-card" data-c7-minimal-shell="agent-alias-display-metadata">
+                <div class="quick-start-alias-head">
+                  <div>
+                    <strong>Имена агентов</strong>
+                    <span>Только подписи UI: запуск, routing и provider selection не меняются.</span>
+                  </div>
+                  <span id="quickStartAgentAliasScope" class="chip neutral"><span class="dot"></span><span>UI metadata</span></span>
+                </div>
+                <div class="quick-start-alias-grid" aria-label="Имена агентов Custom Codex">
+                  <label for="quickStartPrimaryAgentAliasInput">
+                    <span>ChatGPT</span>
+                    <input id="quickStartPrimaryAgentAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="Codex" data-agent-alias-slot="primary_model_slot">
+                  </label>
+                  <label for="quickStartCodingAgentAliasInput">
+                    <span>DeepSeek</span>
+                    <input id="quickStartCodingAgentAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="DIP" data-agent-alias-slot="coding_agent_model_slot">
+                  </label>
+                  <label for="quickStartAgentOneAliasInput">
+                    <span>Агент 1</span>
+                    <input id="quickStartAgentOneAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="1" data-agent-alias-slot="agent_1_display">
+                  </label>
+                  <label for="quickStartAgentTwoAliasInput">
+                    <span>Агент 2</span>
+                    <input id="quickStartAgentTwoAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="2" data-agent-alias-slot="agent_2_display">
+                  </label>
+                </div>
+                <div class="quick-start-alias-actions">
+                  <button id="quickStartAgentAliasesSaveAction" class="button small ghost" type="button">Применить имена</button>
+                  <button id="quickStartAgentAliasesResetAction" class="button small ghost" type="button">Сбросить</button>
+                </div>
+                <div id="quickStartAgentAliasPreview" class="quick-start-alias-preview">Codex -> ChatGPT · DIP -> DeepSeek · 1 / 2 -> display labels</div>
+                <div id="quickStartAgentAliasPacket" class="quick-start-alias-packet mono-value">alias metadata pending</div>
+              </div>
+
               <div class="quick-start-api-checklist" aria-label="Проверка рабочего маршрута">
                 <div class="quick-start-check-row">
                   <span>Маршрут</span>

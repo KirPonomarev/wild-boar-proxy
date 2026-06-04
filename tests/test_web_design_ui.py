@@ -26,6 +26,17 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertTrue((WEB_DESIGN_UI / "scripts" / "overview.js").is_file())
         self.assertTrue((WEB_DESIGN_UI / "assets" / "boar_mark.png").is_file())
 
+    def test_c7_minimal_shell_uses_clean_design_without_local_render_paths(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-c7-minimal-shell="agent-alias-display-metadata"', html)
+        self.assertIn('--c7-design-source: "iosevka-clean-minimal-shell";', css)
+        self.assertIn('"Iosevka Term Local", "Iosevka Term", "SF Mono"', css)
+        self.assertNotIn("file://", html + css + js)
+        self.assertNotIn("кабан дизайн iosevka clean", html + css + js)
+
     def test_referenced_phosphor_png_assets_exist_and_tokens_are_declared(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
@@ -223,7 +234,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("overflow-x: hidden;", css)
         self.assertIn("@media (max-width: 1420px)", css)
         self.assertIn('@media (max-width: 1320px)', css)
-        self.assertIn('--font-ui: "SF Mono"', css)
+        self.assertIn('--font-ui: "Iosevka Term Local", "Iosevka Term", "SF Mono"', css)
         self.assertIn("font-family: var(--font-ui);", css)
         self.assertNotIn("--preview-scale", css)
         self.assertNotIn("fitPreviewToViewport", js)
@@ -1600,6 +1611,48 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("missing_secret_ref", js)
         self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
         self.assertIn('const primary = source === "live"', js)
+
+    def test_c7_agent_aliases_are_ui_metadata_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        section = self._section_html(html, "quickStartScreen")
+
+        alias_match = re.search(
+            r'<div class="quick-start-alias-card"[^>]*>(?P<body>.*?)\n              </div>\n\n              <div class="quick-start-api-checklist"',
+            section,
+            re.S,
+        )
+        self.assertIsNotNone(alias_match)
+        alias_markup = alias_match.group("body")
+
+        self.assertIn("Имена агентов", alias_markup)
+        self.assertIn("Только подписи UI", alias_markup)
+        self.assertIn('id="quickStartPrimaryAgentAliasInput"', alias_markup)
+        self.assertIn('value="Codex"', alias_markup)
+        self.assertIn('id="quickStartCodingAgentAliasInput"', alias_markup)
+        self.assertIn('value="DIP"', alias_markup)
+        self.assertIn("Применить имена", alias_markup)
+        self.assertIn('data-agent-alias-slot="primary_model_slot"', alias_markup)
+        self.assertIn('data-agent-alias-slot="coding_agent_model_slot"', alias_markup)
+        self.assertNotIn("data-ui-action", alias_markup)
+        self.assertNotIn("api/codex/custom/agent-aliases", html + js)
+
+        self.assertIn('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";', js)
+        self.assertIn('alias_scope: "ui_display_metadata_only"', js)
+        self.assertIn("persisted_in_browser_storage: false", js)
+        self.assertIn("semantic_alias_routing_enabled: false", js)
+        self.assertIn("runtime_dispatch_changed: false", js)
+        self.assertIn("session_manager_changed: false", js)
+        self.assertIn("provider_selection_changed: false", js)
+        self.assertIn("command_surface_changed: false", js)
+        self.assertIn("changed_files: []", js)
+        self.assertIn("role_map: codexCustomAgentAliasRoleMap()", js)
+        self.assertIn("alias_role_map: aliasMetadata.role_map", js)
+        self.assertIn("setupCodexCustomAgentAliases();", js)
+        self.assertNotIn("localStorage", js)
+        self.assertIn(".quick-start-alias-card", css)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
 
     def test_quick_start_wired_actions_stay_on_first_screen_and_do_not_cross_launch_paths(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
