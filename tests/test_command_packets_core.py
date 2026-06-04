@@ -104,6 +104,15 @@ class CommandPacketsCoreTests(unittest.TestCase):
             packets.COMMAND_PACKET_REQUIRED_FIELDS,
         )
 
+    def test_command_exit_code_mapping_preserves_compatibility(self) -> None:
+        self.assertEqual(packets.COMMAND_EXIT_OK, 0)
+        self.assertEqual(packets.COMMAND_EXIT_ERROR, 1)
+        self.assertEqual(packets.command_exit_code(True), 0)
+        self.assertEqual(packets.command_exit_code(True, 7), 0)
+        self.assertEqual(packets.command_exit_code(False), 1)
+        self.assertEqual(packets.command_exit_code(False, 7), 7)
+        self.assertEqual(packets.command_exit_code(False, 0), 0)
+
     def test_build_command_packet_matches_runtime_wrapper(self) -> None:
         kwargs = {
             "ok": False,
@@ -126,6 +135,40 @@ class CommandPacketsCoreTests(unittest.TestCase):
             packets.build_command_packet(**kwargs),
             runtime_modes._build_command_payload(**kwargs),
         )
+
+    def test_build_command_packet_exit_code_mapping_matches_runtime_wrappers(self) -> None:
+        cases = [
+            (True, None, 0),
+            (True, 7, 0),
+            (False, None, 1),
+            (False, 7, 7),
+            (False, 0, 0),
+        ]
+        for ok, exit_code, expected_exit_code in cases:
+            with self.subTest(ok=ok, exit_code=exit_code):
+                kwargs = {
+                    "ok": ok,
+                    "human_message": "mapped",
+                    "machine_error_code": "OK" if ok else "PROCESS_FAILED",
+                    "liveness": "healthy" if ok else "down",
+                    "severity": "recoverable",
+                    "operator_action": "none" if ok else "retry",
+                    "changed_files": [],
+                    "exit_code": exit_code,
+                }
+
+                self.assertEqual(
+                    packets.build_command_packet(**kwargs)["exit_code"],
+                    expected_exit_code,
+                )
+                self.assertEqual(
+                    runtime_mod.build_command_payload(**kwargs),
+                    packets.build_command_packet(**kwargs),
+                )
+                self.assertEqual(
+                    runtime_modes._build_command_payload(**kwargs),
+                    packets.build_command_packet(**kwargs),
+                )
 
     def test_build_command_packet_preserves_extra_override_behavior(self) -> None:
         payload = packets.build_command_packet(
@@ -224,11 +267,15 @@ class CommandPacketsCoreTests(unittest.TestCase):
     def test_core_packets_has_no_runtime_or_owner_path_dependencies(self) -> None:
         tree = ast.parse(PACKETS_CORE.read_text(encoding="utf-8"))
         forbidden_imports = {
+            "process_runner",
             "runtime",
+            "runtime_modes",
             "web_design_live_server",
             "web_ui",
             "runtime_status",
             "runtime_repair",
+            "state_store",
+            "state_migration",
         }
         imported: set[str] = set()
         calls: set[str] = set()

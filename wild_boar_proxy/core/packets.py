@@ -19,6 +19,16 @@ COMMAND_PACKET_REQUIRED_FIELDS = [
     "severity",
     "operator_action",
 ]
+COMMAND_EXIT_OK = 0
+COMMAND_EXIT_ERROR = 1
+
+
+def command_exit_code(ok: bool, exit_code: int | None = None) -> int:
+    if ok:
+        return COMMAND_EXIT_OK
+    if exit_code is None:
+        return COMMAND_EXIT_ERROR
+    return exit_code
 
 
 def build_command_packet(
@@ -36,7 +46,7 @@ def build_command_packet(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "ok" if ok else "error",
-        "exit_code": 0 if ok else (1 if exit_code is None else exit_code),
+        "exit_code": command_exit_code(ok, exit_code),
         "human_message": human_message,
         "machine_error_code": machine_error_code,
         "changed_files": changed_files,
