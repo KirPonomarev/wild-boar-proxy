@@ -138,6 +138,18 @@ OWNER_SURFACES = {
         READ,
         frozenset({"run_package_experimental_verify_impl"}),
     ),
+    "run_package_launchable_build": Surface(
+        PACKAGING,
+        "run_package_launchable_build",
+        SUBPROCESS_ADJACENT,
+        frozenset({"run_package_launchable_build_impl"}),
+    ),
+    "run_package_launchable_verify": Surface(
+        PACKAGING,
+        "run_package_launchable_verify",
+        READ,
+        frozenset({"run_package_launchable_verify_impl"}),
+    ),
     "credential_status": Surface(
         CREDENTIALS,
         "credential_status",
@@ -345,6 +357,8 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 (INSTALLER, "run_legacy_import"),
                 (PACKAGING, "run_package_experimental_build"),
                 (PACKAGING, "run_package_experimental_verify"),
+                (PACKAGING, "run_package_launchable_build"),
+                (PACKAGING, "run_package_launchable_verify"),
                 (CREDENTIALS, "credential_status"),
                 (CREDENTIALS, "admit_owner_credential"),
                 (RUNTIME, "mode_set"),
@@ -609,6 +623,7 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
             ("run_installer_init", WRITE_ADJACENT),
             ("run_legacy_import", WRITE_ADJACENT),
             ("run_package_experimental_build", WRITE_ADJACENT),
+            ("run_package_launchable_build", SUBPROCESS_ADJACENT),
             ("_run_credentials_command", WRITE_ADJACENT),
             ("main", DEFERRED_UNCLASSIFIED),
         ):

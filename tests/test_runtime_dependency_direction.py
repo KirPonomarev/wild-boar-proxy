@@ -773,13 +773,20 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         forbidden = {
             "Path",
             "build_command_payload",
+            "hash_directory_files",
             "hash_file",
             "json.loads",
             "mkdir",
+            "os.access",
             "open",
+            "probe_runtime_tk_support",
             "read_text",
+            "shutil.copy2",
+            "shutil.rmtree",
             "tarfile.open",
+            "write_executable_text_atomic",
             "write_json_artifact",
+            "write_text_atomic",
         }
 
         self.assertEqual(calls & forbidden, set())
@@ -1044,6 +1051,8 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = packaging.PackagingDependencies(
             run_package_experimental_build_impl=fake_run_package_experimental_build_impl,
             run_package_experimental_verify_impl=lambda *args, **kwargs: {},
+            run_package_launchable_build_impl=lambda *args, **kwargs: {},
+            run_package_launchable_verify_impl=lambda *args, **kwargs: {},
         )
 
         payload = packaging.run_package_experimental_build(
@@ -1074,6 +1083,8 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         dependencies = packaging.PackagingDependencies(
             run_package_experimental_build_impl=lambda *args, **kwargs: {},
             run_package_experimental_verify_impl=fake_run_package_experimental_verify_impl,
+            run_package_launchable_build_impl=lambda *args, **kwargs: {},
+            run_package_launchable_verify_impl=lambda *args, **kwargs: {},
         )
 
         payload = packaging.run_package_experimental_verify(
@@ -1083,6 +1094,81 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["surface"], "package-experimental-verify")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["manifest"], "manifest-sentinel")
+        self.assertEqual(calls, [(("paths-sentinel", "manifest-sentinel"), {})])
+
+    def test_package_launchable_build_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_package_launchable_build_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "package-launchable-build",
+                "paths": args[0],
+                "output_dir": args[1],
+                "runtime_executable": kwargs["runtime_executable_raw"],
+            }
+
+        dependencies = packaging.PackagingDependencies(
+            run_package_experimental_build_impl=lambda *args, **kwargs: {},
+            run_package_experimental_verify_impl=lambda *args, **kwargs: {},
+            run_package_launchable_build_impl=fake_run_package_launchable_build_impl,
+            run_package_launchable_verify_impl=lambda *args, **kwargs: {},
+        )
+
+        payload = packaging.run_package_launchable_build(
+            "paths-sentinel",
+            "output-dir-sentinel",
+            runtime_executable_raw="runtime-executable-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "package-launchable-build")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["output_dir"], "output-dir-sentinel")
+        self.assertEqual(payload["runtime_executable"], "runtime-executable-sentinel")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "output-dir-sentinel"),
+                    {"runtime_executable_raw": "runtime-executable-sentinel"},
+                )
+            ],
+        )
+
+    def test_package_launchable_verify_wrapper_passes_exact_impl_args(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_package_launchable_verify_impl(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "package-launchable-verify",
+                "paths": args[0],
+                "manifest": args[1],
+            }
+
+        dependencies = packaging.PackagingDependencies(
+            run_package_experimental_build_impl=lambda *args, **kwargs: {},
+            run_package_experimental_verify_impl=lambda *args, **kwargs: {},
+            run_package_launchable_build_impl=lambda *args, **kwargs: {},
+            run_package_launchable_verify_impl=fake_run_package_launchable_verify_impl,
+        )
+
+        payload = packaging.run_package_launchable_verify(
+            "paths-sentinel",
+            "manifest-sentinel",
+            dependencies=dependencies,
+        )
+
+        self.assertEqual(payload["surface"], "package-launchable-verify")
         self.assertEqual(payload["paths"], "paths-sentinel")
         self.assertEqual(payload["manifest"], "manifest-sentinel")
         self.assertEqual(calls, [(("paths-sentinel", "manifest-sentinel"), {})])
@@ -1447,6 +1533,88 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             )
 
         self.assertEqual(payload["surface"], "package-experimental-verify")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["manifest"], "manifest-sentinel")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "manifest-sentinel"),
+                    {
+                        "dependencies": runtime_mod._packaging_dependencies(),
+                    },
+                )
+            ],
+        )
+
+    def test_package_launchable_build_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_package_launchable_build(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "package-launchable-build",
+                "paths": args[0],
+                "output_dir": args[1],
+                "runtime_executable": kwargs["runtime_executable_raw"],
+            }
+
+        with mock.patch.object(
+            packaging,
+            "run_package_launchable_build",
+            side_effect=fake_package_launchable_build,
+        ):
+            payload = runtime_mod.run_package_launchable_build(
+                "paths-sentinel",
+                "output-dir-sentinel",
+                runtime_executable_raw="runtime-executable-sentinel",
+            )
+
+        self.assertEqual(payload["surface"], "package-launchable-build")
+        self.assertEqual(payload["paths"], "paths-sentinel")
+        self.assertEqual(payload["output_dir"], "output-dir-sentinel")
+        self.assertEqual(payload["runtime_executable"], "runtime-executable-sentinel")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "output-dir-sentinel"),
+                    {
+                        "runtime_executable_raw": "runtime-executable-sentinel",
+                        "dependencies": runtime_mod._packaging_dependencies(),
+                    },
+                )
+            ],
+        )
+
+    def test_package_launchable_verify_facade_passes_runtime_dependency(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_package_launchable_verify(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "status": "ok",
+                "surface": "package-launchable-verify",
+                "paths": args[0],
+                "manifest": args[1],
+            }
+
+        with mock.patch.object(
+            packaging,
+            "run_package_launchable_verify",
+            side_effect=fake_package_launchable_verify,
+        ):
+            payload = runtime_mod.run_package_launchable_verify(
+                "paths-sentinel",
+                "manifest-sentinel",
+            )
+
+        self.assertEqual(payload["surface"], "package-launchable-verify")
         self.assertEqual(payload["paths"], "paths-sentinel")
         self.assertEqual(payload["manifest"], "manifest-sentinel")
         self.assertEqual(

@@ -15,6 +15,8 @@ class PackagingPaths(Protocol):
 class PackagingDependencies:
     run_package_experimental_build_impl: Callable[..., dict[str, Any]]
     run_package_experimental_verify_impl: Callable[..., dict[str, Any]]
+    run_package_launchable_build_impl: Callable[..., dict[str, Any]]
+    run_package_launchable_verify_impl: Callable[..., dict[str, Any]]
 
 
 def run_package_experimental_build(
@@ -33,3 +35,26 @@ def run_package_experimental_verify(
     dependencies: PackagingDependencies,
 ) -> dict[str, Any]:
     return dependencies.run_package_experimental_verify_impl(paths, manifest_raw)
+
+
+def run_package_launchable_build(
+    paths: PackagingPaths,
+    output_dir_raw: str,
+    *,
+    runtime_executable_raw: str | None,
+    dependencies: PackagingDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_package_launchable_build_impl(
+        paths,
+        output_dir_raw,
+        runtime_executable_raw=runtime_executable_raw,
+    )
+
+
+def run_package_launchable_verify(
+    paths: PackagingPaths,
+    manifest_raw: str,
+    *,
+    dependencies: PackagingDependencies,
+) -> dict[str, Any]:
+    return dependencies.run_package_launchable_verify_impl(paths, manifest_raw)

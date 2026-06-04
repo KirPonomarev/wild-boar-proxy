@@ -2045,14 +2045,50 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(
+            set(payload),
+            {
+                "status",
+                "exit_code",
+                "human_message",
+                "machine_error_code",
+                "changed_files",
+                "next_action",
+                "liveness",
+                "severity",
+                "operator_action",
+                "package_result",
+            },
+        )
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "none")
         package_result = payload["package_result"]
         artifact_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
         manifest_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_MANIFEST_NAME
         metadata_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME
+        self.assertEqual(
+            set(package_result),
+            {
+                "status",
+                "artifact_kind",
+                "source_root",
+                "artifact_path",
+                "manifest_path",
+                "metadata_path",
+                "artifact_sha256",
+                "metadata_sha256",
+                "embedded_file_count",
+                "runtime_executable",
+                "runtime_tkinter_available",
+            },
+        )
         self.assertEqual(package_result["status"], "built")
         self.assertEqual(package_result["artifact_kind"], "macos_app_bundle")
+        self.assertEqual(package_result["source_root"], str(ROOT.resolve()))
+        self.assertEqual(package_result["artifact_path"], str(artifact_path))
+        self.assertEqual(package_result["manifest_path"], str(manifest_path))
+        self.assertEqual(package_result["metadata_path"], str(metadata_path))
         self.assertEqual(package_result["runtime_executable"], sys.executable)
         self.assertTrue(artifact_path.is_dir())
         self.assertTrue(manifest_path.is_file())
@@ -2152,16 +2188,98 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
         verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(
+            set(verify_payload),
+            {
+                "status",
+                "exit_code",
+                "human_message",
+                "machine_error_code",
+                "changed_files",
+                "next_action",
+                "liveness",
+                "severity",
+                "operator_action",
+                "package_result",
+            },
+        )
+        self.assertEqual(
+            set(verify_payload["package_result"]),
+            {
+                "status",
+                "manifest_path",
+                "artifact_path",
+                "artifact_sha256_expected",
+                "artifact_sha256_observed",
+                "checksum_match",
+                "metadata_path",
+                "metadata_sha256_expected",
+                "metadata_sha256_observed",
+                "metadata_checksum_match",
+                "boundary_check",
+                "runtime_executable",
+                "runtime_path_exists",
+                "runtime_path_executable",
+                "runtime_tkinter_available",
+            },
+        )
         self.assertEqual(verify_payload["status"], "ok")
         self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertEqual(verify_payload["next_action"], "none")
+        self.assertEqual(verify_payload["changed_files"], [])
         self.assertTrue(verify_payload["package_result"]["checksum_match"])
         self.assertTrue(verify_payload["package_result"]["metadata_checksum_match"])
         self.assertEqual(
             verify_payload["package_result"]["boundary_check"]["status"], "passed"
         )
         self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["violating_entries"],
+            [],
+        )
+        self.assertEqual(
             verify_payload["package_result"]["runtime_executable"], sys.executable
         )
+        self.assertTrue(verify_payload["package_result"]["runtime_path_exists"])
+        self.assertTrue(verify_payload["package_result"]["runtime_path_executable"])
+
+    def test_package_launchable_verify_checksum_mismatch_failure(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-mismatch"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        artifact_path = Path(build_payload["package_result"]["artifact_path"])
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        tamper_path = (
+            artifact_path / "Contents" / "Resources" / "app" / "wild_boar_proxy" / "tamper.py"
+        )
+        tamper_path.parent.mkdir(parents=True, exist_ok=True)
+        tamper_path.write_text("value = 1\n", encoding="utf-8")
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertEqual(
+            verify_payload["package_result"]["status"], "checksum_mismatch"
+        )
+        self.assertIs(verify_payload["package_result"]["checksum_match"], False)
 
     def test_package_launchable_verify_rejects_boundary_violation(self) -> None:
         output_dir = Path(self.temp_dir.name) / "launchable-package-verify-boundary"
@@ -2232,9 +2350,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
         )
-        self.assertIn(
-            "Contents/Resources/app/wild_boar_proxy/external_models/secrets.env",
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertIs(verify_payload["package_result"]["checksum_match"], True)
+        self.assertIs(
+            verify_payload["package_result"]["metadata_checksum_match"], True
+        )
+        self.assertEqual(
             verify_payload["package_result"]["violating_entries"],
+            ["Contents/Resources/app/wild_boar_proxy/external_models/secrets.env"],
         )
 
     def test_package_launchable_verify_rejects_symlink_boundary_bypass(self) -> None:
@@ -2275,9 +2398,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
         )
-        self.assertIn(
-            "Contents/Resources/app/wild_boar_proxy/symlink",
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertIs(verify_payload["package_result"]["checksum_match"], True)
+        self.assertIs(
+            verify_payload["package_result"]["metadata_checksum_match"], True
+        )
+        self.assertEqual(
             verify_payload["package_result"]["violating_entries"],
+            ["Contents/Resources/app/wild_boar_proxy/symlink"],
         )
 
     def test_package_launchable_verify_rejects_metadata_checksum_mismatch(self) -> None:
@@ -2313,7 +2441,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             verify_payload["machine_error_code"], "PACKAGE_METADATA_INVALID"
         )
-        self.assertFalse(verify_payload["package_result"]["metadata_checksum_match"])
+        self.assertEqual(verify_payload["changed_files"], [])
+        self.assertEqual(verify_payload["package_result"]["status"], "metadata_invalid")
+        self.assertIs(verify_payload["package_result"]["metadata_checksum_match"], False)
 
     def test_package_launchable_launcher_smoke_installer_init_json_works(self) -> None:
         output_dir = Path(self.temp_dir.name) / "launchable-package-smoke"

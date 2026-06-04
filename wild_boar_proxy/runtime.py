@@ -5759,6 +5759,8 @@ def _packaging_dependencies() -> Any:
     return PackagingDependencies(
         run_package_experimental_build_impl=_run_package_experimental_build_impl,
         run_package_experimental_verify_impl=_run_package_experimental_verify_impl,
+        run_package_launchable_build_impl=_run_package_launchable_build_impl,
+        run_package_launchable_verify_impl=_run_package_launchable_verify_impl,
     )
 
 
@@ -6024,6 +6026,19 @@ def is_launchable_package_bundle_entry_allowed(relative_path: Path) -> bool:
 
 
 def run_package_launchable_build(
+    paths: RuntimePaths, output_dir_raw: str, *, runtime_executable_raw: str | None
+) -> dict[str, Any]:
+    from .packaging import run_package_launchable_build as _run_package_launchable_build
+
+    return _run_package_launchable_build(
+        paths,
+        output_dir_raw,
+        runtime_executable_raw=runtime_executable_raw,
+        dependencies=_packaging_dependencies(),
+    )
+
+
+def _run_package_launchable_build_impl(
     _paths: RuntimePaths, output_dir_raw: str, *, runtime_executable_raw: str | None
 ) -> dict[str, Any]:
     output_dir = Path(output_dir_raw).expanduser().resolve()
@@ -6131,6 +6146,18 @@ def run_package_launchable_build(
 
 
 def run_package_launchable_verify(
+    paths: RuntimePaths, manifest_raw: str
+) -> dict[str, Any]:
+    from .packaging import run_package_launchable_verify as _run_package_launchable_verify
+
+    return _run_package_launchable_verify(
+        paths,
+        manifest_raw,
+        dependencies=_packaging_dependencies(),
+    )
+
+
+def _run_package_launchable_verify_impl(
     _paths: RuntimePaths, manifest_raw: str
 ) -> dict[str, Any]:
     manifest_path = Path(manifest_raw).expanduser().resolve()
