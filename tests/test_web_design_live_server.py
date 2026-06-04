@@ -11664,6 +11664,106 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(rejected["original_codex_touched"])
         self.assertFalse(rejected["asar_touched"])
 
+    def test_custom_native_launch_preflight_endpoint_accepts_owner_authorized_api_route(self) -> None:
+        payloads = live_payloads()
+        with (
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                },
+            ) as status_payload,
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": "wbp-deepseek-v3",
+                            "display_name": "DeepSeek V3",
+                            "provider": "deepseek",
+                            "upstream_model": "deepseek-chat",
+                            "enabled": True,
+                            "selection_enabled": True,
+                            "secret_ref": "DEEPSEEK_API_KEY",
+                        }
+                    ],
+                },
+            ) as api_snapshot,
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+            mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False),
+            mock.patch.object(live_server, "launch_custom_native_app_packet") as launch_native,
+        ):
+            runner = MappingRunner(payloads)
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase=(
+                        "разрешаю тебе любые законные действия в рамках разработки проекта"
+                    ),
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/native-launch-preflight",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["packet_kind"], "custom_native_launch_preflight")
+        self.assertTrue(packet["owner_authorization_phrase_present"])
+        self.assertEqual(packet["execution_mode"], "api_only")
+        self.assertEqual(packet["selected_model"], "wbp-deepseek-v3")
+        self.assertTrue(packet["route_selected"])
+        self.assertEqual(packet["bridge_status"], "not_started_or_down")
+        self.assertEqual(packet["next_action"], "launch_custom_codex_to_create_bridge")
+        self.assertFalse(packet["new_launch_started"])
+        self.assertFalse(packet["show_window_attempted"])
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["asar_touched"])
+        self.assertEqual(
+            packet["final_status"],
+            "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
+        )
+        status_payload.assert_called_once()
+        api_snapshot.assert_called_once()
+        launch_native.assert_not_called()
+        self.assertIn(("external-models", "routes", "list", "--json"), runner.calls)
+
     def test_custom_native_launch_preflight_classifies_window_bridge_and_model_truth_boundaries(self) -> None:
         with mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False):
             packet = live_server._custom_native_launch_preflight_packet(
