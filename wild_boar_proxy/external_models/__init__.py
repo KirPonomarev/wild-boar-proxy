@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_READ
+from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
@@ -24,16 +24,39 @@ from .validate import (
 
 
 def _command_effect_for_args(args: Any) -> str | None:
-    if (
-        args.external_models_command == "credentials"
-        and getattr(args, "credentials_command", "") == "admit"
-    ):
+    external_models_command = getattr(args, "external_models_command", None)
+    if external_models_command in {"start", "stop"}:
         return EFFECT_MUTATE
+    if external_models_command in {"status", "models"}:
+        return EFFECT_READ
+    if external_models_command == "check":
+        return EFFECT_MUTATE
+    if external_models_command == "live-format-check":
+        return EFFECT_PROBE
+    if external_models_command == "routes":
+        routes_command = getattr(args, "routes_command", None)
+        if routes_command in {"add", "update", "remove", "enable", "disable"}:
+            return EFFECT_MUTATE
+        if routes_command == "list":
+            return EFFECT_READ
+        if routes_command == "validate":
+            return EFFECT_MUTATE
+    if external_models_command == "credentials":
+        credentials_command = getattr(args, "credentials_command", "")
+        if credentials_command == "admit":
+            return EFFECT_MUTATE
+        if credentials_command == "status":
+            return EFFECT_READ
     if (
-        args.external_models_command == "credentials"
-        and getattr(args, "credentials_command", "") == "status"
+        external_models_command == "profile"
+        and getattr(args, "profile_command", None) == "codex-desktop"
     ):
         return EFFECT_READ
+    if (
+        external_models_command == "evidence"
+        and getattr(args, "evidence_command", None) == "capture"
+    ):
+        return EFFECT_MUTATE
     return None
 
 

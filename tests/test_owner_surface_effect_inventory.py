@@ -277,32 +277,6 @@ OWNER_SURFACES = {
 }
 
 KNOWN_EFFECT_CONTRACT_GAPS = {
-    "cli_effect_classifier_unclassified_documented_surfaces": (
-        CLI,
-        "command_effect_from_args",
-        (
-            '"sync"',
-            '"token"',
-            '"stable_command"',
-            '"launch_command"',
-            '"codex_runner_command"',
-            '"rollout_evidence_command"',
-            '"rollout_stage_command"',
-            '"validate"',
-            '"diagnostics_command"',
-            '"installer_command"',
-            '"legacy_command"',
-            '"companion_command"',
-            '"package_command"',
-            '"stop"',
-            '"models"',
-            '"check"',
-            '"live-format-check"',
-            '"routes_command"',
-            '"profile_command"',
-            '"evidence_command"',
-        ),
-    ),
     "healthcheck_repair_missing_mutation_metadata": (
         RUNTIME_REPAIR,
         "run_healthcheck_repair",
@@ -314,46 +288,6 @@ KNOWN_EFFECT_CONTRACT_GAPS = {
         "mutation_id",
     ),
 }
-
-
-CLI_UNCLASSIFIED_DOCUMENTED_SURFACE_LABELS = frozenset(
-    {
-        "sync --json",
-        "token --json",
-        "stable repair --dry-run --json",
-        "stable repair --apply --json",
-        "stable target switch --dry-run --json",
-        "stable target switch --apply --json",
-        "launch smoke --json",
-        "launch client --json",
-        "codex-runner smoke --json",
-        "rollout evidence capture --json",
-        "rollout stage prove --json",
-        "rollout stage prove 15 --json",
-        "rollout stage advance --json",
-        "rollout stage advance 20 --json",
-        "accounts validate --json",
-        "diagnostics export --json",
-        "installer init --json",
-        "legacy import --json",
-        "companion reset --json",
-        "companion uninstall --json",
-        "package experimental build --json",
-        "package experimental verify --json",
-        "package launchable build --json",
-        "package launchable verify --json",
-        "external-models start --json",
-        "external-models stop --json",
-        "external-models status --json",
-        "external-models models --json",
-        "external-models check --json",
-        "external-models live-format-check --json",
-        "external-models routes list --json",
-        "external-models routes validate --json",
-        "external-models profile codex-desktop --json",
-        "external-models evidence capture --json",
-    }
-)
 
 
 def _module(path: Path) -> ast.Module:
@@ -721,79 +655,9 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertIn("EFFECT_READ", classifier_source)
         self.assertIn("EFFECT_REPAIR", classifier_source)
 
-    def test_cli_unclassified_documented_surface_gap_is_explicit(self) -> None:
-        _, _, absent_texts = KNOWN_EFFECT_CONTRACT_GAPS[
-            "cli_effect_classifier_unclassified_documented_surfaces"
-        ]
-        self.assertEqual(
-            {
-                '"sync"',
-                '"token"',
-                '"stable_command"',
-                '"launch_command"',
-                '"codex_runner_command"',
-                '"rollout_evidence_command"',
-                '"rollout_stage_command"',
-                '"validate"',
-                '"diagnostics_command"',
-                '"installer_command"',
-                '"legacy_command"',
-                '"companion_command"',
-                '"package_command"',
-                '"stop"',
-                '"models"',
-                '"check"',
-                '"live-format-check"',
-                '"routes_command"',
-                '"profile_command"',
-                '"evidence_command"',
-            },
-            set(absent_texts),
-        )
-        self.assertEqual(
-            {
-                "sync --json",
-                "token --json",
-                "stable repair --dry-run --json",
-                "stable repair --apply --json",
-                "stable target switch --dry-run --json",
-                "stable target switch --apply --json",
-                "launch smoke --json",
-                "launch client --json",
-                "codex-runner smoke --json",
-                "rollout evidence capture --json",
-                "rollout stage prove --json",
-                "rollout stage prove 15 --json",
-                "rollout stage advance --json",
-                "rollout stage advance 20 --json",
-                "accounts validate --json",
-                "diagnostics export --json",
-                "installer init --json",
-                "legacy import --json",
-                "companion reset --json",
-                "companion uninstall --json",
-                "package experimental build --json",
-                "package experimental verify --json",
-                "package launchable build --json",
-                "package launchable verify --json",
-                "external-models start --json",
-                "external-models stop --json",
-                "external-models status --json",
-                "external-models models --json",
-                "external-models check --json",
-                "external-models live-format-check --json",
-                "external-models routes list --json",
-                "external-models routes validate --json",
-                "external-models profile codex-desktop --json",
-                "external-models evidence capture --json",
-            },
-            set(CLI_UNCLASSIFIED_DOCUMENTED_SURFACE_LABELS),
-        )
-
     def test_known_effect_contract_gaps_are_explicitly_tracked(self) -> None:
         self.assertEqual(
             {
-                "cli_effect_classifier_unclassified_documented_surfaces",
                 "healthcheck_repair_missing_mutation_metadata",
                 "promote_missing_mutation_metadata",
             },

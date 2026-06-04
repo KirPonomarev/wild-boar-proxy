@@ -387,8 +387,29 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     command = getattr(args, "command", None)
     if command in {"status", "invariant-check"}:
         return EFFECT_READ
+    if command == "sync":
+        return EFFECT_MUTATE
+    if command == "token":
+        return EFFECT_READ
     if command == "healthcheck":
         return EFFECT_REPAIR if getattr(args, "repair", False) else EFFECT_PROBE
+    if command == "stable":
+        stable_command = getattr(args, "stable_command", None)
+        if stable_command == "repair":
+            return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_READ
+        if (
+            stable_command == "target"
+            and getattr(args, "stable_target_command", None) == "switch"
+        ):
+            return EFFECT_MUTATE if getattr(args, "apply", False) else EFFECT_READ
+    if command == "launch":
+        launch_command = getattr(args, "launch_command", None)
+        if launch_command == "smoke":
+            return EFFECT_MUTATE
+        if launch_command == "client":
+            return EFFECT_MUTATE
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
+        return EFFECT_PROBE
     if command == "mode":
         mode_command = getattr(args, "mode_command", None)
         if mode_command == "get":
@@ -418,10 +439,23 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             and getattr(args, "rollout_posture_command", None) == "inspect"
         ):
             return EFFECT_READ
+        if (
+            rollout_command == "evidence"
+            and getattr(args, "rollout_evidence_command", None) == "capture"
+        ):
+            return EFFECT_MUTATE
+        if rollout_command == "stage":
+            rollout_stage_command = getattr(args, "rollout_stage_command", None)
+            if rollout_stage_command == "prove":
+                return EFFECT_PROBE
+            if rollout_stage_command == "advance":
+                return EFFECT_MUTATE
     if command == "accounts":
         accounts_command = getattr(args, "accounts_command", None)
         if accounts_command == "list":
             return EFFECT_READ
+        if accounts_command == "validate":
+            return EFFECT_PROBE
         if accounts_command in {
             "demote",
             "hold",
@@ -437,15 +471,69 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
                 return EFFECT_READ
             if login_command in {"start", "complete", "cancel"}:
                 return EFFECT_MUTATE
-    if (
-        command == "external-models"
-        and getattr(args, "external_models_command", None) == "credentials"
-    ):
-        credentials_command = getattr(args, "credentials_command", None)
-        if credentials_command == "admit":
+    if command == "diagnostics" and getattr(args, "diagnostics_command", None) == "export":
+        return EFFECT_MUTATE
+    if command == "installer" and getattr(args, "installer_command", None) == "init":
+        return EFFECT_MUTATE
+    if command == "legacy" and getattr(args, "legacy_command", None) == "import":
+        return EFFECT_MUTATE
+    if command == "companion" and getattr(args, "companion_command", None) in {
+        "reset",
+        "uninstall",
+    }:
+        return EFFECT_MUTATE
+    if command == "package":
+        package_command = getattr(args, "package_command", None)
+        if package_command == "experimental":
+            package_experimental_command = getattr(
+                args, "package_experimental_command", None
+            )
+            if package_experimental_command == "build":
+                return EFFECT_MUTATE
+            if package_experimental_command == "verify":
+                return EFFECT_READ
+        if package_command == "launchable":
+            package_launchable_command = getattr(
+                args, "package_launchable_command", None
+            )
+            if package_launchable_command == "build":
+                return EFFECT_MUTATE
+            if package_launchable_command == "verify":
+                return EFFECT_READ
+    if command == "external-models":
+        external_models_command = getattr(args, "external_models_command", None)
+        if external_models_command in {"start", "stop"}:
             return EFFECT_MUTATE
-        if credentials_command == "status":
+        if external_models_command in {"status", "models"}:
             return EFFECT_READ
+        if external_models_command == "check":
+            return EFFECT_MUTATE
+        if external_models_command == "live-format-check":
+            return EFFECT_PROBE
+        if external_models_command == "routes":
+            routes_command = getattr(args, "routes_command", None)
+            if routes_command in {"add", "update", "remove", "enable", "disable"}:
+                return EFFECT_MUTATE
+            if routes_command == "list":
+                return EFFECT_READ
+            if routes_command == "validate":
+                return EFFECT_MUTATE
+        if external_models_command == "credentials":
+            credentials_command = getattr(args, "credentials_command", None)
+            if credentials_command == "admit":
+                return EFFECT_MUTATE
+            if credentials_command == "status":
+                return EFFECT_READ
+        if (
+            external_models_command == "profile"
+            and getattr(args, "profile_command", None) == "codex-desktop"
+        ):
+            return EFFECT_READ
+        if (
+            external_models_command == "evidence"
+            and getattr(args, "evidence_command", None) == "capture"
+        ):
+            return EFFECT_MUTATE
     return None
 
 

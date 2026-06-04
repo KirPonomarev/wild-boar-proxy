@@ -3537,8 +3537,20 @@ class CliTests(unittest.TestCase):
         cases = [
             (["status", "--json"], "read"),
             (["invariant-check", "--json"], "read"),
+            (["sync", "--json"], "mutate"),
+            (["token", "--json"], "read"),
             (["healthcheck", "--json"], "probe"),
             (["healthcheck", "--repair", "--json"], "repair"),
+            (["stable", "repair", "--dry-run", "--json"], "read"),
+            (["stable", "repair", "--apply", "--json"], "repair"),
+            (["stable", "target", "switch", "--dry-run", "--json"], "read"),
+            (["stable", "target", "switch", "--apply", "--json"], "mutate"),
+            (["launch", "smoke", "--json"], "mutate"),
+            (
+                ["launch", "client", "--client-path", "/tmp/wbp-client", "--json"],
+                "mutate",
+            ),
+            (["codex-runner", "smoke", "--prompt", "hi", "--json"], "probe"),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),
@@ -3546,7 +3558,13 @@ class CliTests(unittest.TestCase):
             (["policy", "stage", "set", "15", "--json"], "mutate"),
             (["rollout", "rotation", "inspect", "--json"], "read"),
             (["rollout", "posture", "inspect", "15", "--json"], "read"),
+            (["rollout", "evidence", "capture", "16", "--json"], "mutate"),
+            (["rollout", "stage", "prove", "10", "--json"], "probe"),
+            (["rollout", "stage", "prove", "15", "--json"], "probe"),
+            (["rollout", "stage", "advance", "15", "backend-a", "--json"], "mutate"),
+            (["rollout", "stage", "advance", "20", "backend-a", "--json"], "mutate"),
             (["accounts", "list", "--json"], "read"),
+            (["accounts", "validate", "backend-a", "--json"], "probe"),
             (["accounts", "promote", "backend-a", "--json"], "mutate"),
             (["accounts", "demote", "backend-a", "--json"], "mutate"),
             (["accounts", "hold", "backend-a", "--dry-run", "--json"], "mutate"),
@@ -3561,6 +3579,59 @@ class CliTests(unittest.TestCase):
             (["accounts", "login", "status", "--session", "s", "--json"], "read"),
             (["accounts", "login", "complete", "--session", "s", "--json"], "mutate"),
             (["accounts", "login", "cancel", "--session", "s", "--json"], "mutate"),
+            (["diagnostics", "export", "--json"], "mutate"),
+            (["installer", "init", "--json"], "mutate"),
+            (["legacy", "import", "--source-dir", "/tmp/wbp-source", "--json"], "mutate"),
+            (["companion", "reset", "--json"], "mutate"),
+            (["companion", "uninstall", "--json"], "mutate"),
+            (["package", "experimental", "build", "--output-dir", "/tmp/wbp-out", "--json"], "mutate"),
+            (
+                [
+                    "package",
+                    "experimental",
+                    "verify",
+                    "--manifest",
+                    "/tmp/wbp-manifest.json",
+                    "--json",
+                ],
+                "read",
+            ),
+            (["package", "launchable", "build", "--output-dir", "/tmp/wbp-out", "--json"], "mutate"),
+            (
+                [
+                    "package",
+                    "launchable",
+                    "verify",
+                    "--manifest",
+                    "/tmp/wbp-manifest.json",
+                    "--json",
+                ],
+                "read",
+            ),
+            (["external-models", "start", "--json"], "mutate"),
+            (["external-models", "stop", "--json"], "mutate"),
+            (["external-models", "status", "--json"], "read"),
+            (["external-models", "models", "--json"], "read"),
+            (["external-models", "check", "--route", "wbp-deepseek-v3", "--json"], "mutate"),
+            (
+                [
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--prompt",
+                    "ping",
+                    "--expected-text",
+                    "pong",
+                    "--json",
+                ],
+                "probe",
+            ),
+            (["external-models", "routes", "list", "--json"], "read"),
+            (
+                ["external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"],
+                "mutate",
+            ),
             (
                 [
                     "external-models",
@@ -3585,73 +3656,91 @@ class CliTests(unittest.TestCase):
                 ],
                 "read",
             ),
+            (
+                [
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--json",
+                ],
+                "read",
+            ),
+            (
+                ["external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"],
+                "mutate",
+            ),
         ]
         for argv, expected_effect in cases:
             with self.subTest(argv=" ".join(argv)):
                 args = parser.parse_args(argv)
                 self.assertEqual(cli_mod.command_effect_from_args(args), expected_effect)
 
-    def test_cli_effect_classifier_leaves_tracked_documented_gaps_unclassified(
-        self,
-    ) -> None:
+    def test_cli_effect_classifier_covers_external_models_route_mutations(self) -> None:
         parser = cli_mod.build_parser()
         cases = [
-            ["sync", "--json"],
-            ["token", "--json"],
-            ["stable", "repair", "--dry-run", "--json"],
-            ["stable", "repair", "--apply", "--json"],
-            ["stable", "target", "switch", "--dry-run", "--json"],
-            ["stable", "target", "switch", "--apply", "--json"],
-            ["launch", "smoke", "--json"],
-            ["launch", "client", "--client-path", "/tmp/wbp-client", "--json"],
-            ["codex-runner", "smoke", "--prompt", "hi", "--json"],
-            ["rollout", "evidence", "capture", "16", "--json"],
-            ["rollout", "stage", "prove", "10", "--json"],
-            ["rollout", "stage", "prove", "15", "--json"],
-            ["rollout", "stage", "advance", "15", "backend-a", "--json"],
-            ["rollout", "stage", "advance", "20", "backend-a", "--json"],
-            ["accounts", "validate", "backend-a", "--json"],
-            ["diagnostics", "export", "--json"],
-            ["installer", "init", "--json"],
-            ["legacy", "import", "--source-dir", "/tmp/wbp-source", "--json"],
-            ["companion", "reset", "--json"],
-            ["companion", "uninstall", "--json"],
-            ["package", "experimental", "build", "--output-dir", "/tmp/wbp-out", "--json"],
-            ["package", "experimental", "verify", "--manifest", "/tmp/wbp-manifest.json", "--json"],
-            ["package", "launchable", "build", "--output-dir", "/tmp/wbp-out", "--json"],
-            ["package", "launchable", "verify", "--manifest", "/tmp/wbp-manifest.json", "--json"],
-            ["external-models", "start", "--json"],
-            ["external-models", "stop", "--json"],
-            ["external-models", "status", "--json"],
-            ["external-models", "models", "--json"],
-            ["external-models", "check", "--route", "wbp-deepseek-v3", "--json"],
             [
                 "external-models",
-                "live-format-check",
-                "--route",
-                "wbp-deepseek-v3",
-                "--prompt",
-                "ping",
-                "--expected-text",
-                "pong",
+                "routes",
+                "add",
+                "--file",
+                "/tmp/wbp-route.json",
                 "--json",
             ],
-            ["external-models", "routes", "list", "--json"],
-            ["external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"],
             [
                 "external-models",
-                "profile",
-                "codex-desktop",
+                "routes",
+                "update",
+                "--route",
+                "wbp-deepseek-v3",
+                "--file",
+                "/tmp/wbp-route.json",
+                "--json",
+            ],
+            [
+                "external-models",
+                "routes",
+                "remove",
                 "--route",
                 "wbp-deepseek-v3",
                 "--json",
             ],
-            ["external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"],
+            [
+                "external-models",
+                "routes",
+                "enable",
+                "--route",
+                "wbp-deepseek-v3",
+                "--json",
+            ],
+            [
+                "external-models",
+                "routes",
+                "disable",
+                "--route",
+                "wbp-deepseek-v3",
+                "--json",
+            ],
         ]
         for argv in cases:
             with self.subTest(argv=" ".join(argv)):
                 args = parser.parse_args(argv)
-                self.assertIsNone(cli_mod.command_effect_from_args(args))
+                self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+
+    def test_cli_package_verify_runtime_error_preserves_read_effect(self) -> None:
+        result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(Path(self.temp_dir.name) / "missing-manifest.json"),
+            "--json",
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
 
     def test_status_reports_snapshot_when_managed_listener_is_not_probed(self) -> None:
         stable_port = free_port()
@@ -20736,6 +20825,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["next_action"], "retry")
         self.assertEqual(payload["operator_action"], "retry")

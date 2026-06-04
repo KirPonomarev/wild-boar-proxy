@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
+from wild_boar_proxy import external_models as external_models_mod
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.external_models import contracts, errors, routes, run_external_models_command
 from wild_boar_proxy.external_models import lifecycle
@@ -325,6 +326,114 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertEqual(admitted["machine_error_code"], "OK")
             self.assertEqual(admitted["effect"], "mutate")
             self.assertNotIn(fixture_value, json.dumps(admitted, ensure_ascii=True))
+
+    def test_external_models_effect_classifier_covers_documented_commands(self) -> None:
+        cases = [
+            (mock.Mock(external_models_command="start"), "mutate"),
+            (mock.Mock(external_models_command="stop"), "mutate"),
+            (mock.Mock(external_models_command="status"), "read"),
+            (mock.Mock(external_models_command="models"), "read"),
+            (mock.Mock(external_models_command="check"), "mutate"),
+            (mock.Mock(external_models_command="live-format-check"), "probe"),
+            (mock.Mock(external_models_command="routes", routes_command="list"), "read"),
+            (
+                mock.Mock(external_models_command="routes", routes_command="validate"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="routes", routes_command="add"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="routes", routes_command="update"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="routes", routes_command="remove"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="routes", routes_command="enable"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="routes", routes_command="disable"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="credentials", credentials_command="admit"),
+                "mutate",
+            ),
+            (
+                mock.Mock(external_models_command="credentials", credentials_command="status"),
+                "read",
+            ),
+            (
+                mock.Mock(external_models_command="profile", profile_command="codex-desktop"),
+                "read",
+            ),
+            (
+                mock.Mock(external_models_command="evidence", evidence_command="capture"),
+                "mutate",
+            ),
+        ]
+        for args, expected_effect in cases:
+            with self.subTest(command=args.external_models_command):
+                self.assertEqual(
+                    external_models_mod._command_effect_for_args(args),
+                    expected_effect,
+                )
+
+    def test_external_models_runtime_errors_preserve_documented_effects(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            root = managed_dir / "external-models"
+            cases = [
+                (
+                    mock.Mock(external_models_command="check", route="missing-route"),
+                    "mutate",
+                ),
+                (
+                    mock.Mock(
+                        external_models_command="routes",
+                        routes_command="validate",
+                        route="missing-route",
+                    ),
+                    "mutate",
+                ),
+                (
+                    mock.Mock(
+                        external_models_command="live-format-check",
+                        route="missing-route",
+                        prompt="ping",
+                        expected_text="pong",
+                    ),
+                    "probe",
+                ),
+                (
+                    mock.Mock(
+                        external_models_command="evidence",
+                        evidence_command="capture",
+                        route="missing-route",
+                    ),
+                    "mutate",
+                ),
+            ]
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_MANAGED_DIR": str(managed_dir),
+                    "WBP_EXTERNAL_MODELS_DIR": str(root),
+                },
+                clear=False,
+            ):
+                for args, expected_effect in cases:
+                    with self.subTest(command=args.external_models_command):
+                        packet = run_external_models_command(args)
+                        self.assertEqual(packet["status"], "error")
+                        self.assertEqual(packet["machine_error_code"], errors.ROUTE_NOT_FOUND)
+                        self.assertEqual(packet["effect"], expected_effect)
+                        self.assertEqual(packet["changed_files"], [])
 
     def test_capture_local_evidence_writes_non_self_referential_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
