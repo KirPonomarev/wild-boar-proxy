@@ -10190,8 +10190,10 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
       post_action_refresh_required: false,
       result: {
         status: "integration_failure",
-        machine_error_code: "UI_ACTION_UNAVAILABLE",
+        machine_error_code: metadata.disabled_reason_code || "UI_ACTION_UNAVAILABLE",
         human_message: metadata.unavailable_reason || "Действие недоступно.",
+        availability_state: metadata.availability_state || "unknown_disabled",
+        disabled_reasons: Array.isArray(metadata.disabled_reasons) ? metadata.disabled_reasons : [],
         next_action: "user_action",
         changed_files: []
       }
@@ -12628,10 +12630,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     maybeConfirmAndRunFromButton(document.getElementById("quickStartConnectApiAction"), "api_route_connect");
   });
   document.getElementById("quickStartApiCredentialCheckAction")?.addEventListener("click", () => {
-    maybeConfirmAndRun("api_route_credential_check");
+    maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialCheckAction"), "api_route_credential_check");
   });
   document.getElementById("quickStartApiCredentialRetryAction")?.addEventListener("click", () => {
-    maybeConfirmAndRun("api_route_connect");
+    maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialRetryAction"), "api_route_connect");
   });
   document.getElementById("apiRouteConnectAction")?.addEventListener("click", () => {
     maybeConfirmAndRun("api_route_connect");

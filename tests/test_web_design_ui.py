@@ -1345,6 +1345,14 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartConnectApiAction" class="quick-start-connect-tile api-route-action api-route-connect-action"', section)
         self.assertIn('document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {', js)
         self.assertIn('maybeConfirmAndRunFromButton(document.getElementById("quickStartConnectApiAction"), "api_route_connect")', js)
+        check_accounts_match = re.search(r'<button id="quickStartCheckAccountsAction"[^>]*>', section)
+        self.assertIsNotNone(check_accounts_match)
+        check_accounts_button = check_accounts_match.group(0)
+        self.assertIn('disabled', check_accounts_button)
+        self.assertIn('data-action-state="deferred"', check_accounts_button)
+        self.assertIn('data-disabled-reason-code="UI_ACTION_MAPPING_NOT_ADMITTED"', check_accounts_button)
+        self.assertNotIn("data-ui-action", check_accounts_button)
+        self.assertNotIn('quickStartCheckAccountsAction")?.addEventListener("click"', js)
         connect_api_match = re.search(r'<button id="quickStartConnectApiAction"[^>]*>', section)
         self.assertIsNotNone(connect_api_match)
         connect_api_button = connect_api_match.group(0)
@@ -1537,7 +1545,17 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         blocked_action_body = js.split("function renderBlockedActionFromButton", 1)[1].split("function maybeConfirmAndRunFromButton", 1)[0]
         self.assertIn('route_id: ""', blocked_action_body)
         self.assertNotIn("route_id: extraPayload.route_id", blocked_action_body)
+        self.assertIn('machine_error_code: metadata.disabled_reason_code || "UI_ACTION_UNAVAILABLE"', js)
+        self.assertIn("disabled_reasons: Array.isArray(metadata.disabled_reasons) ? metadata.disabled_reasons : []", js)
         self.assertIn('button.disabled = quickStartPresentationActionButton(button) ? false : !state.available', js)
+        self.assertIn(
+            'maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialCheckAction"), "api_route_credential_check")',
+            js,
+        )
+        self.assertIn(
+            'maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialRetryAction"), "api_route_connect")',
+            js,
+        )
         self.assertIn('.desktop[data-screen="quick-start"] #quickStartExecutionModeDryRunAction', css)
         self.assertIn('.desktop[data-screen="quick-start"] .quick-start-route-response', css)
         self.assertIn(".desktop[data-screen=\"quick-start\"] .quick-start-route-actions", css)
@@ -6773,6 +6791,153 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   }
   if (onboardButton.dataset.disabledReasonCode !== "") {
     throw new Error(`disabled reason must clear after recovery, got ${onboardButton.dataset.disabledReasonCode}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_blocked_ui_action_uses_metadata_reason_in_action_panel(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tagName = tag.toUpperCase();
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.value = "";
+    this.dataset = {};
+    this.children = [];
+    this.attributes = {};
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (token) => this.className.split(/\s+/).filter(Boolean).includes(token),
+      add: () => {},
+      remove: () => {},
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    this.children.push(...items);
+    if (items.length) {
+      this.lastElementChild = items[items.length - 1];
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  querySelector() { return new Node(); }
+  querySelectorAll() { return []; }
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+    this[name] = String(value);
+  }
+  removeAttribute(name) {
+    delete this.attributes[name];
+    delete this[name];
+  }
+}
+
+const elements = {};
+function node(id) {
+  if (!elements[id]) {
+    elements[id] = new Node(id);
+  }
+  return elements[id];
+}
+const desktop = new Node("div");
+desktop.dataset = { screen: "quick-start", source: "live", fixtureState: "healthy" };
+
+let fetchCount = 0;
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "?screen=quick-start&source=live", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    fetchCount += 1;
+    if (url !== "api/actions") {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        action_phase: "live_readonly",
+        actions: {
+          api_route_credential_check: {
+            ui_action: "api_route_credential_check",
+            display_name: "Проверить credential",
+            human_meaning: "server-owned credential check",
+            action_role: "api_route_probe",
+            mutates_runtime: false,
+            affects_primary_truth: false,
+            confirmation_required: false,
+            post_action_refresh_required: false,
+            action_claim_scope: "server_packet_only",
+            available: false,
+            availability_state: "disabled_live_action",
+            disabled_reason_code: "RUNTIME_LIVE_ACTION_CHAIN_PARKED",
+            disabled_reasons: ["LOCK_HELD", "claim_gate_blocked"],
+            unavailable_reason: "Runtime/live-action chain parked by packet metadata."
+          }
+        }
+      })
+    });
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  await sandbox.loadActionMetadata();
+  sandbox.maybeConfirmAndRun("api_route_credential_check");
+  if (fetchCount !== 1) {
+    throw new Error(`blocked action must not dispatch another request, got ${fetchCount}`);
+  }
+  if (elements.actionMachineCode.textContent !== "RUNTIME_LIVE_ACTION_CHAIN_PARKED") {
+    throw new Error(`metadata machine code not surfaced: ${elements.actionMachineCode.textContent}`);
+  }
+  if (elements.actionDisplayState.textContent !== "integration_failure") {
+    throw new Error(`blocked display state must stay non-green: ${elements.actionDisplayState.textContent}`);
+  }
+  if (!elements.actionMessage.textContent.includes("parked")) {
+    throw new Error(`metadata unavailable reason missing: ${elements.actionMessage.textContent}`);
+  }
+  if (elements.actionChangedFiles.textContent !== "0 записей метаданных") {
+    throw new Error(`blocked action must not claim changed files: ${elements.actionChangedFiles.textContent}`);
   }
 })().catch((error) => {
   console.error(error.stack || error.message);
