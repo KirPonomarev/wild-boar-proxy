@@ -2405,6 +2405,156 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertIs(payload, expected)
         builder.assert_called_once_with(**kwargs)
 
+    def test_runtime_guardrail_surface_facade_matches_health_module(self) -> None:
+        launch_readiness = {
+            "status": "blocked",
+            "blocking_reason": "listener_unreachable",
+        }
+        auth_pool_hygiene = {
+            "status": "launch_capable_empty",
+            "blocking_reason": "usable_auth_pool_empty",
+        }
+        recovery_result = {
+            "guardrail_status": "observation_only",
+            "confirmation_basis": "live_runtime_observation_not_confirmed",
+            "effectful_claim_allowed": False,
+        }
+        expected_keys = {
+            "status",
+            "owner_command_surface",
+            "lock_status",
+            "launch_readiness_status",
+            "launch_blocking_reason",
+            "auth_pool_hygiene_status",
+            "auth_pool_blocking_reason",
+            "recovery_guardrail_status",
+            "recovery_confirmation_basis",
+            "recovery_effectful_claim_allowed",
+            "failed_checks",
+            "blocking_reason",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            lock_preflight = runtime_mod.get_lock_preflight(paths)
+
+            facade_payload = runtime_mod.build_runtime_guardrail_surface(
+                paths,
+                launch_readiness=launch_readiness,
+                auth_pool_hygiene=auth_pool_hygiene,
+                recovery_result=recovery_result,
+            )
+            direct_payload = (
+                runtime_health.build_runtime_guardrail_surface_from_preflight(
+                    lock_preflight=lock_preflight,
+                    launch_readiness=launch_readiness,
+                    auth_pool_hygiene=auth_pool_hygiene,
+                    recovery_result=recovery_result,
+                )
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(set(facade_payload), expected_keys)
+        self.assertEqual(facade_payload["status"], "blocked")
+        self.assertEqual(facade_payload["blocking_reason"], "listener_unreachable")
+        self.assertIn("usable_auth_pool_empty", facade_payload["failed_checks"])
+
+    def test_runtime_guardrail_surface_facade_delegates_to_health_module(self) -> None:
+        launch_readiness = {"status": "ready", "blocking_reason": ""}
+        auth_pool_hygiene = {
+            "status": "launch_capable_available",
+            "blocking_reason": "",
+        }
+        recovery_result = {"guardrail_status": "confirmed"}
+        lock_preflight = {"status": "held", "machine_error_code": "LOCK_HELD"}
+        expected = {"surface": "runtime-guardrail"}
+
+        with (
+            mock.patch.object(
+                runtime_mod,
+                "get_lock_preflight",
+                return_value=lock_preflight,
+            ) as lock_reader,
+            mock.patch.object(
+                runtime_health,
+                "build_runtime_guardrail_surface_from_preflight",
+                return_value=expected,
+            ) as builder,
+        ):
+            payload = runtime_mod.build_runtime_guardrail_surface(
+                "paths-sentinel",
+                launch_readiness=launch_readiness,
+                auth_pool_hygiene=auth_pool_hygiene,
+                recovery_result=recovery_result,
+            )
+
+        self.assertIs(payload, expected)
+        lock_reader.assert_called_once_with("paths-sentinel")
+        builder.assert_called_once_with(
+            lock_preflight=lock_preflight,
+            launch_readiness=launch_readiness,
+            auth_pool_hygiene=auth_pool_hygiene,
+            recovery_result=recovery_result,
+        )
+
+    def test_runtime_guardrail_surface_from_preflight_reports_lock_states(
+        self,
+    ) -> None:
+        cases = (
+            ("held", "blocked", "mutation_lock_held"),
+            ("stale", "blocked", "mutation_lock_stale"),
+            ("invalid", "blocked", "mutation_lock_invalid"),
+            ("clear", "clear", ""),
+        )
+
+        for lock_status, expected_status, expected_blocking_reason in cases:
+            with self.subTest(lock_status=lock_status):
+                payload = runtime_health.build_runtime_guardrail_surface_from_preflight(
+                    lock_preflight={"status": lock_status},
+                    launch_readiness=None,
+                    auth_pool_hygiene=None,
+                    recovery_result=None,
+                )
+
+                self.assertEqual(payload["lock_status"], lock_status)
+                self.assertEqual(payload["status"], expected_status)
+                self.assertEqual(
+                    payload["blocking_reason"], expected_blocking_reason
+                )
+                if expected_blocking_reason:
+                    self.assertEqual(
+                        payload["failed_checks"], [expected_blocking_reason]
+                    )
+                else:
+                    self.assertEqual(payload["failed_checks"], [])
+
+    def test_runtime_guardrail_surface_from_preflight_reports_observation_only(
+        self,
+    ) -> None:
+        payload = runtime_health.build_runtime_guardrail_surface_from_preflight(
+            lock_preflight={"status": "clear"},
+            launch_readiness={"status": "ready", "blocking_reason": ""},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "blocking_reason": "",
+            },
+            recovery_result={
+                "guardrail_status": "observation_only",
+                "confirmation_basis": "live_runtime_observation_not_confirmed",
+                "effectful_claim_allowed": False,
+            },
+        )
+
+        self.assertEqual(payload["status"], "caution")
+        self.assertEqual(payload["failed_checks"], [])
+        self.assertEqual(payload["blocking_reason"], "")
+        self.assertEqual(payload["recovery_guardrail_status"], "observation_only")
+        self.assertEqual(
+            payload["recovery_confirmation_basis"],
+            "live_runtime_observation_not_confirmed",
+        )
+        self.assertFalse(payload["recovery_effectful_claim_allowed"])
+
     def test_runtime_deterministic_recovery_result_facade_matches_repair_module(
         self,
     ) -> None:

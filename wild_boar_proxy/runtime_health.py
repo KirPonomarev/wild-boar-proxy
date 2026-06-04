@@ -137,6 +137,74 @@ def build_launch_readiness_surface(
     }
 
 
+def build_runtime_guardrail_surface_from_preflight(
+    *,
+    lock_preflight: dict[str, Any],
+    launch_readiness: dict[str, Any] | None,
+    auth_pool_hygiene: dict[str, Any] | None,
+    recovery_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    lock_status = str(lock_preflight.get("status", "unknown"))
+    if lock_status == "held":
+        failed_checks.append("mutation_lock_held")
+    elif lock_status == "stale":
+        failed_checks.append("mutation_lock_stale")
+    elif lock_status == "invalid":
+        failed_checks.append("mutation_lock_invalid")
+
+    launch_status = ""
+    launch_blocking_reason = ""
+    if isinstance(launch_readiness, dict):
+        launch_status = str(launch_readiness.get("status", ""))
+        launch_blocking_reason = str(launch_readiness.get("blocking_reason", ""))
+        if launch_status == "blocked" and launch_blocking_reason:
+            failed_checks.append(launch_blocking_reason)
+
+    auth_pool_status = ""
+    auth_pool_blocking_reason = ""
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_status = str(auth_pool_hygiene.get("status", ""))
+        auth_pool_blocking_reason = str(auth_pool_hygiene.get("blocking_reason", ""))
+        if auth_pool_status == "launch_capable_empty" and auth_pool_blocking_reason:
+            if auth_pool_blocking_reason not in failed_checks:
+                failed_checks.append(auth_pool_blocking_reason)
+
+    recovery_guardrail_status = ""
+    recovery_confirmation_basis = ""
+    recovery_effectful_claim_allowed = None
+    if isinstance(recovery_result, dict):
+        recovery_guardrail_status = str(recovery_result.get("guardrail_status", ""))
+        recovery_confirmation_basis = str(recovery_result.get("confirmation_basis", ""))
+        recovery_effectful_claim_allowed = recovery_result.get(
+            "effectful_claim_allowed"
+        )
+        if recovery_guardrail_status == "blocked":
+            failed_checks.append("recovery_claim_blocked")
+
+    if failed_checks:
+        status = "blocked"
+    elif recovery_guardrail_status == "observation_only":
+        status = "caution"
+    else:
+        status = "clear"
+
+    return {
+        "status": status,
+        "owner_command_surface": "healthcheck --json",
+        "lock_status": lock_status,
+        "launch_readiness_status": launch_status,
+        "launch_blocking_reason": launch_blocking_reason,
+        "auth_pool_hygiene_status": auth_pool_status,
+        "auth_pool_blocking_reason": auth_pool_blocking_reason,
+        "recovery_guardrail_status": recovery_guardrail_status,
+        "recovery_confirmation_basis": recovery_confirmation_basis,
+        "recovery_effectful_claim_allowed": recovery_effectful_claim_allowed,
+        "failed_checks": failed_checks,
+        "blocking_reason": "" if not failed_checks else failed_checks[0],
+    }
+
+
 def run_healthcheck_probe(
     paths: RuntimeHealthPaths,
     model: str | None = None,
