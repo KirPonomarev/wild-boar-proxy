@@ -2628,6 +2628,131 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_api_route_connect_can_create_direct_deepseek_server_owned_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_path = (
+                data_dir
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-deepseek.json"
+            )
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            payloads[
+                ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+            ] = credential_status_packet(
+                present=True,
+                provider="deepseek",
+                credential_ref="DEEPSEEK_API_KEY",
+                expected_refs=["DEEPSEEK_API_KEY"],
+                provider_dashboard_url="https://platform.deepseek.com/api_keys",
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(route_spec_path),
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route added: wbp-web-primary-deepseek.",
+                changed_files=[str(data_dir / "external-models" / "routes.json")],
+                data={"route_id": "wbp-web-primary-deepseek"},
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "validate",
+                    "--route",
+                    "wbp-web-primary-deepseek",
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+                data={
+                    "route_id": "wbp-web-primary-deepseek",
+                    "route_state": "model_visible",
+                    "verification_scope": "route_provider_only",
+                    "requested_model": "wbp-web-primary-deepseek",
+                    "effective_model": "deepseek-chat",
+                    "provider": "deepseek",
+                },
+            )
+            runner = MappingRunner(payloads)
+            runner._env = {
+                "WBP_SERVER_OWNED_API_ROUTE_ID": "wbp-web-primary-deepseek",
+                "WBP_SERVER_OWNED_API_ROUTE_PROVIDER": "deepseek",
+                "WBP_SERVER_OWNED_API_ROUTE_DISPLAY_NAME": "DeepSeek primary",
+                "WBP_SERVER_OWNED_API_ROUTE_BASE_URL": "https://api.deepseek.com",
+                "WBP_SERVER_OWNED_API_ROUTE_ENDPOINT_PATH": "/chat/completions",
+                "WBP_SERVER_OWNED_API_ROUTE_MODEL": "deepseek-chat",
+                "WBP_SERVER_OWNED_API_ROUTE_SECRET_REF": "DEEPSEEK_API_KEY",
+            }
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["action_role"], "api_route_admission")
+            self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-deepseek")
+            self.assertEqual(result["result"]["data"]["credential_provider"], "deepseek")
+            self.assertEqual(result["result"]["data"]["credential_ref"], "DEEPSEEK_API_KEY")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
+            self.assertEqual(result["result"]["data"]["validate_machine_error_code"], "OK")
+            self.assertFalse(result["result"]["data"]["browser_secret_intake"])
+            self.assertFalse(result["result"]["data"]["browser_path_intake"])
+            self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
+            self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+            serialized = json.dumps(result)
+            self.assertNotIn(str(route_spec_path), serialized)
+            self.assertNotIn(str(data_dir), serialized)
+            self.assertNotIn("deepseek-owner-key", serialized)
+            self.assertTrue(route_spec_path.exists())
+            route_spec = json.loads(route_spec_path.read_text(encoding="utf-8"))
+            self.assertEqual(route_spec["route_id"], "wbp-web-primary-deepseek")
+            self.assertEqual(route_spec["provider"], "deepseek")
+            self.assertEqual(route_spec["auth"]["secret_ref"], "DEEPSEEK_API_KEY")
+            self.assertFalse(route_spec["fallback_eligible"])
+            self.assertIn(
+                ("external-models", "credentials", "status", "--provider", "deepseek", "--json"),
+                runner.calls,
+            )
+            self.assertNotIn(
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                runner.calls,
+            )
+
     def test_api_route_connect_adopts_existing_primary_route_without_add(self) -> None:
         payloads = live_payloads()
         runner = MappingRunner(payloads)
