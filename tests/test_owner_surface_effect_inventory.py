@@ -5,6 +5,9 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
+from wild_boar_proxy import runtime_health
+from wild_boar_proxy import runtime_repair
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "wild_boar_proxy" / "runtime.py"
@@ -591,13 +594,19 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         probe_source = _function_source(probe_surface.path, probe_surface.function)
         self.assertEqual(PROBE, probe_surface.expected_class)
         self.assertTrue(probe_surface.required_calls <= probe_calls)
-        self.assertNotIn("allow_recovery=True", probe_source)
-        self.assertIn("allow_recovery=False", probe_source)
-        self.assertIn("allow_last_known_good_proxy_write=False", probe_source)
-        self.assertIn("allow_current_proxy_auto_adoption=False", probe_source)
-        self.assertIn("allow_stable_fallback_write=False", probe_source)
-        self.assertIn("allow_stale_pid_cleanup=False", probe_source)
-        self.assertIn("effect=EFFECT_PROBE", probe_source)
+        self.assertIn("**HEALTHCHECK_PROBE_CONTRACT.kwargs()", probe_source)
+        self.assertNotIn("allow_recovery=", probe_source)
+        self.assertEqual(
+            runtime_health.HEALTHCHECK_PROBE_CONTRACT.kwargs(),
+            {
+                "allow_recovery": False,
+                "allow_last_known_good_proxy_write": False,
+                "allow_current_proxy_auto_adoption": False,
+                "allow_stable_fallback_write": False,
+                "allow_stale_pid_cleanup": False,
+                "effect": "probe",
+            },
+        )
 
     def test_healthcheck_repair_wrapper_declares_repair_enabled_path(self) -> None:
         repair_surface = OWNER_SURFACES["run_healthcheck_repair"]
@@ -605,12 +614,19 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         repair_source = _function_source(repair_surface.path, repair_surface.function)
         self.assertEqual(REPAIR, repair_surface.expected_class)
         self.assertTrue(repair_surface.required_calls <= repair_calls)
-        self.assertIn("allow_recovery=True", repair_source)
-        self.assertIn("allow_last_known_good_proxy_write=True", repair_source)
-        self.assertIn("allow_current_proxy_auto_adoption=True", repair_source)
-        self.assertIn("allow_stable_fallback_write=True", repair_source)
-        self.assertIn("allow_stale_pid_cleanup=True", repair_source)
-        self.assertIn("effect=EFFECT_REPAIR", repair_source)
+        self.assertIn("**HEALTHCHECK_REPAIR_CONTRACT.kwargs()", repair_source)
+        self.assertNotIn("allow_recovery=", repair_source)
+        self.assertEqual(
+            runtime_repair.HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
+            {
+                "allow_recovery": True,
+                "allow_last_known_good_proxy_write": True,
+                "allow_current_proxy_auto_adoption": True,
+                "allow_stable_fallback_write": True,
+                "allow_stale_pid_cleanup": True,
+                "effect": "repair",
+            },
+        )
 
     def test_dispatch_surfaces_do_not_own_raw_primitives(
         self,

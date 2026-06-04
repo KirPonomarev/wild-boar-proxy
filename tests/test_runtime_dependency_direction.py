@@ -2206,6 +2206,23 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ],
         )
 
+    def test_runtime_repair_contract_declares_admitted_repair_flags(self) -> None:
+        contract = runtime_repair.HEALTHCHECK_REPAIR_CONTRACT
+        expected = {
+            "allow_recovery": True,
+            "allow_last_known_good_proxy_write": True,
+            "allow_current_proxy_auto_adoption": True,
+            "allow_stable_fallback_write": True,
+            "allow_stale_pid_cleanup": True,
+            "effect": "repair",
+        }
+        self.assertTrue(contract.__dataclass_params__.frozen)
+        self.assertEqual(contract.kwargs(), expected)
+
+        mutated = contract.kwargs()
+        mutated["effect"] = "tampered"
+        self.assertEqual(contract.kwargs(), expected)
+
     def test_runtime_repair_wrapper_passes_exact_repair_flags(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
@@ -2230,17 +2247,27 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             [
                 (
                     ("paths-sentinel", "gpt-sentinel"),
-                    {
-                        "allow_recovery": True,
-                        "allow_last_known_good_proxy_write": True,
-                        "allow_current_proxy_auto_adoption": True,
-                        "allow_stable_fallback_write": True,
-                        "allow_stale_pid_cleanup": True,
-                        "effect": "repair",
-                    },
+                    runtime_repair.HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
                 )
             ],
         )
+
+    def test_runtime_health_probe_contract_forbids_repair_flags(self) -> None:
+        contract = runtime_health.HEALTHCHECK_PROBE_CONTRACT
+        expected = {
+            "allow_recovery": False,
+            "allow_last_known_good_proxy_write": False,
+            "allow_current_proxy_auto_adoption": False,
+            "allow_stable_fallback_write": False,
+            "allow_stale_pid_cleanup": False,
+            "effect": "probe",
+        }
+        self.assertTrue(contract.__dataclass_params__.frozen)
+        self.assertEqual(contract.kwargs(), expected)
+
+        mutated = contract.kwargs()
+        mutated["effect"] = "tampered"
+        self.assertEqual(contract.kwargs(), expected)
 
     def test_runtime_health_probe_wrapper_passes_exact_probe_flags(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -2266,14 +2293,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             [
                 (
                     ("paths-sentinel", "gpt-sentinel"),
-                    {
-                        "allow_recovery": False,
-                        "allow_last_known_good_proxy_write": False,
-                        "allow_current_proxy_auto_adoption": False,
-                        "allow_stable_fallback_write": False,
-                        "allow_stale_pid_cleanup": False,
-                        "effect": "probe",
-                    },
+                    runtime_health.HEALTHCHECK_PROBE_CONTRACT.kwargs(),
                 )
             ],
         )
@@ -2427,6 +2447,47 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             _normalize_observed_times(direct_payload),
         )
         _assert_health_probe_contract(self, facade_payload)
+
+    def test_runtime_healthcheck_repair_facade_matches_direct_repair_module(self) -> None:
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def fake_run_healthcheck(*args: object, **kwargs: object) -> dict[str, object]:
+            calls.append((args, kwargs))
+            return {
+                "effect": kwargs["effect"],
+                "changed_files": ["state.json"],
+                "surface": "fake-healthcheck",
+            }
+
+        with mock.patch.object(
+            runtime_mod,
+            "run_healthcheck",
+            side_effect=fake_run_healthcheck,
+        ):
+            facade_payload = runtime_mod.run_healthcheck_repair(
+                "paths-sentinel",
+                "gpt-sentinel",
+            )
+            direct_payload = runtime_repair.run_healthcheck_repair(
+                "paths-sentinel",
+                "gpt-sentinel",
+                dependencies=runtime_mod._healthcheck_repair_dependencies(),
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ("paths-sentinel", "gpt-sentinel"),
+                    runtime_repair.HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
+                ),
+                (
+                    ("paths-sentinel", "gpt-sentinel"),
+                    runtime_repair.HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
+                ),
+            ],
+        )
 
     def test_runtime_health_probe_does_not_write_runtime_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
