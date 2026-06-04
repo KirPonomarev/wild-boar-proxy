@@ -10,9 +10,13 @@ from typing import Any
 
 from .cli_runner import run_codex_cli_runner_smoke
 from .external_models import run_external_models_command
+from .runtime_health import run_healthcheck_probe
+from .runtime_repair import run_healthcheck_repair
 from .runtime import (
     RuntimeErrorInfo,
     RuntimePaths,
+    _health_probe_dependencies,
+    _healthcheck_repair_dependencies,
     export_diagnostics,
     list_accounts,
     mode_get,
@@ -23,8 +27,6 @@ from .runtime import (
     run_accounts_login_complete,
     run_accounts_login_start,
     run_demote,
-    run_healthcheck_probe,
-    run_healthcheck_repair,
     run_invariant_check,
     run_installer_init,
     run_hold,
@@ -388,8 +390,20 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "healthcheck":
             if args.repair:
-                return emit_json(run_healthcheck_repair(paths, args.model))
-            return emit_json(run_healthcheck_probe(paths, args.model))
+                return emit_json(
+                    run_healthcheck_repair(
+                        paths,
+                        args.model,
+                        dependencies=_healthcheck_repair_dependencies(),
+                    )
+                )
+            return emit_json(
+                run_healthcheck_probe(
+                    paths,
+                    args.model,
+                    dependencies=_health_probe_dependencies(),
+                )
+            )
         if args.command == "status":
             return emit_json(summarize_status(paths))
         if args.command == "invariant-check":

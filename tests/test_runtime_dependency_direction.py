@@ -205,6 +205,7 @@ RUNTIME_MODULE_PATHS = {
     "wild_boar_proxy.runtime_repair": REPO_ROOT / "wild_boar_proxy" / "runtime_repair.py",
     "wild_boar_proxy.runtime_status": REPO_ROOT / "wild_boar_proxy" / "runtime_status.py",
 }
+CLI_MODULE_PATH = REPO_ROOT / "wild_boar_proxy" / "cli.py"
 
 
 def _absolute_import_name(module_name: str, node: ast.ImportFrom) -> list[str]:
@@ -608,6 +609,39 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             with self.subTest(module=module_name):
                 source = path.read_text(encoding="utf-8")
                 self.assertEqual(_forbidden_imports(source, module_name), [])
+
+    def test_cli_healthcheck_dispatch_imports_split_owner_surfaces(self) -> None:
+        source = CLI_MODULE_PATH.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported_modules = _iter_imported_modules(source, "wild_boar_proxy.cli")
+        runtime_imported_names: set[str] = set()
+        split_imported_names: dict[str, set[str]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            absolute_modules = _absolute_import_name("wild_boar_proxy.cli", node)
+            if absolute_modules == ["wild_boar_proxy.runtime"]:
+                runtime_imported_names.update(alias.name for alias in node.names)
+            if absolute_modules in (
+                ["wild_boar_proxy.runtime_health"],
+                ["wild_boar_proxy.runtime_repair"],
+            ):
+                split_imported_names.setdefault(absolute_modules[0], set()).update(
+                    alias.name for alias in node.names
+                )
+
+        self.assertIn("wild_boar_proxy.runtime_health", imported_modules)
+        self.assertIn("wild_boar_proxy.runtime_repair", imported_modules)
+        self.assertIn(
+            "run_healthcheck_probe",
+            split_imported_names.get("wild_boar_proxy.runtime_health", set()),
+        )
+        self.assertIn(
+            "run_healthcheck_repair",
+            split_imported_names.get("wild_boar_proxy.runtime_repair", set()),
+        )
+        self.assertNotIn("run_healthcheck_probe", runtime_imported_names)
+        self.assertNotIn("run_healthcheck_repair", runtime_imported_names)
 
     def test_runtime_status_snapshot_does_not_call_health_or_repair_owner_surfaces(self) -> None:
         source = RUNTIME_MODULE_PATHS["wild_boar_proxy.runtime_status"].read_text(
