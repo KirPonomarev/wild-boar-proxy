@@ -12146,6 +12146,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             hold["final_outcome"], "rollback_completed_after_failed_verification"
         )
+        self.assertIn(str(registry_path), payload["changed_files"])
+        self.assertIn(str(state_path), payload["changed_files"])
         self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
         self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
 
@@ -12238,6 +12240,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             release["final_outcome"], "rollback_completed_after_failed_verification"
         )
+        self.assertIn(str(registry_path), payload["changed_files"])
         self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
         self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
 
@@ -13081,6 +13084,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
         evidence = payload["rotation_evidence_result"]
         self.assertEqual(
@@ -19240,6 +19244,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             hold["final_outcome"], "rollback_completed_after_failed_verification"
         )
+        self.assertIn(
+            str(self.managed_dir / "backend-registry.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
         self.assertEqual(
             (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
             before_registry,
@@ -20064,6 +20074,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             retire["final_outcome"], "rollback_completed_after_failed_verification"
         )
+        self.assertIn(
+            str(self.managed_dir / "backend-registry.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
         self.assertEqual(
             (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
             before_registry,
@@ -20124,6 +20140,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(retire["rollback_outcome"], "completed")
         self.assertEqual(
             retire["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertIn(
+            str(self.managed_dir / "backend-registry.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
         self.assertEqual(
             (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),

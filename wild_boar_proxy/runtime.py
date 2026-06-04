@@ -10752,6 +10752,7 @@ def _run_rollout_rotation_inspect_impl(
         severity="recoverable",
         operator_action=operator_action,
         changed_files=[],
+        effect=EFFECT_READ,
         extra={
             "rotation_evidence_result": evidence_result,
             "delegated_evidence": {
@@ -14384,6 +14385,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         operator_action: str = "none",
         exit_code: int | None = None,
         extra: dict[str, Any] | None = None,
+        changed_files_extra: list[str] | None = None,
     ) -> dict[str, Any]:
         payload_extra = {
             "command": command,
@@ -14391,6 +14393,11 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         }
         if extra:
             payload_extra.update(extra)
+        changed_files = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
+        if changed_files_extra:
+            changed_files = _merge_changed_files(changed_files, changed_files_extra)
         return build_command_payload(
             ok=ok,
             human_message=human_message,
@@ -14398,9 +14405,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             liveness=liveness,
             severity=severity,
             operator_action=operator_action,
-            changed_files=detect_changed_files(
-                before, runtime_write_surface_candidates(paths)
-            ),
+            changed_files=changed_files,
             effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
@@ -14434,6 +14439,9 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             extra: dict[str, Any] | None = None,
         ) -> dict[str, Any]:
             demote_result["rollback_attempted"] = True
+            changed_files_before_rollback = detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            )
             try:
                 restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
                 demote_result["rollback_outcome"] = "completed"
@@ -14449,6 +14457,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                     operator_action=operator_action,
                     exit_code=exit_code,
                     extra=extra,
+                    changed_files_extra=changed_files_before_rollback,
                 )
             except Exception as exc:  # noqa: BLE001
                 demote_result["rollback_outcome"] = "failed"
@@ -14464,6 +14473,7 @@ def _run_demote_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                     operator_action="stop",
                     exit_code=1,
                     extra=payload_extra,
+                    changed_files_extra=changed_files_before_rollback,
                 )
 
         if not backend_matches:
@@ -14859,6 +14869,7 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         operator_action: str = "none",
         exit_code: int | None = None,
         extra: dict[str, Any] | None = None,
+        changed_files_extra: list[str] | None = None,
     ) -> dict[str, Any]:
         payload_extra = {
             "command": command,
@@ -14866,6 +14877,11 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         }
         if extra:
             payload_extra.update(extra)
+        changed_files = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
+        if changed_files_extra:
+            changed_files = _merge_changed_files(changed_files, changed_files_extra)
         return build_command_payload(
             ok=ok,
             human_message=human_message,
@@ -14873,9 +14889,7 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             liveness=liveness,
             severity=severity,
             operator_action=operator_action,
-            changed_files=detect_changed_files(
-                before, runtime_write_surface_candidates(paths)
-            ),
+            changed_files=changed_files,
             effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
@@ -14891,6 +14905,9 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         retire_result["rollback_attempted"] = True
+        changed_files_before_rollback = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
         try:
             restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
             retire_result["rollback_outcome"] = "completed"
@@ -14906,6 +14923,7 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action=operator_action,
                 exit_code=exit_code,
                 extra=extra,
+                changed_files_extra=changed_files_before_rollback,
             )
         except Exception as exc:  # noqa: BLE001
             retire_result["rollback_outcome"] = "failed"
@@ -14923,6 +14941,7 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 operator_action="stop",
                 exit_code=1,
                 extra=payload_extra,
+                changed_files_extra=changed_files_before_rollback,
             )
 
     with serialized_lock(paths):
@@ -15463,6 +15482,7 @@ def run_protective_lifecycle_owner_path(
         operator_action: str = "none",
         exit_code: int | None = None,
         extra: dict[str, Any] | None = None,
+        changed_files_extra: list[str] | None = None,
     ) -> dict[str, Any]:
         payload_extra = {
             "command": command,
@@ -15470,6 +15490,11 @@ def run_protective_lifecycle_owner_path(
         }
         if extra:
             payload_extra.update(extra)
+        changed_files = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
+        if changed_files_extra:
+            changed_files = _merge_changed_files(changed_files, changed_files_extra)
         return build_command_payload(
             ok=ok,
             human_message=human_message,
@@ -15477,9 +15502,7 @@ def run_protective_lifecycle_owner_path(
             liveness=liveness,
             severity=severity,
             operator_action=operator_action,
-            changed_files=detect_changed_files(
-                before, runtime_write_surface_candidates(paths)
-            ),
+            changed_files=changed_files,
             effect=EFFECT_MUTATE,
             extra=payload_extra,
             exit_code=exit_code,
@@ -15495,6 +15518,9 @@ def run_protective_lifecycle_owner_path(
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         transition_result["rollback_attempted"] = True
+        changed_files_before_rollback = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
         try:
             restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
             transition_result["rollback_outcome"] = "completed"
@@ -15510,6 +15536,7 @@ def run_protective_lifecycle_owner_path(
                 operator_action=operator_action,
                 exit_code=exit_code,
                 extra=extra,
+                changed_files_extra=changed_files_before_rollback,
             )
         except Exception as exc:  # noqa: BLE001
             transition_result["rollback_outcome"] = "failed"
@@ -15527,6 +15554,7 @@ def run_protective_lifecycle_owner_path(
                 operator_action="stop",
                 exit_code=1,
                 extra=payload_extra,
+                changed_files_extra=changed_files_before_rollback,
             )
 
     precondition_result = _protective_lifecycle_precondition_result(
@@ -15960,6 +15988,7 @@ def _run_promote_impl(
         operator_action: str = "none",
         exit_code: int | None = None,
         extra: dict[str, Any] | None = None,
+        changed_files_extra: list[str] | None = None,
     ) -> dict[str, Any]:
         payload_extra = {
             "command": command,
@@ -15970,6 +15999,8 @@ def _run_promote_impl(
         changed_files = detect_changed_files(
             before, runtime_write_surface_candidates(paths)
         )
+        if changed_files_extra:
+            changed_files = _merge_changed_files(changed_files, changed_files_extra)
         payload_extra["mutation_id"] = _build_promote_mutation_id(
             backend_id=backend_id,
             changed_files=changed_files,
@@ -15997,6 +16028,9 @@ def _run_promote_impl(
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         promotion_result["rollback_attempted"] = True
+        changed_files_before_rollback = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
         try:
             restore_promotion_owner_path_runtime_surfaces(paths, rollback_snapshots)
             promotion_result["rollback_outcome"] = "completed"
@@ -16012,6 +16046,7 @@ def _run_promote_impl(
                 operator_action=operator_action,
                 exit_code=exit_code,
                 extra=extra,
+                changed_files_extra=changed_files_before_rollback,
             )
         except Exception as exc:  # noqa: BLE001
             promotion_result["rollback_outcome"] = "failed"
@@ -16029,6 +16064,7 @@ def _run_promote_impl(
                 operator_action="stop",
                 exit_code=1,
                 extra=payload_extra,
+                changed_files_extra=changed_files_before_rollback,
             )
 
     def summarize_promotion_sync_result(sync_payload: dict[str, Any]) -> dict[str, Any]:
