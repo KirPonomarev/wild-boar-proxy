@@ -107,6 +107,54 @@ def staged_blob_bytes(repo_root: Path, path: str) -> bytes:
     return result.stdout
 
 
+def git_range_head(git_range: str) -> str:
+    if "..." in git_range:
+        head = git_range.rsplit("...", maxsplit=1)[1]
+    elif ".." in git_range:
+        head = git_range.rsplit("..", maxsplit=1)[1]
+    else:
+        raise RuntimeError(
+            f"git range must be BASE..HEAD or BASE...HEAD: {git_range}"
+        )
+    head = head.strip()
+    if not head:
+        raise RuntimeError(f"git range has no head revision: {git_range}")
+    return head
+
+
+def range_paths(repo_root: Path, git_range: str) -> list[str]:
+    result = _run_git(
+        repo_root,
+        ["diff", "--name-only", "--diff-filter=ACMRT", "-z", git_range],
+    )
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(message or f"failed to inspect git range {git_range}")
+    return [
+        path.decode("utf-8", errors="surrogateescape")
+        for path in result.stdout.split(b"\0")
+        if path
+    ]
+
+
+def range_blob_size(repo_root: Path, revision: str, path: str) -> int:
+    result = _run_git(repo_root, ["cat-file", "-s", f"{revision}:{path}"])
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            message or f"failed to read blob size for {revision}:{path}"
+        )
+    return int(result.stdout.strip())
+
+
+def range_blob_bytes(repo_root: Path, revision: str, path: str) -> bytes:
+    result = _run_git(repo_root, ["show", f"{revision}:{path}"])
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(message or f"failed to read blob for {revision}:{path}")
+    return result.stdout
+
+
 def _match_digest(match: bytes) -> str:
     return hashlib.sha256(match).hexdigest()[:16]
 
@@ -143,7 +191,7 @@ def inspect_large_file(path: str, size: int, *, max_bytes: int) -> list[dict[str
         _finding(
             check="large_file",
             path=path,
-            reason=f"staged blob is {size} bytes; limit is {max_bytes} bytes",
+            reason=f"blob is {size} bytes; limit is {max_bytes} bytes",
         )
     ]
 
@@ -208,11 +256,44 @@ def inspect_staged_repo_hygiene(
     }
 
 
+def inspect_git_range_repo_hygiene(
+    repo_root: Path,
+    git_range: str,
+    *,
+    max_bytes: int = DEFAULT_MAX_STAGED_BYTES,
+) -> dict[str, Any]:
+    head = git_range_head(git_range)
+    paths = range_paths(repo_root, git_range)
+    findings: list[dict[str, str]] = []
+    checked_files: list[dict[str, Any]] = []
+
+    for path in paths:
+        size = range_blob_size(repo_root, head, path)
+        checked_files.append({"path": path, "size": size, "revision": head})
+        findings.extend(inspect_path_policy(path))
+        findings.extend(inspect_large_file(path, size, max_bytes=max_bytes))
+        if size <= max_bytes:
+            payload = range_blob_bytes(repo_root, head, path)
+            findings.extend(inspect_secret_leaks(path, payload))
+            findings.extend(inspect_personal_paths(path, payload))
+
+    return {
+        "status": "blocked" if findings else "ok",
+        "mode": "git-range",
+        "git_range": git_range,
+        "revision": head,
+        "max_bytes": max_bytes,
+        "checked_files": checked_files,
+        "findings": findings,
+    }
+
+
 def render_text_report(report: dict[str, Any]) -> str:
     if report["status"] == "ok":
         return (
             "Repo hygiene check passed: "
-            f"{len(report['checked_files'])} staged file(s) checked."
+            f"{len(report['checked_files'])} file(s) checked "
+            f"in {report['mode']} mode."
         )
 
     lines = ["Repo hygiene check failed:"]
@@ -232,7 +313,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--staged-only",
         action="store_true",
-        help="Validate only staged blobs. This is the supported K1 mode.",
+        help="Validate only staged blobs. This is the local hook mode.",
+    )
+    parser.add_argument(
+        "--git-range",
+        metavar="BASE..HEAD",
+        help=(
+            "Validate changed blobs in a git range. This is the CI mode and "
+            "reads blobs from the range head, not the dirty worktree."
+        ),
     )
     parser.add_argument(
         "--max-bytes",
@@ -248,16 +337,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not args.staged_only:
+    if args.staged_only == bool(args.git_range):
         print(
-            "Repo hygiene check requires --staged-only in this contour.",
+            "Repo hygiene check requires exactly one mode: "
+            "--staged-only or --git-range BASE..HEAD.",
             file=sys.stderr,
         )
         return 2
 
     try:
         repo_root = discover_repo_root()
-        report = inspect_staged_repo_hygiene(repo_root, max_bytes=args.max_bytes)
+        if args.staged_only:
+            report = inspect_staged_repo_hygiene(repo_root, max_bytes=args.max_bytes)
+        else:
+            report = inspect_git_range_repo_hygiene(
+                repo_root,
+                args.git_range,
+                max_bytes=args.max_bytes,
+            )
     except Exception as error:
         report = {
             "status": "blocked",
