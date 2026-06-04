@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T20:50:43.297496Z",
-  "model_catalog_schema_version_used": false,
-  "packet_kind": "version_pinning",
-  "provider_endpoint_version_status": "controlled_local_runtime_harness",
-  "python_version": "3.14.5",
-  "status": "ok",
-  "wbp_git_commit": "a065d064a64554e6af62d90e401e99e3b3a70545"
-}

@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-27T13:04:30.348347Z",
-  "local_only_close_claimed": false,
-  "next_contour_admitted_while_unclosed": false,
-  "packet_kind": "role_profile_ui_closeout_false_green_audit",
-  "push_attempt_treated_as_push_confirmed": false,
-  "remote_sha_matches_local_head": true,
-  "status": "ok"
-}

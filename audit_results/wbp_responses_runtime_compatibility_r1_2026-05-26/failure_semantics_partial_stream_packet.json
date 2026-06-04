@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T20:50:43.297609Z",
-  "classification": "not_exercised_buffered_upstream_then_local_sse",
-  "completed_event_required": true,
-  "observed_terminal_event": "response.completed",
-  "packet_kind": "failure_semantics_partial_stream",
-  "partial_stream_counts_as_pass": false,
-  "status": "ok"
-}

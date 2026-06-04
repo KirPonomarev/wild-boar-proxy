@@ -39,6 +39,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     json_write,
     scan_protected_surfaces,
 )
+from tools.historical_audit_fixtures import historical_audit_path
 
 
 TARGET_STATUS = "NATIVE_CUSTOM_SAFETY_REFRESH_CLASSIFIED"
@@ -392,7 +393,9 @@ def build_auth_boundary_refresh_packet(
     ambient_env_packet: dict[str, Any],
     original_auth_boundary_packet: dict[str, Any],
 ) -> dict[str, Any]:
-    summary_path = repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+    summary_path = historical_audit_path(
+        repo_root, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+    )
     summary = read_json(summary_path)
     selected_strategy = str(summary.get("selected_strategy", ""))
     reference = build_native_safety_reference_packet(
@@ -696,9 +699,15 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_scanner_agent_fact_report_packet(repo_root: Path) -> dict[str, Any]:
-    auth_summary = repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
-    cli_summary = repo_root / CLI_RUNNER_DIR / "cli_runner_summary_packet.json"
-    model_summary = repo_root / MODEL_AVAILABILITY_DIR / MODEL_AVAILABILITY_SUMMARY
+    auth_summary = historical_audit_path(
+        repo_root, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+    )
+    cli_summary = historical_audit_path(
+        repo_root, f"{CLI_RUNNER_DIR}/cli_runner_summary_packet.json"
+    )
+    model_summary = historical_audit_path(
+        repo_root, f"{MODEL_AVAILABILITY_DIR}/{MODEL_AVAILABILITY_SUMMARY}"
+    )
     return packet(
         "scanner_agent_fact_report",
         agent_role="read_only_scanner",
@@ -774,7 +783,9 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             packet_kind="provider_auth_strategy_reference",
             source_path=f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json",
             source_status=json_file_status(
-                repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+                historical_audit_path(
+                    repo_root, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+                )
             ),
             expected_status="WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
         ),
@@ -782,7 +793,9 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             packet_kind="cli_runner_reference",
             source_path=f"{CLI_RUNNER_DIR}/cli_runner_summary_packet.json",
             source_status=json_file_status(
-                repo_root / CLI_RUNNER_DIR / "cli_runner_summary_packet.json"
+                historical_audit_path(
+                    repo_root, f"{CLI_RUNNER_DIR}/cli_runner_summary_packet.json"
+                )
             ),
             expected_status="CODEX_CLI_RUNNER_VIA_WBP_WORKS_NOT_NATIVE_APP",
         ),
@@ -790,7 +803,9 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
             packet_kind="model_availability_reference",
             source_path=f"{MODEL_AVAILABILITY_DIR}/{MODEL_AVAILABILITY_SUMMARY}",
             source_status=json_file_status(
-                repo_root / MODEL_AVAILABILITY_DIR / MODEL_AVAILABILITY_SUMMARY
+                historical_audit_path(
+                    repo_root, f"{MODEL_AVAILABILITY_DIR}/{MODEL_AVAILABILITY_SUMMARY}"
+                )
             ),
             expected_status="WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
         ),
@@ -817,21 +832,30 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
                 {
                     "path": f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json",
                     "sha256": file_sha256(
-                        repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+                        historical_audit_path(
+                            repo_root,
+                            f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json",
+                        )
                     ),
                     "reference_only": True,
                 },
                 {
                     "path": f"{CLI_RUNNER_DIR}/cli_runner_summary_packet.json",
                     "sha256": file_sha256(
-                        repo_root / CLI_RUNNER_DIR / "cli_runner_summary_packet.json"
+                        historical_audit_path(
+                            repo_root,
+                            f"{CLI_RUNNER_DIR}/cli_runner_summary_packet.json",
+                        )
                     ),
                     "reference_only": True,
                 },
                 {
                     "path": f"{MODEL_AVAILABILITY_DIR}/{MODEL_AVAILABILITY_SUMMARY}",
                     "sha256": file_sha256(
-                        repo_root / MODEL_AVAILABILITY_DIR / MODEL_AVAILABILITY_SUMMARY
+                        historical_audit_path(
+                            repo_root,
+                            f"{MODEL_AVAILABILITY_DIR}/{MODEL_AVAILABILITY_SUMMARY}",
+                        )
                     ),
                     "reference_only": True,
                 },

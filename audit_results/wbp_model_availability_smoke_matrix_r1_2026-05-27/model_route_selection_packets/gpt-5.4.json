@@ -1,9 +1,0 @@
-{
-  "model_id": "gpt-5.4",
-  "provider_model_id": "gpt-5.4",
-  "route_family": "codex_native_account_route",
-  "route_family_required": true,
-  "route_id": "",
-  "selection_source": "direct_models_endpoint",
-  "unknown_unrouted_smoke_allowed": false
-}

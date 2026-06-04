@@ -1,9 +1,0 @@
-{
-  "default_model": "gpt-5.3-codex",
-  "endpoint": "http://127.0.0.1:8318/v1",
-  "host": "127.0.0.1",
-  "localhost_only": true,
-  "port": 62501,
-  "started_at_utc": "2026-05-23T16:04:24.735256Z",
-  "tmp_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-operator-surface-hardened-k7ix5mxr"
-}

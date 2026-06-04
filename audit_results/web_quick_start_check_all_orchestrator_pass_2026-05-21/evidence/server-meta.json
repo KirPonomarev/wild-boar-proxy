@@ -1,8 +1,0 @@
-{
-  "root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-check-all-ui-pe2x2_pl",
-  "profile_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-check-all-ui-pe2x2_pl/profile",
-  "data_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-check-all-ui-pe2x2_pl/managed",
-  "external_models_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-check-all-ui-pe2x2_pl/managed/external-models",
-  "mock_port": 56581,
-  "web_port": 58610
-}

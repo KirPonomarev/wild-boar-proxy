@@ -14,6 +14,7 @@ from tools.persistent_profile_pre_live_admission_r5_probe import (
     TARGET_STATUS,
     build_packets,
 )
+from tools.historical_audit_fixtures import historical_audit_path
 from wild_boar_proxy.persistent_profile_pre_live_admission import (
     R1_STATUS,
     R2_STATUS,
@@ -33,13 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def default_locations() -> list[PriorEvidenceLocation]:
     return [
-        PriorEvidenceLocation(key=key, evidence_dir=REPO_ROOT / path)
+        PriorEvidenceLocation(key=key, evidence_dir=historical_audit_path(REPO_ROOT, path))
         for key, path in DEFAULT_PRIOR_DIRS.items()
     ]
 
 
 def copy_evidence_tree(tmp: Path, key: str) -> Path:
-    source = REPO_ROOT / DEFAULT_PRIOR_DIRS[key]
+    source = historical_audit_path(REPO_ROOT, DEFAULT_PRIOR_DIRS[key])
     target = tmp / key
     shutil.copytree(source, target)
     return target

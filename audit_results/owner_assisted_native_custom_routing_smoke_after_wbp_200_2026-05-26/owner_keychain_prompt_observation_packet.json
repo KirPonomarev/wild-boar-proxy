@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:18:57.928030Z",
-  "keychain_prompt_blocked_launch": false,
-  "keychain_prompt_machine_observed": false,
-  "keychain_reset_or_default_authorized": false,
-  "machine_error_code": "KEYCHAIN_PROMPT_NOT_MACHINE_CLASSIFIED",
-  "note": "If macOS keychain prompt appeared, contour instruction was to press Cancel. This run does not claim machine proof of keychain behavior.",
-  "status": "not_machine_observed_or_owner_not_recorded_as_blocking"
-}

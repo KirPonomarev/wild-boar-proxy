@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:17:01.504737Z",
-  "direct_non_wbp_model_egress_absent_proven": false,
-  "full_provider_network_pass_claimed": false,
-  "machine_error_code": "DIRECT_EGRESS_NOT_PROVEN_IN_THIS_CONTOUR",
-  "note": "This contour used WBP trace observer but did not run a complete process-level egress capture.",
-  "status": "blocked_or_unproven_for_direct_egress"
-}

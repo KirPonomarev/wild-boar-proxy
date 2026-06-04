@@ -16,6 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools.historical_audit_fixtures import historical_audit_path
+
 
 CURRENT_PACKET_SOURCES = [
     {
@@ -120,8 +122,8 @@ def _read_text(path: Path) -> str:
 def _current_truth_inventory(repo_root: Path) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for source in CURRENT_PACKET_SOURCES:
-        packet_path = repo_root / source["packet"]
-        closeout_path = repo_root / source["closeout"]
+        packet_path = historical_audit_path(repo_root, source["packet"])
+        closeout_path = historical_audit_path(repo_root, source["closeout"])
         packet = _read_json(packet_path)
         rows.append(
             {
@@ -226,20 +228,28 @@ def _historical_seed_inventory(repo_root: Path) -> dict[str, Any]:
 
 def _reconciliation_matrix(repo_root: Path) -> dict[str, Any]:
     acceptance = _read_json(
-        repo_root
-        / "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/final_dual_lane_acceptance_matrix.json"
+        historical_audit_path(
+            repo_root,
+            "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/final_dual_lane_acceptance_matrix.json",
+        )
     )
     final_audit = _read_json(
-        repo_root
-        / "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/independent_audit_packet.json"
+        historical_audit_path(
+            repo_root,
+            "audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-28/independent_audit_packet.json",
+        )
     )
     current_vs_seed = _read_json(
-        repo_root
-        / "audit_results/generic_provider_and_model_registry_r1_2026-05-28/current_vs_seed_model_matrix.json"
+        historical_audit_path(
+            repo_root,
+            "audit_results/generic_provider_and_model_registry_r1_2026-05-28/current_vs_seed_model_matrix.json",
+        )
     )
     selector_seed_visibility = _read_json(
-        repo_root
-        / "audit_results/custom_codex_dual_lane_model_selection_ui_r1_2026-05-28/selector_current_vs_seed_visibility_packet.json"
+        historical_audit_path(
+            repo_root,
+            "audit_results/custom_codex_dual_lane_model_selection_ui_r1_2026-05-28/selector_current_vs_seed_visibility_packet.json",
+        )
     )
 
     rows = [

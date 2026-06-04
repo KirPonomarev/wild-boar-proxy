@@ -49,16 +49,16 @@ CODING_AGENT_MODEL_ID = "wbp-web-primary-openrouter"
 PROFILE_ID = "wbp-custom-main"
 
 IMPORTED_PACKET_PATHS = {
-    "provider_auth": "audit_results/generic_provider_auth_and_secret_admission_r1_2026-05-28/admitted_provider_list_packet.json",
-    "provider_registry": "audit_results/generic_provider_and_model_registry_r1_2026-05-28/generic_provider_registry_packet.json",
-    "provider_smoke_matrix": "audit_results/api_provider_compatibility_and_smoke_matrix_r1_2026-05-28/provider_smoke_matrix_packet.json",
-    "budget_boundary": "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/budget_boundary_packet.json",
-    "concurrency_boundary": "audit_results/budget_quota_fallback_and_concurrency_policy_r1_2026-05-28/concurrency_boundary_packet.json",
-    "acceleration_non_claims": "audit_results/acceleration_and_throughput_classification_r1_2026-05-28/acceleration_non_claims_packet.json",
-    "metadata_source_proof": "audit_results/model_intelligence_and_speed_metadata_fidelity_r1_2026-05-28/metadata_source_and_proof_level_packet.json",
-    "role_slot_persistence": "audit_results/persistent_profile_and_thread_history_r1_2026-05-28/role_slot_persistence_packet.json",
-    "thread_history_classification": "audit_results/persistent_profile_and_thread_history_r1_2026-05-28/thread_history_classification_packet.json",
-    "persistent_profile_safety_summary": "audit_results/custom_codex_persistent_profile_safety_r2_2026-05-28/persistent_profile_safety_summary_packet.json",
+    "provider_auth": "tests/fixtures/final_dual_lane_imported_packets/admitted_provider_list_packet.json",
+    "provider_registry": "tests/fixtures/final_dual_lane_imported_packets/generic_provider_registry_packet.json",
+    "provider_smoke_matrix": "tests/fixtures/final_dual_lane_imported_packets/provider_smoke_matrix_packet.json",
+    "budget_boundary": "tests/fixtures/final_dual_lane_imported_packets/budget_boundary_packet.json",
+    "concurrency_boundary": "tests/fixtures/final_dual_lane_imported_packets/concurrency_boundary_packet.json",
+    "acceleration_non_claims": "tests/fixtures/final_dual_lane_imported_packets/acceleration_non_claims_packet.json",
+    "metadata_source_proof": "tests/fixtures/final_dual_lane_imported_packets/metadata_source_and_proof_level_packet.json",
+    "role_slot_persistence": "tests/fixtures/final_dual_lane_imported_packets/role_slot_persistence_packet.json",
+    "thread_history_classification": "tests/fixtures/final_dual_lane_imported_packets/thread_history_classification_packet.json",
+    "persistent_profile_safety_summary": "tests/fixtures/final_dual_lane_imported_packets/persistent_profile_safety_summary_packet.json",
 }
 
 

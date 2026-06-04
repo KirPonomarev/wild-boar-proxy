@@ -1,0 +1,5 @@
+{
+  "concurrent_execution_blocked_observed": true,
+  "packet_kind": "final_dual_lane_imported_concurrency_boundary_fixture",
+  "status": "ok"
+}

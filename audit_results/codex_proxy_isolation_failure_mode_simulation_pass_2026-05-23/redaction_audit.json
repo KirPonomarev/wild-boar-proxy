@@ -1,9 +1,0 @@
-{
-  "findings": [],
-  "notes": [
-    "mock-key is fake test credential; sandbox auth contents are not stored",
-    "Authorization headers are stored as presence booleans or redacted strings"
-  ],
-  "schema_version": 1,
-  "status": "pass"
-}

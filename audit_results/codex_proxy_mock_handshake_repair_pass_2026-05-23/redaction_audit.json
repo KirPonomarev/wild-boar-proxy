@@ -1,9 +1,0 @@
-{
-  "findings": [],
-  "notes": [
-    "mock-key is fake and allowed",
-    "Authorization stored redacted or as presence boolean"
-  ],
-  "schema_version": 1,
-  "status": "pass"
-}

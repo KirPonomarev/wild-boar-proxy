@@ -1,9 +1,0 @@
-{
-  "auth_materialized": false,
-  "captured_at_utc": "2026-05-28T23:16:40.728927Z",
-  "material_mismatch_detected": false,
-  "owner_dependency_classification": "owner_action_pending",
-  "recommended_closure": "owner_action_pending_localized",
-  "session_handoff_present": true,
-  "stable_runtime_http_status": 503
-}

@@ -1,7 +1,0 @@
-{
-  "auth_materialized_counts_as_runnable_native_responses": false,
-  "captured_at_utc": "2026-05-28T23:16:40.728931Z",
-  "login_started_counts_as_native_recovery": false,
-  "one_recovered_auth_path_counts_as_broad_native_lane_health": false,
-  "stable_runtime_reproof_counts_as_launched_custom_codex_recovery": false
-}

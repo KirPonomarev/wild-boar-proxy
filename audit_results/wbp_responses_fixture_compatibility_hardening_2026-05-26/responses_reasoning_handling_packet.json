@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:53:04.804650Z",
-  "fixture": "reasoning_item_input.json",
-  "machine_error_code": "REASONING_INPUT_IGNORED_NOT_PASSTHROUGH",
-  "reasoning_passthrough_claimed": false,
-  "reasoning_summary_leak_blocked_by_test": true,
-  "status": "ok_with_limits",
-  "test": "test_wbp_responses_reasoning_item_classified"
-}

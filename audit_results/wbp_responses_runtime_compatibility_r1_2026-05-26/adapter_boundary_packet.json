@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T20:50:43.297637Z",
-  "deterministic_fixture_scope": "openai_chat_completions_shape_only",
-  "generic_runtime_harness_proves_provider_family_compatibility": false,
-  "packet_kind": "adapter_boundary",
-  "provider_family_adapter_claims_absent": true,
-  "status": "ok"
-}

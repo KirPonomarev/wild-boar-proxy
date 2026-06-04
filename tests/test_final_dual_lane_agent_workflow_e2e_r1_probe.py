@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from tools.final_dual_lane_agent_workflow_e2e_r1_probe import (
+    IMPORTED_PACKET_PATHS,
     _build_provenance_matrix,
     _dangerous_provenance_transitions,
     _provenance_row,
@@ -23,6 +24,12 @@ TOOL = ROOT / "tools" / "final_dual_lane_agent_workflow_e2e_r1_probe.py"
 
 
 class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
+    def test_imported_packets_use_deliberate_fixtures_not_raw_audit_results(self) -> None:
+        for relative_path in IMPORTED_PACKET_PATHS.values():
+            self.assertTrue(relative_path.startswith("tests/fixtures/"))
+            self.assertFalse(relative_path.startswith("audit_results/"))
+            self.assertTrue((ROOT / relative_path).is_file())
+
     def test_provenance_guard_blocks_dangerous_layer_transitions(self) -> None:
         rows = [
             _provenance_row(

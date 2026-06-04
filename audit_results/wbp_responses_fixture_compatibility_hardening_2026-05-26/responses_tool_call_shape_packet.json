@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:53:04.804462Z",
-  "classification": "tool_call_input_translated_to_openai_chat_tool_calls",
-  "complete_tool_loop_claimed": false,
-  "fixture": "tool_call_request.json",
-  "machine_error_code": "OK",
-  "status": "ok",
-  "test": "test_wbp_responses_tool_call_shape_required"
-}

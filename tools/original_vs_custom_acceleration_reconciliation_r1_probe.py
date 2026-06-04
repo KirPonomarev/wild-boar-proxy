@@ -21,6 +21,7 @@ from wild_boar_proxy.native_launch_contract import (  # noqa: E402
     NATIVE_LAUNCH_MODES,
     build_native_launch_contract_packet,
 )
+from tools.historical_audit_fixtures import historical_audit_path  # noqa: E402
 
 
 ACCELERATION_DIR = Path("audit_results/acceleration_and_throughput_classification_r1_2026-05-28")
@@ -89,26 +90,28 @@ def _version_scope(repo_root: Path) -> dict[str, str]:
 def _required_inputs(repo_root: Path) -> dict[str, dict[str, Any]]:
     return {
         "lane_measurement_comparison": _read_json(
-            repo_root / ACCELERATION_DIR / "lane_measurement_comparison_packet.json"
+            historical_audit_path(repo_root, ACCELERATION_DIR / "lane_measurement_comparison_packet.json")
         ),
         "latency_classification": _read_json(
-            repo_root / ACCELERATION_DIR / "latency_classification_packet.json"
+            historical_audit_path(repo_root, ACCELERATION_DIR / "latency_classification_packet.json")
         ),
         "measurement_integrity": _read_json(
-            repo_root / ACCELERATION_DIR / "measurement_integrity_packet.json"
+            historical_audit_path(repo_root, ACCELERATION_DIR / "measurement_integrity_packet.json")
         ),
         "acceleration_non_claims": _read_json(
-            repo_root / ACCELERATION_DIR / "acceleration_non_claims_packet.json"
+            historical_audit_path(repo_root, ACCELERATION_DIR / "acceleration_non_claims_packet.json")
         ),
-        "final_runtime": _read_json(repo_root / FINAL_E2E_DIR / "final_dual_lane_runtime_packet.json"),
+        "final_runtime": _read_json(
+            historical_audit_path(repo_root, FINAL_E2E_DIR / "final_dual_lane_runtime_packet.json")
+        ),
         "final_integrity": _read_json(
-            repo_root / FINAL_E2E_DIR / "final_dual_lane_integrity_packet.json"
+            historical_audit_path(repo_root, FINAL_E2E_DIR / "final_dual_lane_integrity_packet.json")
         ),
         "integrity_strengthening": _read_json(
-            repo_root / INTEGRITY_DIR / "integrity_strengthening_packet.json"
+            historical_audit_path(repo_root, INTEGRITY_DIR / "integrity_strengthening_packet.json")
         ),
         "original_codex_untouched": _read_json(
-            repo_root / INTEGRITY_DIR / "original_codex_untouched_packet.json"
+            historical_audit_path(repo_root, INTEGRITY_DIR / "original_codex_untouched_packet.json")
         ),
     }
 

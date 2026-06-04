@@ -61,6 +61,7 @@ COMMAND_PACKET_SAFE_REFERENCE_KEYS = (
     "token_source_kind",
     "token_ref",
     "token_refs",
+    "token_status",
 )
 COMMAND_PACKET_SAFE_METADATA_KEY_SUFFIXES = (
     "_emitted",

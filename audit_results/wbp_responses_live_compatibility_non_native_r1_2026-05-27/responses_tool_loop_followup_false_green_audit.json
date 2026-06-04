@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-27T08:51:25.022121Z",
-  "findings": [],
-  "packet_kind": "responses_tool_loop_followup_false_green_audit",
-  "status": "ok",
-  "tool_loop_followup_failure_implies_model_unavailable": false,
-  "tool_loop_followup_failure_implies_provider_incompatible": false,
-  "tool_loop_followup_success_implies_broad_tools_capability": false
-}

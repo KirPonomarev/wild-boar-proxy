@@ -1,2 +1,0 @@
-COMMAND    PID            USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
-cli-proxy 1364 kirillponomarev    7u  IPv4 0x77672ad41d4f7f95      0t0  TCP 127.0.0.1:8318 (LISTEN)

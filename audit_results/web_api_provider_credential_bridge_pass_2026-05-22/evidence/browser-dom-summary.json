@@ -1,9 +1,0 @@
-{
-  "actionMachineCode": "OK",
-  "actionRefreshStatus": "canonical refresh complete",
-  "actionStatus": "ok",
-  "actionUiAction": "api_route_connect",
-  "apiCard": "\n                \n                  openrouter\n                  gpt-5.4 · main route\n                \n                \n              ",
-  "ledgerText": "api_route_connect · -14:10:44подтвержденоtarget - · machine OK · refresh canonical refresh completeExternal-models route validation captured provider evidence without claiming runtime readiness.command packet outcome only · Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.machineOKnextnonerefreshcanonical refresh completedisplayok_refresh_completeclaim scopeapi_route_admissionchanged files1 metadata entriescredential_phase=credential_admitted · credential_present=true · credential_admitted=true · credential_ref=OPENROUTER_API_KEY · browser_api_key_intake=false · secret_exposed=falseapi_route_connect · -14:10:43выполняетсяtarget - · machine RUNNING · refresh refresh not requiredДействие выполняется.command packet outcome only · Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.machineRUNNINGnextwaitrefreshrefresh not requireddisplayrunningclaim scoperunningchanged files0 metadata entriescredential_phase=unknown · credential_present=false · credential_admitted=false · credential_ref=- · browser_api_key_intake=unknown · secret_exposed=unknown",
-  "url": "http://127.0.0.1:8788/?screen=quick-start&source=live"
-}

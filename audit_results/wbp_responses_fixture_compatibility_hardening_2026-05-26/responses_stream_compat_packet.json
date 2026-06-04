@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:53:04.804267Z",
-  "event_fixture": "stream_text_events.ndjson",
-  "fixture": "stream_text_request.json",
-  "machine_error_code": "OK",
-  "status": "ok",
-  "streaming_full_provider_claimed": false,
-  "test": "test_wbp_responses_stream_sse_sequence_required"
-}

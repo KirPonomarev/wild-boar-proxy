@@ -1,9 +1,0 @@
-{
-  "auth_strategy_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
-  "captured_at_utc": "2026-05-26T17:59:03.716872Z",
-  "model_availability_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
-  "owner_assisted_native_baseline": "OWNER_ASSISTED_NATIVE_CUSTOM_WBP_200_RESPONSE_PROVEN_WITH_LIMITS",
-  "packet_kind": "reference_prerequisites",
-  "references_are_prerequisite_only": true,
-  "status": "ok"
-}

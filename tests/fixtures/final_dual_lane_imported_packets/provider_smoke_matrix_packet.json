@@ -1,0 +1,7 @@
+{
+  "packet_kind": "final_dual_lane_imported_provider_smoke_matrix_fixture",
+  "provider_family_compatibility_claimed": false,
+  "status": "ok",
+  "streaming_compatibility_claimed": false,
+  "tool_compatibility_claimed": false
+}

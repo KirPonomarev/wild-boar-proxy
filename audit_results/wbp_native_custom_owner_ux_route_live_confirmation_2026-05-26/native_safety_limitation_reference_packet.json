@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T12:14:05.029583Z",
-  "direct_egress_reproved_in_this_contour": false,
-  "filesystem_safety_reproved_in_this_contour": false,
-  "machine_ui_reproved_in_this_contour": false,
-  "packet_kind": "native_safety_limitation_reference",
-  "status": "ok"
-}

@@ -1,9 +1,0 @@
-{
-  "checklist": [
-    {"step": "provider_alive", "observed": true, "packet": "curl http://127.0.0.1:8318/v1/models"},
-    {"step": "cli_runner_smoke", "observed": true, "packet": "codex-runner smoke --json", "current_codex_untouched": true},
-    {"step": "custom_native_launch_routing", "observed": true, "proven_in_prior_contours": true},
-    {"step": "original_via_wbp_reversible", "observed": true, "proven_in_prior_contour": true, "config_sha256_restored": true},
-    {"step": "honest_gap_declaration", "observed": true, "ui_input_unproven": true, "reason": "AX/CG host limitation"}
-  ]
-}

@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T20:50:43.297517Z",
-  "content_type": "text/event-stream",
-  "event_count": 9,
-  "http_status": 200,
-  "packet_kind": "responses_stream_runtime_harness",
-  "response_body_sha256": "c201925616d625f496b8a6f2ecad8b639c7872d2ffc57c7545ad2d8442c242c8",
-  "status": "ok"
-}

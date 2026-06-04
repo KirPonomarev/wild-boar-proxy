@@ -18,10 +18,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from wild_boar_proxy.native_filesystem_probe import json_write
+from tools.historical_audit_fixtures import historical_audit_path
 
 
-ADMISSION_PACKET = ROOT / "audit_results/wbp_optional_annex_admission_stop_classification_r1_2026-05-27/optional_annex_admission_status_packet.json"
-DESIGN_GATE_PACKET = ROOT / "audit_results/web_design_gate_admission_check_pass_2026-05-16/decision_packet.json"
+ADMISSION_PACKET = historical_audit_path(
+    ROOT,
+    "audit_results/wbp_optional_annex_admission_stop_classification_r1_2026-05-27/optional_annex_admission_status_packet.json",
+)
+DESIGN_GATE_PACKET = historical_audit_path(
+    ROOT,
+    "audit_results/web_design_gate_admission_check_pass_2026-05-16/decision_packet.json",
+)
 HTML_PATH = ROOT / "wild_boar_proxy/web_design_ui/index.html"
 JS_PATH = ROOT / "wild_boar_proxy/web_design_ui/scripts/overview.js"
 CSS_PATH = ROOT / "wild_boar_proxy/web_design_ui/styles/overview.css"

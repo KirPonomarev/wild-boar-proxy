@@ -16,6 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools.historical_audit_fixtures import historical_audit_path
+
 
 FINAL_DIR = Path("audit_results/final_dual_lane_agent_workflow_e2e_r1_2026-05-29")
 API_MATRIX_DIR = Path("audit_results/api_provider_compatibility_and_smoke_matrix_r1_2026-05-28")
@@ -44,7 +46,7 @@ def json_write(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _read_json(repo_root: Path, relative_path: Path | str) -> dict[str, Any]:
-    return json.loads((repo_root / relative_path).read_text(encoding="utf-8"))
+    return json.loads(historical_audit_path(repo_root, relative_path).read_text(encoding="utf-8"))
 
 
 def _blocker_row(

@@ -21,6 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from wild_boar_proxy.native_filesystem_probe import classify_keychain_observation, json_write
 from wild_boar_proxy.provider_auth_strategy import build_current_codex_auth_independence_packet
+from tools.historical_audit_fixtures import historical_audit_path
 
 
 TARGET_STATUS = "CODEX_CUSTOM_KEYCHAIN_PROMPT_BEHAVIOR_READINESS_R1_CLASSIFIED"
@@ -301,7 +302,9 @@ def build_auth_strategy_prompt_interaction_readiness_packet(
     repo_root: Path,
     provider_auth_strategy_packet: dict[str, Any],
 ) -> dict[str, Any]:
-    summary_path = repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+    summary_path = historical_audit_path(
+        repo_root, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+    )
     summary = read_json(summary_path)
     selected = str(
         summary.get("selected_strategy")
@@ -585,7 +588,9 @@ def build_summary_packet(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_readiness_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, Any]]:
-    provider_auth_path = repo_root / AUTH_STRATEGY_DIR / "provider_auth_strategy_packet.json"
+    provider_auth_path = historical_audit_path(
+        repo_root, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_packet.json"
+    )
     provider_auth = read_json(provider_auth_path)
     keychain_observation = classify_keychain_observation(machine_prompt_observed=False)
     owner_action = build_keychain_allowed_owner_action_boundary_packet()

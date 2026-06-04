@@ -1,0 +1,18 @@
+{
+  "backup_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfileBackups/wbp-custom-main",
+  "browser_client_path_authority": false,
+  "captured_at_utc": "2026-05-27T06:21:14.406015Z",
+  "packet_kind": "persistent_restore_path_authority",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "reason_class": "",
+  "remote_client_path_authority": false,
+  "restore_executed": false,
+  "restore_execution_allowed": false,
+  "restore_target_escapes_persistent_profile": false,
+  "restore_target_is_persistent_profile_root": true,
+  "restore_target_overlaps_backup_root": false,
+  "restore_target_overlaps_original_codex": false,
+  "restore_target_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "status": "ok"
+}
