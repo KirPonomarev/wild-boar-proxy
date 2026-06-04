@@ -246,6 +246,54 @@ class AccountLifecycleFsmTests(unittest.TestCase):
         self.assertNotIn("machine_error_code", result)
         self.assertNotIn("human_message", result)
 
+    def test_retire_precondition_adapter_maps_packet_vocabulary(self) -> None:
+        cases = (
+            ("active", False, "active", "eligible_active_backend_for_retire", True),
+            (
+                "active",
+                True,
+                "held_active",
+                "eligible_active_backend_for_retire",
+                True,
+            ),
+            ("reserve", False, "reserve", "eligible_reserve_backend_for_retire", True),
+            (
+                "reserve",
+                True,
+                "held_reserve",
+                "eligible_reserve_backend_for_retire",
+                True,
+            ),
+            ("retired", False, "retired", "already_retired", True),
+            ("retired", True, "retired", "already_retired", True),
+            (
+                "unexpected",
+                False,
+                "invalid_pool",
+                "invalid_lifecycle_precondition",
+                False,
+            ),
+        )
+
+        for pool, manual_hold, state, precondition, mapped in cases:
+            with self.subTest(pool=pool, manual_hold=manual_hold):
+                result = accounts_lifecycle.classify_retire_lifecycle_precondition(
+                    pool, manual_hold
+                )
+                self.assertEqual(result["effective_state"], state)
+                self.assertEqual(result["retire_precondition_status"], precondition)
+                self.assertIs(result["mapped_to_packet_vocabulary"], mapped)
+
+    def test_retire_adapter_keeps_runtime_proof_out_of_fsm(self) -> None:
+        result = accounts_lifecycle.classify_retire_lifecycle_precondition(
+            "retired", False
+        )
+
+        self.assertEqual(result["retire_precondition_status"], "already_retired")
+        self.assertNotIn("terminal_no_return_confirmed", result)
+        self.assertNotIn("machine_error_code", result)
+        self.assertNotIn("human_message", result)
+
     def test_fsm_helpers_are_pure(self) -> None:
         forbidden_calls = {
             "Path",
@@ -265,6 +313,7 @@ class AccountLifecycleFsmTests(unittest.TestCase):
             "classify_account_lifecycle_transition",
             "classify_protective_lifecycle_precondition",
             "classify_demote_lifecycle_precondition",
+            "classify_retire_lifecycle_precondition",
         ):
             with self.subTest(function=function):
                 calls = _call_names(_function(ACCOUNTS_LIFECYCLE, function))

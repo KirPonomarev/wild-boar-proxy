@@ -15071,28 +15071,14 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         )
 
     before = snapshot_known_files(paths)
-    before_registry = read_json(paths.registry_file)
-    before_state = read_json(paths.state_file, required=False)
-    before_routing_ids = routing_eligible_active_backend_ids(before_registry)
-    before_selected_backend_ids = selected_backend_ids_from_state(before_state)
     command = ["retire", backend_id]
-    backend_matches = get_registry_backends_by_id(before_registry, backend_id)
-    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    previous_pool = (
-        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
-    )
-    previous_manual_hold = bool(
-        selected_backend.get("manual_hold", False)
-        if isinstance(selected_backend, dict)
-        else False
-    )
     retire_result: dict[str, Any] = {
         "status": "owner_path_emitted",
         "attempted": True,
         "backend_id": backend_id,
         "precondition_status": "pending",
-        "previous_pool": previous_pool,
-        "previous_manual_hold": previous_manual_hold,
+        "previous_pool": "",
+        "previous_manual_hold": False,
         "requested_transition": "retire_terminal",
         "rollback_point_captured": False,
         "routing_change_attempted": False,
@@ -15183,67 +15169,92 @@ def _run_retire_impl(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 extra=payload_extra,
             )
 
-    if not backend_matches:
-        retire_result["precondition_status"] = "backend_missing"
-        retire_result["final_outcome"] = "precondition_failed"
-        return build_retire_payload(
-            ok=False,
-            human_message="Retirement target backend does not exist.",
-            machine_error_code="RETIRE_PRECONDITION_FAILED",
-            operator_action="user_action",
+    with serialized_lock(paths):
+        before_registry = read_json(paths.registry_file)
+        before_state = read_json(paths.state_file, required=False)
+        before_routing_ids = routing_eligible_active_backend_ids(before_registry)
+        before_selected_backend_ids = selected_backend_ids_from_state(before_state)
+        backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+        selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+        previous_pool = (
+            str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
         )
+        previous_manual_hold = bool(
+            selected_backend.get("manual_hold", False)
+            if isinstance(selected_backend, dict)
+            else False
+        )
+        retire_result["previous_pool"] = previous_pool
+        retire_result["previous_manual_hold"] = previous_manual_hold
 
-    if len(backend_matches) > 1:
-        retire_result["precondition_status"] = "ambiguous_backend_id"
-        retire_result["final_outcome"] = "precondition_failed"
-        return build_retire_payload(
-            ok=False,
-            human_message="Retirement target backend is ambiguous.",
-            machine_error_code="RETIRE_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if previous_pool == "retired":
-        retire_result["precondition_status"] = "already_retired"
-        retire_result["terminal_no_return_confirmed"] = bool(
-            backend_id not in set(before_routing_ids)
-            and backend_id not in set(before_selected_backend_ids)
-            and not previous_manual_hold
-        )
-        if not retire_result["terminal_no_return_confirmed"]:
+        if not backend_matches:
+            retire_result["precondition_status"] = "backend_missing"
             retire_result["final_outcome"] = "precondition_failed"
             return build_retire_payload(
                 ok=False,
-                human_message="Retired backend does not satisfy terminal no-return proof.",
-                machine_error_code="RETIRE_STATUS_FAILED",
+                human_message="Retirement target backend does not exist.",
+                machine_error_code="RETIRE_PRECONDITION_FAILED",
                 operator_action="user_action",
             )
-        retire_result["final_outcome"] = "already_retired"
-        retire_result["rollback_outcome"] = "not_needed"
-        return build_retire_payload(
-            ok=True,
-            human_message="Backend is already retired with terminal no-return proof.",
-            machine_error_code="OK",
-            operator_action="none",
+
+        if len(backend_matches) > 1:
+            retire_result["precondition_status"] = "ambiguous_backend_id"
+            retire_result["final_outcome"] = "precondition_failed"
+            return build_retire_payload(
+                ok=False,
+                human_message="Retirement target backend is ambiguous.",
+                machine_error_code="RETIRE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        retire_precondition = (
+            accounts_lifecycle.classify_retire_lifecycle_precondition(
+                previous_pool, previous_manual_hold
+            )
         )
+        precondition_status = str(retire_precondition["retire_precondition_status"])
+        if precondition_status == "invalid_lifecycle_precondition":
+            precondition_status = "backend_not_retirable_pool"
+        retire_result["precondition_status"] = precondition_status
 
-    if previous_pool not in {"active", "reserve"}:
-        retire_result["precondition_status"] = "backend_not_retirable_pool"
-        retire_result["final_outcome"] = "precondition_failed"
-        return build_retire_payload(
-            ok=False,
-            human_message="Only active or reserve backends are eligible for retirement.",
-            machine_error_code="RETIRE_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
+        if precondition_status == "already_retired":
+            retire_result["terminal_no_return_confirmed"] = bool(
+                backend_id not in set(before_routing_ids)
+                and backend_id not in set(before_selected_backend_ids)
+                and not previous_manual_hold
+            )
+            if not retire_result["terminal_no_return_confirmed"]:
+                retire_result["final_outcome"] = "precondition_failed"
+                return build_retire_payload(
+                    ok=False,
+                    human_message="Retired backend does not satisfy terminal no-return proof.",
+                    machine_error_code="RETIRE_STATUS_FAILED",
+                    operator_action="user_action",
+                )
+            retire_result["final_outcome"] = "already_retired"
+            retire_result["rollback_outcome"] = "not_needed"
+            return build_retire_payload(
+                ok=True,
+                human_message="Backend is already retired with terminal no-return proof.",
+                machine_error_code="OK",
+                operator_action="none",
+            )
 
-    retire_result["precondition_status"] = (
-        "eligible_active_backend_for_retire"
-        if previous_pool == "active"
-        else "eligible_reserve_backend_for_retire"
-    )
+        if precondition_status not in {
+            "eligible_active_backend_for_retire",
+            "eligible_reserve_backend_for_retire",
+        }:
+            retire_result["precondition_status"] = "backend_not_retirable_pool"
+            retire_result["final_outcome"] = "precondition_failed"
+            return build_retire_payload(
+                ok=False,
+                human_message="Only active or reserve backends are eligible for retirement.",
+                machine_error_code="RETIRE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
 
-    with serialized_lock(paths):
+        retire_result["precondition_status"] = precondition_status
+
         rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
         retire_result["rollback_point_captured"] = True
         process_result = run_bounded_process(

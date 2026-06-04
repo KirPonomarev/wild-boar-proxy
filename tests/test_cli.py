@@ -18745,6 +18745,136 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_retire_preconditions_use_fsm_adapter(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].extend(
+            [
+                self.build_backend(
+                    backend_id="backend-active-held-retire",
+                    auth_ref="/tmp/codex-active-held-retire.json",
+                    pool="active",
+                    manual_hold=True,
+                ),
+                self.build_backend(
+                    backend_id="backend-reserve-retire-precondition",
+                    auth_ref="/tmp/codex-reserve-retire-precondition.json",
+                    pool="reserve",
+                ),
+                self.build_backend(
+                    backend_id="backend-retired-precondition",
+                    auth_ref="/tmp/codex-retired-precondition.json",
+                    pool="retired",
+                ),
+                self.build_backend(
+                    backend_id="backend-retired-held-precondition",
+                    auth_ref="/tmp/codex-retired-held-precondition.json",
+                    pool="retired",
+                    manual_hold=True,
+                ),
+                self.build_backend(
+                    backend_id="backend-invalid-retire-precondition",
+                    auth_ref="/tmp/codex-invalid-retire-precondition.json",
+                    pool="hold",
+                ),
+            ]
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        calls: list[tuple[str, bool]] = []
+
+        def fake_retire_precondition(pool: str, manual_hold: bool) -> dict[str, str]:
+            calls.append((pool, manual_hold))
+            if pool == "retired":
+                return {"retire_precondition_status": "already_retired"}
+            if pool == "hold":
+                return {
+                    "retire_precondition_status": "invalid_lifecycle_precondition"
+                }
+            return {"retire_precondition_status": "backend_not_retirable_pool"}
+
+        def fail_if_subprocess_runs(*_args, **_kwargs):
+            raise AssertionError("retire subprocess should not run")
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod.accounts_lifecycle,
+                "classify_retire_lifecycle_precondition",
+                side_effect=fake_retire_precondition,
+            ), mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fail_if_subprocess_runs,
+            ) as run_process:
+                cases = (
+                    (
+                        "backend-a",
+                        "backend_not_retirable_pool",
+                        "precondition_failed",
+                        "RETIRE_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-active-held-retire",
+                        "backend_not_retirable_pool",
+                        "precondition_failed",
+                        "RETIRE_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-reserve-retire-precondition",
+                        "backend_not_retirable_pool",
+                        "precondition_failed",
+                        "RETIRE_PRECONDITION_FAILED",
+                    ),
+                    (
+                        "backend-retired-precondition",
+                        "already_retired",
+                        "already_retired",
+                        "OK",
+                    ),
+                    (
+                        "backend-retired-held-precondition",
+                        "already_retired",
+                        "precondition_failed",
+                        "RETIRE_STATUS_FAILED",
+                    ),
+                    (
+                        "backend-invalid-retire-precondition",
+                        "backend_not_retirable_pool",
+                        "precondition_failed",
+                        "RETIRE_PRECONDITION_FAILED",
+                    ),
+                )
+                for (
+                    backend_id,
+                    precondition,
+                    final_outcome,
+                    machine_error_code,
+                ) in cases:
+                    with self.subTest(backend_id=backend_id):
+                        payload = runtime_mod.run_retire(paths, backend_id)
+                        retire = payload["retire_result"]
+                        self.assertEqual(
+                            retire["precondition_status"], precondition
+                        )
+                        self.assertEqual(retire["final_outcome"], final_outcome)
+                        self.assertEqual(
+                            payload["machine_error_code"], machine_error_code
+                        )
+
+                run_process.assert_not_called()
+
+        self.assertEqual(
+            calls,
+            [
+                ("active", False),
+                ("active", True),
+                ("reserve", False),
+                ("retired", False),
+                ("retired", True),
+                ("hold", False),
+            ],
+        )
+
     def test_accounts_retire_retires_reserve_backend_without_false_routing_claims(
         self,
     ) -> None:

@@ -94,6 +94,17 @@ ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_BACKEND_HELD = "backend_held"
 ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_NOT_ACTIVE = "backend_not_active"
 ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
 
+ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_ELIGIBLE_ACTIVE = (
+    "eligible_active_backend_for_retire"
+)
+ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_ELIGIBLE_RESERVE = (
+    "eligible_reserve_backend_for_retire"
+)
+ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_NOT_RETIRABLE = (
+    "backend_not_retirable_pool"
+)
+ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_INVALID = "invalid_lifecycle_precondition"
+
 
 class AccountLifecyclePaths(Protocol):
     pass
@@ -328,6 +339,45 @@ def classify_demote_lifecycle_precondition(
         "demote_precondition_status": demote_status,
         "mapped_to_packet_vocabulary": (
             demote_status != ACCOUNT_LIFECYCLE_DEMOTE_PRECONDITION_INVALID
+        ),
+    }
+
+
+def classify_retire_lifecycle_precondition(
+    pool: str, manual_hold: bool
+) -> dict[str, Any]:
+    effective_state = classify_account_lifecycle_state(pool, manual_hold)
+    transition = classify_account_lifecycle_transition(
+        effective_state, ACCOUNT_LIFECYCLE_ACTION_RETIRE
+    )
+    retire_status = ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_INVALID
+
+    transition_precondition = str(transition["precondition_status"])
+
+    if transition_precondition == ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_RETIRED:
+        retire_status = ACCOUNT_LIFECYCLE_PRECONDITION_ALREADY_RETIRED
+    elif (
+        transition["transition_status"] == ACCOUNT_LIFECYCLE_TRANSITION_ALLOWED
+        and transition["target_state"] == ACCOUNT_LIFECYCLE_STATE_RETIRED
+    ):
+        if pool == ACCOUNT_LIFECYCLE_POOL_ACTIVE:
+            retire_status = ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_ELIGIBLE_ACTIVE
+        elif pool == ACCOUNT_LIFECYCLE_POOL_RESERVE:
+            retire_status = ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_ELIGIBLE_RESERVE
+        else:
+            retire_status = ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_NOT_RETIRABLE
+    elif (
+        transition_precondition
+        == ACCOUNT_LIFECYCLE_PRECONDITION_NOT_LIFECYCLE_ACTION
+    ):
+        retire_status = ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_NOT_RETIRABLE
+
+    return {
+        **transition,
+        "effective_state": effective_state,
+        "retire_precondition_status": retire_status,
+        "mapped_to_packet_vocabulary": (
+            retire_status != ACCOUNT_LIFECYCLE_RETIRE_PRECONDITION_INVALID
         ),
     }
 
