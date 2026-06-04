@@ -742,12 +742,15 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         calls = _call_names(source)
         forbidden = {
             "clear_stale_managed_pid_if_needed",
+            "read_text",
             "reconcile_stable_fallback",
             "refresh_last_known_good_proxy_from_healthcheck",
             "run_current_proxy_owner_path_activation",
             "run_stable_runtime_launcher_attempt",
             "run_startup_contract_repair_owner_path",
+            "write_json_atomic",
             "write_stable_runtime_consumer_snapshot",
+            "write_text_atomic",
         }
 
         self.assertEqual(calls & forbidden, set())
@@ -2904,6 +2907,125 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                     payload["activation_method"],
                     runtime_repair.STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
                 )
+
+    def test_runtime_generated_stable_runtime_config_text_facade_matches_repair_module(
+        self,
+    ) -> None:
+        stable_config_text = (
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            'auth-dir: "/tmp/old-auth"\n'
+            "label: stable\n"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.stable_config.write_text(stable_config_text, encoding="utf-8")
+
+            facade_text = runtime_mod.build_generated_stable_runtime_config_text(paths)
+            direct_text = (
+                runtime_repair.build_generated_stable_runtime_config_text_from_inputs(
+                    stable_config_text=stable_config_text,
+                    repair_target_inventory_dir=str(
+                        paths.repair_target_inventory_dir
+                    ),
+                )
+            )
+
+            self.assertEqual(
+                paths.stable_config.read_text(encoding="utf-8"),
+                stable_config_text,
+            )
+
+        self.assertEqual(facade_text, direct_text)
+        self.assertEqual(
+            facade_text,
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{paths.repair_target_inventory_dir}"\n'
+            "label: stable",
+        )
+
+    def test_runtime_generated_stable_runtime_config_text_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = "generated-config-text"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.stable_config.write_text(
+                "host: 127.0.0.1\nport: 8318\n", encoding="utf-8"
+            )
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_generated_stable_runtime_config_text_from_inputs",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_generated_stable_runtime_config_text(paths)
+
+        self.assertEqual(payload, expected)
+        builder.assert_called_once_with(
+            stable_config_text="host: 127.0.0.1\nport: 8318\n",
+            repair_target_inventory_dir=str(paths.repair_target_inventory_dir),
+        )
+
+    def test_runtime_generated_stable_runtime_config_text_facade_preserves_missing_config_error(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.stable_config.unlink()
+
+            with self.assertRaises(runtime_mod.RuntimeErrorInfo) as raised:
+                runtime_mod.build_generated_stable_runtime_config_text(paths)
+
+        self.assertEqual(raised.exception.machine_error_code, "MISSING_STABLE_CONFIG")
+        self.assertEqual(raised.exception.operator_action, "user_action")
+
+    def test_runtime_generated_stable_runtime_config_text_from_inputs_rewrites_auth_dir(
+        self,
+    ) -> None:
+        target = "/tmp/repair-target"
+        cases = (
+            (
+                "existing_auth_dir",
+                'host: 127.0.0.1\nport: 8318\nauth-dir: "/tmp/old"\n',
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{target}"',
+            ),
+            (
+                "missing_auth_dir",
+                "host: 127.0.0.1\nport: 8318\nlabel: stable\n",
+                f'host: 127.0.0.1\nport: 8318\nlabel: stable\nauth-dir: "{target}"',
+            ),
+            (
+                "indented_auth_dir",
+                'host: 127.0.0.1\n  auth-dir: "/tmp/old"\nlabel: stable\n',
+                f'host: 127.0.0.1\nauth-dir: "{target}"\nlabel: stable',
+            ),
+            (
+                "multiple_auth_dir_lines",
+                'auth-dir: "/tmp/old-a"\nport: 8318\n  auth-dir: "/tmp/old-b"\n',
+                f'auth-dir: "{target}"\nport: 8318\nauth-dir: "{target}"',
+            ),
+            (
+                "empty_config",
+                "",
+                f'auth-dir: "{target}"',
+            ),
+        )
+
+        for case_name, stable_config_text, expected in cases:
+            with self.subTest(case=case_name):
+                payload = (
+                    runtime_repair.build_generated_stable_runtime_config_text_from_inputs(
+                        stable_config_text=stable_config_text,
+                        repair_target_inventory_dir=target,
+                    )
+                )
+
+                self.assertEqual(payload, expected)
+                self.assertFalse(payload.endswith("\n"))
 
     def test_runtime_stable_runtime_activation_evidence_surface_facade_matches_repair_module(
         self,

@@ -338,6 +338,27 @@ def build_stable_runtime_generated_config_surface_from_inputs(
     }
 
 
+def build_generated_stable_runtime_config_text_from_inputs(
+    *,
+    stable_config_text: str,
+    repair_target_inventory_dir: str,
+) -> str:
+    auth_dir_line = f'auth-dir: "{repair_target_inventory_dir}"'
+    lines = stable_config_text.splitlines()
+    rewritten: list[str] = []
+    replaced = False
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if stripped.startswith("auth-dir:"):
+            rewritten.append(auth_dir_line)
+            replaced = True
+        else:
+            rewritten.append(raw_line)
+    if not replaced:
+        rewritten.append(auth_dir_line)
+    return "\n".join(rewritten)
+
+
 def build_stable_runtime_consumer_snapshot_payload_from_inputs(
     *,
     activation_method: str,

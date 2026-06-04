@@ -4141,20 +4141,14 @@ def build_generated_stable_runtime_config_text(paths: RuntimePaths) -> str:
             machine_error_code="MISSING_STABLE_CONFIG",
             operator_action="user_action",
         )
-    auth_dir_line = f'auth-dir: "{paths.repair_target_inventory_dir}"'
-    lines = paths.stable_config.read_text(encoding="utf-8").splitlines()
-    rewritten: list[str] = []
-    replaced = False
-    for raw_line in lines:
-        stripped = raw_line.strip()
-        if stripped.startswith("auth-dir:"):
-            rewritten.append(auth_dir_line)
-            replaced = True
-        else:
-            rewritten.append(raw_line)
-    if not replaced:
-        rewritten.append(auth_dir_line)
-    return "\n".join(rewritten)
+    from .runtime_repair import (
+        build_generated_stable_runtime_config_text_from_inputs as _build_text,
+    )
+
+    return _build_text(
+        stable_config_text=paths.stable_config.read_text(encoding="utf-8"),
+        repair_target_inventory_dir=str(paths.repair_target_inventory_dir),
+    )
 
 
 def write_stable_runtime_consumer_snapshot(
