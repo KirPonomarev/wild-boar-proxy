@@ -7732,6 +7732,7 @@ def build_command_payload(
     extra: dict[str, Any] | None = None,
     exit_code: int | None = None,
     effect: str | None = None,
+    secret_values: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     return command_packets.build_command_packet(
         ok=ok,
@@ -7744,6 +7745,7 @@ def build_command_payload(
         extra=extra,
         exit_code=exit_code,
         effect=effect,
+        secret_values=secret_values,
     )
 
 

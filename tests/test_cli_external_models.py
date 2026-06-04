@@ -16,6 +16,8 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from wild_boar_proxy.core import packets
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -299,6 +301,12 @@ class ExternalModelsCliTests(unittest.TestCase):
             self.assertFalse(credential_result["browser_path_intake"])
             self.assertEqual(credential_result["scope"], "sandbox")
             self.assertNotIn("admit-owner-env-key", admit_result.stdout)
+            self.assertFalse(
+                packets.command_packet_has_secret_leak(
+                    admit_payload,
+                    secret_values=["admit-owner-env-key"],
+                )
+            )
             self.assertEqual(
                 stat.S_IMODE((self.external_dir / "secrets.env").stat().st_mode),
                 0o600,
@@ -323,6 +331,12 @@ class ExternalModelsCliTests(unittest.TestCase):
             self.assertEqual(status_credential["credential_ref"], "OPENROUTER_API_KEY")
             self.assertFalse(status_credential["secret_value_exposed"])
             self.assertNotIn("admit-owner-env-key", status_result.stdout)
+            self.assertFalse(
+                packets.command_packet_has_secret_leak(
+                    status_payload,
+                    secret_values=["admit-owner-env-key"],
+                )
+            )
 
             lifecycle_status = self.run_cli("external-models", "status", "--json")
             lifecycle_payload = self.parse_payload(lifecycle_status)

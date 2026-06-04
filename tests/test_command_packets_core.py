@@ -31,6 +31,14 @@ def _dotted_name(node: ast.AST) -> str:
     return ""
 
 
+class _OpaqueSecretCarrier:
+    def __init__(self, secret: str) -> None:
+        self.secret = secret
+
+    def __repr__(self) -> str:
+        return f"OpaqueSecretCarrier({self.secret})"
+
+
 class CommandPacketsCoreTests(unittest.TestCase):
     def test_core_machine_error_codes_match_j2_taxonomy(self) -> None:
         self.assertEqual(errors.OK, "OK")
@@ -353,6 +361,154 @@ class CommandPacketsCoreTests(unittest.TestCase):
                 effect="invalid",
                 extra={"effect": "read"},
             )
+
+    def test_build_command_packet_redacts_payload_by_default(self) -> None:
+        payload = packets.build_command_packet(
+            ok=True,
+            human_message="Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "data": {
+                    "api_key": "plain-fixture-value",
+                    "note": "token bucket remains observable",
+                }
+            },
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            payload["human_message"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            payload["data"]["api_key"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(payload["data"]["note"], "token bucket remains observable")
+        self.assertFalse(packets.command_packet_has_secret_leak(payload))
+
+    def test_build_command_packet_redacts_explicit_secret_values(self) -> None:
+        sentinel = "local-runtime-token-1234567890"
+
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message=f"token source returned {sentinel}",
+            machine_error_code="PROCESS_FAILED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={"data": {"message": f"raw={sentinel}"}},
+            secret_values=[sentinel],
+        )
+
+        encoded = json.dumps(payload, default=str)
+        self.assertEqual(payload["status"], "error")
+        self.assertNotIn(sentinel, encoded)
+        self.assertIn(packets.COMMAND_PACKET_REDACTION_PLACEHOLDER, encoded)
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(payload, secret_values=[sentinel])
+        )
+
+    def test_build_command_packet_preserves_safe_secret_references(self) -> None:
+        payload = packets.build_command_packet(
+            ok=True,
+            human_message="credential reference collected",
+            machine_error_code="OK",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "data": {
+                    "secret_ref": "OPENROUTER_API_KEY",
+                    "credential_ref": "provider:openrouter",
+                    "token_ref": "managed_local_token",
+                    "available_secret_refs": ["OPENROUTER_API_KEY"],
+                    "secret_value_exposed": False,
+                }
+            },
+        )
+
+        self.assertEqual(payload["data"]["secret_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(payload["data"]["credential_ref"], "provider:openrouter")
+        self.assertEqual(payload["data"]["token_ref"], "managed_local_token")
+        self.assertEqual(
+            payload["data"]["available_secret_refs"],
+            ["OPENROUTER_API_KEY"],
+        )
+        self.assertFalse(payload["data"]["secret_value_exposed"])
+        self.assertFalse(packets.command_packet_has_secret_leak(payload))
+
+    def test_build_command_packet_fails_safe_on_unredactable_secret_leak(self) -> None:
+        sentinel = "sk-wbp-unredactable-secret-1234567890"
+
+        payload = packets.build_command_packet(
+            ok=True,
+            human_message="would otherwise be ok",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=["/tmp/would-have-mutated.json"],
+            extra={"data": {"opaque": _OpaqueSecretCarrier(sentinel)}},
+            secret_values=[sentinel],
+        )
+
+        encoded = json.dumps(payload, default=str)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["exit_code"], 1)
+        self.assertEqual(payload["machine_error_code"], "COMMAND_PACKET_MALFORMED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "stop")
+        self.assertEqual(payload["operator_action"], "stop")
+        self.assertEqual(payload["packet_redaction_status"], "failed")
+        self.assertNotIn("data", payload)
+        self.assertNotIn(sentinel, encoded)
+
+    def test_runtime_wrappers_inherit_builder_redaction(self) -> None:
+        kwargs = {
+            "ok": True,
+            "human_message": "ok",
+            "machine_error_code": "OK",
+            "liveness": "healthy",
+            "severity": "recoverable",
+            "operator_action": "none",
+            "changed_files": [],
+            "extra": {"data": {"api_key": "plain-fixture-value"}},
+        }
+
+        expected = packets.build_command_packet(**kwargs)
+
+        self.assertEqual(runtime_mod.build_command_payload(**kwargs), expected)
+        self.assertEqual(runtime_modes._build_command_payload(**kwargs), expected)
+        self.assertEqual(
+            expected["data"]["api_key"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+
+    def test_runtime_wrappers_forward_explicit_secret_values(self) -> None:
+        sentinel = "local-runtime-token-wrapper-1234567890"
+        kwargs = {
+            "ok": True,
+            "human_message": f"collected {sentinel}",
+            "machine_error_code": "OK",
+            "liveness": "healthy",
+            "severity": "recoverable",
+            "operator_action": "none",
+            "changed_files": [],
+            "secret_values": [sentinel],
+        }
+
+        expected = packets.build_command_packet(**kwargs)
+
+        self.assertEqual(runtime_mod.build_command_payload(**kwargs), expected)
+        self.assertEqual(runtime_modes._build_command_payload(**kwargs), expected)
+        self.assertNotIn(sentinel, json.dumps(expected))
 
     def test_missing_required_fields_reports_canonical_order(self) -> None:
         packet = {

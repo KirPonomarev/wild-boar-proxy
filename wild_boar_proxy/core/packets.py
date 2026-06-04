@@ -319,6 +319,21 @@ def command_packet_has_secret_leak(
     return _sensitive_key_leak_present(packet)
 
 
+def _command_packet_redaction_failure_payload() -> dict[str, Any]:
+    return {
+        "status": "error",
+        "exit_code": COMMAND_EXIT_ERROR,
+        "human_message": "Command packet redaction failed; unsafe payload withheld.",
+        "machine_error_code": "COMMAND_PACKET_MALFORMED",
+        "changed_files": [],
+        "next_action": "stop",
+        "liveness": "unknown",
+        "severity": "fatal",
+        "operator_action": "stop",
+        "packet_redaction_status": "failed",
+    }
+
+
 def build_command_packet(
     *,
     ok: bool,
@@ -331,6 +346,7 @@ def build_command_packet(
     extra: dict[str, Any] | None = None,
     exit_code: int | None = None,
     effect: str | None = None,
+    secret_values: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "ok" if ok else "error",
@@ -347,7 +363,10 @@ def build_command_packet(
         payload["effect"] = validate_effect(effect)
     if extra:
         payload.update(extra)
-    return payload
+    redacted_payload = redact_command_packet(payload, secret_values=secret_values)
+    if command_packet_has_secret_leak(redacted_payload, secret_values=secret_values):
+        return _command_packet_redaction_failure_payload()
+    return redacted_payload
 
 
 def missing_required_fields(

@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wild_boar_proxy.core import packets
+
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTH_COMMAND_HELPER = ROOT / "wbp_codex_auth_command.py"
@@ -92,6 +94,13 @@ class TokenCommandCliTests(unittest.TestCase):
         self.assertFalse(payload["data"]["token_emitted"])
         self.assertFalse(payload["data"]["secret_value_exposed"])
         self.assertTrue(payload["data"]["local_only"])
+        self.assertNotIn("config_path", payload["data"])
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(
+                payload,
+                secret_values=["local-runtime-token-123"],
+            )
+        )
 
     def test_token_plain_falls_back_to_secret_key_shape(self) -> None:
         self.generated_config.write_text(

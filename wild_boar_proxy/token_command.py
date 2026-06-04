@@ -82,9 +82,9 @@ def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:
                 "scope": TOKEN_SCOPE,
                 "local_only": True,
                 "short_lived": False,
-                "config_path": str(config_path),
             }
         },
+        secret_values=[_token],
     )
 
 
