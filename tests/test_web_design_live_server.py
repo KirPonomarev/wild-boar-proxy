@@ -953,10 +953,33 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
-    def test_functional_app_integration_proof_wires_first_screen_and_c2_c3_c4_packets(
+    def test_functional_app_integration_proof_wires_first_screen_lanes_and_three_modes(
         self,
     ) -> None:
         payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={
+                "active": 1,
+                "reserve": 1,
+                "retired": 0,
+                "healthy": 2,
+                "degraded": 0,
+                "down": 0,
+                "selected_backend_ids": ["acct-active"],
+            },
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+                "launch_capable_backend_count": 1,
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[
+                account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json"),
+                account("acct-reserve", "reserve", "healthy", auth_ref="/tmp/wbp-reserve.json"),
+            ]
+        )
         payloads[("external-models", "status", "--json")] = command_packet(
             human_message=(
                 "External-models synthetic lifecycle status collected without live runtime claims."
@@ -1084,6 +1107,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 )
                 actions = json.loads(fetch(f"{base}/api/actions"))
                 launch_modes = json.loads(fetch(f"{base}/api/codex/launch-modes"))
+                custom_accounts = json.loads(fetch(f"{base}/api/codex/custom/accounts"))
+                account_selection = json.loads(fetch(f"{base}/api/codex/custom/account-selection"))
                 chatgpt_only = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/execution-mode-dry-run",
@@ -1121,6 +1146,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         },
                     )
                 )
+                api_executor_truth = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-executor-truth",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
                 deepseek_live_blocked = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/api-only-deepseek/live-format",
@@ -1134,6 +1169,77 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 server.shutdown()
                 thread.join(timeout=2)
                 server.server_close()
+
+        authorized_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def authorized_session_factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            authorized_sessions.append(session)
+            return session
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                mock.patch.object(
+                    live_server,
+                    "CodexCustomSessionManager",
+                    side_effect=lambda root=None: REAL_CODEX_CUSTOM_SESSION_MANAGER(
+                        Path(temp_dir) if root is None else root
+                    ),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    side_effect=authorized_session_factory,
+                ),
+            ):
+                authorized_server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=MappingRunner(dict(payloads)),
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                authorized_thread = threading.Thread(
+                    target=authorized_server.serve_forever,
+                    daemon=True,
+                )
+                authorized_thread.start()
+                authorized_base = f"http://127.0.0.1:{authorized_server.server_port}"
+                try:
+                    session_created = json.loads(
+                        post_json(
+                            f"{authorized_base}/api/codex/custom/sessions",
+                            {
+                                "primary_model_id": "gpt-5.3-codex",
+                                "coding_agent_model_id": "wbp-deepseek-v3",
+                            },
+                        )
+                    )
+                    session_id = session_created["session"]["session_id"]
+                    primary_prompt = json.loads(
+                        post_json(
+                            f"{authorized_base}/api/codex/custom/sessions/{session_id}/prompt",
+                            {
+                                "prompt": "Reply with exactly CHATGPT_LANE_OK.",
+                                "slot_id": "primary_model_slot",
+                            },
+                        )
+                    )
+                    api_prompt = json.loads(
+                        post_json(
+                            f"{authorized_base}/api/codex/custom/sessions/{session_id}/prompt",
+                            {
+                                "prompt": "Reply with exactly API_LANE_OK.",
+                                "slot_id": "coding_agent_model_slot",
+                            },
+                        )
+                    )
+                finally:
+                    authorized_server.shutdown()
+                    authorized_thread.join(timeout=2)
+                    authorized_server.server_close()
 
         self.assertIn('data-source="live"', index)
         self.assertNotIn('data-source="fixture"', index)
@@ -1171,6 +1277,18 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(actions["actions"]["export_diagnostics"]["available"])
         self.assertFalse(actions["actions"]["sync_runtime"]["available"])
         self.assertFalse(actions["actions"]["launch_client_dispatch"]["available"])
+
+        self.assertEqual(custom_accounts["status"], "ok")
+        self.assertEqual(custom_accounts["account_source"], "provided_packet_or_fake")
+        self.assertFalse(custom_accounts["account_mutation_performed"])
+        self.assertFalse(custom_accounts["raw_backend_ids_exposed"])
+        self.assertFalse(custom_accounts["raw_auth_refs_exposed"])
+        self.assertEqual(custom_accounts["token_burn"], 0)
+        self.assertEqual(account_selection["status"], "ok")
+        self.assertEqual(account_selection["selected_source_class"], "gpt_account")
+        self.assertTrue(account_selection["selection_dry_run_proven"])
+        self.assertFalse(account_selection["inference_proven"])
+        self.assertFalse(account_selection["provider_called"])
 
         modes = {mode["id"]: mode for mode in launch_modes["modes"]}
         self.assertIn("original_codex", modes)
@@ -1216,6 +1334,20 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn('"base_url"', quick_start_json)
         self.assertNotIn('"route_id"', quick_start_json)
 
+        self.assertEqual(api_executor_truth["status"], "ok")
+        self.assertEqual(
+            api_executor_truth["final_status"],
+            "API_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(api_executor_truth["api_primary_slot_proven"])
+        self.assertEqual(api_executor_truth["primary_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(api_executor_truth["selected_api_model"], "wbp-deepseek-v3")
+        self.assertTrue(api_executor_truth["api_line_used_as_executor"])
+        self.assertFalse(api_executor_truth["chatgpt_line_used_as_executor"])
+        self.assertFalse(api_executor_truth["fallback_used"])
+        self.assertFalse(api_executor_truth["provider_called"])
+        self.assertFalse(api_executor_truth["live_call_attempted"])
+
         self.assertEqual(deepseek_live_blocked["status"], "blocked")
         self.assertEqual(
             deepseek_live_blocked["machine_error_code"],
@@ -1245,6 +1377,40 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(len(created_sessions), 1)
         self.assertEqual(created_sessions[0].run_payloads, [])
+
+        self.assertEqual(session_created["status"], "ok")
+        self.assertTrue(session_created["session_created"])
+        self.assertEqual(
+            session_created["session"]["role_slots"]["primary_model_slot"]["model_id"],
+            "gpt-5.3-codex",
+        )
+        self.assertEqual(
+            session_created["session"]["role_slots"]["coding_agent_model_slot"]["model_id"],
+            "wbp-deepseek-v3",
+        )
+        self.assertEqual(primary_prompt["status"], "ok")
+        self.assertEqual(primary_prompt["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(primary_prompt["configured_provider"], "cliproxy")
+        self.assertTrue(primary_prompt["live_prompt_full_success"])
+        self.assertEqual(api_prompt["status"], "ok")
+        self.assertEqual(api_prompt["current_execution_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(api_prompt["configured_provider"], "external_route")
+        self.assertTrue(api_prompt["live_prompt_full_success"])
+        self.assertEqual(
+            authorized_sessions[0].run_payloads,
+            [
+                {
+                    "prompt": "Reply with exactly CHATGPT_LANE_OK.",
+                    "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Reply with exactly API_LANE_OK.",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
 
     def test_live_server_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
         with self.assertRaises(SystemExit) as raised:
