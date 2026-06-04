@@ -302,6 +302,10 @@ It must emit:
 - one launchable desktop artifact path
 - a checksum manifest for the artifact
 - metadata with the selected runtime executable and runtime-capability probe
+- runtime dependency truth:
+  `runtime_dependency_strategy=external_selected_runtime`,
+  `standalone_runtime_embedded=false`, and
+  `cross_machine_portability_claim=not_made`
 - integrity binding for both the artifact and the companion metadata used for
   launchability claims
 - an installer-stage admission packet for the bounded `.app` bundle strategy,
@@ -328,6 +332,10 @@ remain bounded to:
 `package launchable verify --manifest <path> --json` is the owner surface for
 artifact existence + checksum verification + launchable bundle boundary +
 metadata-integrity verification from the manifest.
+
+Launcher smoke from a copied `.app` may prove relocated local startup only. It
+must not be treated as private-data boundary verification, standalone runtime
+proof, cross-machine portability proof, or production release proof.
 
 ## Additional onboarding owner surface
 

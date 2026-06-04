@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shlex
+import shutil
 import socket
 import stat
 import subprocess
@@ -337,6 +338,19 @@ class CliTests(unittest.TestCase):
         env["WBP_LAUNCH_STABILIZATION_SECONDS"] = "0"
         env["WBP_SYNC_SCRIPT"] = str(self.sync_script)
         return env
+
+    def assert_launchable_runtime_dependency_truth(
+        self, packet: dict[str, object]
+    ) -> None:
+        self.assertEqual(
+            packet["runtime_dependency_strategy"],
+            runtime_mod.LAUNCHABLE_PACKAGE_RUNTIME_DEPENDENCY_STRATEGY,
+        )
+        self.assertFalse(packet["standalone_runtime_embedded"])
+        self.assertEqual(
+            packet["cross_machine_portability_claim"],
+            runtime_mod.LAUNCHABLE_PACKAGE_CROSS_MACHINE_PORTABILITY_CLAIM,
+        )
 
     def run_cli(
         self, *args: str, include_launcher_override: bool = True
@@ -2109,6 +2123,9 @@ class CliTests(unittest.TestCase):
                 "metadata_sha256",
                 "embedded_file_count",
                 "runtime_executable",
+                "runtime_dependency_strategy",
+                "standalone_runtime_embedded",
+                "cross_machine_portability_claim",
                 "runtime_tkinter_available",
                 "installer_stage_admission",
                 "desktop_shell_strategy",
@@ -2125,6 +2142,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(package_result["manifest_path"], str(manifest_path))
         self.assertEqual(package_result["metadata_path"], str(metadata_path))
         self.assertEqual(package_result["runtime_executable"], sys.executable)
+        self.assert_launchable_runtime_dependency_truth(package_result)
         self.assertEqual(
             package_result["desktop_shell_strategy"],
             runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
@@ -2173,6 +2191,7 @@ class CliTests(unittest.TestCase):
             metadata["installer_stage_admission"],
             installer_admission,
         )
+        self.assert_launchable_runtime_dependency_truth(metadata)
         self.assertTrue(metadata["local_only_bind_required"])
         self.assertFalse(metadata["public_bind_allowed"])
         self.assertEqual(
@@ -2188,6 +2207,7 @@ class CliTests(unittest.TestCase):
             / "MacOS"
             / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
         ).read_text(encoding="utf-8")
+        self.assertIn("PYTHONDONTWRITEBYTECODE=1", launcher_text)
         self.assertIn("wild_boar_proxy.desktop_web_shell", launcher_text)
         self.assertIn("--smoke-web-shell-json", launcher_text)
         self.assertIn(
@@ -2205,6 +2225,18 @@ class CliTests(unittest.TestCase):
         (package_root / "docs").mkdir(parents=True)
         (package_root / "wild_boar_proxy" / "module.py").write_text(
             "value = 1\n", encoding="utf-8"
+        )
+        (
+            package_root / "wild_boar_proxy" / "review_bridge_session_store.py"
+        ).write_text("value = 2\n", encoding="utf-8")
+        (package_root / "wild_boar_proxy" / "state_temp_prefix.py").write_text(
+            "value = 3\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "token_command.py").write_text(
+            "value = 4\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "web_token.py").write_text(
+            "value = 5\n", encoding="utf-8"
         )
         (package_root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
         outside_secret = Path(self.temp_dir.name) / "outside-secret.md"
@@ -2243,6 +2275,17 @@ class CliTests(unittest.TestCase):
         self.assertIn("Contents/Info.plist", entries)
         self.assertIn("Contents/MacOS/WildBoarProxy", entries)
         self.assertIn("Contents/Resources/app/wild_boar_proxy/module.py", entries)
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/review_bridge_session_store.py",
+            entries,
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/state_temp_prefix.py", entries
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/token_command.py", entries
+        )
+        self.assertIn("Contents/Resources/app/wild_boar_proxy/web_token.py", entries)
         self.assertIn("Contents/Resources/app/docs/guide.md", entries)
         self.assertNotIn("Contents/Resources/app/LEAK.md", entries)
         self.assertNotIn("Contents/Resources/app/auth.json", entries)
@@ -2317,6 +2360,9 @@ class CliTests(unittest.TestCase):
                 "runtime_executable",
                 "runtime_path_exists",
                 "runtime_path_executable",
+                "runtime_dependency_strategy",
+                "standalone_runtime_embedded",
+                "cross_machine_portability_claim",
                 "runtime_tkinter_available",
                 "installer_stage_admission",
                 "desktop_shell_strategy",
@@ -2377,6 +2423,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertTrue(verify_payload["package_result"]["runtime_path_exists"])
         self.assertTrue(verify_payload["package_result"]["runtime_path_executable"])
+        self.assert_launchable_runtime_dependency_truth(verify_payload["package_result"])
 
     def test_package_launchable_verify_checksum_mismatch_failure(self) -> None:
         output_dir = Path(self.temp_dir.name) / "launchable-package-verify-mismatch"
@@ -2644,6 +2691,77 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["desktop_shell"]["strategy"],
+            runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
+        )
+        self.assertEqual(
+            payload["desktop_shell"]["entrypoint"],
+            runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
+        )
+        self.assertTrue(payload["server"]["local_only_bind"])
+        self.assertFalse(payload["server"]["public_bind_allowed"])
+        self.assertTrue(payload["web_security"]["web_token_bootstrap_meta_present"])
+        self.assertTrue(payload["web_security"]["csrf_bootstrap_meta_present"])
+        self.assertTrue(payload["web_security"]["unauthorized_post_rejected"])
+        self.assertTrue(payload["package_boundary"]["requires_package_launchable_verify"])
+        self.assertFalse(payload["package_boundary"]["evaluated_by_shell_smoke"])
+        self.assertFalse(payload["packet_contents"]["includes_web_token_value"])
+        self.assertFalse(payload["packet_contents"]["includes_csrf_token_value"])
+
+    def test_package_launchable_relocated_launcher_smoke_web_shell_json_works_without_repo_pythonpath(
+        self,
+    ) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-relocated-smoke"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        source_app = Path(build_payload["package_result"]["artifact_path"])
+        self.assert_launchable_runtime_dependency_truth(
+            build_payload["package_result"]
+        )
+
+        install_root = Path(self.temp_dir.name) / "external-install-root"
+        install_root.mkdir()
+        relocated_app = install_root / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+        shutil.copytree(source_app, relocated_app)
+        external_cwd = Path(self.temp_dir.name) / "external-launch-cwd"
+        external_cwd.mkdir()
+        launcher_path = (
+            relocated_app
+            / "Contents"
+            / "MacOS"
+            / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+        env = self.env(include_launcher_override=False)
+        env.pop("PYTHONPATH", None)
+        self.assertNotIn("PYTHONPATH", env)
+
+        app_digest_before = runtime_mod.hash_directory_files(relocated_app)
+        result = subprocess.run(
+            [str(launcher_path), "--smoke-web-shell-json", "--port", "0"],
+            cwd=external_cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        app_digest_after = runtime_mod.hash_directory_files(relocated_app)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(app_digest_after, app_digest_before)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")

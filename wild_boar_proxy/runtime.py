@@ -182,6 +182,8 @@ LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STRATEGY = "app_bundle_only"
 LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STATUS = "admitted"
 LAUNCHABLE_PACKAGE_PRODUCTION_RELEASE_STATUS = "deferred_by_release_gate"
 LAUNCHABLE_PACKAGE_RELEASE_GATE_REASON = "signing_and_notarization_not_admitted"
+LAUNCHABLE_PACKAGE_RUNTIME_DEPENDENCY_STRATEGY = "external_selected_runtime"
+LAUNCHABLE_PACKAGE_CROSS_MACHINE_PORTABILITY_CLAIM = "not_made"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
 EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "CANON.md"
@@ -240,6 +242,12 @@ EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS = {
     "temp",
     "tmp",
     "token",
+}
+EXPERIMENTAL_PACKAGE_SOURCE_TOKEN_ALLOWED_PATHS = {
+    "wild_boar_proxy/review_bridge_session_store.py",
+    "wild_boar_proxy/state_temp_prefix.py",
+    "wild_boar_proxy/token_command.py",
+    "wild_boar_proxy/web_token.py",
 }
 SERIALIZED_LOCK_LOCAL_OWNERS: dict[str, dict[str, int]] = {}
 SERIALIZED_LOCK_LOCAL_OWNERS_GUARD = threading.Lock()
@@ -5288,6 +5296,8 @@ def is_experimental_package_path_excluded(relative_path: Path) -> bool:
     suffixes = {suffix.lower() for suffix in relative_path.suffixes}
     if suffixes.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_FILE_SUFFIXES):
         return True
+    if relative_path.as_posix() in EXPERIMENTAL_PACKAGE_SOURCE_TOKEN_ALLOWED_PATHS:
+        return False
     stem_tokens = {
         token for token in re.split(r"[^a-z0-9]+", relative_path.stem.lower()) if token
     }
@@ -5369,6 +5379,16 @@ def build_launchable_installer_stage_admission(
         "artifact_verification_required": True,
         "artifact_verified": artifact_verified,
         "boundary_verified": boundary_verified,
+    }
+
+
+def build_launchable_runtime_dependency_truth() -> dict[str, Any]:
+    return {
+        "runtime_dependency_strategy": LAUNCHABLE_PACKAGE_RUNTIME_DEPENDENCY_STRATEGY,
+        "standalone_runtime_embedded": False,
+        "cross_machine_portability_claim": (
+            LAUNCHABLE_PACKAGE_CROSS_MACHINE_PORTABILITY_CLAIM
+        ),
     }
 
 
@@ -5474,6 +5494,7 @@ def render_launchable_package_launcher_script(runtime_executable: Path) -> str:
         [
             "#!/bin/sh",
             "set -eu",
+            "export PYTHONDONTWRITEBYTECODE=1",
             f'PYTHON_EXE="{runtime_executable}"',
             'APP_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"',
             'RESOURCE_APP="$APP_ROOT/Resources/app"',
@@ -5877,6 +5898,7 @@ def _run_package_launchable_build_impl(
                 artifact_verified=False,
                 boundary_verified=False,
             ),
+            **build_launchable_runtime_dependency_truth(),
             "runtime_executable": str(runtime_executable),
             "runtime_probe": runtime_probe,
             "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
@@ -5943,6 +5965,7 @@ def _run_package_launchable_build_impl(
                 "metadata_sha256": metadata_sha256,
                 "embedded_file_count": len(package_files),
                 "runtime_executable": str(runtime_executable),
+                **build_launchable_runtime_dependency_truth(),
                 "runtime_tkinter_available": runtime_probe["tkinter_available"] is True,
                 "installer_stage_admission": build_launchable_installer_stage_admission(
                     artifact_verified=False,
@@ -6155,6 +6178,7 @@ def _run_package_launchable_verify_impl(
                     "runtime_executable": runtime_executable,
                     "runtime_path_exists": runtime_path_exists,
                     "runtime_path_executable": runtime_path_executable,
+                    **build_launchable_runtime_dependency_truth(),
                     "runtime_tkinter_available": runtime_tkinter_available,
                     "installer_stage_admission": installer_stage_admission,
                     "desktop_shell_strategy": desktop_shell_strategy,
@@ -6189,6 +6213,7 @@ def _run_package_launchable_verify_impl(
                 "runtime_executable": runtime_executable,
                 "runtime_path_exists": runtime_path_exists,
                 "runtime_path_executable": runtime_path_executable,
+                **build_launchable_runtime_dependency_truth(),
                 "runtime_tkinter_available": runtime_tkinter_available,
                 "installer_stage_admission": installer_stage_admission,
                 "desktop_shell_strategy": desktop_shell_strategy,

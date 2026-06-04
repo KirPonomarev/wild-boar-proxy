@@ -120,6 +120,7 @@ from wild_boar_proxy.review_bridge_command_bus import (
 )
 from wild_boar_proxy.review_bridge_packet_import import (
     ReviewImportContext,
+    ReviewPacketImportError,
     default_review_import_context,
 )
 from wild_boar_proxy.review_bridge_session_store import (
@@ -8705,6 +8706,20 @@ def ui_action_metadata(
     }
 
 
+def _default_review_import_context_or_none(repo_root: Path) -> ReviewImportContext | None:
+    try:
+        return default_review_import_context(repo_root)
+    except ReviewPacketImportError:
+        return None
+
+
+def _default_review_apply_context_or_none(repo_root: Path) -> ReviewApplyContext | None:
+    try:
+        return default_review_apply_context(repo_root)
+    except ReviewPacketImportError:
+        return None
+
+
 def build_handler(
     *,
     runner: CommandRunner | None = None,
@@ -8734,12 +8749,17 @@ def build_handler(
     )
     legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
-    bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
+    bounded_review_import_context = (
+        review_import_context or _default_review_import_context_or_none(ROOT)
+    )
     command_review_apply_context = review_apply_context
     query_review_apply_context = review_apply_context
     if query_review_apply_context is None:
-        default_apply_context = default_review_apply_context(ROOT)
-        if default_apply_context.source_status == "ok":
+        default_apply_context = _default_review_apply_context_or_none(ROOT)
+        if (
+            default_apply_context is not None
+            and default_apply_context.source_status == "ok"
+        ):
             query_review_apply_context = default_apply_context
     review_query_bridge = ReviewQueryBridge(
         review_session_store,

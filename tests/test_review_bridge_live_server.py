@@ -20,7 +20,10 @@ from wild_boar_proxy.review_bridge_apply_admission import (
     ReviewApplyContext,
     ReviewSceneInventoryEntry,
 )
-from wild_boar_proxy.review_bridge_packet_import import ReviewImportContext
+from wild_boar_proxy.review_bridge_packet_import import (
+    ReviewImportContext,
+    ReviewPacketImportError,
+)
 from wild_boar_proxy.web_design_live_server import build_handler
 from wild_boar_proxy.web_token import (
     WEB_AUTH_HEADER,
@@ -104,6 +107,47 @@ def write_scene_manifest(root: Path, entries: list[dict[str, str]]) -> Path:
 
 
 class ReviewBridgeLiveServerTests(unittest.TestCase):
+    def test_default_review_context_unavailable_returns_review_import_error_packet(
+        self,
+    ) -> None:
+        unavailable = ReviewPacketImportError(
+            "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+            "Unable to determine the current baseline for review import.",
+        )
+        with (
+            patch(
+                "wild_boar_proxy.web_design_live_server.default_review_import_context",
+                side_effect=unavailable,
+            ),
+            patch(
+                "wild_boar_proxy.web_design_live_server.default_review_apply_context",
+                side_effect=unavailable,
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_review_handler(),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                imported = json.loads(
+                    post_json(f"{base}/api/review-command", import_command_payload())
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(imported["status"], "command_error")
+        self.assertEqual(
+            imported["machine_error_code"],
+            "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+        )
+        self.assertEqual(imported["changed_files"], [])
+        self.assertEqual(imported["next_action"], "fix_command_payload")
+
     def test_review_command_and_query_surfaces_stay_split(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
