@@ -12573,6 +12573,52 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
         self.assertTrue(lock_state["snapshot_checked"])
 
+    def test_detect_changed_files_uses_content_hash_when_mtime_is_restored(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            target = paths.state_file
+            original = target.read_bytes()
+            replacement = (
+                (b"!" if original[:1] != b"!" else b"?") + original[1:]
+                if original
+                else b"x"
+            )
+            before = runtime_mod.snapshot_known_files(paths)
+            stat_result = target.stat()
+
+            target.write_bytes(replacement)
+            os.utime(target, ns=(stat_result.st_atime_ns, stat_result.st_mtime_ns))
+
+            self.assertIn(
+                str(target),
+                runtime_mod.detect_changed_files(before, [target]),
+            )
+
+    def test_detect_changed_files_uses_directory_digest_when_mtime_is_restored(
+        self,
+    ) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            session_dir = runtime_mod.sandbox_login_sessions_dir(paths)
+            session_dir.mkdir(parents=True, exist_ok=True)
+            child = session_dir / "mtime-restored-session.json"
+            child.write_bytes(b'{"a":1}\n')
+            before = runtime_mod.snapshot_known_files(paths)
+            directory_stat = session_dir.stat()
+            child_stat = child.stat()
+
+            child.write_bytes(b'{"a":2}\n')
+            os.utime(child, ns=(child_stat.st_atime_ns, child_stat.st_mtime_ns))
+            os.utime(
+                session_dir,
+                ns=(directory_stat.st_atime_ns, directory_stat.st_mtime_ns),
+            )
+
+            self.assertIn(
+                str(session_dir),
+                runtime_mod.detect_changed_files(before, [session_dir]),
+            )
+
     def test_accounts_promote_blocks_when_active_target_is_already_reached(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())

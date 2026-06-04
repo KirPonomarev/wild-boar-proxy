@@ -11,6 +11,7 @@ import re
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -9489,7 +9490,81 @@ def mode_set(paths: RuntimePaths, mode: str) -> dict[str, Any]:
     )
 
 
-def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
+def _hash_directory_tree(root: Path) -> str:
+    digest = hashlib.sha256()
+    for candidate in sorted(
+        root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()
+    ):
+        relative = candidate.relative_to(root).as_posix()
+        try:
+            stat_result = candidate.lstat()
+        except OSError as exc:
+            digest.update(
+                f"{relative}\0error\0{exc.__class__.__name__}\0".encode("utf-8")
+            )
+            continue
+        mode = stat_result.st_mode
+        digest.update(f"{relative}\0{mode}\0".encode("utf-8"))
+        if stat.S_ISREG(mode):
+            digest.update(b"file\0")
+            digest.update(str(stat_result.st_size).encode("utf-8"))
+            digest.update(b"\0")
+            try:
+                digest.update(candidate.read_bytes())
+            except OSError as exc:
+                digest.update(
+                    f"read_error\0{exc.__class__.__name__}\0".encode("utf-8")
+                )
+        elif stat.S_ISDIR(mode):
+            digest.update(b"dir\0")
+        elif stat.S_ISLNK(mode):
+            digest.update(b"symlink\0")
+            try:
+                digest.update(os.readlink(candidate).encode("utf-8", "surrogateescape"))
+            except OSError as exc:
+                digest.update(
+                    f"readlink_error\0{exc.__class__.__name__}\0".encode("utf-8")
+                )
+        else:
+            digest.update(f"other\0{stat_result.st_size}\0".encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _snapshot_changed_file_candidate(candidate: Path) -> dict[str, Any]:
+    try:
+        stat_result = candidate.lstat()
+    except FileNotFoundError:
+        return {"state": "missing"}
+    except OSError as exc:
+        return {"state": "error", "error": exc.__class__.__name__}
+    mode = stat_result.st_mode
+    if stat.S_ISREG(mode):
+        try:
+            sha256 = hash_file(candidate)
+        except OSError as exc:
+            sha256 = f"read_error:{exc.__class__.__name__}"
+        return {
+            "state": "file",
+            "mode": mode,
+            "size": stat_result.st_size,
+            "sha256": sha256,
+        }
+    if stat.S_ISDIR(mode):
+        return {
+            "state": "dir",
+            "mode": mode,
+            "digest": _hash_directory_tree(candidate),
+        }
+    if stat.S_ISLNK(mode):
+        try:
+            target = os.readlink(candidate)
+        except OSError as exc:
+            target = f"readlink_error:{exc.__class__.__name__}"
+        return {"state": "symlink", "mode": mode, "target": target}
+    return {"state": "other", "mode": mode, "size": stat_result.st_size}
+
+
+def snapshot_known_files(paths: RuntimePaths) -> dict[Path, dict[str, Any]]:
     candidates = [
         paths.registry_file,
         paths.state_file,
@@ -9503,11 +9578,11 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
         sandbox_login_sessions_dir(paths),
         sandbox_login_auth_artifacts_dir(paths),
     ]
-    result: dict[Path, tuple[int, int]] = {}
+    result: dict[Path, dict[str, Any]] = {}
     for candidate in candidates:
-        if candidate.exists():
-            stat_result = candidate.stat()
-            result[candidate] = (stat_result.st_mtime_ns, stat_result.st_mode)
+        snapshot = _snapshot_changed_file_candidate(candidate)
+        if snapshot["state"] != "missing":
+            result[candidate] = snapshot
     return result
 
 
@@ -9516,17 +9591,13 @@ def snapshot_path_states(candidates: list[Path]) -> dict[Path, dict[str, Any]]:
 
 
 def detect_changed_files(
-    before: dict[Path, tuple[int, int]], after_paths: list[Path]
+    before: dict[Path, dict[str, Any]], after_paths: list[Path]
 ) -> list[str]:
     changed: list[str] = []
     for candidate in after_paths:
-        if not candidate.exists():
-            if candidate in before:
-                changed.append(str(candidate))
-            continue
-        stat_result = candidate.stat()
-        after = (stat_result.st_mtime_ns, stat_result.st_mode)
-        if before.get(candidate) != after:
+        before_snapshot = before.get(candidate, {"state": "missing"})
+        after = _snapshot_changed_file_candidate(candidate)
+        if before_snapshot != after:
             changed.append(str(candidate))
     return changed
 
