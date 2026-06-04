@@ -953,6 +953,299 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
+    def test_functional_app_integration_proof_wires_first_screen_and_c2_c3_c4_packets(
+        self,
+    ) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "status", "--json")] = command_packet(
+            human_message=(
+                "External-models synthetic lifecycle status collected without live runtime claims."
+            ),
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "foundation_phase": "C5",
+                "adapter_runtime_available": False,
+                "lifecycle_mode": "synthetic",
+                "adapter_state": "stopped",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "routes_count": 1,
+                "observed_routes_count": 1,
+                "available_secret_refs": ["DEEPSEEK_API_KEY"],
+                "observed_routes": {
+                    "wbp-deepseek-v3": {
+                        "availability_state": "verified",
+                        "last_check": "2026-05-25T00:00:00Z",
+                        "last_verified_at": "2026-05-25T00:00:00Z",
+                    }
+                },
+                "adapter": {
+                    "state": "stopped",
+                    "lifecycle_mode": "synthetic",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "base_url": None,
+                    "host": "127.0.0.1",
+                    "port": None,
+                    "started_at_utc": None,
+                    "last_transition": "init",
+                },
+                "local_auth": {
+                    "token_ref": "managed_local_token",
+                    "token_present": False,
+                    "token_created_at_utc": None,
+                },
+            },
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        )
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                    }
+                ],
+            },
+        )
+        runner = MappingRunner(payloads)
+        created_sessions: list[ExternalRouteFakeOperatorSurfaceSession] = []
+
+        def session_factory(*args: object, **kwargs: object) -> ExternalRouteFakeOperatorSurfaceSession:
+            session = ExternalRouteFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        with mock.patch.object(
+            live_server,
+            "OperatorSurfaceSession",
+            side_effect=session_factory,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=runner),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                index = fetch(f"{base}/?source=live")
+                overview = json.loads(fetch(f"{base}/api/live-readonly?command_id=sync"))
+                accounts = json.loads(fetch(f"{base}/api/accounts-readonly?command_id=sync"))
+                api_connections = json.loads(
+                    fetch(f"{base}/api/api-connections-readonly?command_id=sync")
+                )
+                actions = json.loads(fetch(f"{base}/api/actions"))
+                launch_modes = json.loads(fetch(f"{base}/api/codex/launch-modes"))
+                chatgpt_only = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {"execution_mode": "chatgpt_only"},
+                    )
+                )
+                api_only = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                chatgpt_plus_api = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/execution-mode-dry-run",
+                        {
+                            "execution_mode": "chatgpt_plus_api",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                quick_start = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/quick-start/config-admission",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+                deepseek_live_blocked = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertIn('data-source="live"', index)
+        self.assertNotIn('data-source="fixture"', index)
+
+        self.assertEqual(overview["status"], "ok")
+        self.assertEqual(overview["source"], "live_readonly")
+        self.assertTrue(overview["primary_truth_ok"])
+        self.assertEqual(overview["runtime"]["machine_error_code"], "OK")
+        self.assertEqual(overview["runtime"]["effective_mode"], "managed")
+        self.assertEqual(overview["runtime"]["desired_mode"], "managed")
+        self.assertEqual(overview["commands"]["healthcheck"]["status"], "ok")
+        self.assertEqual(set(overview["commands"]), set(READONLY_COMMAND_IDS))
+
+        self.assertEqual(accounts["status"], "ok")
+        self.assertEqual(accounts["source"], "accounts_readonly")
+        self.assertTrue(accounts["primary_truth_ok"])
+        self.assertGreaterEqual(accounts["summary"]["active"], 1)
+        self.assertGreaterEqual(accounts["summary"]["reserve"], 1)
+        self.assertIn("next_action", accounts["registry_identity"])
+        self.assertNotIn("auth_ref", json.dumps(accounts, ensure_ascii=False))
+
+        self.assertEqual(api_connections["status"], "ok")
+        self.assertEqual(api_connections["source"], "api_connections_readonly")
+        self.assertTrue(api_connections["primary_truth_ok"])
+        self.assertEqual(api_connections["routes"][0]["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(api_connections["routes"][0]["provider"], "deepseek")
+        self.assertEqual(api_connections["routes"][0]["secret_ref"], "DEEPSEEK_API_KEY")
+        self.assertEqual(api_connections["routes"][0]["secret_status_label"], "available")
+        self.assertEqual(api_connections["routes"][0]["validation_label"], "ok")
+        self.assertTrue(api_connections["routes"][0]["primary"])
+        self.assertNotIn('"auth"', json.dumps(api_connections, ensure_ascii=False))
+
+        self.assertEqual(actions["action_phase"], LIVE_READONLY_ACTION_PHASE)
+        self.assertFalse(actions["actions"]["stable_repair_plan"]["available"])
+        self.assertFalse(actions["actions"]["export_diagnostics"]["available"])
+        self.assertFalse(actions["actions"]["sync_runtime"]["available"])
+        self.assertFalse(actions["actions"]["launch_client_dispatch"]["available"])
+
+        modes = {mode["id"]: mode for mode in launch_modes["modes"]}
+        self.assertIn("original_codex", modes)
+        self.assertIn("codex_custom", modes)
+        self.assertIn("safe_app_copy", modes)
+        self.assertFalse(modes["safe_app_copy"]["live_launch_available"])
+
+        self.assertEqual(chatgpt_only["status"], "ok")
+        self.assertEqual(chatgpt_only["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertFalse(chatgpt_only["api_line_used_as_executor"])
+        self.assertFalse(chatgpt_only["chatgpt_only_calls_api"])
+
+        self.assertEqual(api_only["status"], "ok")
+        self.assertEqual(api_only["primary_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(api_only["primary_model_slot"]["model_id"], "wbp-deepseek-v3")
+        self.assertFalse(api_only["chatgpt_line_used_as_executor"])
+        self.assertFalse(api_only["api_only_calls_chatgpt"])
+        self.assertFalse(api_only["live_call_attempted"])
+        self.assertFalse(api_only["provider_called"])
+
+        self.assertEqual(chatgpt_plus_api["status"], "ok")
+        self.assertEqual(chatgpt_plus_api["primary_model_slot"]["lane"], "codex_account_lane")
+        self.assertEqual(chatgpt_plus_api["coding_agent_model_slot"]["lane"], "api_route_lane")
+        self.assertEqual(
+            chatgpt_plus_api["coding_agent_model_slot"]["model_id"],
+            "wbp-deepseek-v3",
+        )
+        self.assertTrue(chatgpt_plus_api["dual_lane_slots_preserved"])
+        self.assertFalse(chatgpt_plus_api["live_call_attempted"])
+        self.assertFalse(chatgpt_plus_api["provider_called"])
+
+        self.assertEqual(quick_start["status"], "ok")
+        self.assertEqual(quick_start["launch_admission"], "admitted")
+        self.assertEqual(quick_start["api_route"]["status"], "admitted")
+        self.assertFalse(quick_start["fallback_used"])
+        self.assertFalse(quick_start["silent_fallback_used"])
+        self.assertFalse(quick_start["live_call_attempted"])
+        self.assertFalse(quick_start["provider_called"])
+        self.assertFalse(quick_start["custom_codex_launch_attempted"])
+        quick_start_json = json.dumps(quick_start, ensure_ascii=False)
+        self.assertNotIn("DEEPSEEK_API_KEY", quick_start_json)
+        self.assertNotIn('"secret_ref"', quick_start_json)
+        self.assertNotIn('"base_url"', quick_start_json)
+        self.assertNotIn('"route_id"', quick_start_json)
+
+        self.assertEqual(deepseek_live_blocked["status"], "blocked")
+        self.assertEqual(
+            deepseek_live_blocked["machine_error_code"],
+            "API_ONLY_DEEPSEEK_OWNER_AUTH_REQUIRED",
+        )
+        self.assertFalse(deepseek_live_blocked["provider_called"])
+        self.assertFalse(deepseek_live_blocked["live_call_attempted"])
+        self.assertNotIn(
+            (
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "--expected-text",
+                "API_ONLY_DEEPSEEK_READY",
+                "--json",
+            ),
+            runner.calls,
+        )
+        self.assertNotIn(("sync", "--json"), runner.calls)
+        self.assertNotIn(("launch", "client", "--json"), runner.calls)
+        self.assertNotIn(
+            ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"),
+            runner.calls,
+        )
+        self.assertEqual(len(created_sessions), 1)
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
     def test_live_server_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
         with self.assertRaises(SystemExit) as raised:
             live_server.main(["--host", "0.0.0.0", "--port", "0"])
