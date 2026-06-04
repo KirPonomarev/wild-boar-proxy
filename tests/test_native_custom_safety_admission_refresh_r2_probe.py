@@ -29,7 +29,9 @@ class NativeCustomSafetyAdmissionRefreshR2ProbeTests(unittest.TestCase):
         live_gate = packets["native_custom_live_precondition_gate_packet.json"]
 
         if summary["status"] == "blocked":
-            self.assertIn("sync_gate_packet.json", summary["blocked_packets"])
+            self.assertTrue(summary["blocked_packets"])
+            for packet_name in summary["blocked_packets"]:
+                self.assertEqual(packets[packet_name]["status"], "blocked")
             self.assertFalse(summary["parent_target_closed"])
             self.assertFalse(summary["this_target_closed"])
             self.assertFalse(summary["native_launch_attempted"])
