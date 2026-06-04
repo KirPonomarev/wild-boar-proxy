@@ -763,6 +763,61 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         self.assertFalse(payload["post_rollback_verification"]["verified"])
         self.assertEqual(target.read_bytes(), b"old")
 
+    def test_rollback_latest_apply_exception_after_write_reports_changed_files(
+        self,
+    ) -> None:
+        target = self.commit_rollback_eligible_transaction()
+
+        def partial_rollback(*_args: Any, **_kwargs: Any) -> object:
+            target.write_bytes(b"old")
+            raise runtime_mod.state_transaction.StateTransactionError(
+                "Rollback failed after writing target.",
+                machine_error_code=(
+                    runtime_mod.state_transaction.STATE_TRANSACTION_FAILED_BLOCKED
+                ),
+            )
+
+        with mock.patch.object(
+            runtime_mod.state_transaction,
+            "rollback_latest_state_transaction",
+            side_effect=partial_rollback,
+        ):
+            payload = runtime_mod.run_rollback_latest_apply(self.paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(
+            payload["machine_error_code"],
+            runtime_mod.state_transaction.STATE_TRANSACTION_FAILED_BLOCKED,
+        )
+        self.assertEqual(payload["changed_files"], [str(target.resolve(strict=False))])
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_rollback_latest_apply_exception_before_write_keeps_changed_files_empty(
+        self,
+    ) -> None:
+        target = self.commit_rollback_eligible_transaction()
+
+        def blocked_rollback(*_args: Any, **_kwargs: Any) -> object:
+            raise runtime_mod.state_transaction.StateTransactionError(
+                "Rollback failed before writing target.",
+                machine_error_code=(
+                    runtime_mod.state_transaction.STATE_TRANSACTION_FAILED_BLOCKED
+                ),
+            )
+
+        with mock.patch.object(
+            runtime_mod.state_transaction,
+            "rollback_latest_state_transaction",
+            side_effect=blocked_rollback,
+        ):
+            payload = runtime_mod.run_rollback_latest_apply(self.paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["effect"], "repair")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(target.read_bytes(), b"new")
+
     def test_rollback_latest_cli_rejects_mutation_id_selection(self) -> None:
         target = self.commit_rollback_eligible_transaction()
 

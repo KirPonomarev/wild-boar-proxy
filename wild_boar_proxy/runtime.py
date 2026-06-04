@@ -7632,6 +7632,24 @@ def _verify_latest_rollback_result(
     }
 
 
+def _rollback_apply_changed_files_after_exception(
+    preflight: state_transaction.TransactionRollbackPreflightResult,
+) -> list[str]:
+    changed: list[str] = []
+    for item in preflight.files:
+        snapshot = mutation_ledger.snapshot_path(item.target_path)
+        if item.sha256_after is None:
+            item_changed = snapshot.kind != mutation_ledger.KIND_MISSING
+        else:
+            item_changed = (
+                snapshot.kind != mutation_ledger.KIND_FILE
+                or snapshot.sha256 != item.sha256_after
+            )
+        if item_changed:
+            changed.append(item.target_path)
+    return changed
+
+
 def run_rollback_latest_dry_run(paths: RuntimePaths) -> dict[str, Any]:
     transaction_root = paths.managed_dir.expanduser().resolve(strict=False)
     try:
@@ -7726,6 +7744,7 @@ def run_rollback_latest_apply(paths: RuntimePaths) -> dict[str, Any]:
             expected_rollback_id=preflight.rollback_id,
         )
     except state_transaction.StateTransactionError as exc:
+        changed_files = _rollback_apply_changed_files_after_exception(preflight)
         return build_command_payload(
             ok=False,
             human_message="Rollback apply failed during transaction rollback.",
@@ -7733,7 +7752,7 @@ def run_rollback_latest_apply(paths: RuntimePaths) -> dict[str, Any]:
             liveness="unknown",
             severity="recoverable",
             operator_action="user_action",
-            changed_files=[],
+            changed_files=changed_files,
             extra=_rollback_packet_extra(
                 preflight,
                 command_mode="apply",
