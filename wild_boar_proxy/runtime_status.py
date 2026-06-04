@@ -19,6 +19,7 @@ class RuntimeStatusPaths(Protocol):
     runtime_mode_file: Path
     stable_config: Path
     state_file: Path
+    sync_script: Path
 
 
 @dataclass(frozen=True)

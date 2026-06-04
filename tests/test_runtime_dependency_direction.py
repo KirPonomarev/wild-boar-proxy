@@ -2566,6 +2566,88 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertIs(payload, expected)
         builder.assert_called_once_with()
 
+    def test_runtime_last_known_good_proxy_contract_facade_matches_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.sync_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+            facade_payload = runtime_mod.build_last_known_good_proxy_contract(paths)
+            direct_payload = runtime_repair.build_last_known_good_proxy_contract(paths)
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "contract_ready")
+        self.assertEqual(
+            facade_payload["owner_command_surface"],
+            "healthcheck --repair --json",
+        )
+        self.assertEqual(
+            runtime_repair.LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+        )
+        self.assertEqual(
+            runtime_repair.LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+            runtime_mod.LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+        )
+        self.assertEqual(
+            facade_payload["state_fields"],
+            [
+                runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+                runtime_mod.LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+            ],
+        )
+
+    def test_runtime_last_known_good_proxy_contract_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            expected = {"surface": "last-known-good-proxy-contract"}
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_last_known_good_proxy_contract",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_last_known_good_proxy_contract(paths)
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(paths)
+
+    def test_runtime_last_known_good_proxy_contract_reports_sync_script_availability(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            missing_payload = runtime_repair.build_last_known_good_proxy_contract(
+                paths
+            )
+            paths.sync_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            available_payload = runtime_repair.build_last_known_good_proxy_contract(
+                paths
+            )
+
+        self.assertEqual(
+            missing_payload["launcher_lane_ineligible_sync_owner_recovery_surface"][
+                "status"
+            ],
+            "unavailable",
+        )
+        self.assertEqual(
+            available_payload["launcher_lane_ineligible_sync_owner_recovery_surface"][
+                "status"
+            ],
+            "available",
+        )
+        self.assertEqual(
+            available_payload["launcher_lane_ineligible_sync_owner_recovery_surface"][
+                "command_surface"
+            ],
+            "sync --json",
+        )
+
     def test_runtime_mode_get_facade_matches_direct_modes_module(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _runtime_paths(Path(temp_dir))

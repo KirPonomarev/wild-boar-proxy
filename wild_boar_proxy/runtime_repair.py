@@ -21,6 +21,7 @@ class RuntimeRepairPaths(Protocol):
     stable_config: Path
     stable_runtime_generated_config_file: Path
     state_file: Path
+    sync_script: Path
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,10 @@ HEALTHCHECK_REPAIR_CONTRACT: Final = HealthcheckRepairContract(
 
 STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV: Final = "WBP_STABLE_CONFIG"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: Final = "stable_runtime_consumer_snapshot"
+LAST_KNOWN_GOOD_PROXY_URL_FIELD: Final = "last_known_good_proxy_url"
+LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD: Final = (
+    "last_known_good_proxy_observed_at"
+)
 
 
 def build_deterministic_stable_recovery_contract(
@@ -203,6 +208,50 @@ def build_startup_contract_repair_contract() -> dict[str, Any]:
             "startup_cleanup_alone_sufficient": False,
             "top_level_ok_requires_live_attestation": True,
         },
+    }
+
+
+def build_last_known_good_proxy_contract(paths: RuntimeRepairPaths) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
+        "sync_owner_forbidden": True,
+        "launch_smoke_owner_forbidden": True,
+        "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "status": "available" if paths.sync_script.exists() else "unavailable",
+            "command_surface": "sync --json",
+            "owner_path_private": True,
+            "allowed_when_launcher_lane_ineligible": True,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "writes_managed_config_proxy_url": True,
+            "reproof_required": True,
+        },
+        "state_file": str(paths.state_file),
+        "state_fields": [
+            LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+        ],
+        "current_proxy_url_field": "current_proxy_url",
+        "current_proxy_url_reuse_forbidden": True,
+        "separate_metadata_file_default": False,
+        "write_owner": "serialized_healthcheck_owner_path",
+        "write_path_status": "owner_path_emitted",
+        "refresh_requires_positive_managed_proxy_proof": True,
+        "refresh_from_candidate_liveness_alone_forbidden": True,
+        "refresh_from_current_proxy_url_alone_forbidden": True,
+        "failed_reprobe_clears_persisted_value": False,
+        "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            "current_proxy_url",
+            "legacy.default_local_proxy_candidates",
+            "legacy.dynamic_local_listener_candidates",
+        ],
+        "candidate_inputs_bounded_local_only": True,
+        "candidate_input_deduped_after_filter": True,
+        "changed_files_visibility_required": True,
+        "historical_truth_promotes_live_truth": False,
     }
 
 
