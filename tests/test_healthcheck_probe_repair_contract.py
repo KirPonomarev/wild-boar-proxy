@@ -20,6 +20,7 @@ from tools.truth_tree_harness import (
     snapshot_truth_tree,
 )
 from wild_boar_proxy import runtime as runtime_mod
+from wild_boar_proxy import runtime_repair
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -506,6 +507,42 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         else:
             self.assertIsNone(payload["mutation_id"])
             self.assertEqual(ledger["status"], "not_mutated")
+
+    def test_healthcheck_repair_wrapper_requires_mutation_metadata(self) -> None:
+        class MissingMetadataDependencies:
+            def run_healthcheck(self, *_args, **_kwargs):
+                return {
+                    "status": "ok",
+                    "effect": "repair",
+                    "changed_files": [],
+                    "mutation_id": None,
+                }
+
+        with self.assertRaisesRegex(RuntimeError, "mutation_ledger"):
+            runtime_repair.run_healthcheck_repair(
+                self.paths,
+                dependencies=MissingMetadataDependencies(),
+            )
+
+        class CompleteMetadataDependencies:
+            def run_healthcheck(self, *_args, **_kwargs):
+                return {
+                    "status": "ok",
+                    "effect": "repair",
+                    "changed_files": [],
+                    "mutation_id": None,
+                    "mutation_ledger": {
+                        "status": "not_mutated",
+                        "changed_files": [],
+                    },
+                }
+
+        payload = runtime_repair.run_healthcheck_repair(
+            self.paths,
+            dependencies=CompleteMetadataDependencies(),
+        )
+        self.assertIn("mutation_id", payload)
+        self.assertIn("mutation_ledger", payload)
 
     def test_healthcheck_repair_last_known_good_refresh_is_rollback_backed(
         self,

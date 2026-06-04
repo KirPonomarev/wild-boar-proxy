@@ -3074,6 +3074,7 @@ LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD = "last_known_good_proxy_observed_at"
 HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_REFRESH_SCOPE = (
     "healthcheck_last_known_good_proxy_refresh"
 )
+ACCOUNTS_PROMOTE_MUTATION_SCOPE = "accounts_promote"
 HEALTHCHECK_LAST_KNOWN_GOOD_PROXY_TRANSACTION_PREFIX = "healthcheck-lkg"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS = [
     "schema_version",
@@ -15648,6 +15649,24 @@ def run_promote(
     )
 
 
+def _build_promote_mutation_id(
+    *, backend_id: str, changed_files: list[str]
+) -> str | None:
+    if not changed_files:
+        return None
+    return mutation_ledger.build_planned_mutation_id(
+        effect=EFFECT_MUTATE,
+        scope=ACCOUNTS_PROMOTE_MUTATION_SCOPE,
+        planned_records=[
+            {
+                "command": "accounts promote",
+                "backend_id": backend_id,
+                "changed_files": sorted(changed_files),
+            }
+        ],
+    )
+
+
 def _run_promote_impl(
     paths: RuntimePaths,
     backend_id: str,
@@ -15710,6 +15729,13 @@ def _run_promote_impl(
         }
         if extra:
             payload_extra.update(extra)
+        changed_files = detect_changed_files(
+            before, runtime_write_surface_candidates(paths)
+        )
+        payload_extra["mutation_id"] = _build_promote_mutation_id(
+            backend_id=backend_id,
+            changed_files=changed_files,
+        )
         return build_command_payload(
             ok=ok,
             human_message=human_message,
@@ -15717,11 +15743,10 @@ def _run_promote_impl(
             liveness=liveness,
             severity=severity,
             operator_action=operator_action,
-            changed_files=detect_changed_files(
-                before, runtime_write_surface_candidates(paths)
-            ),
+            changed_files=changed_files,
             extra=payload_extra,
             exit_code=exit_code,
+            effect=EFFECT_MUTATE,
         )
 
     def rollback_after_failed_verification(
@@ -15996,50 +16021,78 @@ def _run_promote_impl(
             "ok" if process_result.machine_error_code == PROCESS_OK else "nonzero"
         )
 
-        after_command_registry = read_json(paths.registry_file)
-        after_command_state = read_json(paths.state_file, required=False)
-        after_command_matches = get_registry_backends_by_id(
-            after_command_registry, backend_id
-        )
-        after_command_backend = (
-            after_command_matches[0] if len(after_command_matches) == 1 else None
-        )
-        before_selected_backend_ids = sorted(
-            str(item) for item in before_state.get("selected_backend_ids", []) or []
-        )
-        after_command_selected_backend_ids = sorted(
-            str(item) for item in after_command_state.get("selected_backend_ids", []) or []
-        )
-        promotion_result["routing_change_attempted"] = bool(
-            (
-                isinstance(after_command_backend, dict)
-                and str(after_command_backend.get("pool", "")) != previous_pool
+        try:
+            after_command_registry = read_json(paths.registry_file)
+            after_command_state = read_json(paths.state_file, required=False)
+            after_command_matches = get_registry_backends_by_id(
+                after_command_registry, backend_id
             )
-            or before_selected_backend_ids != after_command_selected_backend_ids
-        )
+            after_command_backend = (
+                after_command_matches[0]
+                if len(after_command_matches) == 1
+                else None
+            )
+            before_selected_backend_ids = sorted(
+                str(item) for item in before_state.get("selected_backend_ids", []) or []
+            )
+            after_command_selected_backend_ids = sorted(
+                str(item)
+                for item in after_command_state.get("selected_backend_ids", []) or []
+            )
+            promotion_result["routing_change_attempted"] = bool(
+                (
+                    isinstance(after_command_backend, dict)
+                    and str(after_command_backend.get("pool", "")) != previous_pool
+                )
+                or before_selected_backend_ids != after_command_selected_backend_ids
+            )
 
-        if len(after_command_matches) != 1:
-            promotion_result["final_outcome"] = "promotion_command_failed"
+            if len(after_command_matches) != 1:
+                promotion_result["final_outcome"] = "promotion_command_failed"
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Promotion did not leave a uniquely identifiable backend state."
+                    ),
+                    machine_error_code="PROMOTION_COMMAND_FAILED",
+                    liveness="unknown",
+                    operator_action="user_action",
+                    exit_code=external_exit_code if external_exit_code else 1,
+                )
+
+            if bool(after_command_backend.get("manual_hold", False)) or str(
+                after_command_backend.get("pool", "")
+            ) != "active":
+                promotion_result["final_outcome"] = "promotion_command_failed"
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Promotion command did not place the backend into active."
+                    ),
+                    machine_error_code="PROMOTION_COMMAND_FAILED",
+                    liveness="unknown",
+                    operator_action="user_action",
+                    exit_code=external_exit_code if external_exit_code else 1,
+                )
+        except RuntimeErrorInfo as exc:
             return rollback_after_failed_verification(
                 human_message=(
-                    "Promotion did not leave a uniquely identifiable backend state."
+                    "Promotion post-command state verification raised a runtime error."
                 ),
                 machine_error_code="PROMOTION_COMMAND_FAILED",
                 liveness="unknown",
-                operator_action="user_action",
-                exit_code=external_exit_code if external_exit_code else 1,
+                operator_action=exc.operator_action,
+                exit_code=exc.exit_code,
+                extra={"verification_error": str(exc)},
             )
-
-        if bool(after_command_backend.get("manual_hold", False)) or str(
-            after_command_backend.get("pool", "")
-        ) != "active":
-            promotion_result["final_outcome"] = "promotion_command_failed"
+        except Exception as exc:  # noqa: BLE001
             return rollback_after_failed_verification(
-                human_message="Promotion command did not place the backend into active.",
+                human_message=(
+                    "Promotion post-command state verification raised an unexpected error."
+                ),
                 machine_error_code="PROMOTION_COMMAND_FAILED",
                 liveness="unknown",
-                operator_action="user_action",
-                exit_code=external_exit_code if external_exit_code else 1,
+                operator_action="retry",
+                exit_code=1,
+                extra={"verification_error": str(exc)},
             )
 
         promotion_result["sync_attempted"] = True

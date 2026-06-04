@@ -763,4 +763,9 @@ def main(argv: list[str] | None = None) -> int:
         }
         if command_effect is not None:
             payload["effect"] = command_effect
+        if (
+            args.command == "accounts"
+            and getattr(args, "accounts_command", None) == "promote"
+        ):
+            payload["mutation_id"] = None
         return emit_json(payload)

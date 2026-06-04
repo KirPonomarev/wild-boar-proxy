@@ -12150,6 +12150,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
         promotion = payload["promotion_result"]
         self.assertEqual(promotion["precondition_status"], "eligible_reserve_backend")
         self.assertEqual(promotion["previous_pool"], "reserve")
@@ -12181,6 +12183,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["changed_files"], [])
         promotion = payload["promotion_result"]
         self.assertEqual(promotion["precondition_status"], "backend_not_reserve")
         self.assertFalse(promotion["rollback_point_captured"])
@@ -17218,6 +17223,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 9, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "PROMOTION_VALIDATE_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertIsNone(payload["mutation_id"])
         promotion = payload["promotion_result"]
         self.assertTrue(promotion["validate_attempted"])
         self.assertEqual(promotion["validate_outcome"], "failed")
@@ -17236,6 +17243,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
         self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_promote_runtime_error_preserves_null_mutation_id(self) -> None:
+        (self.managed_dir / "backend-registry.json").write_text("{", encoding="utf-8")
+
+        result = self.run_cli("accounts", "promote", "backend-a", "--json")
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["machine_error_code"], "INVALID_JSON_FILE")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertIsNone(payload["mutation_id"])
+        self.assertEqual(payload["changed_files"], [])
 
     def test_accounts_promote_validate_timeout_uses_bounded_process_contract(
         self,
@@ -17376,6 +17395,78 @@ class CliTests(unittest.TestCase):
             promotion["external_process_result"]["machine_error_code"],
             runtime_mod.PROCESS_TIMEOUT,
         )
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_promote_post_command_runtime_error_rolls_back(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-promote-corrupt-registry",
+                auth_ref="/tmp/codex-promote-corrupt-registry.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        validate_ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="",
+            stderr="validate-ok",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+        promote_ok = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="",
+            stderr="promote-corrupted-registry",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.001,
+        )
+
+        def fake_run_bounded_process(command, **kwargs):
+            command_text = [str(item) for item in command]
+            if command_text[1] == "validate":
+                return validate_ok
+            registry_path.write_text("{", encoding="utf-8")
+            return promote_ok
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod,
+                "run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ):
+                payload = runtime_mod.run_promote(
+                    paths, "backend-promote-corrupt-registry"
+                )
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_COMMAND_FAILED")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertRegex(payload["mutation_id"], r"^wbp-mut-[0-9a-f]{20}$")
+        self.assertIn(str(registry_path), payload["changed_files"])
+        self.assertIn("verification_error", payload)
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["rollback_point_captured"])
+        self.assertTrue(promotion["rollback_attempted"])
+        self.assertEqual(promotion["rollback_outcome"], "completed")
+        self.assertEqual(promotion["external_command_status"], "ok")
         self.assertEqual(
             promotion["final_outcome"], "rollback_completed_after_failed_verification"
         )

@@ -482,8 +482,18 @@ def run_healthcheck_repair(
     *,
     dependencies: HealthcheckRepairDependencies,
 ) -> dict[str, Any]:
-    return dependencies.run_healthcheck(
+    payload = dependencies.run_healthcheck(
         paths,
         model,
         **HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
     )
+    required_metadata_fields = ("mutation_id", "mutation_ledger")
+    missing_metadata_fields = [
+        field for field in required_metadata_fields if field not in payload
+    ]
+    if missing_metadata_fields:
+        raise RuntimeError(
+            "healthcheck repair packet missing mutation metadata: "
+            + ", ".join(missing_metadata_fields)
+        )
+    return payload

@@ -276,18 +276,7 @@ OWNER_SURFACES = {
     ),
 }
 
-KNOWN_EFFECT_CONTRACT_GAPS = {
-    "healthcheck_repair_missing_mutation_metadata": (
-        RUNTIME_REPAIR,
-        "run_healthcheck_repair",
-        "mutation_id",
-    ),
-    "promote_missing_mutation_metadata": (
-        RUNTIME,
-        "_run_promote_impl",
-        "mutation_id",
-    ),
-}
+KNOWN_EFFECT_CONTRACT_GAPS = {}
 
 
 def _module(path: Path) -> ast.Module:
@@ -609,6 +598,8 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         self.assertEqual(REPAIR, repair_surface.expected_class)
         self.assertTrue(repair_surface.required_calls <= repair_calls)
         self.assertIn("**HEALTHCHECK_REPAIR_CONTRACT.kwargs()", repair_source)
+        self.assertIn('"mutation_id"', repair_source)
+        self.assertIn('"mutation_ledger"', repair_source)
         self.assertNotIn("allow_recovery=", repair_source)
         self.assertEqual(
             runtime_repair.HEALTHCHECK_REPAIR_CONTRACT.kwargs(),
@@ -621,6 +612,16 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 "effect": "repair",
             },
         )
+
+    def test_promote_owner_path_declares_mutation_metadata(self) -> None:
+        promote_source = _function_source(RUNTIME, "_run_promote_impl")
+        mutation_id_source = _function_source(RUNTIME, "_build_promote_mutation_id")
+
+        self.assertIn('"mutation_id"', promote_source)
+        self.assertIn("effect=EFFECT_MUTATE", promote_source)
+        self.assertIn("_build_promote_mutation_id", promote_source)
+        self.assertIn("mutation_ledger.build_planned_mutation_id", mutation_id_source)
+        self.assertIn("ACCOUNTS_PROMOTE_MUTATION_SCOPE", mutation_id_source)
 
     def test_dispatch_surfaces_do_not_own_raw_primitives(
         self,
@@ -650,19 +651,14 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
 
         self.assertIn("command_effect = command_effect_from_args(args)", main_source)
         self.assertIn('payload["effect"] = command_effect', main_source)
+        self.assertIn('payload["mutation_id"] = None', main_source)
         self.assertIn("EFFECT_MUTATE", classifier_source)
         self.assertIn("EFFECT_PROBE", classifier_source)
         self.assertIn("EFFECT_READ", classifier_source)
         self.assertIn("EFFECT_REPAIR", classifier_source)
 
     def test_known_effect_contract_gaps_are_explicitly_tracked(self) -> None:
-        self.assertEqual(
-            {
-                "healthcheck_repair_missing_mutation_metadata",
-                "promote_missing_mutation_metadata",
-            },
-            set(KNOWN_EFFECT_CONTRACT_GAPS),
-        )
+        self.assertEqual(set(), set(KNOWN_EFFECT_CONTRACT_GAPS))
         for gap, (path, function, absent_text) in KNOWN_EFFECT_CONTRACT_GAPS.items():
             with self.subTest(gap=gap):
                 source = _function_source(path, function)

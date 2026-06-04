@@ -2292,7 +2292,12 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         def fake_run_healthcheck(*args: object, **kwargs: object) -> dict[str, object]:
             calls.append((args, kwargs))
-            return {"effect": "repair", "changed_files": ["state.json"]}
+            return {
+                "effect": "repair",
+                "changed_files": ["state.json"],
+                "mutation_id": "wbp-mut-test",
+                "mutation_ledger": {"changed_files": ["state.json"]},
+            }
 
         dependencies = runtime_repair.HealthcheckRepairDependencies(
             run_healthcheck=fake_run_healthcheck
@@ -2306,6 +2311,8 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         self.assertEqual(payload["effect"], "repair")
         self.assertEqual(payload["changed_files"], ["state.json"])
+        self.assertEqual(payload["mutation_id"], "wbp-mut-test")
+        self.assertEqual(payload["mutation_ledger"], {"changed_files": ["state.json"]})
         self.assertEqual(
             calls,
             [
@@ -3757,6 +3764,8 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             return {
                 "effect": kwargs["effect"],
                 "changed_files": ["state.json"],
+                "mutation_id": "wbp-mut-test",
+                "mutation_ledger": {"changed_files": ["state.json"]},
                 "surface": "fake-healthcheck",
             }
 

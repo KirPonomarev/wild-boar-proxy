@@ -1279,6 +1279,22 @@ remain separate from:
 `accounts promote <id> --json` is the owner surface for single-account
 promotion truth.
 
+Promotion packets must emit `effect="mutate"` and packet-only additive field
+`mutation_id`.
+
+`mutation_id` must be `null` when promotion exits with `changed_files=[]`,
+including precondition failure and validation failure.
+When promotion leaves bounded owner truth-state changes in `changed_files`,
+`mutation_id` must be a stable planned mutation id for the promotion command,
+target backend, and declared changed files.
+Rollback-completed failures may still report rollback-touched owner truth-state
+surfaces in `changed_files`; those packets must also carry a stable
+`mutation_id`.
+
+This phase does not add a promotion `mutation_ledger`, rollback API, or
+rollback-available claim. Promotion rollback evidence remains expressed through
+`promotion_result` and truthful `changed_files`.
+
 Promotion success must not be inferred from external promote subprocess exit
 code alone.
 Successful owner packets must prove, machine-readably:
