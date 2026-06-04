@@ -9,7 +9,7 @@ import hashlib
 import json
 import sys
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -26,9 +26,17 @@ ARCHIVE_FILENAME = "audit_results_raw.tar"
 
 
 class ExternalizationError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        mutations: list[dict[str, str]] | None = None,
+        written_files: list[str] | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
+        self.mutations = mutations or []
+        self.written_files = written_files or []
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
@@ -81,9 +89,29 @@ def validate_packet_redaction(packet: dict[str, Any]) -> list[str]:
 
 
 def resolve_audit_root(repo_root: Path, audit_root: Path) -> Path:
-    if audit_root.is_absolute():
-        return audit_root.resolve()
-    return (repo_root / audit_root).resolve()
+    raw_audit_root = audit_root if audit_root.is_absolute() else repo_root / audit_root
+    raw_audit_root = raw_audit_root.absolute()
+    if not _is_relative_to(raw_audit_root, repo_root):
+        raise ExternalizationError("audit_root_outside_repo")
+
+    ancestors = [raw_audit_root, *raw_audit_root.parents]
+    for ancestor in reversed(ancestors):
+        if ancestor.is_symlink():
+            raise ExternalizationError("audit_root_symlink_blocked")
+
+    resolved = raw_audit_root.resolve()
+    if not _is_relative_to(resolved, repo_root):
+        raise ExternalizationError("audit_root_outside_repo")
+    return resolved
+
+def reject_audit_root_symlinks(audit_root: Path) -> None:
+    if audit_root.is_symlink():
+        raise ExternalizationError("audit_results_symlink_blocked")
+    if not audit_root.exists():
+        return
+    for path in audit_root.rglob("*"):
+        if path.is_symlink():
+            raise ExternalizationError("audit_results_symlink_blocked")
 
 
 def validate_external_root(
@@ -143,6 +171,7 @@ def build_packet(
     archive_sha256: str | None,
     mutations: list[dict[str, str]],
     written_files: list[str],
+    verification: dict[str, Any],
 ) -> dict[str, Any]:
     summary = manifest["summary"]
     if not isinstance(summary, dict):
@@ -166,6 +195,7 @@ def build_packet(
         "archive_plan": archive_plan_from_manifest(manifest),
         "manifest_sha256": manifest_sha256,
         "archive_sha256": archive_sha256,
+        "verification": verification,
         "written_files": written_files,
         "mutations": mutations,
     }
@@ -175,7 +205,13 @@ def build_packet(
     return packet
 
 
-def blocked_packet(*, mode: str, code: str) -> dict[str, Any]:
+def blocked_packet(
+    *,
+    mode: str,
+    code: str,
+    mutations: list[dict[str, str]] | None = None,
+    written_files: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "artifact_type": ARTIFACT_TYPE,
@@ -187,7 +223,8 @@ def blocked_packet(*, mode: str, code: str) -> dict[str, Any]:
         "external_root_policy": "outside_repo_required",
         "error_code": code,
         "errors": [code],
-        "mutations": [],
+        "written_files": written_files or [],
+        "mutations": mutations or [],
     }
 
 
@@ -195,8 +232,17 @@ def write_manifest(external_root: Path, manifest_payload: bytes) -> Path:
     manifest_path = external_root / MANIFEST_FILENAME
     if manifest_path.exists():
         raise ExternalizationError("external_manifest_already_exists")
-    manifest_path.write_bytes(manifest_payload + b"\n")
+    manifest_path.write_bytes(manifest_payload)
     return manifest_path
+
+
+def _tar_path_is_safe(name: str, *, audit_source_root: str) -> bool:
+    path = PurePosixPath(name)
+    if path.is_absolute():
+        return False
+    if ".." in path.parts:
+        return False
+    return name == audit_source_root or name.startswith(f"{audit_source_root}/")
 
 
 def write_raw_archive(
@@ -221,11 +267,12 @@ def write_raw_archive(
                 continue
 
             repo_path = str(entry["path"])
-            source = (repo_root / repo_path).resolve()
+            raw_source = repo_root / repo_path
+            if raw_source.is_symlink():
+                raise ExternalizationError("archive_source_symlink_blocked")
+            source = raw_source.resolve()
             if not _is_relative_to(source, repo_root):
                 raise ExternalizationError("archive_source_outside_repo")
-            if source.is_symlink():
-                raise ExternalizationError("archive_source_symlink_blocked")
             if not source.is_file():
                 raise ExternalizationError("archive_source_missing")
 
@@ -240,6 +287,85 @@ def write_raw_archive(
             with source.open("rb") as handle:
                 archive.addfile(info, handle)
     return archive_path
+
+
+def verify_archive_readback(
+    *,
+    archive_path: Path,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    archive_sha256: str,
+    manifest_sha256: str,
+) -> dict[str, Any]:
+    if not manifest_path.is_file():
+        raise ExternalizationError("external_manifest_missing")
+    if not archive_path.is_file():
+        raise ExternalizationError("external_archive_missing")
+    if _sha256_file(manifest_path) != manifest_sha256:
+        raise ExternalizationError("external_manifest_digest_mismatch")
+    if _sha256_file(archive_path) != archive_sha256:
+        raise ExternalizationError("external_archive_digest_mismatch")
+
+    manifest_from_disk = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest_builder.validate_manifest_redaction(manifest_from_disk):
+        raise ExternalizationError("external_manifest_redaction_failed")
+    if manifest_from_disk.get("summary") != manifest.get("summary"):
+        raise ExternalizationError("external_manifest_summary_mismatch")
+
+    archive_plan = archive_plan_from_manifest(manifest)
+    audit_source_root = str(manifest["source_root"])
+    expected_sha_by_path = {
+        str(entry["path"]): str(entry["sha256"])
+        for entry in manifest["entries"]
+        if isinstance(entry, dict)
+        and entry.get("kind") == "file"
+        and entry.get("dirty_state") != "deleted"
+    }
+    seen_paths: set[str] = set()
+    total_size = 0
+    entries_total = 0
+    with tarfile.open(archive_path, "r") as archive:
+        members = archive.getmembers()
+        for member in members:
+            entries_total += 1
+            total_size += member.size
+            if not member.isfile():
+                raise ExternalizationError("archive_member_not_regular_file")
+            if member.issym() or member.islnk():
+                raise ExternalizationError("archive_member_link_blocked")
+            if not _tar_path_is_safe(member.name, audit_source_root=audit_source_root):
+                raise ExternalizationError("archive_member_path_unsafe")
+            if member.name not in expected_sha_by_path:
+                raise ExternalizationError("archive_member_not_in_manifest")
+            handle = archive.extractfile(member)
+            if handle is None:
+                raise ExternalizationError("archive_member_payload_missing")
+            digest = hashlib.sha256(handle.read()).hexdigest()
+            if digest != expected_sha_by_path[member.name]:
+                raise ExternalizationError("archive_member_digest_mismatch")
+            seen_paths.add(member.name)
+
+    if entries_total != archive_plan["files_to_archive"]:
+        raise ExternalizationError("archive_entry_count_mismatch")
+    if seen_paths != set(expected_sha_by_path):
+        raise ExternalizationError("archive_manifest_member_set_mismatch")
+    if total_size != archive_plan["bytes_to_archive"]:
+        raise ExternalizationError("archive_size_mismatch")
+
+    return {
+        "status": "passed",
+        "archive_entries_total": entries_total,
+        "archive_bytes_total": total_size,
+        "archive_entry_count_matches_plan": True,
+        "archive_size_matches_plan": True,
+        "archive_paths_safe": True,
+        "archive_regular_files_only": True,
+        "archive_member_sha256_matches": True,
+        "archive_sha256_matches": True,
+        "manifest_sha256_matches": True,
+        "manifest_summary_matches": True,
+        "manifest_redaction_passed": True,
+    }
 
 
 def run_export(
@@ -259,6 +385,7 @@ def run_export(
         audit_root=audit_root,
         external_root=external_root,
     )
+    reject_audit_root_symlinks(audit_root)
     if mode == "archive":
         validate_archive_mode(include_raw=include_raw, acknowledgement=acknowledgement)
 
@@ -277,25 +404,49 @@ def run_export(
             archive_sha256=None,
             mutations=[],
             written_files=[],
+            verification={"status": "not_applicable", "reason": "dry_run"},
         )
 
     external_root.mkdir(parents=True, exist_ok=True)
+    mutations: list[dict[str, str]] = []
+    written_files: list[str] = []
     manifest_path = write_manifest(external_root, manifest_payload)
+    written_files.append(manifest_path.name)
+    mutations.append(
+        {"surface": "external_root", "kind": "write_file", "file": manifest_path.name}
+    )
     archive_path = write_raw_archive(
         repo_root=repo_root,
         external_root=external_root,
         manifest=manifest,
     )
+    written_files.append(archive_path.name)
+    mutations.append(
+        {"surface": "external_root", "kind": "write_file", "file": archive_path.name}
+    )
+    archive_sha256 = _sha256_file(archive_path)
+    try:
+        verification = verify_archive_readback(
+            archive_path=archive_path,
+            manifest_path=manifest_path,
+            manifest=manifest,
+            archive_sha256=archive_sha256,
+            manifest_sha256=manifest_sha256,
+        )
+    except ExternalizationError as error:
+        raise ExternalizationError(
+            error.code,
+            mutations=mutations,
+            written_files=written_files,
+        ) from error
     return build_packet(
         mode=mode,
         manifest=manifest,
         manifest_sha256=manifest_sha256,
-        archive_sha256=_sha256_file(archive_path),
-        written_files=[manifest_path.name, archive_path.name],
-        mutations=[
-            {"surface": "external_root", "kind": "write_file", "file": manifest_path.name},
-            {"surface": "external_root", "kind": "write_file", "file": archive_path.name},
-        ],
+        archive_sha256=archive_sha256,
+        written_files=written_files,
+        mutations=mutations,
+        verification=verification,
     )
 
 
@@ -366,7 +517,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except ExternalizationError as error:
         sys.stdout.buffer.write(
-            packet_json_bytes(blocked_packet(mode=args.mode, code=error.code)) + b"\n"
+            packet_json_bytes(
+                blocked_packet(
+                    mode=args.mode,
+                    code=error.code,
+                    mutations=error.mutations,
+                    written_files=error.written_files,
+                )
+            )
+            + b"\n"
         )
         return 1
     except Exception:

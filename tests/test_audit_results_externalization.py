@@ -1,7 +1,9 @@
 import importlib.util
+import io
 import json
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -85,6 +87,16 @@ def _run_exporter(
 
 def _packet(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return json.loads(result.stdout)
+
+
+def _manifest_for(repo_root: Path) -> dict[str, object]:
+    return exporter.manifest_builder.build_manifest(repo_root, repo_root / "audit_results")
+
+
+def _write_manifest(external_root: Path, manifest: dict[str, object]) -> Path:
+    manifest_path = external_root / exporter.MANIFEST_FILENAME
+    manifest_path.write_bytes(exporter.manifest_builder.manifest_json_bytes(manifest))
+    return manifest_path
 
 
 class AuditResultsExternalizationTests(unittest.TestCase):
@@ -180,6 +192,15 @@ class AuditResultsExternalizationTests(unittest.TestCase):
             packet["written_files"],
         )
         self.assertEqual(2, len(packet["mutations"]))
+        self.assertIsInstance(packet["verification"], dict)
+        verification = packet["verification"]
+        self.assertEqual("passed", verification["status"])
+        self.assertEqual(1, verification["archive_entries_total"])
+        self.assertTrue(verification["archive_paths_safe"])
+        self.assertTrue(verification["archive_regular_files_only"])
+        self.assertTrue(verification["archive_member_sha256_matches"])
+        self.assertTrue(verification["archive_sha256_matches"])
+        self.assertTrue(verification["manifest_sha256_matches"])
 
     def test_packet_redacts_secret_and_personal_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -222,6 +243,7 @@ class AuditResultsExternalizationTests(unittest.TestCase):
         self.assertEqual(0, result_a.returncode, result_a.stderr)
         self.assertEqual(0, result_b.returncode, result_b.stderr)
         self.assertEqual(packet_a["archive_sha256"], packet_b["archive_sha256"])
+        self.assertEqual(packet_a["verification"], packet_b["verification"])
 
     def test_dry_run_reflects_deleted_tracked_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -238,6 +260,186 @@ class AuditResultsExternalizationTests(unittest.TestCase):
         self.assertIsInstance(archive_plan, dict)
         self.assertEqual(1, archive_plan["deleted_tracked_entries"])
         self.assertEqual(0, archive_plan["files_to_archive"])
+
+    def test_verify_archive_rejects_absolute_tar_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            external_root.mkdir()
+            manifest = _manifest_for(repo_root)
+            manifest_path = _write_manifest(external_root, manifest)
+            archive_path = external_root / exporter.ARCHIVE_FILENAME
+            with tarfile.open(archive_path, "w") as archive:
+                info = tarfile.TarInfo("/audit_results/packet.json")
+                info.size = 0
+                archive.addfile(info)
+
+            with self.assertRaises(exporter.ExternalizationError) as raised:
+                exporter.verify_archive_readback(
+                    archive_path=archive_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    archive_sha256=exporter._sha256_file(archive_path),
+                    manifest_sha256=exporter._sha256_file(manifest_path),
+                )
+
+        self.assertEqual("archive_member_path_unsafe", raised.exception.code)
+
+    def test_verify_archive_rejects_dotdot_tar_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            external_root.mkdir()
+            manifest = _manifest_for(repo_root)
+            manifest_path = _write_manifest(external_root, manifest)
+            archive_path = external_root / exporter.ARCHIVE_FILENAME
+            with tarfile.open(archive_path, "w") as archive:
+                info = tarfile.TarInfo("audit_results/../packet.json")
+                info.size = 0
+                archive.addfile(info)
+
+            with self.assertRaises(exporter.ExternalizationError) as raised:
+                exporter.verify_archive_readback(
+                    archive_path=archive_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    archive_sha256=exporter._sha256_file(archive_path),
+                    manifest_sha256=exporter._sha256_file(manifest_path),
+                )
+
+        self.assertEqual("archive_member_path_unsafe", raised.exception.code)
+
+    def test_verify_archive_rejects_symlink_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            external_root.mkdir()
+            manifest = _manifest_for(repo_root)
+            manifest_path = _write_manifest(external_root, manifest)
+            archive_path = external_root / exporter.ARCHIVE_FILENAME
+            with tarfile.open(archive_path, "w") as archive:
+                info = tarfile.TarInfo("audit_results/packet.json")
+                info.type = tarfile.SYMTYPE
+                info.linkname = "/tmp/target"
+                archive.addfile(info)
+
+            with self.assertRaises(exporter.ExternalizationError) as raised:
+                exporter.verify_archive_readback(
+                    archive_path=archive_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    archive_sha256=exporter._sha256_file(archive_path),
+                    manifest_sha256=exporter._sha256_file(manifest_path),
+                )
+
+        self.assertEqual("archive_member_not_regular_file", raised.exception.code)
+
+    def test_verify_archive_rejects_count_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            external_root.mkdir()
+            manifest = _manifest_for(repo_root)
+            manifest_path = _write_manifest(external_root, manifest)
+            archive_path = external_root / exporter.ARCHIVE_FILENAME
+            with tarfile.open(archive_path, "w"):
+                pass
+
+            with self.assertRaises(exporter.ExternalizationError) as raised:
+                exporter.verify_archive_readback(
+                    archive_path=archive_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    archive_sha256=exporter._sha256_file(archive_path),
+                    manifest_sha256=exporter._sha256_file(manifest_path),
+                )
+
+        self.assertEqual("archive_entry_count_mismatch", raised.exception.code)
+
+    def test_verify_archive_rejects_member_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            external_root.mkdir()
+            manifest = _manifest_for(repo_root)
+            manifest_path = _write_manifest(external_root, manifest)
+            archive_path = external_root / exporter.ARCHIVE_FILENAME
+            payload = b'{"packet":false}\n'
+            with tarfile.open(archive_path, "w") as archive:
+                info = tarfile.TarInfo("audit_results/packet.json")
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+
+            with self.assertRaises(exporter.ExternalizationError) as raised:
+                exporter.verify_archive_readback(
+                    archive_path=archive_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    archive_sha256=exporter._sha256_file(archive_path),
+                    manifest_sha256=exporter._sha256_file(manifest_path),
+                )
+
+        self.assertEqual("archive_member_digest_mismatch", raised.exception.code)
+
+    def test_export_blocks_symlinked_audit_entry_structurally(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            outside = Path(temp_dir) / "outside.txt"
+            outside.write_text("outside\n", encoding="utf-8")
+            (audit_dir / "linked.txt").symlink_to(outside)
+
+            result = _run_exporter(repo_root, external_root, "--dry-run")
+            packet = _packet(result)
+
+        self.assertEqual(1, result.returncode)
+        self.assertFalse(external_root.exists())
+        self.assertEqual("blocked", packet["status"])
+        self.assertEqual("audit_results_symlink_blocked", packet["error_code"])
+
+    def test_export_blocks_symlinked_audit_root_ancestor_structurally(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            outside = Path(temp_dir) / "outside"
+            outside.mkdir()
+            (outside / "audit_results").mkdir()
+            (repo_root / "alias").symlink_to(outside, target_is_directory=True)
+
+            result = _run_exporter(
+                repo_root,
+                external_root,
+                "--audit-root",
+                "alias/audit_results",
+                "--dry-run",
+            )
+            packet = _packet(result)
+
+        self.assertEqual(1, result.returncode)
+        self.assertFalse(external_root.exists())
+        self.assertEqual("blocked", packet["status"])
+        self.assertEqual("audit_root_symlink_blocked", packet["error_code"])
+
+    def test_export_blocks_absolute_audit_root_outside_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root, _audit_dir = _init_repo_with_audit_file(temp_dir)
+            external_root = Path(temp_dir) / "external_archive"
+            outside = Path(temp_dir) / "outside_audit_results"
+            outside.mkdir()
+
+            result = _run_exporter(
+                repo_root,
+                external_root,
+                "--audit-root",
+                str(outside),
+                "--dry-run",
+            )
+            packet = _packet(result)
+
+        self.assertEqual(1, result.returncode)
+        self.assertFalse(external_root.exists())
+        self.assertEqual("blocked", packet["status"])
+        self.assertEqual("audit_root_outside_repo", packet["error_code"])
 
 
 if __name__ == "__main__":
