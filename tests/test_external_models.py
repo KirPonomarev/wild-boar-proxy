@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
+from wild_boar_proxy.core import packets
 from wild_boar_proxy.external_models import contracts, routes
 from wild_boar_proxy.external_models import lifecycle
 from wild_boar_proxy.external_models import transforms
@@ -256,6 +257,30 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertFalse(state["local_auth"]["token_present"])
             self.assertEqual(paths.secrets_file.read_text(encoding="utf-8"), "")
             self.assertEqual(paths.secrets_file.stat().st_mode & 0o777, 0o600)
+
+    def test_build_external_models_payload_keeps_domain_actions_passthrough(self) -> None:
+        packet = contracts.build_external_models_payload(
+            ok=False,
+            human_message="owner action required",
+            machine_error_code="credential_source_missing",
+            data={"route_id": "wbp-deepseek-v3"},
+            next_action="api_route_connect",
+            severity="critical",
+            liveness="warming_up",
+        )
+
+        self.assertEqual(packet["operator_action"], "api_route_connect")
+        self.assertEqual(packet["next_action"], "api_route_connect")
+        self.assertEqual(packet["severity"], "critical")
+        self.assertEqual(packet["liveness"], "warming_up")
+        self.assertEqual(
+            packets.classify_command_operator_action(packet["operator_action"]),
+            "legacy",
+        )
+        self.assertEqual(
+            packets.classify_command_next_action(packet["next_action"]),
+            "legacy",
+        )
 
     def test_capture_local_evidence_writes_non_self_referential_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

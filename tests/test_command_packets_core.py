@@ -104,6 +104,51 @@ class CommandPacketsCoreTests(unittest.TestCase):
             packets.COMMAND_PACKET_REQUIRED_FIELDS,
         )
 
+    def test_packet_value_vocabulary_matches_j4_scope(self) -> None:
+        self.assertEqual(packets.COMMAND_STATUS_VALUES, ("ok", "error"))
+        self.assertEqual(
+            packets.COMMAND_LIVENESS_VALUES,
+            ("healthy", "degraded", "down", "unknown", "not_applicable"),
+        )
+        self.assertEqual(packets.COMMAND_SEVERITY_VALUES, ("recoverable", "fatal", "high"))
+        self.assertEqual(
+            packets.COMMAND_OPERATOR_ACTION_VALUES,
+            ("none", "retry", "user_action", "stop"),
+        )
+        self.assertEqual(
+            packets.COMMAND_NEXT_ACTION_VALUES,
+            ("none", "retry", "user_action", "stop"),
+        )
+
+    def test_packet_value_classification_is_additive(self) -> None:
+        self.assertEqual(packets.classify_command_status("ok"), "core")
+        self.assertEqual(packets.classify_command_status("blocked"), "legacy")
+        self.assertEqual(packets.classify_command_status("bad-status"), "invalid_shape")
+        self.assertEqual(packets.classify_command_liveness("not_applicable"), "core")
+        self.assertEqual(packets.classify_command_liveness("warming_up"), "legacy")
+        self.assertEqual(packets.classify_command_severity("high"), "core")
+        self.assertEqual(packets.classify_command_severity("critical"), "legacy")
+        self.assertEqual(packets.classify_command_operator_action("retry"), "core")
+        self.assertEqual(
+            packets.classify_command_operator_action("repair_runtime"), "legacy"
+        )
+        self.assertEqual(packets.classify_command_next_action("stop"), "core")
+        self.assertEqual(
+            packets.classify_command_next_action("accounts_login_start"), "legacy"
+        )
+        self.assertEqual(packets.classify_command_next_action("bad/action"), "invalid_shape")
+        self.assertEqual(packets.classify_command_operator_action(None), "invalid_shape")
+
+    def test_command_value_token_shape_is_compatibility_wide(self) -> None:
+        self.assertTrue(packets.is_command_value_token("repair_runtime"))
+        self.assertTrue(packets.is_command_value_token("accounts_login_start"))
+        self.assertTrue(packets.is_command_value_token("A1_B2"))
+        self.assertFalse(packets.is_command_value_token("_leading_underscore"))
+        self.assertFalse(packets.is_command_value_token("1_leading_digit"))
+        self.assertFalse(packets.is_command_value_token("bad action"))
+        self.assertFalse(packets.is_command_value_token("bad-action"))
+        self.assertFalse(packets.is_command_value_token("bad/action"))
+
     def test_command_exit_code_mapping_preserves_compatibility(self) -> None:
         self.assertEqual(packets.COMMAND_EXIT_OK, 0)
         self.assertEqual(packets.COMMAND_EXIT_ERROR, 1)
@@ -196,6 +241,70 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertEqual(payload["operator_action"], "override")
         self.assertEqual(payload["next_action"], "stop")
         self.assertEqual(payload["effect"], "raw-extra-effect")
+
+    def test_build_command_packet_keeps_legacy_action_values_passthrough(self) -> None:
+        payload = packets.build_command_packet(
+            ok=True,
+            human_message="legacy action",
+            machine_error_code="OK",
+            liveness="warming_up",
+            severity="critical",
+            operator_action="repair_runtime",
+            changed_files=[],
+        )
+
+        self.assertEqual(payload["operator_action"], "repair_runtime")
+        self.assertEqual(payload["next_action"], "repair_runtime")
+        self.assertEqual(
+            packets.classify_command_operator_action(payload["operator_action"]),
+            "legacy",
+        )
+        self.assertEqual(
+            packets.classify_command_next_action(payload["next_action"]),
+            "legacy",
+        )
+        self.assertEqual(
+            runtime_mod.build_command_payload(
+                ok=True,
+                human_message="legacy action",
+                machine_error_code="OK",
+                liveness="warming_up",
+                severity="critical",
+                operator_action="repair_runtime",
+                changed_files=[],
+            ),
+            payload,
+        )
+        self.assertEqual(
+            runtime_modes._build_command_payload(
+                ok=True,
+                human_message="legacy action",
+                machine_error_code="OK",
+                liveness="warming_up",
+                severity="critical",
+                operator_action="repair_runtime",
+                changed_files=[],
+            ),
+            payload,
+        )
+
+    def test_build_command_packet_keeps_action_extra_override_behavior(self) -> None:
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message="override action",
+            machine_error_code="PROCESS_FAILED",
+            liveness="down",
+            severity="fatal",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "operator_action": "user_action",
+                "next_action": "accounts_login_start",
+            },
+        )
+
+        self.assertEqual(payload["operator_action"], "user_action")
+        self.assertEqual(payload["next_action"], "accounts_login_start")
 
     def test_build_command_packet_keeps_legacy_machine_error_code_passthrough(self) -> None:
         payload = packets.build_command_packet(
