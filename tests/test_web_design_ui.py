@@ -1389,15 +1389,23 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartDeepSeekCodeEditProofAction"', section)
         self.assertIn("Проверить DeepSeek-правку", section)
         self.assertIn('id="quickStartCustomLaunchAction"', section)
-        self.assertIn("Запустить Codex Custom", section)
+        self.assertIn("Проверить запуск", section)
         self.assertIn('id="quickStartLaunchPreflightAction"', section)
         self.assertIn("Предзапусковая проверка", section)
+        self.assertIn('id="quickStartChatSlotState"', section)
+        self.assertIn('id="quickStartApiSlotState"', section)
+        self.assertIn('id="quickStartOwnerAuthState"', section)
         self.assertIn('id="quickStartBridgeState"', section)
         self.assertIn('id="quickStartWindowState"', section)
         self.assertIn('id="quickStartConfigState"', section)
-        self.assertIn('document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch())', js)
+        self.assertIn('id="quickStartNextActionState"', section)
+        self.assertIn(
+            'document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartLaunchAdmissionProjection())',
+            js,
+        )
         self.assertIn('document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight())', js)
         self.assertIn('fetch("api/codex/custom/native-launch-preflight"', js)
+        self.assertIn("runQuickStartLaunchAdmissionProjection", js)
         self.assertIn("renderQuickStartLaunchPreflight", js)
         self.assertIn("visible_window_counts_as_model_truth", js)
         self.assertIn("bridge_alive_counts_as_model_truth", js)
@@ -1416,6 +1424,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertNotIn("secret_ref", show_window_button)
         self.assertIn('id="quickStartVisibleHistoryConfirmAction"', section)
         self.assertIn("syncCodexRouteSelects", js)
+        self.assertIn("quickStartAdmissionComponentVisual", js)
+        self.assertIn("quickStartNextActionLabel", js)
         self.assertIn("apiReasoningOptionForModelEntry", js)
         self.assertIn("provider_declared_max", js)
         self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
@@ -1537,6 +1547,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartCheckAllAction" class="button quick-start-only check-all-action"', html)
         self.assertIn('data-ui-action="quick_start_check_all"', html)
         self.assertNotIn('id="quickStartCheckAllAction" class="button primary', html)
+        self.assertNotIn(".quick-start-route-card .quick-start-api-checklist .quick-start-check-row:nth-child(n+2)", css)
         self.assertIn(".header-actions #quickStartCheckAllAction:disabled", css)
         self.assertIn('document.getElementById("quickStartCheckAllAction")?.addEventListener("click"', js)
         self.assertIn('maybeConfirmAndRunFromButton(button, button.dataset.uiAction || "quick_start_check_all")', js)
@@ -1752,6 +1763,197 @@ sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
   }
   if (requestBody.execution_mode !== "chatgpt_plus_api" || requestBody.api_model_id !== "wbp-deepseek-v3") {
     throw new Error(`selection body mismatch ${JSON.stringify(requestBody)}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_primary_launch_action_is_admission_projection_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(id = "") {
+    this.id = id;
+    this.dataset = {};
+    this.disabled = false;
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.3-codex";
+node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+
+const urls = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options.body);
+    for (const forbidden of ["route_id", "secret_ref", "api_key", "base_url", "path", "CODEX_HOME"]) {
+      if (JSON.stringify(body).includes(forbidden)) {
+        throw new Error(`forbidden browser field leaked into projection body: ${forbidden}`);
+      }
+    }
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+          execution_mode: "chatgpt_plus_api",
+          chatgpt_model: { status: "admitted", model_id: "gpt-5.3-codex" },
+          api_model: { status: "admitted", model_id: "wbp-deepseek-v3" },
+          api_reasoning: { status: "defaulted", option_id: "catalog_default" },
+          api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+          launch_admission: "admitted",
+          launch_admission_summary: "Config admission ok; preflight remains separate.",
+          dry_server_truth_only: true,
+          custom_codex_launch_attempted: false,
+          new_launch_started: false,
+          network_calls_made: false,
+          live_call_attempted: false,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "none"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "blocked",
+          machine_error_code: "OWNER_AUTHORIZATION_REQUIRED",
+          human_message: "Owner authorization required.",
+          final_status: "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
+          execution_mode: "chatgpt_plus_api",
+          selected_model: "gpt-5.3-codex",
+          owner_authorization_phrase_present: false,
+          preflight_claim_scope: "quick_start_launch_guard_no_live_mutation",
+          bridge_required: true,
+          bridge_alive: false,
+          bridge_status: "not_started_or_down",
+          custom_process_observed: false,
+          window_status: "not_found",
+          config_status: "no_previous_launch",
+          show_window_attempted: false,
+          custom_codex_launch_attempted: false,
+          new_launch_started: false,
+          network_calls_made: false,
+          live_call_attempted: false,
+          provider_called: false,
+          live_provider_called: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "provide_exact_owner_authorization_phrase"
+        })
+      });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.runQuickStartLaunchAdmissionProjection().then(() => {
+  const expected = [
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected projection fetches ${JSON.stringify(urls)}`);
+  }
+  if (urls.some((url) => url === "api/codex/custom/native-launch")) {
+    throw new Error("quick-start projection called live native launch");
+  }
+  if (nodes.quickStartChatSlotState.lastElementChild.textContent !== "admitted") {
+    throw new Error(`chat slot not projected: ${nodes.quickStartChatSlotState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartApiSlotState.lastElementChild.textContent !== "admitted") {
+    throw new Error(`api slot not projected: ${nodes.quickStartApiSlotState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartOwnerAuthState.lastElementChild.textContent !== "owner auth") {
+    throw new Error(`owner auth not projected: ${nodes.quickStartOwnerAuthState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartLaunchState.className.includes("green")) {
+    throw new Error(`owner-auth blocked preflight must not be green: ${nodes.quickStartLaunchState.className}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (rendered.owner_authorization_phrase_present !== false) {
+    throw new Error(`owner auth truth missing: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  for (const field of ["custom_codex_launch_attempted", "new_launch_started", "network_calls_made", "live_call_attempted", "provider_called"]) {
+    if (rendered[field] !== false) {
+      throw new Error(`${field} must stay false in projection: ${nodes.quickStartRouteResponse.textContent}`);
+    }
+  }
+  if (rendered.next_action !== "provide_exact_owner_authorization_phrase") {
+    throw new Error(`next_action not preserved: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);

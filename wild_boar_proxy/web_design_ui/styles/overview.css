@@ -7731,7 +7731,6 @@ button:disabled {
   display: grid;
 }
 
-.desktop[data-screen="quick-start"] .quick-start-route-card .quick-start-api-checklist .quick-start-check-row:nth-child(n+2),
 .desktop[data-screen="quick-start"] #quickStartCheckAccountsAction,
 .desktop[data-screen="quick-start"] #quickStartRouteRefreshAction,
 .desktop[data-screen="quick-start"] #quickStartExecutionModeDryRunAction,

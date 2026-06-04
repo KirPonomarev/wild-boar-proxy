@@ -1525,12 +1525,66 @@ function quickStartExecutionModeLabel(mode) {
   return "не выбран";
 }
 
+function quickStartAdmissionComponentVisual(component) {
+  const status = component?.status || "";
+  if (["admitted", "accepted", "defaulted"].includes(status)) {
+    return "green";
+  }
+  if (status === "not_required") {
+    return "neutral";
+  }
+  if (["missing", "unavailable", "not_confirmed", "blocked", "rejected"].includes(status)) {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartAdmissionComponentLabel(component) {
+  const status = component?.status || "";
+  if (status === "not_required") {
+    return "not required";
+  }
+  if (status === "admitted") {
+    return "admitted";
+  }
+  if (status === "accepted" || status === "defaulted") {
+    return status;
+  }
+  return status || "unknown";
+}
+
+function quickStartNextActionLabel(nextAction) {
+  const action = nextAction || "";
+  if (!action || action === "none") {
+    return "none";
+  }
+  if (action === "provide_exact_owner_authorization_phrase") {
+    return "owner auth";
+  }
+  if (action === "repair_quick_start_config_selection") {
+    return "repair config";
+  }
+  if (action === "remove_forbidden_browser_fields" || action === "remove_browser_payload_fields") {
+    return "remove fields";
+  }
+  if (action.includes("launch_custom_codex") || action.includes("launch_or_reuse_custom_codex")) {
+    return "launch gated";
+  }
+  if (action === "show_existing_window") {
+    return "show window";
+  }
+  return action.length > 18 ? `${action.slice(0, 18)}...` : action;
+}
+
 function renderQuickStartConfigAdmission(packet) {
   const admitted = packet?.status === "ok" && packet?.launch_admission === "admitted";
   const blocked = packet?.status === "blocked" || packet?.status === "rejected";
   const modeLabel = quickStartExecutionModeLabel(packet?.execution_mode || "");
   const apiRoute = packet?.api_route || {};
   const apiReasoning = packet?.api_reasoning || {};
+  const chatgptModel = packet?.chatgpt_model || {};
+  const apiModel = packet?.api_model || {};
+  const nextAction = packet?.next_action || "";
   setQuickStartChip(
     "quickStartRouteChip",
     admitted ? "green" : (blocked ? "amber" : "red"),
@@ -1542,9 +1596,34 @@ function renderQuickStartConfigAdmission(packet) {
     modeLabel
   );
   setQuickStartChip(
+    "quickStartChatSlotState",
+    quickStartAdmissionComponentVisual(chatgptModel),
+    quickStartAdmissionComponentLabel(chatgptModel)
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    quickStartAdmissionComponentVisual(apiModel),
+    quickStartAdmissionComponentLabel(apiModel)
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    "neutral",
+    "preflight"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    admitted ? "green" : (blocked ? "amber" : "red"),
+    admitted ? "admission ok" : "blocked"
+  );
+  setQuickStartChip(
     "quickStartConfigState",
     admitted ? "green" : (blocked ? "amber" : "red"),
     packet?.launch_admission === "admitted" ? "admitted" : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    !nextAction || nextAction === "none" ? "green" : "amber",
+    quickStartNextActionLabel(nextAction)
   );
   setQuickStartChip(
     "quickStartApiRouteChip",
@@ -1564,11 +1643,15 @@ function renderQuickStartConfigAdmission(packet) {
     api_reasoning_status: apiReasoning.status || "",
     api_route_status: apiRoute.status || "",
     api_route_reference: apiRoute.route_reference || "",
+    owner_authorization_phrase_present: false,
     fallback_used: packet?.fallback_used === true,
     silent_fallback_used: packet?.silent_fallback_used === true,
     launch_admission: packet?.launch_admission || "blocked",
     launch_admission_summary: packet?.launch_admission_summary || "",
     dry_server_truth_only: packet?.dry_server_truth_only === true,
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
     live_call_attempted: packet?.live_call_attempted === true,
     provider_called: packet?.provider_called === true,
     raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
@@ -1715,6 +1798,92 @@ async function runQuickStartLaunchPreflight() {
     }
     codexLaunchDryRunInFlight = false;
     button?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartLaunchAdmissionProjection() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = await buildCodexCustomLaunchSelectionPayload();
+  codexLaunchDryRunInFlight = true;
+  const launchButton = document.getElementById("quickStartCustomLaunchAction");
+  const preflightButton = document.getElementById("quickStartLaunchPreflightAction");
+  launchButton?.setAttribute("disabled", "disabled");
+  preflightButton?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "проверяю");
+  setQuickStartChip("quickStartLaunchState", "neutral", "admission");
+  const responseNode = document.getElementById("quickStartRouteResponse");
+  if (responseNode) {
+    responseNode.textContent = "проверяю admission и preflight без live launch...";
+  }
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 20000) : null;
+  try {
+    const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!admissionResponse.ok) {
+      throw new Error(`quick start config admission http ${admissionResponse.status}`);
+    }
+    const admissionPacket = await admissionResponse.json();
+    renderQuickStartConfigAdmission(admissionPacket);
+    if (admissionPacket?.launch_admission !== "admitted") {
+      return;
+    }
+    const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!preflightResponse.ok) {
+      throw new Error(`custom launch preflight http ${preflightResponse.status}`);
+    }
+    renderQuickStartLaunchPreflight(await preflightResponse.json());
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    renderQuickStartLaunchPreflight({
+      status: "failed",
+      machine_error_code: timedOut
+        ? "QUICK_START_LAUNCH_ADMISSION_PROJECTION_TIMEOUT"
+        : "QUICK_START_LAUNCH_ADMISSION_PROJECTION_FETCH_FAILED",
+      human_message: timedOut
+        ? "Quick Start launch admission projection timed out before packet truth returned."
+        : error.message,
+      packet_kind: "quick_start_launch_admission_projection",
+      preflight_claim_scope: "quick_start_launch_guard_no_live_mutation",
+      execution_mode: payload.execution_mode || "",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      api_reasoning_option_id: payload.api_reasoning_option_id || "",
+      owner_authorization_phrase_present: false,
+      show_window_attempted: false,
+      new_launch_started: false,
+      live_call_attempted: false,
+      provider_called: false,
+      live_provider_called: false,
+      custom_codex_launch_attempted: false,
+      network_calls_made: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      raw_path_exposed: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      next_action: error.message
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    codexLaunchDryRunInFlight = false;
+    launchButton?.removeAttribute("disabled");
+    preflightButton?.removeAttribute("disabled");
   }
 }
 
@@ -2158,6 +2327,8 @@ function setQuickStartRouteResponse(packet) {
       launch_admission: packet?.launch_admission || "",
       launch_admission_summary: packet?.launch_admission_summary || "",
       dry_server_truth_only: packet?.dry_server_truth_only === true,
+      owner_authorization_phrase_present:
+        packet?.owner_authorization_phrase_present === true,
       launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
       quick_start_stable_custom_launch_final_status:
         packet?.quick_start_stable_custom_launch_final_status || "",
@@ -2169,6 +2340,10 @@ function setQuickStartRouteResponse(packet) {
       existing_window_reuse_admissible:
         packet?.existing_window_reuse_admissible === true,
       new_launch_required: packet?.new_launch_required === true,
+      custom_codex_launch_attempted:
+        packet?.custom_codex_launch_attempted === true,
+      new_launch_started: packet?.new_launch_started === true,
+      network_calls_made: packet?.network_calls_made === true,
       visible_window_counts_as_model_truth:
         packet?.visible_window_counts_as_model_truth === true,
       bridge_alive_counts_as_model_truth:
@@ -2192,6 +2367,7 @@ function setQuickStartRouteResponse(packet) {
 
 function renderQuickStartLaunchPreflight(packet) {
   const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
+  const ownerBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
   const bridgeLabel = packet?.bridge_required === true
     ? (packet?.bridge_alive === true ? "жив" : "упал")
     : "не нужен";
@@ -2217,6 +2393,20 @@ function renderQuickStartLaunchPreflight(packet) {
     windowLabel
   );
   setQuickStartChip(
+    "quickStartOwnerAuthState",
+    packet?.owner_authorization_phrase_present === true
+      ? "green"
+      : (ownerBlocked ? "amber" : "neutral"),
+    packet?.owner_authorization_phrase_present === true
+      ? "confirmed"
+      : (ownerBlocked ? "owner auth" : "not checked")
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "preflight ok" : (ownerBlocked ? "owner auth" : "blocked")
+  );
+  setQuickStartChip(
     "quickStartConfigState",
     configVisual,
     configLabel
@@ -2225,6 +2415,11 @@ function renderQuickStartLaunchPreflight(packet) {
     "quickStartRouteChip",
     ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
     ok ? "preflight ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    ok && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -2236,8 +2431,15 @@ function renderQuickStartLaunchPreflight(packet) {
     bridge_status: packet?.bridge_status || "",
     window_status: packet?.window_status || "",
     config_status: configStatus,
+    owner_authorization_phrase_present:
+      packet?.owner_authorization_phrase_present === true,
     existing_window_reuse_admissible: packet?.existing_window_reuse_admissible === true,
     new_launch_required: packet?.new_launch_required === true,
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    provider_called: packet?.provider_called === true,
     visible_window_counts_as_model_truth:
       packet?.visible_window_counts_as_model_truth === true,
     bridge_alive_counts_as_model_truth:
@@ -12567,7 +12769,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
   document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
-  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch());
+  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartLaunchAdmissionProjection());
   document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow());
   document.getElementById("quickStartVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
