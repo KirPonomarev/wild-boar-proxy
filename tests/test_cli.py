@@ -2110,6 +2110,7 @@ class CliTests(unittest.TestCase):
                 "embedded_file_count",
                 "runtime_executable",
                 "runtime_tkinter_available",
+                "installer_stage_admission",
                 "desktop_shell_strategy",
                 "desktop_shell_entrypoint",
                 "default_desktop_surface",
@@ -2132,6 +2133,25 @@ class CliTests(unittest.TestCase):
             package_result["desktop_shell_entrypoint"],
             runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
         )
+        installer_admission = package_result["installer_stage_admission"]
+        self.assertEqual(installer_admission["status"], "admitted")
+        self.assertEqual(installer_admission["strategy"], "app_bundle_only")
+        self.assertEqual(installer_admission["input_artifact_kind"], "macos_app_bundle")
+        self.assertEqual(
+            installer_admission["installable_artifact_kind"], "macos_app_bundle"
+        )
+        self.assertEqual(installer_admission["production_release_claim"], "not_made")
+        self.assertEqual(
+            installer_admission["production_release_status"],
+            "deferred_by_release_gate",
+        )
+        self.assertEqual(installer_admission["signing_status"], "not_signed")
+        self.assertEqual(installer_admission["notarization_status"], "not_notarized")
+        self.assertEqual(installer_admission["dmg_status"], "not_built")
+        self.assertEqual(installer_admission["pkg_status"], "not_built")
+        self.assertTrue(installer_admission["artifact_verification_required"])
+        self.assertFalse(installer_admission["artifact_verified"])
+        self.assertFalse(installer_admission["boundary_verified"])
         self.assertEqual(
             package_result["default_desktop_surface"], "web_design_live_server"
         )
@@ -2148,6 +2168,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             metadata["desktop_shell_entrypoint"],
             runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
+        )
+        self.assertEqual(
+            metadata["installer_stage_admission"],
+            installer_admission,
         )
         self.assertTrue(metadata["local_only_bind_required"])
         self.assertFalse(metadata["public_bind_allowed"])
@@ -2294,6 +2318,7 @@ class CliTests(unittest.TestCase):
                 "runtime_path_exists",
                 "runtime_path_executable",
                 "runtime_tkinter_available",
+                "installer_stage_admission",
                 "desktop_shell_strategy",
                 "desktop_shell_entrypoint",
                 "default_desktop_surface",
@@ -2315,6 +2340,25 @@ class CliTests(unittest.TestCase):
             verify_payload["package_result"]["desktop_shell_entrypoint"],
             runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
         )
+        installer_admission = verify_payload["package_result"]["installer_stage_admission"]
+        self.assertEqual(installer_admission["status"], "admitted")
+        self.assertEqual(installer_admission["strategy"], "app_bundle_only")
+        self.assertEqual(installer_admission["input_artifact_kind"], "macos_app_bundle")
+        self.assertEqual(
+            installer_admission["installable_artifact_kind"], "macos_app_bundle"
+        )
+        self.assertEqual(installer_admission["production_release_claim"], "not_made")
+        self.assertEqual(
+            installer_admission["production_release_status"],
+            "deferred_by_release_gate",
+        )
+        self.assertEqual(installer_admission["signing_status"], "not_signed")
+        self.assertEqual(installer_admission["notarization_status"], "not_notarized")
+        self.assertEqual(installer_admission["dmg_status"], "not_built")
+        self.assertEqual(installer_admission["pkg_status"], "not_built")
+        self.assertTrue(installer_admission["artifact_verification_required"])
+        self.assertTrue(installer_admission["artifact_verified"])
+        self.assertTrue(installer_admission["boundary_verified"])
         self.assertEqual(
             verify_payload["package_result"]["default_desktop_surface"],
             "web_design_live_server",

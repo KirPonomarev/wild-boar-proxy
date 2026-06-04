@@ -304,11 +304,26 @@ It must emit:
 - metadata with the selected runtime executable and runtime-capability probe
 - integrity binding for both the artifact and the companion metadata used for
   launchability claims
+- an installer-stage admission packet for the bounded `.app` bundle strategy,
+  with production release claims explicitly absent until the release gate admits
+  signing and notarization
 - only allowlisted repo source/docs material plus the minimal launcher/bundle
   scaffolding required for packaged launch
 
 The launchable package surface must not include runtime/private data such as
 auth files, runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+The launchable package installer-stage admission is not a production release
+claim. Until a separate release gate admits signing and notarization, it must
+remain bounded to:
+
+- `strategy=app_bundle_only`
+- `production_release_claim=not_made`
+- `production_release_status=deferred_by_release_gate`
+- `signing_status=not_signed`
+- `notarization_status=not_notarized`
+- `dmg_status=not_built`
+- `pkg_status=not_built`
 
 `package launchable verify --manifest <path> --json` is the owner surface for
 artifact existence + checksum verification + launchable bundle boundary +

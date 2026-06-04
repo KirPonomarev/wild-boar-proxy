@@ -177,6 +177,11 @@ LAUNCHABLE_PACKAGE_ARTIFACT_KIND = "macos_app_bundle"
 LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY = "web_design_live_server_local_only"
 LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT = "wild_boar_proxy.desktop_web_shell"
 LAUNCHABLE_PACKAGE_LEGACY_TK_ENTRYPOINT = "wild_boar_proxy.ui_shell"
+LAUNCHABLE_PACKAGE_INSTALLER_STAGE_SCHEMA_VERSION = 1
+LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STRATEGY = "app_bundle_only"
+LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STATUS = "admitted"
+LAUNCHABLE_PACKAGE_PRODUCTION_RELEASE_STATUS = "deferred_by_release_gate"
+LAUNCHABLE_PACKAGE_RELEASE_GATE_REASON = "signing_and_notarization_not_admitted"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
 EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "CANON.md"
@@ -5340,6 +5345,33 @@ def read_experimental_repository_metadata(source_root: Path) -> dict[str, str]:
     }
 
 
+def build_launchable_installer_stage_admission(
+    *,
+    artifact_verified: bool,
+    boundary_verified: bool,
+) -> dict[str, Any]:
+    return {
+        "schema_version": LAUNCHABLE_PACKAGE_INSTALLER_STAGE_SCHEMA_VERSION,
+        "status": LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STATUS,
+        "strategy": LAUNCHABLE_PACKAGE_INSTALLER_STAGE_STRATEGY,
+        "input_artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+        "installable_artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+        "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
+        "production_release_claim": "not_made",
+        "production_release_status": LAUNCHABLE_PACKAGE_PRODUCTION_RELEASE_STATUS,
+        "release_gate_reason": LAUNCHABLE_PACKAGE_RELEASE_GATE_REASON,
+        "signing_status": "not_signed",
+        "notarization_status": "not_notarized",
+        "dmg_status": "not_built",
+        "pkg_status": "not_built",
+        "runtime_private_data_policy": "forbidden_by_launchable_package_boundary",
+        "browser_private_data_embedding_policy": "forbidden",
+        "artifact_verification_required": True,
+        "artifact_verified": artifact_verified,
+        "boundary_verified": boundary_verified,
+    }
+
+
 def launchable_package_app_path(output_dir: Path) -> Path:
     return output_dir / LAUNCHABLE_PACKAGE_APP_NAME
 
@@ -5841,6 +5873,10 @@ def _run_package_launchable_build_impl(
             "created_at_utc": now_iso(),
             "source_root": str(source_root),
             "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+            "installer_stage_admission": build_launchable_installer_stage_admission(
+                artifact_verified=False,
+                boundary_verified=False,
+            ),
             "runtime_executable": str(runtime_executable),
             "runtime_probe": runtime_probe,
             "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
@@ -5908,6 +5944,10 @@ def _run_package_launchable_build_impl(
                 "embedded_file_count": len(package_files),
                 "runtime_executable": str(runtime_executable),
                 "runtime_tkinter_available": runtime_probe["tkinter_available"] is True,
+                "installer_stage_admission": build_launchable_installer_stage_admission(
+                    artifact_verified=False,
+                    boundary_verified=False,
+                ),
                 "desktop_shell_strategy": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_STRATEGY,
                 "desktop_shell_entrypoint": LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
                 "default_desktop_surface": "web_design_live_server",
@@ -6076,6 +6116,10 @@ def _run_package_launchable_verify_impl(
     default_desktop_surface = str(metadata.get("default_desktop_surface", ""))
     local_only_bind_required = metadata.get("local_only_bind_required") is True
     public_bind_allowed = metadata.get("public_bind_allowed") is True
+    installer_stage_admission = build_launchable_installer_stage_admission(
+        artifact_verified=True,
+        boundary_verified=not violating_entries,
+    )
     runtime_path_exists = False
     runtime_path_executable = False
     if runtime_executable:
@@ -6112,6 +6156,7 @@ def _run_package_launchable_verify_impl(
                     "runtime_path_exists": runtime_path_exists,
                     "runtime_path_executable": runtime_path_executable,
                     "runtime_tkinter_available": runtime_tkinter_available,
+                    "installer_stage_admission": installer_stage_admission,
                     "desktop_shell_strategy": desktop_shell_strategy,
                     "desktop_shell_entrypoint": desktop_shell_entrypoint,
                     "default_desktop_surface": default_desktop_surface,
@@ -6145,6 +6190,7 @@ def _run_package_launchable_verify_impl(
                 "runtime_path_exists": runtime_path_exists,
                 "runtime_path_executable": runtime_path_executable,
                 "runtime_tkinter_available": runtime_tkinter_available,
+                "installer_stage_admission": installer_stage_admission,
                 "desktop_shell_strategy": desktop_shell_strategy,
                 "desktop_shell_entrypoint": desktop_shell_entrypoint,
                 "default_desktop_surface": default_desktop_surface,
