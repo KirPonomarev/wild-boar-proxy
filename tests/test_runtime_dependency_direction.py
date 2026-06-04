@@ -572,6 +572,28 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             ["wild_boar_proxy.mutation_ledger"],
         )
 
+    def test_detector_flags_repair_startup_state_imports(self) -> None:
+        source = (
+            "from . import state_startup_contract\n"
+            "from . import state_startup_lock\n"
+            "from . import state_startup_recovery\n"
+            "from . import state_startup_schema\n"
+            "from . import state_startup_truth\n"
+            "from . import state_transaction\n"
+        )
+
+        self.assertEqual(
+            _forbidden_imports(source, "wild_boar_proxy.runtime_repair"),
+            [
+                "wild_boar_proxy.state_startup_contract",
+                "wild_boar_proxy.state_startup_lock",
+                "wild_boar_proxy.state_startup_recovery",
+                "wild_boar_proxy.state_startup_schema",
+                "wild_boar_proxy.state_startup_truth",
+                "wild_boar_proxy.state_transaction",
+            ],
+        )
+
     def test_detector_flags_accounts_lifecycle_runtime_import(self) -> None:
         source = "from . import runtime\n"
 
@@ -609,6 +631,26 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
             with self.subTest(module=module_name):
                 source = path.read_text(encoding="utf-8")
                 self.assertEqual(_forbidden_imports(source, module_name), [])
+
+    def test_runtime_repair_module_does_not_import_startup_state_modules(
+        self,
+    ) -> None:
+        source = RUNTIME_MODULE_PATHS["wild_boar_proxy.runtime_repair"].read_text(
+            encoding="utf-8"
+        )
+        imported_modules = set(
+            _iter_imported_modules(source, "wild_boar_proxy.runtime_repair")
+        )
+        forbidden_modules = {
+            "wild_boar_proxy.state_startup_contract",
+            "wild_boar_proxy.state_startup_lock",
+            "wild_boar_proxy.state_startup_recovery",
+            "wild_boar_proxy.state_startup_schema",
+            "wild_boar_proxy.state_startup_truth",
+            "wild_boar_proxy.state_transaction",
+        }
+
+        self.assertEqual(imported_modules & forbidden_modules, set())
 
     def test_cli_healthcheck_dispatch_imports_split_owner_surfaces(self) -> None:
         source = CLI_MODULE_PATH.read_text(encoding="utf-8")
@@ -2433,6 +2475,96 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         self.assertIs(payload, expected)
         builder.assert_called_once_with(**kwargs)
+
+    def test_runtime_deterministic_stable_recovery_contract_facade_matches_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            facade_payload = runtime_mod.build_deterministic_stable_recovery_contract(
+                paths
+            )
+            direct_payload = (
+                runtime_repair.build_deterministic_stable_recovery_contract(paths)
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "contract_ready")
+        self.assertEqual(
+            facade_payload["owner_command_surface"],
+            "healthcheck --repair --json",
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+            runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        )
+        self.assertEqual(
+            facade_payload["shared_activation_mechanics"]["handoff_env_var"],
+            runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+        )
+        self.assertEqual(
+            facade_payload["shared_activation_mechanics"]["snapshot_topic"],
+            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        )
+
+    def test_runtime_deterministic_stable_recovery_contract_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            expected = {"surface": "repair-contract"}
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_deterministic_stable_recovery_contract",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_deterministic_stable_recovery_contract(
+                    paths
+                )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(paths)
+
+    def test_runtime_startup_contract_repair_contract_facade_matches_repair_module(
+        self,
+    ) -> None:
+        facade_payload = runtime_mod.build_startup_contract_repair_contract()
+        direct_payload = runtime_repair.build_startup_contract_repair_contract()
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "contract_ready")
+        self.assertEqual(
+            facade_payload["entry_owner"],
+            "healthcheck_startup_contract_repair_path",
+        )
+        self.assertEqual(
+            facade_payload["owner_command_surface"],
+            "healthcheck --repair --json",
+        )
+        self.assertTrue(facade_payload["same_source_lock_invariant_required"])
+        self.assertTrue(facade_payload["schema_auto_migrate_forbidden"])
+        self.assertTrue(facade_payload["truth_file_rewrite_forbidden"])
+
+    def test_runtime_startup_contract_repair_contract_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = {"surface": "startup-contract-repair"}
+
+        with mock.patch.object(
+            runtime_repair,
+            "build_startup_contract_repair_contract",
+            return_value=expected,
+        ) as builder:
+            payload = runtime_mod.build_startup_contract_repair_contract()
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with()
 
     def test_runtime_mode_get_facade_matches_direct_modes_module(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -61,6 +61,150 @@ HEALTHCHECK_REPAIR_CONTRACT: Final = HealthcheckRepairContract(
     effect=EFFECT_REPAIR,
 )
 
+STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV: Final = "WBP_STABLE_CONFIG"
+STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: Final = "stable_runtime_consumer_snapshot"
+
+
+def build_deterministic_stable_recovery_contract(
+    paths: RuntimeRepairPaths,
+) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "entry_owner": "healthcheck_live_attestation_path",
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
+        "sync_hidden_owner_forbidden": True,
+        "new_generic_cli_default": False,
+        "eligible_failure_lanes": [
+            "managed_preflight_failure",
+            "stable_service_disabled",
+            "explicit_stable_recovery_lane",
+        ],
+        "entry_lane_surface": {
+            "status": "owner_path_emitted",
+            "field": "deterministic_stable_recovery_result.entry_lane",
+            "nested_recovery_surface": True,
+            "top_level_machine_error_code_separate": True,
+            "allowed_values": [
+                "managed_preflight_failure",
+                "stable_service_disabled",
+                "explicit_stable_recovery_lane",
+                "not_invoked",
+            ],
+        },
+        "failure_taxonomy_redesign_forbidden": True,
+        "shared_activation_mechanics": {
+            "status": "owner_path_emitted",
+            "reuse_existing_launch_smoke_activation_helper": True,
+            "generated_config_file": str(paths.stable_runtime_generated_config_file),
+            "handoff_env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+            "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            "owner_paths": ["healthcheck --repair --json", "launch smoke --json"],
+        },
+        "generated_config_regeneration_status": "owner_path_emitted",
+        "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+        "generated_config_derivation_source": (
+            "current_baseline_stable_config_plus_current_approved_target_reference"
+        ),
+        "generated_config_regeneration_owner_paths": [
+            "healthcheck --repair --json",
+            "launch smoke --json",
+        ],
+        "stale_generated_config_authoritative": False,
+        "generated_config_existence_alone_sufficient": False,
+        "snapshot_refresh_status": "owner_path_emitted",
+        "snapshot_refresh_after_stable_live_outcome": True,
+        "snapshot_refresh_owner_paths": [
+            "healthcheck --repair --json",
+            "launch smoke --json",
+        ],
+        "snapshot_schema_widening_required": False,
+        "new_persisted_recovery_metadata_required": False,
+        "stable_service_disabled_classification": {
+            "status": "owner_path_emitted",
+            "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+            "control_layer_classification": True,
+            "persisted_engine_state_flag": False,
+            "positive_evidence_required": True,
+            "desired_mode_alone_sufficient": False,
+            "generated_config_existence_alone_sufficient": False,
+            "snapshot_presence_alone_sufficient": False,
+            "bounded_reenable_lane_eligible_required": True,
+            "proxy_path_failure_codes_separate": [
+                "PROXY_PATH_BROKEN",
+                "PROXY_REPROBE_FAILED",
+            ],
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "overclassification_forbidden": True,
+        },
+        "re_enable_method_contract": {
+            "status": "owner_path_emitted",
+            "owner_path_scope": "bounded_control_layer_recovery_action",
+            "owner_command_surface": "healthcheck --repair --json",
+            "reuse_private_launch_smoke_helper_allowed": True,
+            "launcher_protocol_widening_required": False,
+            "launchd_integration_forbidden": True,
+            "os_service_manager_integration_forbidden": True,
+            "generic_service_supervision_forbidden": True,
+        },
+        "approved_target_recovery_outcome": "separate",
+        "observed_source_fallback_recovery_outcome": "separate",
+        "recovery_failure_outcome": "separate",
+        "top_level_truth_boundaries": {
+            "status": "contract_ready",
+            "top_level_final_truth_fields": [
+                "status",
+                "machine_error_code",
+                "liveness",
+                "endpoint",
+            ],
+            "nested_recovery_surface": "deterministic_stable_recovery_result",
+            "final_live_truth_separate": True,
+            "launch_smoke_owner_lane_fields_forbidden": True,
+            "status_second_owner_forbidden": True,
+            "sync_owner_lane_forbidden": True,
+        },
+        "top_level_machine_error_code_rules": {
+            "status": "owner_path_emitted",
+            "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+            "stable_service_disabled_requires_final_unhealthy": True,
+            "ok_after_successful_reenable": "OK",
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "proxy_path_codes_remain_separate": True,
+        },
+        "live_runtime_observation_required": True,
+        "mode_truth_redefinition_forbidden": True,
+        "last_known_good_proxy_persistence_in_scope": False,
+    }
+
+
+def build_startup_contract_repair_contract() -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "entry_owner": "healthcheck_startup_contract_repair_path",
+        "owner_command_surface": "healthcheck --repair --json",
+        "status_delegates_to_owner": False,
+        "healthcheck_probe_owner_forbidden": True,
+        "status_second_owner_forbidden": True,
+        "stable_recovery_surface_redefinition_forbidden": True,
+        "same_source_lock_invariant_required": True,
+        "schema_auto_migrate_forbidden": True,
+        "truth_file_rewrite_forbidden": True,
+        "covered_startup_slices": [
+            "temp_recovery",
+            "lock_slice_recovery",
+            "schema_slice_assessment",
+            "truth_slice_assessment",
+        ],
+        "top_level_truth_boundaries": {
+            "status": "contract_ready",
+            "nested_recovery_surface": "startup_contract_repair_result",
+            "final_live_truth_separate": True,
+            "startup_cleanup_alone_sufficient": False,
+            "top_level_ok_requires_live_attestation": True,
+        },
+    }
+
 
 def build_deterministic_stable_recovery_result(
     *,
