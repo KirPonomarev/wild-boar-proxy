@@ -576,6 +576,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(shape_check["status"], "fail")
         self.assertEqual(shape_check["machine_error_code"], "COMMAND_PACKET_MALFORMED")
 
+    def test_invariant_check_requires_command_packet_semantics(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                status_evidence={
+                    "status": "bad-status",
+                    "exit_code": True,
+                    "human_message": "semantically malformed",
+                    "machine_error_code": "BAD/CODE",
+                    "changed_files": "/tmp/wbp-state.json",
+                    "next_action": "bad/action",
+                },
+            )
+
+        shape_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "command_packet_shape"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(shape_check["status"], "fail")
+        self.assertEqual(shape_check["machine_error_code"], "COMMAND_PACKET_MALFORMED")
+        self.assertIn("status:invalid_shape", shape_check["human_message"])
+        self.assertIn("exit_code:type", shape_check["human_message"])
+        self.assertIn("changed_files:type", shape_check["human_message"])
+
     def test_invariant_check_rejects_false_green(self) -> None:
         with mock.patch.dict(os.environ, self.env(), clear=False):
             payload = runtime_mod.build_invariant_check_packet(

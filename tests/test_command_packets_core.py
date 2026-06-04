@@ -39,6 +39,10 @@ class _OpaqueSecretCarrier:
         return f"OpaqueSecretCarrier({self.secret})"
 
 
+def _violation_codes(violations: list[dict[str, str]]) -> set[tuple[str, str]]:
+    return {(violation["field"], violation["code"]) for violation in violations}
+
+
 class CommandPacketsCoreTests(unittest.TestCase):
     def test_core_machine_error_codes_match_j2_taxonomy(self) -> None:
         self.assertEqual(errors.OK, "OK")
@@ -509,6 +513,110 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertEqual(runtime_mod.build_command_payload(**kwargs), expected)
         self.assertEqual(runtime_modes._build_command_payload(**kwargs), expected)
         self.assertNotIn(sentinel, json.dumps(expected))
+
+    def test_semantic_inspector_accepts_core_and_legacy_tokens(self) -> None:
+        core_payload = packets.build_command_packet(
+            ok=True,
+            human_message="ok",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            effect="read",
+        )
+        legacy_payload = packets.build_command_packet(
+            ok=False,
+            human_message="legacy packet",
+            machine_error_code="provider_network_failed",
+            liveness="warming_up",
+            severity="critical",
+            operator_action="repair_runtime",
+            changed_files=[],
+        )
+
+        self.assertEqual(packets.inspect_command_packet_semantics(core_payload), [])
+        self.assertEqual(packets.inspect_command_packet_semantics(legacy_payload), [])
+        self.assertFalse(packets.has_command_packet_semantic_violation(core_payload))
+
+    def test_semantic_inspector_reports_missing_and_non_object_packets(self) -> None:
+        self.assertEqual(
+            _violation_codes(packets.inspect_command_packet_semantics("not-a-packet")),
+            {("packet", "type")},
+        )
+
+        violations = packets.inspect_command_packet_semantics({"status": "ok"})
+
+        self.assertIn(("exit_code", "missing"), _violation_codes(violations))
+        self.assertIn(("changed_files", "missing"), _violation_codes(violations))
+
+    def test_semantic_inspector_reports_invalid_shapes_and_types(self) -> None:
+        base_payload = packets.build_command_packet(
+            ok=True,
+            human_message="ok",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            effect="read",
+        )
+        cases = [
+            ("status", "bad-status", ("status", "invalid_shape")),
+            ("exit_code", True, ("exit_code", "type")),
+            ("exit_code", "0", ("exit_code", "type")),
+            ("human_message", {"message": "ok"}, ("human_message", "type")),
+            ("machine_error_code", "BAD/CODE", ("machine_error_code", "invalid_shape")),
+            ("changed_files", "/tmp/file", ("changed_files", "type")),
+            ("changed_files", [1], ("changed_files", "item_type")),
+            ("next_action", "bad/action", ("next_action", "invalid_shape")),
+            ("liveness", "bad/liveness", ("liveness", "invalid_shape")),
+            ("severity", 1, ("severity", "type")),
+            ("operator_action", None, ("operator_action", "type")),
+            ("effect", "invalid", ("effect", "invalid_value")),
+            ("effect", False, ("effect", "type")),
+        ]
+
+        for field, value, expected_violation in cases:
+            with self.subTest(field=field, value=value):
+                payload = copy.deepcopy(base_payload)
+                payload[field] = value
+
+                violations = packets.inspect_command_packet_semantics(payload)
+
+                self.assertIn(expected_violation, _violation_codes(violations))
+
+    def test_semantic_inspector_keeps_shape_helper_compatibility(self) -> None:
+        payload = packets.build_command_packet(
+            ok=True,
+            human_message="ok",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={"status": "bad-status"},
+        )
+
+        self.assertTrue(packets.has_command_packet_shape(payload))
+        self.assertTrue(packets.has_command_packet_semantic_violation(payload))
+
+    def test_semantic_inspector_detects_secret_leak_without_redacting(self) -> None:
+        payload = {
+            "status": "ok",
+            "exit_code": 0,
+            "human_message": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+            "machine_error_code": "OK",
+            "changed_files": [],
+            "next_action": "none",
+            "liveness": "healthy",
+            "severity": "recoverable",
+            "operator_action": "none",
+        }
+
+        violations = packets.inspect_command_packet_semantics(payload)
+
+        self.assertIn(("packet", "secret_leak"), _violation_codes(violations))
 
     def test_missing_required_fields_reports_canonical_order(self) -> None:
         packet = {

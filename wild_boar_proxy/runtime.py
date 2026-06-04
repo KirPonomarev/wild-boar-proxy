@@ -8279,21 +8279,25 @@ def build_invariant_check_packet(
     checks: list[dict[str, Any]] = []
     failure_codes: list[str] = []
 
-    shape_missing = missing_packet_fields(
-        status_packet, RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS
+    packet_violations = command_packets.inspect_command_packet_semantics(
+        status_packet, required_fields=RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS
     )
-    if shape_missing:
+    if packet_violations:
         failure_codes.append("COMMAND_PACKET_MALFORMED")
+    packet_violation_summary = ", ".join(
+        f"{violation['field']}:{violation['code']}"
+        for violation in packet_violations
+    )
     checks.append(
         build_invariant_check(
             "command_packet_shape",
-            passed=not shape_missing,
+            passed=not packet_violations,
             severity="critical",
             evidence_source="status_evidence_packet",
             human_message=(
-                "Runtime evidence packet has required strict JSON fields."
-                if not shape_missing
-                else "Runtime evidence packet is missing fields: " + ", ".join(shape_missing)
+                "Runtime evidence packet has required strict JSON fields and values."
+                if not packet_violations
+                else "Runtime evidence packet is malformed: " + packet_violation_summary
             ),
             machine_error_code="COMMAND_PACKET_MALFORMED",
         )

@@ -7,6 +7,7 @@ import json
 import re
 from typing import Any, Literal
 
+from . import errors as core_errors
 from ..command_effects import validate_effect
 
 
@@ -317,6 +318,154 @@ def command_packet_has_secret_leak(
     if any(pattern.search(encoded) for pattern in _COMMAND_PACKET_SECRET_PATTERNS):
         return True
     return _sensitive_key_leak_present(packet)
+
+
+def _command_packet_violation(
+    field: str, code: str, human_message: str
+) -> dict[str, str]:
+    return {"field": field, "code": code, "human_message": human_message}
+
+
+def _inspect_string_token_field(
+    packet: dict[str, Any],
+    field: str,
+    classifier: Any,
+    violations: list[dict[str, str]],
+) -> None:
+    value = packet.get(field)
+    if not isinstance(value, str):
+        violations.append(
+            _command_packet_violation(field, "type", f"{field} must be a string.")
+        )
+        return
+    if classifier(value) == "invalid_shape":
+        violations.append(
+            _command_packet_violation(
+                field,
+                "invalid_shape",
+                f"{field} must use a machine-readable token shape.",
+            )
+        )
+
+
+def inspect_command_packet_semantics(
+    packet: Any,
+    *,
+    required_fields: list[str] | tuple[str, ...] | None = None,
+    secret_values: tuple[str, ...] | list[str] | None = None,
+) -> list[dict[str, str]]:
+    fields = list(required_fields or COMMAND_PACKET_REQUIRED_FIELDS)
+    violations: list[dict[str, str]] = []
+    if not isinstance(packet, dict):
+        return [
+            _command_packet_violation(
+                "packet", "type", "Command packet must be a JSON object."
+            )
+        ]
+
+    for field in missing_required_fields(packet, fields):
+        violations.append(
+            _command_packet_violation(field, "missing", f"{field} is required.")
+        )
+
+    if "status" in packet:
+        _inspect_string_token_field(packet, "status", classify_command_status, violations)
+    if "human_message" in packet and not isinstance(packet.get("human_message"), str):
+        violations.append(
+            _command_packet_violation(
+                "human_message", "type", "human_message must be a string."
+            )
+        )
+    if "machine_error_code" in packet:
+        _inspect_string_token_field(
+            packet,
+            "machine_error_code",
+            core_errors.classify_machine_error_code,
+            violations,
+        )
+    if "next_action" in packet:
+        _inspect_string_token_field(
+            packet, "next_action", classify_command_next_action, violations
+        )
+    if "liveness" in packet:
+        _inspect_string_token_field(
+            packet, "liveness", classify_command_liveness, violations
+        )
+    if "severity" in packet:
+        _inspect_string_token_field(
+            packet, "severity", classify_command_severity, violations
+        )
+    if "operator_action" in packet:
+        _inspect_string_token_field(
+            packet,
+            "operator_action",
+            classify_command_operator_action,
+            violations,
+        )
+
+    if "exit_code" in packet:
+        exit_code = packet.get("exit_code")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            violations.append(
+                _command_packet_violation(
+                    "exit_code", "type", "exit_code must be an integer."
+                )
+            )
+    if "changed_files" in packet:
+        changed_files = packet.get("changed_files")
+        if not isinstance(changed_files, list):
+            violations.append(
+                _command_packet_violation(
+                    "changed_files", "type", "changed_files must be a list."
+                )
+            )
+        elif not all(isinstance(path, str) for path in changed_files):
+            violations.append(
+                _command_packet_violation(
+                    "changed_files",
+                    "item_type",
+                    "changed_files must contain only strings.",
+                )
+            )
+    if "effect" in packet:
+        effect = packet.get("effect")
+        if not isinstance(effect, str):
+            violations.append(
+                _command_packet_violation("effect", "type", "effect must be a string.")
+            )
+        else:
+            try:
+                validate_effect(effect)
+            except ValueError:
+                violations.append(
+                    _command_packet_violation(
+                        "effect",
+                        "invalid_value",
+                        "effect must be a documented command effect.",
+                    )
+                )
+    if command_packet_has_secret_leak(packet, secret_values=secret_values):
+        violations.append(
+            _command_packet_violation(
+                "packet", "secret_leak", "Command packet contains secret material."
+            )
+        )
+    return violations
+
+
+def has_command_packet_semantic_violation(
+    packet: Any,
+    *,
+    required_fields: list[str] | tuple[str, ...] | None = None,
+    secret_values: tuple[str, ...] | list[str] | None = None,
+) -> bool:
+    return bool(
+        inspect_command_packet_semantics(
+            packet,
+            required_fields=required_fields,
+            secret_values=secret_values,
+        )
+    )
 
 
 def _command_packet_redaction_failure_payload() -> dict[str, Any]:
