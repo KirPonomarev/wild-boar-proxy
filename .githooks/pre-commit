@@ -7,3 +7,4 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 
 python3 "$repo_root/tools/check_closeout_resilience.py" --staged-only
+python3 "$repo_root/tools/check_repo_hygiene.py" --staged-only
