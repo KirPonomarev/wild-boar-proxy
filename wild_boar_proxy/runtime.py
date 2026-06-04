@@ -9369,6 +9369,7 @@ def mode_set(paths: RuntimePaths, mode: str) -> dict[str, Any]:
         severity="recoverable",
         operator_action="none",
         changed_files=[str(paths.runtime_mode_file)],
+        effect=EFFECT_MUTATE,
         extra={
             "desired_mode": mode,
             "effective_mode": effective_mode,

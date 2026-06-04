@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from wild_boar_proxy.command_effects import EFFECT_READ
+from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_READ
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
@@ -24,6 +24,11 @@ from .validate import (
 
 
 def _command_effect_for_args(args: Any) -> str | None:
+    if (
+        args.external_models_command == "credentials"
+        and getattr(args, "credentials_command", "") == "admit"
+    ):
+        return EFFECT_MUTATE
     if (
         args.external_models_command == "credentials"
         and getattr(args, "credentials_command", "") == "status"
@@ -275,6 +280,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
                 next_action="owner_action",
                 severity=exc.severity,
                 exit_code=exc.exit_code,
+                effect=EFFECT_MUTATE,
                 data={"credential_result": credential_result},
             )
         return contracts.build_external_models_payload(
@@ -283,6 +289,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
             machine_error_code=errors.OK,
             changed_files=changed_files,
             next_action="api_route_connect",
+            effect=EFFECT_MUTATE,
             data={"credential_result": credential_result},
         )
     if action == "status":

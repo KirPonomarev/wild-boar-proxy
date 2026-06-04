@@ -11,7 +11,7 @@ from unittest import mock
 from pathlib import Path
 
 from wild_boar_proxy.core import packets
-from wild_boar_proxy.external_models import contracts, routes
+from wild_boar_proxy.external_models import contracts, errors, routes, run_external_models_command
 from wild_boar_proxy.external_models import lifecycle
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models import validate as validate_mod
@@ -281,6 +281,50 @@ class ExternalModelContractTests(unittest.TestCase):
             packets.classify_command_next_action(packet["next_action"]),
             "legacy",
         )
+
+    def test_credential_admit_packets_declare_mutate_effect(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            root = managed_dir / "external-models"
+            args = mock.Mock(
+                external_models_command="credentials",
+                credentials_command="admit",
+                provider="deepseek",
+                source="owner-env",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_MANAGED_DIR": str(managed_dir),
+                    "WBP_EXTERNAL_MODELS_DIR": str(root),
+                    "DEEPSEEK_API_KEY": "",
+                },
+                clear=False,
+            ):
+                missing = run_external_models_command(args)
+            self.assertEqual(missing["status"], "error")
+            self.assertEqual(
+                missing["machine_error_code"],
+                errors.EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING,
+            )
+            self.assertEqual(missing["effect"], "mutate")
+            self.assertEqual(missing["changed_files"], [])
+
+            fixture_value = "fixture-deepseek-value"
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_MANAGED_DIR": str(managed_dir),
+                    "WBP_EXTERNAL_MODELS_DIR": str(root),
+                    "DEEPSEEK_API_KEY": fixture_value,
+                },
+                clear=False,
+            ):
+                admitted = run_external_models_command(args)
+            self.assertEqual(admitted["status"], "ok")
+            self.assertEqual(admitted["machine_error_code"], "OK")
+            self.assertEqual(admitted["effect"], "mutate")
+            self.assertNotIn(fixture_value, json.dumps(admitted, ensure_ascii=True))
 
     def test_capture_local_evidence_writes_non_self_referential_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

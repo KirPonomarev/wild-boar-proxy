@@ -277,15 +277,31 @@ OWNER_SURFACES = {
 }
 
 KNOWN_EFFECT_CONTRACT_GAPS = {
-    "mode_set_missing_mutate_effect": (
-        RUNTIME,
-        "mode_set",
-        "effect=EFFECT_MUTATE",
-    ),
-    "cli_runtime_error_handler_missing_effect_context": (
+    "cli_effect_classifier_unclassified_documented_surfaces": (
         CLI,
-        "main",
-        '"effect"',
+        "command_effect_from_args",
+        (
+            '"sync"',
+            '"token"',
+            '"stable_command"',
+            '"launch_command"',
+            '"codex_runner_command"',
+            '"rollout_evidence_command"',
+            '"rollout_stage_command"',
+            '"validate"',
+            '"diagnostics_command"',
+            '"installer_command"',
+            '"legacy_command"',
+            '"companion_command"',
+            '"package_command"',
+            '"stop"',
+            '"models"',
+            '"check"',
+            '"live-format-check"',
+            '"routes_command"',
+            '"profile_command"',
+            '"evidence_command"',
+        ),
     ),
     "healthcheck_repair_missing_mutation_metadata": (
         RUNTIME_REPAIR,
@@ -298,6 +314,46 @@ KNOWN_EFFECT_CONTRACT_GAPS = {
         "mutation_id",
     ),
 }
+
+
+CLI_UNCLASSIFIED_DOCUMENTED_SURFACE_LABELS = frozenset(
+    {
+        "sync --json",
+        "token --json",
+        "stable repair --dry-run --json",
+        "stable repair --apply --json",
+        "stable target switch --dry-run --json",
+        "stable target switch --apply --json",
+        "launch smoke --json",
+        "launch client --json",
+        "codex-runner smoke --json",
+        "rollout evidence capture --json",
+        "rollout stage prove --json",
+        "rollout stage prove 15 --json",
+        "rollout stage advance --json",
+        "rollout stage advance 20 --json",
+        "accounts validate --json",
+        "diagnostics export --json",
+        "installer init --json",
+        "legacy import --json",
+        "companion reset --json",
+        "companion uninstall --json",
+        "package experimental build --json",
+        "package experimental verify --json",
+        "package launchable build --json",
+        "package launchable verify --json",
+        "external-models start --json",
+        "external-models stop --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models check --json",
+        "external-models live-format-check --json",
+        "external-models routes list --json",
+        "external-models routes validate --json",
+        "external-models profile codex-desktop --json",
+        "external-models evidence capture --json",
+    }
+)
 
 
 def _module(path: Path) -> ast.Module:
@@ -400,6 +456,10 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertEqual(MUTATE, surface.expected_class)
                 self.assertTrue(surface.required_calls <= calls)
                 self.assertTrue(calls & WRITE_PRIMITIVES)
+
+    def test_mode_set_declares_mutate_effect(self) -> None:
+        source = _function_source(RUNTIME, "mode_set")
+        self.assertIn("effect=EFFECT_MUTATE", source)
 
     def test_run_sync_uses_bounded_runner_with_lock_and_write_adjacency(self) -> None:
         surface = OWNER_SURFACES["run_sync"]
@@ -650,11 +710,90 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
                 self.assertTrue(surface.required_calls <= calls)
                 self.assertEqual(set(), calls & forbidden_raw_primitives)
 
+    def test_cli_runtime_error_handler_preserves_known_effect_context(self) -> None:
+        main_source = _function_source(CLI, "main")
+        classifier_source = _function_source(CLI, "command_effect_from_args")
+
+        self.assertIn("command_effect = command_effect_from_args(args)", main_source)
+        self.assertIn('payload["effect"] = command_effect', main_source)
+        self.assertIn("EFFECT_MUTATE", classifier_source)
+        self.assertIn("EFFECT_PROBE", classifier_source)
+        self.assertIn("EFFECT_READ", classifier_source)
+        self.assertIn("EFFECT_REPAIR", classifier_source)
+
+    def test_cli_unclassified_documented_surface_gap_is_explicit(self) -> None:
+        _, _, absent_texts = KNOWN_EFFECT_CONTRACT_GAPS[
+            "cli_effect_classifier_unclassified_documented_surfaces"
+        ]
+        self.assertEqual(
+            {
+                '"sync"',
+                '"token"',
+                '"stable_command"',
+                '"launch_command"',
+                '"codex_runner_command"',
+                '"rollout_evidence_command"',
+                '"rollout_stage_command"',
+                '"validate"',
+                '"diagnostics_command"',
+                '"installer_command"',
+                '"legacy_command"',
+                '"companion_command"',
+                '"package_command"',
+                '"stop"',
+                '"models"',
+                '"check"',
+                '"live-format-check"',
+                '"routes_command"',
+                '"profile_command"',
+                '"evidence_command"',
+            },
+            set(absent_texts),
+        )
+        self.assertEqual(
+            {
+                "sync --json",
+                "token --json",
+                "stable repair --dry-run --json",
+                "stable repair --apply --json",
+                "stable target switch --dry-run --json",
+                "stable target switch --apply --json",
+                "launch smoke --json",
+                "launch client --json",
+                "codex-runner smoke --json",
+                "rollout evidence capture --json",
+                "rollout stage prove --json",
+                "rollout stage prove 15 --json",
+                "rollout stage advance --json",
+                "rollout stage advance 20 --json",
+                "accounts validate --json",
+                "diagnostics export --json",
+                "installer init --json",
+                "legacy import --json",
+                "companion reset --json",
+                "companion uninstall --json",
+                "package experimental build --json",
+                "package experimental verify --json",
+                "package launchable build --json",
+                "package launchable verify --json",
+                "external-models start --json",
+                "external-models stop --json",
+                "external-models status --json",
+                "external-models models --json",
+                "external-models check --json",
+                "external-models live-format-check --json",
+                "external-models routes list --json",
+                "external-models routes validate --json",
+                "external-models profile codex-desktop --json",
+                "external-models evidence capture --json",
+            },
+            set(CLI_UNCLASSIFIED_DOCUMENTED_SURFACE_LABELS),
+        )
+
     def test_known_effect_contract_gaps_are_explicitly_tracked(self) -> None:
         self.assertEqual(
             {
-                "mode_set_missing_mutate_effect",
-                "cli_runtime_error_handler_missing_effect_context",
+                "cli_effect_classifier_unclassified_documented_surfaces",
                 "healthcheck_repair_missing_mutation_metadata",
                 "promote_missing_mutation_metadata",
             },
@@ -663,7 +802,11 @@ class OwnerSurfaceEffectInventoryTests(unittest.TestCase):
         for gap, (path, function, absent_text) in KNOWN_EFFECT_CONTRACT_GAPS.items():
             with self.subTest(gap=gap):
                 source = _function_source(path, function)
-                self.assertNotIn(absent_text, source)
+                absent_texts = (
+                    absent_text if isinstance(absent_text, tuple) else (absent_text,)
+                )
+                for text in absent_texts:
+                    self.assertNotIn(text, source)
 
 
 if __name__ == "__main__":

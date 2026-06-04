@@ -9,6 +9,7 @@ import sys
 from typing import Any
 
 from .cli_runner import run_codex_cli_runner_smoke
+from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .external_models import run_external_models_command
 from .runtime_health import run_healthcheck_probe
 from .runtime_repair import run_healthcheck_repair
@@ -382,10 +383,77 @@ def emit_json(payload: dict[str, Any]) -> int:
     return int(payload["exit_code"])
 
 
+def command_effect_from_args(args: argparse.Namespace) -> str | None:
+    command = getattr(args, "command", None)
+    if command in {"status", "invariant-check"}:
+        return EFFECT_READ
+    if command == "healthcheck":
+        return EFFECT_REPAIR if getattr(args, "repair", False) else EFFECT_PROBE
+    if command == "mode":
+        mode_command = getattr(args, "mode_command", None)
+        if mode_command == "get":
+            return EFFECT_READ
+        if mode_command == "set":
+            return EFFECT_MUTATE
+    if command == "rollback":
+        if getattr(args, "apply", False):
+            return EFFECT_REPAIR
+        if getattr(args, "dry_run", False):
+            return EFFECT_READ
+    if (
+        command == "policy"
+        and getattr(args, "policy_command", None) == "stage"
+        and getattr(args, "policy_stage_command", None) == "set"
+    ):
+        return EFFECT_MUTATE
+    if command == "rollout":
+        rollout_command = getattr(args, "rollout_command", None)
+        if (
+            rollout_command == "rotation"
+            and getattr(args, "rollout_rotation_command", None) == "inspect"
+        ):
+            return EFFECT_READ
+        if (
+            rollout_command == "posture"
+            and getattr(args, "rollout_posture_command", None) == "inspect"
+        ):
+            return EFFECT_READ
+    if command == "accounts":
+        accounts_command = getattr(args, "accounts_command", None)
+        if accounts_command == "list":
+            return EFFECT_READ
+        if accounts_command in {
+            "demote",
+            "hold",
+            "onboard",
+            "promote",
+            "release",
+            "retire",
+        }:
+            return EFFECT_MUTATE
+        if accounts_command == "login":
+            login_command = getattr(args, "accounts_login_command", None)
+            if login_command == "status":
+                return EFFECT_READ
+            if login_command in {"start", "complete", "cancel"}:
+                return EFFECT_MUTATE
+    if (
+        command == "external-models"
+        and getattr(args, "external_models_command", None) == "credentials"
+    ):
+        credentials_command = getattr(args, "credentials_command", None)
+        if credentials_command == "admit":
+            return EFFECT_MUTATE
+        if credentials_command == "status":
+            return EFFECT_READ
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     paths = RuntimePaths.from_env()
+    command_effect = command_effect_from_args(args)
 
     try:
         if args.command == "healthcheck":
@@ -605,4 +673,6 @@ def main(argv: list[str] | None = None) -> int:
             "severity": exc.severity,
             "operator_action": exc.operator_action,
         }
+        if command_effect is not None:
+            payload["effect"] = command_effect
         return emit_json(payload)

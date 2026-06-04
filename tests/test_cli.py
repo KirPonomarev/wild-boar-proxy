@@ -24,6 +24,7 @@ from tools.truth_tree_harness import (
     assert_declared_mutations_match,
     snapshot_truth_tree,
 )
+from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import runtime as runtime_mod
 from wild_boar_proxy.process_runner import BoundedProcessResult
 
@@ -3524,11 +3525,133 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertEqual(payload["desired_mode"], "stable")
         self.assertEqual(
             (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
             "stable",
         )
+
+    def test_cli_effect_classifier_covers_canonical_error_contexts(self) -> None:
+        parser = cli_mod.build_parser()
+        cases = [
+            (["status", "--json"], "read"),
+            (["invariant-check", "--json"], "read"),
+            (["healthcheck", "--json"], "probe"),
+            (["healthcheck", "--repair", "--json"], "repair"),
+            (["mode", "get", "--json"], "read"),
+            (["mode", "set", "stable", "--json"], "mutate"),
+            (["rollback", "--latest", "--dry-run", "--json"], "read"),
+            (["rollback", "--latest", "--apply", "--json"], "repair"),
+            (["policy", "stage", "set", "15", "--json"], "mutate"),
+            (["rollout", "rotation", "inspect", "--json"], "read"),
+            (["rollout", "posture", "inspect", "15", "--json"], "read"),
+            (["accounts", "list", "--json"], "read"),
+            (["accounts", "promote", "backend-a", "--json"], "mutate"),
+            (["accounts", "demote", "backend-a", "--json"], "mutate"),
+            (["accounts", "hold", "backend-a", "--dry-run", "--json"], "mutate"),
+            (["accounts", "hold", "backend-a", "--json"], "mutate"),
+            (["accounts", "release", "backend-a", "--json"], "mutate"),
+            (["accounts", "retire", "backend-a", "--json"], "mutate"),
+            (["accounts", "onboard", "--json"], "mutate"),
+            (
+                ["accounts", "login", "start", "--provider", "codex", "--mode", "device", "--json"],
+                "mutate",
+            ),
+            (["accounts", "login", "status", "--session", "s", "--json"], "read"),
+            (["accounts", "login", "complete", "--session", "s", "--json"], "mutate"),
+            (["accounts", "login", "cancel", "--session", "s", "--json"], "mutate"),
+            (
+                [
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "deepseek",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ],
+                "mutate",
+            ),
+            (
+                [
+                    "external-models",
+                    "credentials",
+                    "status",
+                    "--provider",
+                    "deepseek",
+                    "--json",
+                ],
+                "read",
+            ),
+        ]
+        for argv, expected_effect in cases:
+            with self.subTest(argv=" ".join(argv)):
+                args = parser.parse_args(argv)
+                self.assertEqual(cli_mod.command_effect_from_args(args), expected_effect)
+
+    def test_cli_effect_classifier_leaves_tracked_documented_gaps_unclassified(
+        self,
+    ) -> None:
+        parser = cli_mod.build_parser()
+        cases = [
+            ["sync", "--json"],
+            ["token", "--json"],
+            ["stable", "repair", "--dry-run", "--json"],
+            ["stable", "repair", "--apply", "--json"],
+            ["stable", "target", "switch", "--dry-run", "--json"],
+            ["stable", "target", "switch", "--apply", "--json"],
+            ["launch", "smoke", "--json"],
+            ["launch", "client", "--client-path", "/tmp/wbp-client", "--json"],
+            ["codex-runner", "smoke", "--prompt", "hi", "--json"],
+            ["rollout", "evidence", "capture", "16", "--json"],
+            ["rollout", "stage", "prove", "10", "--json"],
+            ["rollout", "stage", "prove", "15", "--json"],
+            ["rollout", "stage", "advance", "15", "backend-a", "--json"],
+            ["rollout", "stage", "advance", "20", "backend-a", "--json"],
+            ["accounts", "validate", "backend-a", "--json"],
+            ["diagnostics", "export", "--json"],
+            ["installer", "init", "--json"],
+            ["legacy", "import", "--source-dir", "/tmp/wbp-source", "--json"],
+            ["companion", "reset", "--json"],
+            ["companion", "uninstall", "--json"],
+            ["package", "experimental", "build", "--output-dir", "/tmp/wbp-out", "--json"],
+            ["package", "experimental", "verify", "--manifest", "/tmp/wbp-manifest.json", "--json"],
+            ["package", "launchable", "build", "--output-dir", "/tmp/wbp-out", "--json"],
+            ["package", "launchable", "verify", "--manifest", "/tmp/wbp-manifest.json", "--json"],
+            ["external-models", "start", "--json"],
+            ["external-models", "stop", "--json"],
+            ["external-models", "status", "--json"],
+            ["external-models", "models", "--json"],
+            ["external-models", "check", "--route", "wbp-deepseek-v3", "--json"],
+            [
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "ping",
+                "--expected-text",
+                "pong",
+                "--json",
+            ],
+            ["external-models", "routes", "list", "--json"],
+            ["external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"],
+            [
+                "external-models",
+                "profile",
+                "codex-desktop",
+                "--route",
+                "wbp-deepseek-v3",
+                "--json",
+            ],
+            ["external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"],
+        ]
+        for argv in cases:
+            with self.subTest(argv=" ".join(argv)):
+                args = parser.parse_args(argv)
+                self.assertIsNone(cli_mod.command_effect_from_args(args))
 
     def test_status_reports_snapshot_when_managed_listener_is_not_probed(self) -> None:
         stable_port = free_port()
@@ -10713,9 +10836,9 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_does_not_claim_ready_from_foreign_listener_without_runtime_identity(
         self,
     ) -> None:
-        sentinel_secret = "sk-wbp-d3a-onboard-foreign-listener"
+        sentinel_value = "wbp-d3a-onboard-foreign-listener-fixture-token"
         (self.profile_dir / "auth.json").write_text(
-            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            json.dumps({"OPENAI_API_KEY": sentinel_value}) + "\n",
             encoding="utf-8",
         )
         port = free_port()
@@ -10780,10 +10903,10 @@ class CliTests(unittest.TestCase):
             after=after,
             changed_files=payload["changed_files"],
         )
-        self.assertNotIn(sentinel_secret, result.stdout)
-        self.assertNotIn("sk-wbp-d3a", result.stdout)
-        self.assertNotIn(sentinel_secret, result.stderr)
-        self.assertNotIn("sk-wbp-d3a", result.stderr)
+        self.assertNotIn(sentinel_value, result.stdout)
+        self.assertNotIn("wbp-d3a-onboard", result.stdout)
+        self.assertNotIn(sentinel_value, result.stderr)
+        self.assertNotIn("wbp-d3a-onboard", result.stderr)
 
     def test_onboarding_lifecycle_admission_marks_reserve_only_launch_gap_ready(
         self,
@@ -20497,9 +20620,9 @@ class CliTests(unittest.TestCase):
     def test_sync_rejects_socket_only_managed_listener_without_runtime_identity(
         self,
     ) -> None:
-        sentinel_secret = "sk-wbp-d1b-sentinel-secret-socket-only"
+        sentinel_value = "wbp-d1b-sentinel-value-socket-only"
         (self.profile_dir / "auth.json").write_text(
-            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            json.dumps({"OPENAI_API_KEY": sentinel_value}) + "\n",
             encoding="utf-8",
         )
         port = free_port()
@@ -20541,17 +20664,17 @@ class CliTests(unittest.TestCase):
             after=after,
             changed_files=payload["changed_files"],
         )
-        self.assertNotIn(sentinel_secret, result.stdout)
-        self.assertNotIn("sk-wbp-d1b", result.stdout)
-        self.assertNotIn(sentinel_secret, result.stderr)
-        self.assertNotIn("sk-wbp-d1b", result.stderr)
+        self.assertNotIn(sentinel_value, result.stdout)
+        self.assertNotIn("wbp-d1b-sentinel-value", result.stdout)
+        self.assertNotIn(sentinel_value, result.stderr)
+        self.assertNotIn("wbp-d1b-sentinel-value", result.stderr)
 
     def test_sync_rejects_foreign_openai_listener_without_runtime_identity(
         self,
     ) -> None:
-        sentinel_secret = "sk-wbp-d1b-sentinel-secret-foreign-openai"
+        sentinel_value = "wbp-d1b-sentinel-value-foreign-openai"
         (self.profile_dir / "auth.json").write_text(
-            json.dumps({"OPENAI_API_KEY": sentinel_secret}) + "\n",
+            json.dumps({"OPENAI_API_KEY": sentinel_value}) + "\n",
             encoding="utf-8",
         )
         port = free_port()
@@ -20596,10 +20719,10 @@ class CliTests(unittest.TestCase):
             after=after,
             changed_files=payload["changed_files"],
         )
-        self.assertNotIn(sentinel_secret, result.stdout)
-        self.assertNotIn("sk-wbp-d1b", result.stdout)
-        self.assertNotIn(sentinel_secret, result.stderr)
-        self.assertNotIn("sk-wbp-d1b", result.stderr)
+        self.assertNotIn(sentinel_value, result.stdout)
+        self.assertNotIn("wbp-d1b-sentinel-value", result.stdout)
+        self.assertNotIn(sentinel_value, result.stderr)
+        self.assertNotIn("wbp-d1b-sentinel-value", result.stderr)
 
     def test_sync_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
@@ -21665,7 +21788,27 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["next_action"], "retry")
+
+    def test_mode_get_runtime_error_preserves_read_effect(self) -> None:
+        (self.managed_dir / "supervisor-state.json").write_text("{", encoding="utf-8")
+        result = self.run_cli("mode", "get", "--json")
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["machine_error_code"], "INVALID_JSON_FILE")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_hold_dry_run_runtime_error_preserves_mutate_effect(self) -> None:
+        (self.managed_dir / "backend-registry.json").write_text("{", encoding="utf-8")
+        result = self.run_cli("accounts", "hold", "backend-a", "--dry-run", "--json")
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["machine_error_code"], "INVALID_JSON_FILE")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertEqual(payload["changed_files"], [])
 
     def test_launch_smoke_wraps_external_launcher_and_reports_fallback(self) -> None:
         stable_port = free_port()
