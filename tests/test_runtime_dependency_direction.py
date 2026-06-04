@@ -652,6 +652,21 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
 
         self.assertEqual(imported_modules & forbidden_modules, set())
 
+    def test_runtime_repair_module_does_not_source_wall_clock_time(self) -> None:
+        source = RUNTIME_MODULE_PATHS["wild_boar_proxy.runtime_repair"].read_text(
+            encoding="utf-8"
+        )
+        imported_modules = set(
+            _iter_imported_modules(source, "wild_boar_proxy.runtime_repair")
+        )
+        calls = _call_names(source)
+
+        self.assertEqual(imported_modules & {"datetime", "time"}, set())
+        self.assertEqual(
+            calls & {"now_iso", "datetime.now", "datetime.utcnow", "time.time"},
+            set(),
+        )
+
     def test_cli_healthcheck_dispatch_imports_split_owner_surfaces(self) -> None:
         source = CLI_MODULE_PATH.read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -3012,6 +3027,97 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                     self.assertEqual(payload["current_snapshot"], current_snapshot)
                 else:
                     self.assertNotIn("current_snapshot", payload)
+
+    def test_runtime_stable_runtime_consumer_snapshot_payload_facade_matches_repair_module(
+        self,
+    ) -> None:
+        observed_at = "2026-06-01T00:00:00+00:00"
+
+        with mock.patch.object(runtime_mod, "now_iso", return_value=observed_at):
+            facade_payload = runtime_mod.build_stable_runtime_consumer_snapshot_payload(
+                activation_method="process_local_env_override",
+                selected_config_file="/tmp/stable-runtime-config.yaml",
+                selected_source_kind="approved_repair_target",
+                selected_source_path="/tmp/repair-target",
+                activation_outcome=(
+                    runtime_mod.STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME
+                ),
+                fallback_reason="",
+            )
+        direct_payload = (
+            runtime_repair.build_stable_runtime_consumer_snapshot_payload_from_inputs(
+                activation_method="process_local_env_override",
+                selected_config_file="/tmp/stable-runtime-config.yaml",
+                selected_source_kind="approved_repair_target",
+                selected_source_path="/tmp/repair-target",
+                activation_outcome=(
+                    runtime_repair.STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME
+                ),
+                fallback_reason="",
+                observed_at_utc=observed_at,
+            )
+        )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(
+            list(facade_payload),
+            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+        )
+        self.assertEqual(facade_payload["schema_version"], 1)
+        self.assertEqual(facade_payload["observed_at_utc"], observed_at)
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME,
+            runtime_mod.STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME,
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
+            runtime_mod.STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
+            runtime_mod.STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
+        )
+
+    def test_runtime_stable_runtime_consumer_snapshot_payload_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = {"surface": "stable-runtime-consumer-snapshot-payload"}
+
+        with (
+            mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-01T00:00:00+00:00",
+            ),
+            mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_consumer_snapshot_payload_from_inputs",
+                return_value=expected,
+            ) as builder,
+        ):
+            payload = runtime_mod.build_stable_runtime_consumer_snapshot_payload(
+                activation_method="process_local_env_override",
+                selected_config_file="/tmp/stable-runtime-config.yaml",
+                selected_source_kind="observed_stable_inventory_source",
+                selected_source_path="/tmp/observed-source",
+                activation_outcome=(
+                    runtime_mod.STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME
+                ),
+                fallback_reason="launcher_exit_nonzero",
+            )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(
+            activation_method="process_local_env_override",
+            selected_config_file="/tmp/stable-runtime-config.yaml",
+            selected_source_kind="observed_stable_inventory_source",
+            selected_source_path="/tmp/observed-source",
+            activation_outcome=(
+                runtime_mod.STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME
+            ),
+            fallback_reason="launcher_exit_nonzero",
+            observed_at_utc="2026-06-01T00:00:00+00:00",
+        )
 
     def test_runtime_stable_runtime_consumer_contract_uses_repair_contract_facades(
         self,

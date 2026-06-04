@@ -4179,16 +4179,19 @@ def build_stable_runtime_consumer_snapshot_payload(
     activation_outcome: str,
     fallback_reason: str,
 ) -> dict[str, Any]:
-    return {
-        "schema_version": 1,
-        "activation_method": activation_method,
-        "selected_config_file": selected_config_file,
-        "selected_source_kind": selected_source_kind,
-        "selected_source_path": selected_source_path,
-        "activation_outcome": activation_outcome,
-        "fallback_reason": fallback_reason,
-        "observed_at_utc": now_iso(),
-    }
+    from .runtime_repair import (
+        build_stable_runtime_consumer_snapshot_payload_from_inputs as _build_payload,
+    )
+
+    return _build_payload(
+        activation_method=activation_method,
+        selected_config_file=selected_config_file,
+        selected_source_kind=selected_source_kind,
+        selected_source_path=selected_source_path,
+        activation_outcome=activation_outcome,
+        fallback_reason=fallback_reason,
+        observed_at_utc=now_iso(),
+    )
 
 
 def emit_subprocess_output(*, stdout: str, stderr: str) -> None:

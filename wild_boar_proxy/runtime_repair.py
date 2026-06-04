@@ -65,6 +65,9 @@ HEALTHCHECK_REPAIR_CONTRACT: Final = HealthcheckRepairContract(
 STABLE_RUNTIME_GENERATED_CONFIG_METHOD: Final = "control_owned_generated_config"
 STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV: Final = "WBP_STABLE_CONFIG"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: Final = "stable_runtime_consumer_snapshot"
+STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME: Final = "approved_target_activated"
+STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME: Final = "observed_source_selected"
+STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME: Final = "observed_source_fallback"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS: Final = [
     "schema_version",
     "activation_method",
@@ -332,6 +335,28 @@ def build_stable_runtime_generated_config_surface_from_inputs(
             activation_snapshot_references_generated_config
         ),
         "activation_snapshot_alone_sufficient": False,
+    }
+
+
+def build_stable_runtime_consumer_snapshot_payload_from_inputs(
+    *,
+    activation_method: str,
+    selected_config_file: str,
+    selected_source_kind: str,
+    selected_source_path: str,
+    activation_outcome: str,
+    fallback_reason: str,
+    observed_at_utc: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "activation_method": activation_method,
+        "selected_config_file": selected_config_file,
+        "selected_source_kind": selected_source_kind,
+        "selected_source_path": selected_source_path,
+        "activation_outcome": activation_outcome,
+        "fallback_reason": fallback_reason,
+        "observed_at_utc": observed_at_utc,
     }
 
 
