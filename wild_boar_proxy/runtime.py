@@ -45,8 +45,8 @@ from .command_effects import (
     EFFECT_PROBE,
     EFFECT_READ,
     EFFECT_REPAIR,
-    validate_effect,
 )
+from .core import packets as command_packets
 from .process_runner import (
     PROCESS_FAILED,
     PROCESS_NOT_FOUND,
@@ -112,17 +112,7 @@ SCALE_GATE_ORDER = [
     SCALE_GATE_FALLBACK_DRILL,
     SCALE_GATE_EVIDENCE_PACKET,
 ]
-COMMAND_PAYLOAD_REQUIRED_FIELDS = [
-    "status",
-    "exit_code",
-    "human_message",
-    "machine_error_code",
-    "changed_files",
-    "next_action",
-    "liveness",
-    "severity",
-    "operator_action",
-]
+COMMAND_PAYLOAD_REQUIRED_FIELDS = command_packets.COMMAND_PACKET_REQUIRED_FIELDS
 SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
 SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
@@ -7743,22 +7733,18 @@ def build_command_payload(
     exit_code: int | None = None,
     effect: str | None = None,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "status": "ok" if ok else "error",
-        "exit_code": 0 if ok else (1 if exit_code is None else exit_code),
-        "human_message": human_message,
-        "machine_error_code": machine_error_code,
-        "changed_files": changed_files,
-        "next_action": operator_action,
-        "liveness": liveness,
-        "severity": severity,
-        "operator_action": operator_action,
-    }
-    if effect is not None:
-        payload["effect"] = validate_effect(effect)
-    if extra:
-        payload.update(extra)
-    return payload
+    return command_packets.build_command_packet(
+        ok=ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness=liveness,
+        severity=severity,
+        operator_action=operator_action,
+        changed_files=changed_files,
+        extra=extra,
+        exit_code=exit_code,
+        effect=effect,
+    )
 
 
 def _rollback_preflight_files_packet(
@@ -8156,7 +8142,7 @@ def build_invariant_check(
 
 
 def missing_packet_fields(packet: dict[str, Any], required_fields: list[str]) -> list[str]:
-    return [field for field in required_fields if field not in packet]
+    return command_packets.missing_required_fields(packet, required_fields)
 
 
 def registry_pool_integrity_failure(registry: dict[str, Any]) -> str:
@@ -11356,9 +11342,7 @@ def summarize_scale_evidence_accounts(accounts_payload: dict[str, Any]) -> dict[
 
 
 def has_command_payload_shape(payload: Any) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return all(field in payload for field in COMMAND_PAYLOAD_REQUIRED_FIELDS)
+    return command_packets.has_command_packet_shape(payload)
 
 
 def evaluate_scale_evidence_strict_json_contract(

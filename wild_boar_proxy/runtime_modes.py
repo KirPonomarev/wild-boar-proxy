@@ -8,7 +8,8 @@ import socket
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from .command_effects import EFFECT_READ, validate_effect
+from .command_effects import EFFECT_READ
+from .core import packets as command_packets
 from .runtime_errors import RuntimeErrorInfo
 
 
@@ -83,22 +84,18 @@ def _build_command_payload(
     exit_code: int | None = None,
     effect: str | None = None,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "status": "ok" if ok else "error",
-        "exit_code": 0 if ok else (1 if exit_code is None else exit_code),
-        "human_message": human_message,
-        "machine_error_code": machine_error_code,
-        "changed_files": changed_files,
-        "next_action": operator_action,
-        "liveness": liveness,
-        "severity": severity,
-        "operator_action": operator_action,
-    }
-    if effect is not None:
-        payload["effect"] = validate_effect(effect)
-    if extra:
-        payload.update(extra)
-    return payload
+    return command_packets.build_command_packet(
+        ok=ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness=liveness,
+        severity=severity,
+        operator_action=operator_action,
+        changed_files=changed_files,
+        extra=extra,
+        exit_code=exit_code,
+        effect=effect,
+    )
 
 
 def get_desired_mode(paths: RuntimeModePaths) -> str:
