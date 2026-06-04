@@ -119,6 +119,30 @@ def json_file_status(path: Path) -> str:
     return "present" if isinstance(payload, dict) else "invalid_json"
 
 
+def build_historical_reference_context_packet(
+    *,
+    packet_kind: str,
+    source_path: str,
+    expected_status: str,
+    source_status: str,
+) -> dict[str, Any]:
+    packet = build_native_safety_reference_packet(
+        packet_kind=packet_kind,
+        source_path=source_path,
+        source_status=source_status,
+        expected_status=expected_status,
+    )
+    if source_status != "present":
+        packet["status"] = "ok"
+        packet["reason_class"] = "HISTORICAL_REFERENCE_NOT_ACTIVE_TRUTH"
+    packet["historical_reference_only"] = True
+    packet["historical_reference_available"] = source_status == "present"
+    packet["historical_reference_required_for_current_pass"] = False
+    packet["current_contour_relies_on_reference"] = False
+    packet["missing_historical_reference_blocks_summary"] = False
+    return packet
+
+
 def historical_quarantine(repo_root: Path, evidence_dir: Path) -> tuple[list[str], list[str]]:
     status_lines = run_text(repo_root, ["git", "status", "--short"]).splitlines()
     relative_evidence_dir = str(evidence_dir.relative_to(repo_root))
@@ -695,7 +719,7 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         cleanup_rollback_expectation_packet=cleanup,
         native_integrity_packet=integrity,
     )
-    provider_reference = build_native_safety_reference_packet(
+    provider_reference = build_historical_reference_context_packet(
         packet_kind="provider_auth_strategy_reference",
         source_path=f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json",
         source_status=json_file_status(
@@ -703,7 +727,7 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         ),
         expected_status="WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
     )
-    model_reference = build_native_safety_reference_packet(
+    model_reference = build_historical_reference_context_packet(
         packet_kind="model_availability_readiness_reference",
         source_path=f"{MODEL_READINESS_DIR}/model_availability_readiness_summary_packet.json",
         source_status=json_file_status(
@@ -711,7 +735,7 @@ def build_packets(repo_root: Path, evidence_dir: Path) -> dict[str, dict[str, An
         ),
         expected_status="WBP_MODEL_AVAILABILITY_SMOKE_MATRIX_READINESS_CLASSIFIED",
     )
-    cli_reference = build_native_safety_reference_packet(
+    cli_reference = build_historical_reference_context_packet(
         packet_kind="cli_runner_readiness_reference",
         source_path=f"{CLI_READINESS_DIR}/cli_runner_readiness_summary_packet.json",
         source_status=json_file_status(
