@@ -62,8 +62,19 @@ HEALTHCHECK_REPAIR_CONTRACT: Final = HealthcheckRepairContract(
     effect=EFFECT_REPAIR,
 )
 
+STABLE_RUNTIME_GENERATED_CONFIG_METHOD: Final = "control_owned_generated_config"
 STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV: Final = "WBP_STABLE_CONFIG"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: Final = "stable_runtime_consumer_snapshot"
+STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS: Final = [
+    "schema_version",
+    "activation_method",
+    "selected_config_file",
+    "selected_source_kind",
+    "selected_source_path",
+    "activation_outcome",
+    "fallback_reason",
+    "observed_at_utc",
+]
 LAST_KNOWN_GOOD_PROXY_URL_FIELD: Final = "last_known_good_proxy_url"
 LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD: Final = (
     "last_known_good_proxy_observed_at"
@@ -280,6 +291,90 @@ def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:
         "live_runtime_observation_required": True,
         "baseline_config_is_observation_surface": True,
     }
+
+
+def build_stable_runtime_generated_config_surface_from_inputs(
+    *,
+    config_file: str,
+    config_exists: bool,
+    activation_snapshot_present: bool,
+    activation_snapshot_observed_at_utc: str,
+    activation_snapshot_freshness: str,
+    activation_snapshot_references_generated_config: bool,
+) -> dict[str, Any]:
+    if not config_exists:
+        status = "declared_not_materialized"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "fresh"
+    ):
+        status = "materialized_with_fresh_activation_evidence"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "stale"
+    ):
+        status = "materialized_with_stale_activation_evidence"
+    else:
+        status = "materialized_unactivated"
+    return {
+        "status": status,
+        "config_file": config_file,
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+        "artifact_kind": "generated_runtime_config",
+        "truth_surface": False,
+        "activation_method": STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
+        "exists": config_exists,
+        "activation_snapshot_present": activation_snapshot_present,
+        "activation_snapshot_observed_at_utc": activation_snapshot_observed_at_utc,
+        "activation_snapshot_freshness": activation_snapshot_freshness,
+        "activation_snapshot_references_generated_config": (
+            activation_snapshot_references_generated_config
+        ),
+        "activation_snapshot_alone_sufficient": False,
+    }
+
+
+def build_stable_runtime_activation_evidence_surface_from_inputs(
+    *,
+    snapshot_file: str,
+    snapshot_topic: str,
+    snapshot_present: bool,
+    snapshot_shape_valid: bool,
+    snapshot_observed_at_utc: str,
+    snapshot_freshness: str,
+    snapshot_references_generated_config: bool,
+    generated_config_file: str,
+    current_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if snapshot_shape_valid and snapshot_freshness == "stale":
+        status = "snapshot_stale"
+    elif snapshot_shape_valid:
+        status = "snapshot_present"
+    elif snapshot_present:
+        status = "snapshot_shape_invalid"
+    else:
+        status = "declared_not_materialized"
+    payload = {
+        "status": status,
+        "snapshot_file": snapshot_file,
+        "snapshot_topic": snapshot_topic,
+        "classification": "runtime_state_snapshot_evidence",
+        "owner": "serialized_runtime_state_mutation_path",
+        "final_truth_without_live_checks": False,
+        "live_runtime_observation_required": True,
+        "required_fields": STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+        "snapshot_present": snapshot_present,
+        "snapshot_shape_valid": snapshot_shape_valid,
+        "snapshot_observed_at_utc": snapshot_observed_at_utc,
+        "snapshot_freshness": snapshot_freshness,
+        "snapshot_references_generated_config": snapshot_references_generated_config,
+        "generated_config_file": generated_config_file,
+        "snapshot_alone_sufficient": False,
+    }
+    if current_snapshot is not None:
+        payload["current_snapshot"] = current_snapshot
+    return payload
 
 
 def build_deterministic_stable_recovery_result(

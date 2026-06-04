@@ -3410,6 +3410,7 @@ def build_stable_runtime_generated_config_surface(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     generated_path = paths.stable_runtime_generated_config_file
+    generated_path_exists = generated_path.exists()
     snapshot = get_valid_stable_runtime_consumer_snapshot(state)
     activation_snapshot_present = snapshot is not None
     activation_snapshot_observed_at_utc = ""
@@ -3425,37 +3426,20 @@ def build_stable_runtime_generated_config_surface(
         activation_snapshot_references_generated_config = (
             str(snapshot.get("selected_config_file")) == str(generated_path)
         )
-    if not generated_path.exists():
-        status = "declared_not_materialized"
-    elif (
-        activation_snapshot_references_generated_config
-        and activation_snapshot_freshness == "fresh"
-    ):
-        status = "materialized_with_fresh_activation_evidence"
-    elif (
-        activation_snapshot_references_generated_config
-        and activation_snapshot_freshness == "stale"
-    ):
-        status = "materialized_with_stale_activation_evidence"
-    else:
-        status = "materialized_unactivated"
-    return {
-        "status": status,
-        "config_file": str(generated_path),
-        "ownership": "control_layer",
-        "location_scope": "companion_managed_data",
-        "artifact_kind": "generated_runtime_config",
-        "truth_surface": False,
-        "activation_method": STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
-        "exists": generated_path.exists(),
-        "activation_snapshot_present": activation_snapshot_present,
-        "activation_snapshot_observed_at_utc": activation_snapshot_observed_at_utc,
-        "activation_snapshot_freshness": activation_snapshot_freshness,
-        "activation_snapshot_references_generated_config": (
+    from .runtime_repair import (
+        build_stable_runtime_generated_config_surface_from_inputs as _build_surface,
+    )
+
+    return _build_surface(
+        config_file=str(generated_path),
+        config_exists=generated_path_exists,
+        activation_snapshot_present=activation_snapshot_present,
+        activation_snapshot_observed_at_utc=activation_snapshot_observed_at_utc,
+        activation_snapshot_freshness=activation_snapshot_freshness,
+        activation_snapshot_references_generated_config=(
             activation_snapshot_references_generated_config
         ),
-        "activation_snapshot_alone_sufficient": False,
-    }
+    )
 
 
 def build_stable_runtime_launcher_handoff_contract(
@@ -3486,34 +3470,21 @@ def build_stable_runtime_activation_evidence_surface(
             str(snapshot.get("selected_config_file"))
             == str(paths.stable_runtime_generated_config_file)
         )
-    if snapshot_shape_valid and snapshot_freshness == "stale":
-        status = "snapshot_stale"
-    elif snapshot_shape_valid:
-        status = "snapshot_present"
-    elif snapshot_present:
-        status = "snapshot_shape_invalid"
-    else:
-        status = "declared_not_materialized"
-    payload = {
-        "status": status,
-        "snapshot_file": str(paths.state_file),
-        "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
-        "classification": "runtime_state_snapshot_evidence",
-        "owner": "serialized_runtime_state_mutation_path",
-        "final_truth_without_live_checks": False,
-        "live_runtime_observation_required": True,
-        "required_fields": STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
-        "snapshot_present": snapshot_present,
-        "snapshot_shape_valid": snapshot_shape_valid,
-        "snapshot_observed_at_utc": snapshot_observed_at_utc,
-        "snapshot_freshness": snapshot_freshness,
-        "snapshot_references_generated_config": snapshot_references_generated_config,
-        "generated_config_file": str(paths.stable_runtime_generated_config_file),
-        "snapshot_alone_sufficient": False,
-    }
-    if snapshot_present:
-        payload["current_snapshot"] = snapshot
-    return payload
+    from .runtime_repair import (
+        build_stable_runtime_activation_evidence_surface_from_inputs as _build_surface,
+    )
+
+    return _build_surface(
+        snapshot_file=str(paths.state_file),
+        snapshot_topic=STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        snapshot_present=snapshot_present,
+        snapshot_shape_valid=snapshot_shape_valid,
+        snapshot_observed_at_utc=snapshot_observed_at_utc,
+        snapshot_freshness=snapshot_freshness,
+        snapshot_references_generated_config=snapshot_references_generated_config,
+        generated_config_file=str(paths.stable_runtime_generated_config_file),
+        current_snapshot=snapshot if snapshot_present else None,
+    )
 
 
 def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:

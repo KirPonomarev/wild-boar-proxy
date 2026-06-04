@@ -2763,19 +2763,281 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         self.assertIs(payload, expected)
         builder.assert_called_once_with()
 
+    def test_runtime_stable_runtime_generated_config_surface_facade_matches_repair_module(
+        self,
+    ) -> None:
+        observed_at = "2026-06-01T00:00:00+00:00"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            paths.stable_runtime_generated_config_file.write_text(
+                "host: 127.0.0.1\nport: 1\n", encoding="utf-8"
+            )
+            snapshot = {
+                "schema_version": 1,
+                "activation_method": "process_local_env_override",
+                "selected_config_file": str(paths.stable_runtime_generated_config_file),
+                "selected_source_kind": "approved_repair_target",
+                "selected_source_path": str(paths.repair_target_inventory_dir),
+                "activation_outcome": "approved_target_activated",
+                "fallback_reason": "",
+                "observed_at_utc": observed_at,
+            }
+
+            with mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-01T00:00:30+00:00",
+            ):
+                facade_payload = (
+                    runtime_mod.build_stable_runtime_generated_config_surface(
+                        paths,
+                        {
+                            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: snapshot
+                        },
+                    )
+                )
+            direct_payload = (
+                runtime_repair.build_stable_runtime_generated_config_surface_from_inputs(
+                    config_file=str(paths.stable_runtime_generated_config_file),
+                    config_exists=True,
+                    activation_snapshot_present=True,
+                    activation_snapshot_observed_at_utc=observed_at,
+                    activation_snapshot_freshness="fresh",
+                    activation_snapshot_references_generated_config=True,
+                )
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(
+            facade_payload["status"], "materialized_with_fresh_activation_evidence"
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
+            runtime_mod.STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        )
+        self.assertEqual(
+            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+        )
+
+    def test_runtime_stable_runtime_generated_config_surface_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = {"surface": "stable-runtime-generated-config"}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_generated_config_surface_from_inputs",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_stable_runtime_generated_config_surface(
+                    paths, {}
+                )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(
+            config_file=str(paths.stable_runtime_generated_config_file),
+            config_exists=False,
+            activation_snapshot_present=False,
+            activation_snapshot_observed_at_utc="",
+            activation_snapshot_freshness="unknown",
+            activation_snapshot_references_generated_config=False,
+        )
+
+    def test_runtime_stable_runtime_generated_config_surface_from_inputs_reports_statuses(
+        self,
+    ) -> None:
+        cases = (
+            (False, False, "unknown", "declared_not_materialized"),
+            (True, True, "fresh", "materialized_with_fresh_activation_evidence"),
+            (True, True, "stale", "materialized_with_stale_activation_evidence"),
+            (True, False, "fresh", "materialized_unactivated"),
+        )
+
+        for config_exists, references_config, freshness, expected_status in cases:
+            with self.subTest(expected_status=expected_status):
+                payload = (
+                    runtime_repair.build_stable_runtime_generated_config_surface_from_inputs(
+                        config_file="/tmp/stable-runtime-config.yaml",
+                        config_exists=config_exists,
+                        activation_snapshot_present=references_config,
+                        activation_snapshot_observed_at_utc=(
+                            "2026-06-01T00:00:00+00:00"
+                            if references_config
+                            else ""
+                        ),
+                        activation_snapshot_freshness=freshness,
+                        activation_snapshot_references_generated_config=(
+                            references_config
+                        ),
+                    )
+                )
+
+                self.assertEqual(payload["status"], expected_status)
+                self.assertEqual(
+                    payload["config_file"], "/tmp/stable-runtime-config.yaml"
+                )
+                self.assertEqual(
+                    payload["activation_method"],
+                    runtime_repair.STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
+                )
+
+    def test_runtime_stable_runtime_activation_evidence_surface_facade_matches_repair_module(
+        self,
+    ) -> None:
+        observed_at = "2026-06-01T00:00:00+00:00"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            snapshot = {
+                "schema_version": 1,
+                "activation_method": "process_local_env_override",
+                "selected_config_file": str(paths.stable_runtime_generated_config_file),
+                "selected_source_kind": "approved_repair_target",
+                "selected_source_path": str(paths.repair_target_inventory_dir),
+                "activation_outcome": "approved_target_activated",
+                "fallback_reason": "",
+                "observed_at_utc": observed_at,
+            }
+
+            with mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-01T00:00:30+00:00",
+            ):
+                facade_payload = (
+                    runtime_mod.build_stable_runtime_activation_evidence_surface(
+                        paths,
+                        {
+                            runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC: snapshot
+                        },
+                    )
+                )
+            direct_payload = (
+                runtime_repair.build_stable_runtime_activation_evidence_surface_from_inputs(
+                    snapshot_file=str(paths.state_file),
+                    snapshot_topic=runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+                    snapshot_present=True,
+                    snapshot_shape_valid=True,
+                    snapshot_observed_at_utc=observed_at,
+                    snapshot_freshness="fresh",
+                    snapshot_references_generated_config=True,
+                    generated_config_file=str(paths.stable_runtime_generated_config_file),
+                    current_snapshot=snapshot,
+                )
+            )
+
+        self.assertEqual(facade_payload, direct_payload)
+        self.assertEqual(facade_payload["status"], "snapshot_present")
+        self.assertEqual(facade_payload["current_snapshot"], snapshot)
+        self.assertEqual(
+            facade_payload["required_fields"],
+            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+        )
+
+    def test_runtime_stable_runtime_activation_evidence_surface_facade_delegates_to_repair_module(
+        self,
+    ) -> None:
+        expected = {"surface": "stable-runtime-activation-evidence"}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            with mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_activation_evidence_surface_from_inputs",
+                return_value=expected,
+            ) as builder:
+                payload = runtime_mod.build_stable_runtime_activation_evidence_surface(
+                    paths, {}
+                )
+
+        self.assertIs(payload, expected)
+        builder.assert_called_once_with(
+            snapshot_file=str(paths.state_file),
+            snapshot_topic=runtime_mod.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            snapshot_present=False,
+            snapshot_shape_valid=False,
+            snapshot_observed_at_utc="",
+            snapshot_freshness="unknown",
+            snapshot_references_generated_config=False,
+            generated_config_file=str(paths.stable_runtime_generated_config_file),
+            current_snapshot=None,
+        )
+
+    def test_runtime_stable_runtime_activation_evidence_surface_from_inputs_reports_statuses(
+        self,
+    ) -> None:
+        cases = (
+            (False, False, "unknown", "declared_not_materialized"),
+            (True, False, "unknown", "snapshot_shape_invalid"),
+            (True, True, "fresh", "snapshot_present"),
+            (True, True, "stale", "snapshot_stale"),
+        )
+
+        for snapshot_present, shape_valid, freshness, expected_status in cases:
+            with self.subTest(expected_status=expected_status):
+                current_snapshot = {"schema_version": 1} if snapshot_present else None
+                payload = (
+                    runtime_repair.build_stable_runtime_activation_evidence_surface_from_inputs(
+                        snapshot_file="/tmp/state.json",
+                        snapshot_topic=(
+                            runtime_repair.STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC
+                        ),
+                        snapshot_present=snapshot_present,
+                        snapshot_shape_valid=shape_valid,
+                        snapshot_observed_at_utc=(
+                            "2026-06-01T00:00:00+00:00"
+                            if shape_valid
+                            else ""
+                        ),
+                        snapshot_freshness=freshness,
+                        snapshot_references_generated_config=shape_valid,
+                        generated_config_file="/tmp/stable-runtime-config.yaml",
+                        current_snapshot=current_snapshot,
+                    )
+                )
+
+                self.assertEqual(payload["status"], expected_status)
+                self.assertEqual(payload["snapshot_file"], "/tmp/state.json")
+                if snapshot_present:
+                    self.assertEqual(payload["current_snapshot"], current_snapshot)
+                else:
+                    self.assertNotIn("current_snapshot", payload)
+
     def test_runtime_stable_runtime_consumer_contract_uses_repair_contract_facades(
         self,
     ) -> None:
         launcher_handoff = {"surface": "launcher-handoff"}
         effective_truth = {"surface": "effective-truth"}
+        generated_surface = {"surface": "generated-config"}
+        activation_evidence = {"surface": "activation-evidence"}
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             mock.patch.object(
                 runtime_repair,
+                "build_stable_runtime_generated_config_surface_from_inputs",
+                return_value=generated_surface,
+            ) as generated_builder,
+            mock.patch.object(
+                runtime_repair,
                 "build_stable_runtime_launcher_handoff_contract",
                 return_value=launcher_handoff,
             ) as launcher_builder,
+            mock.patch.object(
+                runtime_repair,
+                "build_stable_runtime_activation_evidence_surface_from_inputs",
+                return_value=activation_evidence,
+            ) as activation_builder,
             mock.patch.object(
                 runtime_repair,
                 "build_stable_runtime_effective_truth_contract",
@@ -2795,9 +3057,15 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                 paths, registry, policy_drift, state
             )
 
+        self.assertIs(
+            payload["derived_stable_runtime_config_surface"], generated_surface
+        )
         self.assertIs(payload["launcher_handoff_contract"], launcher_handoff)
+        self.assertIs(payload["activation_evidence_surface"], activation_evidence)
         self.assertIs(payload["effective_truth_contract"], effective_truth)
+        generated_builder.assert_called_once()
         launcher_builder.assert_called_once_with(paths)
+        activation_builder.assert_called_once()
         truth_builder.assert_called_once_with()
 
     def test_runtime_startup_contract_repair_contract_facade_matches_repair_module(
