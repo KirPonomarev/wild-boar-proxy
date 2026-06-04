@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import ast
+import copy
+import json
 import unittest
 from pathlib import Path
 
@@ -372,6 +374,191 @@ class CommandPacketsCoreTests(unittest.TestCase):
                 "operator_action",
             ],
         )
+
+    def test_redact_command_packet_redacts_nested_explicit_secret_values(self) -> None:
+        sentinel = "sk-wbp-command-packet-secret-1234567890"
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message=f"failed with token {sentinel}",
+            machine_error_code="PROCESS_FAILED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "data": {
+                    "api_key": sentinel,
+                    "message": f"prefix {sentinel} suffix",
+                    "nested": ["safe", sentinel],
+                    "tuple_value": (sentinel, "kept"),
+                }
+            },
+        )
+
+        redacted = packets.redact_command_packet(payload, secret_values=[sentinel])
+
+        self.assertTrue(packets.has_command_packet_shape(redacted))
+        self.assertEqual(
+            redacted["data"]["api_key"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            redacted["human_message"],
+            f"failed with token {packets.COMMAND_PACKET_REDACTION_PLACEHOLDER}",
+        )
+        self.assertEqual(
+            redacted["data"]["message"],
+            f"prefix {packets.COMMAND_PACKET_REDACTION_PLACEHOLDER} suffix",
+        )
+        self.assertEqual(
+            redacted["data"]["nested"][1],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            redacted["data"]["tuple_value"],
+            (packets.COMMAND_PACKET_REDACTION_PLACEHOLDER, "kept"),
+        )
+        self.assertNotIn(sentinel, json.dumps(redacted, default=str))
+
+    def test_redact_command_packet_does_not_mutate_original_payload(self) -> None:
+        sentinel = "sk-wbp-nonmutating-secret-1234567890"
+        payload = {
+            "status": "ok",
+            "exit_code": 0,
+            "human_message": sentinel,
+            "machine_error_code": "OK",
+            "changed_files": [],
+            "next_action": "none",
+            "liveness": "healthy",
+            "severity": "recoverable",
+            "operator_action": "none",
+            "data": {"token": sentinel},
+        }
+        original = copy.deepcopy(payload)
+
+        redacted = packets.redact_command_packet(payload, secret_values=[sentinel])
+
+        self.assertEqual(payload, original)
+        self.assertNotEqual(redacted, payload)
+        self.assertEqual(
+            redacted["data"]["token"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+
+    def test_redact_command_packet_preserves_safe_secret_references(self) -> None:
+        payload = {
+            "secret_ref": "OPENROUTER_API_KEY",
+            "credential_ref": "provider:openrouter",
+            "token_ref": "managed_local_token",
+            "available_secret_refs": ["OPENROUTER_API_KEY"],
+            "api_key_source": "managed_local_token",
+            "token_source_kind": "stable_generated_config",
+            "token_output_shape": "plain_token_stdout",
+            "token_present": True,
+            "token_emitted": False,
+            "secret_value_recorded": False,
+            "secret_value_exposed": False,
+            "profile_dir_redacted": True,
+            "api_key_bundle": {"token_ref": "managed_local_token"},
+        }
+
+        redacted = packets.redact_command_packet_value(payload)
+
+        self.assertEqual(redacted["secret_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(redacted["credential_ref"], "provider:openrouter")
+        self.assertEqual(redacted["token_ref"], "managed_local_token")
+        self.assertEqual(redacted["available_secret_refs"], ["OPENROUTER_API_KEY"])
+        self.assertEqual(redacted["api_key_source"], "managed_local_token")
+        self.assertEqual(
+            redacted["api_key_bundle"]["token_ref"],
+            "managed_local_token",
+        )
+        self.assertFalse(packets.command_packet_has_secret_leak(redacted))
+
+    def test_redact_command_packet_preserves_machine_truth_fields(self) -> None:
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message="token bucket remains observable",
+            machine_error_code="PROCESS_TIMEOUT",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=["/tmp/token-bucket-state.json"],
+            exit_code=7,
+            effect="probe",
+        )
+
+        redacted = packets.redact_command_packet(payload)
+
+        for field in packets.COMMAND_PACKET_REQUIRED_FIELDS + ["effect"]:
+            with self.subTest(field=field):
+                self.assertEqual(redacted[field], payload[field])
+
+    def test_command_packet_has_secret_leak_detects_explicit_secret_after_serialization(
+        self,
+    ) -> None:
+        sentinel = "sk-wbp-serialized-secret-1234567890"
+        payload = {"data": {"messages": ["safe", {"text": f"raw={sentinel}"}]}}
+
+        self.assertTrue(
+            packets.command_packet_has_secret_leak(payload, secret_values=[sentinel])
+        )
+
+    def test_command_packet_has_secret_leak_ignores_redacted_payload(self) -> None:
+        sentinel = "sk-wbp-redacted-secret-1234567890"
+        payload = {
+            "data": {
+                "api_key": sentinel,
+                "authorization": f"Bearer {sentinel}",
+                "message": f"raw={sentinel}",
+            }
+        }
+
+        redacted = packets.redact_command_packet(payload, secret_values=[sentinel])
+
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(redacted, secret_values=[sentinel])
+        )
+
+    def test_redaction_catches_high_confidence_secret_shapes(self) -> None:
+        payload = {
+            "data": {
+                "authorization_header": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+                "env_text": "OPENAI_API_KEY=abcdefghijklmnopqrstuvwxyz",
+                "plain_api_key": "plain-fixture-value",
+                "sk_value": "sk-wbp-secret-shape-1234567890",
+                "url": "https://user:password@example.test/path",
+                "note": "token bucket remains observable",
+                "next_action": "accounts_login_start",
+                "secret_ref": "OPENROUTER_API_KEY",
+                "token_ref": "managed_local_token",
+            }
+        }
+
+        redacted = packets.redact_command_packet(payload)
+
+        self.assertEqual(
+            redacted["data"]["authorization_header"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            redacted["data"]["env_text"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            redacted["data"]["plain_api_key"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertEqual(
+            redacted["data"]["sk_value"],
+            packets.COMMAND_PACKET_REDACTION_PLACEHOLDER,
+        )
+        self.assertNotIn("user:password", redacted["data"]["url"])
+        self.assertEqual(redacted["data"]["note"], "token bucket remains observable")
+        self.assertEqual(redacted["data"]["next_action"], "accounts_login_start")
+        self.assertEqual(redacted["data"]["secret_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(redacted["data"]["token_ref"], "managed_local_token")
+        self.assertFalse(packets.command_packet_has_secret_leak(redacted))
 
     def test_core_packets_has_no_runtime_or_owner_path_dependencies(self) -> None:
         tree = ast.parse(PACKETS_CORE.read_text(encoding="utf-8"))
