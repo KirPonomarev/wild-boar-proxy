@@ -28,6 +28,7 @@ from tools.truth_tree_harness import (
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import runtime as runtime_mod
 from wild_boar_proxy.process_runner import BoundedProcessResult
+from wild_boar_proxy.web_token import WEB_TOKEN_FILENAME
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2424,6 +2425,74 @@ class CliTests(unittest.TestCase):
         self.assertTrue(verify_payload["package_result"]["runtime_path_exists"])
         self.assertTrue(verify_payload["package_result"]["runtime_path_executable"])
         self.assert_launchable_runtime_dependency_truth(verify_payload["package_result"])
+
+    def test_package_launchable_artifact_runs_desktop_web_shell_smoke(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-web-shell-smoke"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
+        executable = (
+            output_dir
+            / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+            / "Contents"
+            / "MacOS"
+            / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+
+        smoke_result = subprocess.run(
+            [str(executable), "--smoke-web-shell-json"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(smoke_result.returncode, 0, smoke_result.stderr)
+        packet = json.loads(smoke_result.stdout)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["desktop_shell"]["entrypoint"],
+            runtime_mod.LAUNCHABLE_PACKAGE_DESKTOP_SHELL_ENTRYPOINT,
+        )
+        self.assertEqual(
+            packet["desktop_shell"]["default_surface"],
+            "web_design_live_server",
+        )
+        self.assertTrue(packet["server"]["local_only_bind"])
+        self.assertFalse(packet["server"]["public_bind_allowed"])
+        self.assertNotEqual(packet["server"]["port"], 8788)
+        self.assertTrue(packet["first_screen"]["live_readonly_endpoint_ok"])
+        self.assertTrue(packet["first_screen"]["status_truth_present"])
+        self.assertTrue(packet["first_screen"]["accounts_readonly_endpoint_ok"])
+        self.assertTrue(packet["first_screen"]["api_connections_readonly_endpoint_ok"])
+        self.assertFalse(packet["packet_contents"]["includes_index_html"])
+        self.assertFalse(packet["packet_contents"]["includes_live_readonly_payload"])
+        self.assertFalse(packet["packet_contents"]["includes_accounts_payload"])
+        self.assertFalse(packet["packet_contents"]["includes_api_connections_payload"])
+        self.assertFalse(packet["packet_contents"]["includes_web_token_value"])
+        self.assertFalse(packet["packet_contents"]["includes_csrf_token_value"])
+        self.assertFalse((self.managed_dir / WEB_TOKEN_FILENAME).exists())
 
     def test_package_launchable_verify_checksum_mismatch_failure(self) -> None:
         output_dir = Path(self.temp_dir.name) / "launchable-package-verify-mismatch"

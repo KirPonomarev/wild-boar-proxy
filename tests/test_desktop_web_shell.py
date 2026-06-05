@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import socket
 import tempfile
 import unittest
 from unittest import mock
@@ -54,16 +55,91 @@ class DesktopWebShellTest(unittest.TestCase):
         self.assertTrue(packet["first_screen"]["data_source_live"])
         self.assertTrue(packet["first_screen"]["custom_launch_action_present"])
         self.assertTrue(packet["first_screen"]["agent_alias_packet_present"])
+        self.assertTrue(packet["first_screen"]["live_readonly_endpoint_ok"])
+        self.assertTrue(packet["first_screen"]["status_truth_present"])
+        self.assertTrue(packet["first_screen"]["accounts_readonly_endpoint_ok"])
+        self.assertIn("accounts_machine_error_code", packet["first_screen"])
+        self.assertTrue(packet["first_screen"]["api_connections_readonly_endpoint_ok"])
+        self.assertIn("api_machine_error_code", packet["first_screen"])
         self.assertTrue(packet["web_security"]["web_token_bootstrap_meta_present"])
         self.assertTrue(packet["web_security"]["csrf_bootstrap_meta_present"])
         self.assertTrue(
             packet["web_security"]["web_bootstrap_tokens_delivered_to_browser"]
         )
         self.assertTrue(packet["web_security"]["unauthorized_post_rejected"])
+        self.assertFalse(packet["packet_contents"]["includes_live_readonly_payload"])
+        self.assertFalse(packet["packet_contents"]["includes_accounts_payload"])
+        self.assertFalse(packet["packet_contents"]["includes_api_connections_payload"])
         self.assertFalse(packet["packet_contents"]["includes_web_token_value"])
         self.assertFalse(packet["packet_contents"]["includes_csrf_token_value"])
         self.assertFalse(packet["package_boundary"]["evaluated_by_shell_smoke"])
         self.assertTrue(packet["package_boundary"]["requires_package_launchable_verify"])
+        self.assertFalse((self.managed_dir / WEB_TOKEN_FILENAME).exists())
+
+    def test_main_smoke_json_uses_ephemeral_port_by_default(self) -> None:
+        with (
+            mock.patch.object(
+                desktop_web_shell,
+                "run_desktop_web_shell_smoke",
+                return_value=({"status": "ok"}, 0),
+            ) as smoke,
+            mock.patch("builtins.print"),
+        ):
+            exit_code = desktop_web_shell.main(["--smoke-json"])
+
+        self.assertEqual(exit_code, 0)
+        smoke.assert_called_once_with(
+            host=desktop_web_shell.DESKTOP_WEB_SHELL_DEFAULT_HOST,
+            port=0,
+        )
+
+    def test_main_interactive_shell_keeps_default_fixed_port(self) -> None:
+        with mock.patch.object(
+            desktop_web_shell,
+            "run_desktop_web_shell",
+            return_value=0,
+        ) as run_shell:
+            exit_code = desktop_web_shell.main(["--no-open-browser"])
+
+        self.assertEqual(exit_code, 0)
+        run_shell.assert_called_once_with(
+            host=desktop_web_shell.DESKTOP_WEB_SHELL_DEFAULT_HOST,
+            port=desktop_web_shell.DESKTOP_WEB_SHELL_DEFAULT_PORT,
+            open_browser=False,
+        )
+
+    def test_smoke_returns_packet_for_explicit_busy_port(self) -> None:
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        try:
+            port = int(sock.getsockname()[1])
+            packet, exit_code = desktop_web_shell.run_desktop_web_shell_smoke(
+                port=port
+            )
+        finally:
+            sock.close()
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            desktop_web_shell.DESKTOP_WEB_SHELL_BIND_ERROR,
+        )
+        self.assertFalse((self.managed_dir / WEB_TOKEN_FILENAME).exists())
+
+    def test_smoke_returns_packet_for_fetch_failure(self) -> None:
+        with mock.patch.object(
+            desktop_web_shell,
+            "_fetch_text",
+            side_effect=OSError("connection closed"),
+        ):
+            packet, exit_code = desktop_web_shell.run_desktop_web_shell_smoke()
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "DESKTOP_WEB_SHELL_SMOKE_FAILED")
+        self.assertIn("connection closed", packet["human_message"])
         self.assertFalse((self.managed_dir / WEB_TOKEN_FILENAME).exists())
 
     def test_smoke_rejects_public_bind(self) -> None:

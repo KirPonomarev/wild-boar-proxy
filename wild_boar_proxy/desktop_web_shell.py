@@ -33,6 +33,7 @@ DESKTOP_WEB_SHELL_DEFAULT_HOST = "127.0.0.1"
 DESKTOP_WEB_SHELL_DEFAULT_PORT = 8788
 DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH = "/api/action"
 DESKTOP_WEB_SHELL_PUBLIC_BIND_ERROR = "DESKTOP_WEB_SHELL_PUBLIC_BIND_REJECTED"
+DESKTOP_WEB_SHELL_BIND_ERROR = "DESKTOP_WEB_SHELL_BIND_FAILED"
 
 
 class DesktopWebShellError(ValueError):
@@ -72,6 +73,11 @@ def _base_url(host: str, port: int) -> str:
 def _fetch_text(url: str, *, timeout_seconds: float = 3.0) -> str:
     with NO_PROXY_OPENER.open(url, timeout=timeout_seconds) as response:
         return response.read().decode("utf-8")
+
+
+def _fetch_json(url: str, *, timeout_seconds: float = 3.0) -> dict[str, Any]:
+    payload = json.loads(_fetch_text(url, timeout_seconds=timeout_seconds))
+    return payload if isinstance(payload, dict) else {}
 
 
 def _post_json_without_auth(url: str, *, timeout_seconds: float = 3.0) -> dict[str, Any]:
@@ -114,6 +120,12 @@ def build_desktop_web_shell_server(
                 web_token_state=web_token_state,
             ),
         )
+    except OSError as exc:
+        delete_web_token(web_token_state)
+        raise DesktopWebShellError(
+            f"Desktop web shell failed to bind {admitted_host}:{port}.",
+            machine_error_code=DESKTOP_WEB_SHELL_BIND_ERROR,
+        ) from exc
     except Exception:
         delete_web_token(web_token_state)
         raise
@@ -126,6 +138,9 @@ def build_desktop_web_shell_packet(
     base_url: str,
     port: int,
     index_html: str,
+    live_readonly: dict[str, Any],
+    accounts_readonly: dict[str, Any],
+    api_connections_readonly: dict[str, Any],
     action_metadata: dict[str, Any],
     unauthorized_post: dict[str, Any],
 ) -> dict[str, Any]:
@@ -141,10 +156,25 @@ def build_desktop_web_shell_packet(
         int(unauthorized_post.get("http_status", 0)) == 401
         and unauthorized_machine_error == "WEB_INGRESS_WEB_TOKEN_REJECTED"
     )
+    live_commands = live_readonly.get("commands")
+    if not isinstance(live_commands, dict):
+        live_commands = {}
+    accounts_summary = accounts_readonly.get("summary")
+    if not isinstance(accounts_summary, dict):
+        accounts_summary = {}
+    api_summary = api_connections_readonly.get("summary")
+    if not isinstance(api_summary, dict):
+        api_summary = {}
+    live_readonly_endpoint_ok = "status" in live_readonly
+    accounts_readonly_endpoint_ok = "status" in accounts_readonly
+    api_connections_readonly_endpoint_ok = "status" in api_connections_readonly
     status_ok = (
         token_meta_present
         and csrf_meta_present
         and unauthorized_post_rejected
+        and live_readonly_endpoint_ok
+        and accounts_readonly_endpoint_ok
+        and api_connections_readonly_endpoint_ok
         and isinstance(action_metadata, dict)
         and action_metadata.get("status") == "ok"
     )
@@ -173,6 +203,18 @@ def build_desktop_web_shell_packet(
             "data_source_live": 'data-source="live"' in index_html,
             "custom_launch_action_present": "quickStartCustomLaunchAction" in index_html,
             "agent_alias_packet_present": "quickStartAgentAliasPacket" in index_html,
+            "live_readonly_endpoint_ok": live_readonly_endpoint_ok,
+            "status_truth_present": isinstance(live_commands.get("status"), dict),
+            "healthcheck_truth_present": isinstance(
+                live_commands.get("healthcheck"), dict
+            ),
+            "mode_truth_present": isinstance(live_commands.get("mode_get"), dict),
+            "accounts_readonly_endpoint_ok": accounts_readonly_endpoint_ok,
+            "accounts_visible_count": accounts_summary.get("visible_count"),
+            "accounts_machine_error_code": accounts_summary.get("machine_error_code"),
+            "api_connections_readonly_endpoint_ok": api_connections_readonly_endpoint_ok,
+            "api_routes_count": api_summary.get("routes_count"),
+            "api_machine_error_code": api_summary.get("machine_error_code"),
         },
         "web_security": {
             "web_token_bootstrap_meta_present": token_meta_present,
@@ -192,6 +234,9 @@ def build_desktop_web_shell_packet(
         },
         "packet_contents": {
             "includes_index_html": False,
+            "includes_live_readonly_payload": False,
+            "includes_accounts_payload": False,
+            "includes_api_connections_payload": False,
             "includes_web_token_value": False,
             "includes_csrf_token_value": False,
         },
@@ -229,6 +274,11 @@ def run_desktop_web_shell_smoke(
         admitted_host = validate_desktop_bind_host(host)
         base_url = _base_url(admitted_host, actual_port)
         index_html = _fetch_text(f"{base_url}/")
+        live_readonly = _fetch_json(f"{base_url}/api/live-readonly")
+        accounts_readonly = _fetch_json(f"{base_url}/api/accounts-readonly")
+        api_connections_readonly = _fetch_json(
+            f"{base_url}/api/api-connections-readonly"
+        )
         action_metadata = json.loads(_fetch_text(f"{base_url}/api/actions"))
         unauthorized_post = _post_json_without_auth(
             f"{base_url}{DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH}"
@@ -238,10 +288,28 @@ def run_desktop_web_shell_smoke(
             base_url=base_url,
             port=actual_port,
             index_html=index_html,
+            live_readonly=live_readonly,
+            accounts_readonly=accounts_readonly,
+            api_connections_readonly=api_connections_readonly,
             action_metadata=action_metadata,
             unauthorized_post=unauthorized_post,
         )
         return packet, 0 if packet["status"] == "ok" else 1
+    except Exception as exc:
+        return (
+            {
+                "schema_version": DESKTOP_WEB_SHELL_SCHEMA_VERSION,
+                "status": "error",
+                "machine_error_code": "DESKTOP_WEB_SHELL_SMOKE_FAILED",
+                "source": "desktop_web_shell_smoke",
+                "changed_files": [],
+                "human_message": (
+                    "Desktop web shell smoke failed: "
+                    f"{exc.__class__.__name__}: {exc}"
+                ),
+            },
+            1,
+        )
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -273,21 +341,21 @@ def run_desktop_web_shell(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=DESKTOP_WEB_SHELL_DEFAULT_HOST)
-    parser.add_argument("--port", type=int, default=DESKTOP_WEB_SHELL_DEFAULT_PORT)
+    parser.add_argument("--port", type=int)
     parser.add_argument("--no-open-browser", action="store_true")
     parser.add_argument("--smoke-json", action="store_true")
     args = parser.parse_args(argv)
     if args.smoke_json:
         packet, exit_code = run_desktop_web_shell_smoke(
             host=args.host,
-            port=args.port,
+            port=args.port if args.port is not None else 0,
         )
         print(json.dumps(packet, ensure_ascii=False, sort_keys=True))
         return exit_code
     try:
         return run_desktop_web_shell(
             host=args.host,
-            port=args.port,
+            port=args.port if args.port is not None else DESKTOP_WEB_SHELL_DEFAULT_PORT,
             open_browser=not args.no_open_browser,
         )
     except DesktopWebShellError as exc:
