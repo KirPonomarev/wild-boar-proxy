@@ -414,6 +414,7 @@ def _run_custom_codex_readonly_snapshot(
     endpoint: str,
     timeout_scope: str,
     build_snapshot: Callable[[], dict[str, Any]],
+    timeout_fallback: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     if timeout_seconds is None:
@@ -435,17 +436,19 @@ def _run_custom_codex_readonly_snapshot(
     thread.start()
     thread.join(timeout_seconds)
     if thread.is_alive():
-        return _custom_codex_readonly_timeout_packet(
+        timeout_packet = _custom_codex_readonly_timeout_packet(
             endpoint=endpoint,
             timeout_scope=timeout_scope,
         )
+        return timeout_fallback(timeout_packet) if timeout_fallback else timeout_packet
     try:
         status, value = results.get_nowait()
     except Empty:
-        return _custom_codex_readonly_timeout_packet(
+        timeout_packet = _custom_codex_readonly_timeout_packet(
             endpoint=endpoint,
             timeout_scope=timeout_scope,
         )
+        return timeout_fallback(timeout_packet) if timeout_fallback else timeout_packet
     if status == "error":
         raise value
     return value
@@ -549,6 +552,54 @@ def _mark_operator_status_timeout_fallback(packet: dict[str, Any]) -> dict[str, 
     packet["fallback_used"] = True
     packet["model_auto_selected"] = False
     packet["selector_runtime_readiness_claimed"] = False
+    return packet
+
+
+def _custom_model_selector_timeout_fallback_packet(
+    timeout_packet: dict[str, Any],
+    *,
+    operator_surface_session: Any,
+    api_connections_readonly_runner: CommandRunner,
+) -> dict[str, Any]:
+    try:
+        api_snapshot = build_api_connections_readonly_snapshot(
+            api_connections_readonly_runner
+        )
+        operator_status, operator_status_timeout = _bounded_operator_status_payload(
+            operator_surface_session
+        )
+        packet = build_dual_lane_model_selection_ui_packet(
+            operator_status,
+            api_snapshot=api_snapshot,
+        )
+        if operator_status_timeout:
+            packet = _mark_operator_status_timeout_fallback(packet)
+    except Exception:
+        return timeout_packet
+
+    chat_lane = packet.get("chatgpt_lane") if isinstance(packet.get("chatgpt_lane"), dict) else {}
+    api_lane = packet.get("api_lane") if isinstance(packet.get("api_lane"), dict) else {}
+    chat_model_count = int(chat_lane.get("model_count") or 0) if isinstance(chat_lane, dict) else 0
+    api_model_count = int(api_lane.get("model_count") or 0) if isinstance(api_lane, dict) else 0
+    if chat_model_count <= 0 and api_model_count <= 0:
+        return timeout_packet
+
+    packet["status"] = "degraded"
+    packet["machine_error_code"] = CUSTOM_CODEX_READONLY_TIMEOUT_CODE
+    packet["human_message"] = (
+        "Custom Codex selector timed out; degraded selector was built from bounded "
+        "operator/API snapshots."
+    )
+    packet["next_action"] = "select_available_model_or_retry_readonly_snapshot"
+    packet["source"] = "custom_model_selector_timeout_fallback"
+    packet["endpoint"] = str(timeout_packet.get("endpoint") or "")
+    packet["timeout_scope"] = str(timeout_packet.get("timeout_scope") or "")
+    packet["outer_selector_timeout"] = True
+    packet["fallback_used"] = True
+    packet["model_auto_selected"] = False
+    packet["selector_runtime_readiness_claimed"] = False
+    packet["api_lane_catalog_available"] = api_model_count > 0
+    packet["native_lane_catalog_incomplete"] = chat_model_count <= 0
     return packet
 
 
@@ -9427,6 +9478,11 @@ def build_handler(
                     endpoint=parsed.path,
                     timeout_scope="custom_model_selector_readonly_snapshot",
                     build_snapshot=build_selector_snapshot,
+                    timeout_fallback=lambda timeout_packet: _custom_model_selector_timeout_fallback_packet(
+                        timeout_packet,
+                        operator_surface_session=operator_surface_session,
+                        api_connections_readonly_runner=api_connections_readonly_runner,
+                    ),
                 )
             )
             return

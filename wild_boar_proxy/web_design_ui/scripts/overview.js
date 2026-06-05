@@ -1541,27 +1541,16 @@ async function buildCodexCustomLaunchSelectionPayload() {
   syncCodexRouteSelects("quickStartApiModelSelect");
   syncCodexRouteSelects("quickStartApiReasoningOptionSelect");
   syncCodexRouteSelects("quickStartExecutionModeSelect");
-  const modeNode = document.getElementById("codexCustomExecutionModeSelect");
-  const modelNode = document.getElementById("codexCustomModelSelect");
-  const apiModelNode = document.getElementById("codexCustomApiModelSelect");
-  const apiReasoningNode = document.getElementById("codexCustomApiReasoningOptionSelect");
-  const executionMode = modeNode ? modeNode.value : "chatgpt_only";
-  let chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
-  let apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
-  const apiReasoningOptionId = executionMode === "chatgpt_only"
-    ? ""
-    : (apiReasoningNode ? apiReasoningNode.value : "");
-  if ((executionMode === "api_only" && !apiModelId) || (executionMode !== "api_only" && !chatgptModelId)) {
+  let payload = quickStartLaunchPayloadFromSelects();
+  if (customLaunchPayloadRequiresModelRefresh(payload)) {
     await refreshCodexCustomModelsPanel();
-    chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
-    apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
+    syncCodexRouteSelects("codexCustomModelSelect");
+    syncCodexRouteSelects("codexCustomApiModelSelect");
+    syncCodexRouteSelects("codexCustomApiReasoningOptionSelect");
+    syncCodexRouteSelects("codexCustomExecutionModeSelect");
+    payload = quickStartLaunchPayloadFromSelects();
   }
-  return {
-    execution_mode: executionMode,
-    chatgpt_model_id: chatgptModelId,
-    api_model_id: apiModelId,
-    api_reasoning_option_id: apiReasoningOptionId
-  };
+  return payload;
 }
 
 async function runCodexCustomLaunch() {
@@ -2461,6 +2450,34 @@ function syncCodexRouteSelects(sourceId) {
   if (source && target) {
     target.value = source.value;
   }
+}
+
+function selectValue(id) {
+  const node = document.getElementById(id);
+  return node ? String(node.value || "").trim() : "";
+}
+
+function quickStartLaunchPayloadFromSelects() {
+  const executionMode = selectValue("quickStartExecutionModeSelect") || "chatgpt_only";
+  return {
+    execution_mode: executionMode,
+    chatgpt_model_id: executionMode === "api_only" ? "" : selectValue("quickStartChatModelSelect"),
+    api_model_id: executionMode === "chatgpt_only" ? "" : selectValue("quickStartApiModelSelect"),
+    api_reasoning_option_id: executionMode === "chatgpt_only"
+      ? ""
+      : selectValue("quickStartApiReasoningOptionSelect")
+  };
+}
+
+function customLaunchPayloadRequiresModelRefresh(payload) {
+  const executionMode = payload?.execution_mode || "";
+  if (executionMode === "api_only") {
+    return !payload?.api_model_id;
+  }
+  if (executionMode === "chatgpt_plus_api") {
+    return !payload?.chatgpt_model_id || !payload?.api_model_id;
+  }
+  return !payload?.chatgpt_model_id;
 }
 
 function setQuickStartChip(id, visual, label) {

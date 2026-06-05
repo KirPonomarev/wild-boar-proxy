@@ -403,6 +403,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("original_codex_touched: boundary?.original_codex_touched === true", js)
         self.assertIn("registry?.chatgpt_lane?.default_model_id", js)
         self.assertIn("registry?.api_lane?.default_model_id", js)
+        self.assertIn("quickStartLaunchPayloadFromSelects", js)
+        self.assertIn("customLaunchPayloadRequiresModelRefresh", js)
         self.assertIn("renderCodexCustomModelCatalog(\"codexCustomChatLaneCatalog\", chatEntries)", js)
         self.assertIn("renderCodexCustomModelCatalog(\"codexCustomApiLaneCatalog\", apiEntries)", js)
         self.assertIn("renderCodexCustomModelCatalog(\"codexCustomSeedLaneCatalog\", seedEntries)", js)
@@ -1907,6 +1909,96 @@ sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
   }
   if (requestBody.execution_mode !== "chatgpt_plus_api" || requestBody.api_model_id !== "wbp-deepseek-v3") {
     throw new Error(`selection body mismatch ${JSON.stringify(requestBody)}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_launch_payload_uses_visible_quick_start_selects(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(id = "") {
+    this.id = id;
+    this.dataset = {};
+    this.disabled = false;
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "api_only";
+node("quickStartChatModelSelect").value = "gpt-5.3-codex";
+node("quickStartApiModelSelect").value = "wbp-deepseek-v4-pro-max";
+node("quickStartApiReasoningOptionSelect").value = "provider_declared_max";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("payload with visible API selection must not need selector refresh");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.buildCodexCustomLaunchSelectionPayload().then((payload) => {
+  if (payload.execution_mode !== "api_only") {
+    throw new Error(`wrong execution mode ${JSON.stringify(payload)}`);
+  }
+  if (payload.chatgpt_model_id !== "") {
+    throw new Error(`api-only must not send ChatGPT model ${JSON.stringify(payload)}`);
+  }
+  if (payload.api_model_id !== "wbp-deepseek-v4-pro-max") {
+    throw new Error(`visible API model was dropped ${JSON.stringify(payload)}`);
+  }
+  if (payload.api_reasoning_option_id !== "provider_declared_max") {
+    throw new Error(`visible API reasoning was dropped ${JSON.stringify(payload)}`);
   }
 }).catch((error) => {
   console.error(error);

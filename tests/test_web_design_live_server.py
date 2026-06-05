@@ -14024,7 +14024,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
         )
 
-    def test_codex_custom_dual_lane_selector_timeout_returns_bounded_error_packet(self) -> None:
+    def test_codex_custom_dual_lane_selector_timeout_returns_degraded_api_lane_fallback(self) -> None:
         class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
             def status_payload(self) -> dict[str, object]:
                 time.sleep(0.2)
@@ -14050,13 +14050,17 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                     thread.join(timeout=2)
                     server.server_close()
 
-        self.assertNotEqual(selector["status"], "ok")
-        self.assertEqual(selector["status"], "integration_failure")
+        self.assertEqual(selector["status"], "degraded")
         self.assertEqual(selector["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
         self.assertEqual(selector["endpoint"], "/api/codex/custom/model-selector")
         self.assertEqual(selector["timeout_scope"], "custom_model_selector_readonly_snapshot")
-        self.assertFalse(selector["fallback_used"])
+        self.assertTrue(selector["fallback_used"])
         self.assertFalse(selector["model_auto_selected"])
+        self.assertFalse(selector["selector_runtime_readiness_claimed"])
+        self.assertTrue(selector["outer_selector_timeout"])
+        self.assertGreaterEqual(selector["api_lane"]["model_count"], 1)
+        self.assertGreaterEqual(selector["api_lane"]["selectable_model_count"], 1)
+        self.assertTrue(selector["api_lane_catalog_available"])
 
     def test_codex_custom_status_timeout_returns_bounded_error_packet(self) -> None:
         class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
