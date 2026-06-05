@@ -6747,6 +6747,8 @@ class CliTests(unittest.TestCase):
             "\n".join(
                 [
                     "cliproxy 1 user 10u IPv4 0t0 TCP 127.0.0.1:8318 (LISTEN)",
+                    "Python 7 user 3u IPv4 0t0 TCP 127.0.0.1:65164 (LISTEN)",
+                    "node 8 user 4u IPv4 0t0 TCP 127.0.0.1:65165 (LISTEN)",
                     "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8765 (LISTEN)",
                     "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8788 (LISTEN)",
                     "bridge 1 user 10u IPv4 0t0 TCP 127.0.0.1:50555 (LISTEN)",

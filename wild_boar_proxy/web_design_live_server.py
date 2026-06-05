@@ -3434,6 +3434,7 @@ def _custom_native_launch_preflight_packet(
     external_routes_packet: dict[str, Any] | None = None,
     native_bridge_lease: _CustomNativeBridgeLease | None = None,
     last_launch_packet: dict[str, Any] | None = None,
+    runtime_health_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     forbidden = _forbidden_custom_live_launch_fields(payload)
     if forbidden:
@@ -3598,6 +3599,61 @@ def _custom_native_launch_preflight_packet(
         selected_model=selected_model,
         payload=payload,
     )
+    runtime_health_gate = _custom_native_chatgpt_runtime_health_gate_packet(
+        runtime_health_result,
+        execution_mode=str(current_fields.get("execution_mode") or ""),
+    )
+    if runtime_health_gate.get("status") != "ok":
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_launch_preflight",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "status": "blocked",
+            "machine_error_code": str(
+                runtime_health_gate.get("runtime_health_machine_error_code")
+                or runtime_health_gate.get("machine_error_code")
+                or "CUSTOM_CODEX_RUNTIME_HEALTH_BLOCKED"
+            ),
+            "block_reason_code": str(
+                runtime_health_gate.get("machine_error_code")
+                or "CUSTOM_CODEX_RUNTIME_HEALTH_BLOCKED"
+            ),
+            "human_message": "Custom native launch preflight blocked because ChatGPT lane runtime health is not green.",
+            "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
+            "owner_authorization_phrase_present": owner_authorized,
+            "execution_mode": current_fields["execution_mode"],
+            "chatgpt_model_id": current_fields["chatgpt_model_id"],
+            "api_model_id": current_fields["api_model_id"],
+            "api_reasoning_option_id": current_fields["api_reasoning_option_id"],
+            "selected_model": selected_model,
+            "launch_model_id": selected_model,
+            "route_model_id": route_model_id,
+            "selection_packet": execution_packet or {},
+            "runtime_health_gate": runtime_health_gate,
+            "runtime_health_required_for_chatgpt_lane": True,
+            "runtime_health_status": str(runtime_health_gate.get("runtime_health_status") or ""),
+            "runtime_health_machine_error_code": str(
+                runtime_health_gate.get("runtime_health_machine_error_code") or ""
+            ),
+            "show_window_attempted": False,
+            "new_launch_started": False,
+            "live_provider_called": False,
+            "model_auto_selected": False,
+            "fallback_used": False,
+            "silent_fallback_used": False,
+            "browser_raw_backend_authority_widened": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "raw_path_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "final_status": "KNOWN_BLOCKER_CUSTOM_CODEX_RUNTIME_HEALTH_NOT_PROVEN",
+            "next_action": str(
+                runtime_health_gate.get("runtime_health_next_action")
+                or "repair_runtime_proxy"
+            ),
+        }
     current_digest = _quick_start_launch_selection_digest(current_fields)
     last_fields = _quick_start_launch_fields_from_packet(last_launch_packet)
     last_digest = _quick_start_launch_selection_digest(last_fields) if last_launch_packet else ""
@@ -3835,11 +3891,90 @@ def _quick_start_api_reasoning_admission_component(
     }
 
 
+def _command_result_health_ok(result: dict[str, Any] | None) -> bool:
+    if not isinstance(result, dict):
+        return False
+    packet = result.get("packet")
+    packet = packet if isinstance(packet, dict) else {}
+    return bool(
+        result.get("status") == "ok"
+        and result.get("machine_error_code") == "OK"
+        and packet.get("status") == "ok"
+        and packet.get("machine_error_code") == "OK"
+    )
+
+
+def _custom_native_chatgpt_runtime_health_gate_packet(
+    runtime_health_result: dict[str, Any] | None,
+    *,
+    execution_mode: str,
+) -> dict[str, Any]:
+    chatgpt_required = execution_mode in {"chatgpt_only", "chatgpt_plus_api"}
+    if not chatgpt_required:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_chatgpt_runtime_health_gate",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "runtime_health_required_for_chatgpt_lane": False,
+            "runtime_health_status": "not_required",
+            "runtime_health_machine_error_code": "OK",
+            "runtime_health_next_action": "none",
+            "source_command": "healthcheck --json",
+        }
+
+    packet = (
+        runtime_health_result.get("packet")
+        if isinstance(runtime_health_result, dict)
+        and isinstance(runtime_health_result.get("packet"), dict)
+        else {}
+    )
+    result_status = (
+        str(runtime_health_result.get("status") or "")
+        if isinstance(runtime_health_result, dict)
+        else "missing"
+    )
+    machine_error_code = (
+        str(runtime_health_result.get("machine_error_code") or "")
+        if isinstance(runtime_health_result, dict)
+        else ""
+    )
+    if not machine_error_code:
+        machine_error_code = str(packet.get("machine_error_code") or "")
+    if not machine_error_code:
+        machine_error_code = "CUSTOM_CODEX_RUNTIME_HEALTH_MISSING"
+    next_action = (
+        str(runtime_health_result.get("next_action") or "")
+        if isinstance(runtime_health_result, dict)
+        else ""
+    )
+    if not next_action:
+        next_action = str(packet.get("next_action") or "repair_runtime_proxy")
+    ok = _command_result_health_ok(runtime_health_result)
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_chatgpt_runtime_health_gate",
+        "status": "ok" if ok else "blocked",
+        "machine_error_code": "OK" if ok else "CUSTOM_CODEX_RUNTIME_HEALTH_BLOCKED",
+        "runtime_health_required_for_chatgpt_lane": True,
+        "runtime_health_status": result_status,
+        "runtime_health_machine_error_code": "OK" if ok else machine_error_code,
+        "runtime_health_human_message": (
+            str(runtime_health_result.get("human_message") or "")
+            if isinstance(runtime_health_result, dict)
+            else "Healthcheck packet was not available."
+        ),
+        "runtime_health_next_action": "none" if ok else next_action,
+        "source_command": "healthcheck --json",
+    }
+
+
 def build_quick_start_config_admission_packet(
     payload: dict[str, Any],
     operator_status: dict[str, Any] | None,
     *,
     api_snapshot: dict[str, Any] | None,
+    runtime_health_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     base = {
         "schema_version": 1,
@@ -3926,10 +4061,24 @@ def build_quick_start_config_admission_packet(
         model_truth.get("status") == "ok"
         and all(component["status"] in {"admitted", "accepted", "defaulted", "not_required"} for component in components)
     )
-    status = "ok" if admitted else "blocked"
-    machine_error_code = "OK" if admitted else str(
-        model_truth.get("machine_error_code") or "QUICK_START_CONFIG_ADMISSION_BLOCKED"
+    runtime_health_gate = _custom_native_chatgpt_runtime_health_gate_packet(
+        runtime_health_result,
+        execution_mode=execution_mode,
     )
+    if runtime_health_gate.get("status") != "ok":
+        admitted = False
+    status = "ok" if admitted else "blocked"
+    if admitted:
+        machine_error_code = "OK"
+    elif runtime_health_gate.get("status") != "ok":
+        machine_error_code = str(
+            runtime_health_gate.get("runtime_health_machine_error_code")
+            or "CUSTOM_CODEX_RUNTIME_HEALTH_BLOCKED"
+        )
+    else:
+        machine_error_code = str(
+            model_truth.get("machine_error_code") or "QUICK_START_CONFIG_ADMISSION_BLOCKED"
+        )
     if machine_error_code == "OK" and not admitted:
         machine_error_code = "QUICK_START_CONFIG_ADMISSION_BLOCKED"
     return {
@@ -3960,14 +4109,30 @@ def build_quick_start_config_admission_packet(
             "slots_coherent": model_truth.get("slots_coherent") is True,
             "api_reasoning_option_model_bound": model_truth.get("api_reasoning_option_model_bound") is True,
         },
+        "runtime_health_gate": runtime_health_gate,
+        "runtime_health_required_for_chatgpt_lane": (
+            runtime_health_gate.get("runtime_health_required_for_chatgpt_lane") is True
+        ),
         "launch_admission": "admitted" if admitted else "blocked",
         "launch_admission_summary": (
             "Config admission is ok; next contour may use existing launch preflight gate."
             if admitted
-            else "Config admission blocked; launch must stay gated."
+            else (
+                "ChatGPT lane blocked by healthcheck --json; launch must stay gated."
+                if runtime_health_gate.get("status") != "ok"
+                else "Config admission blocked; launch must stay gated."
+            )
         ),
         "selector_packet": model_truth.get("selector_packet", {}),
-        "next_action": "none" if admitted else "repair_quick_start_config_selection",
+        "next_action": (
+            "none"
+            if admitted
+            else (
+                str(runtime_health_gate.get("runtime_health_next_action") or "repair_runtime_proxy")
+                if runtime_health_gate.get("status") != "ok"
+                else "repair_quick_start_config_selection"
+            )
+        ),
     }
 
 
@@ -10098,6 +10263,7 @@ def build_handler(
                 operator_status, _operator_status_timeout = _bounded_operator_status_payload(
                     operator_surface_session
                 )
+            runtime_health_result = execute_command(readonly_runner, "healthcheck")
             self._send_json(
                 _custom_native_launch_preflight_packet(
                     payload,
@@ -10107,6 +10273,7 @@ def build_handler(
                     external_routes_packet=external_routes_packet,
                     native_bridge_lease=custom_native_bridge_lease,
                     last_launch_packet=custom_native_launch_state["last_packet"],
+                    runtime_health_result=runtime_health_result,
                 )
             )
             return
@@ -10173,6 +10340,7 @@ def build_handler(
                 operator_status, _operator_status_timeout = _bounded_operator_status_payload(
                     operator_surface_session
                 )
+            runtime_health_result = execute_command(readonly_runner, "healthcheck")
             preflight_packet = _custom_native_launch_preflight_packet(
                 payload,
                 owner_authorized=codex_custom_live_prompt_authorized,
@@ -10181,6 +10349,7 @@ def build_handler(
                 external_routes_packet=external_routes_packet,
                 native_bridge_lease=custom_native_bridge_lease,
                 last_launch_packet=custom_native_launch_state["last_packet"],
+                runtime_health_result=runtime_health_result,
             )
             if preflight_packet.get("status") != "ok":
                 packet = _custom_native_launch_stability_guard_packet(
@@ -10650,6 +10819,7 @@ def build_handler(
                     payload,
                     operator_status,
                     api_snapshot=api_snapshot,
+                    runtime_health_result=execute_command(readonly_runner, "healthcheck"),
                 )
             )
             return

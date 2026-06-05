@@ -146,6 +146,14 @@ LEGACY_PROXY_REPROBE_EXCLUDED_PORTS = {
     50555,
     49157,
 }
+DYNAMIC_PROXY_REPROBE_EXCLUDED_COMMAND_PREFIXES = (
+    "python",
+    "codex",
+    "node",
+    "electron",
+    "cli-proxy",
+    "cli-proxy-api",
+)
 PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
     "env.WBP_PROXY_REPROBE_CANDIDATES",
     "runtime_state.last_known_good_proxy_url",
@@ -7107,7 +7115,13 @@ def proxy_reprobe_excluded_ports_for_state(state: dict[str, Any]) -> set[int]:
 def parse_dynamic_local_listener_candidates(raw_output: str) -> list[str]:
     ports: list[int] = []
     seen_ports: set[int] = set()
-    for match in re.finditer(r"(127\.0\.0\.1|localhost):(\d+)", raw_output):
+    for line in raw_output.splitlines():
+        command_name = line.split(maxsplit=1)[0].strip().lower() if line.strip() else ""
+        if command_name.startswith(DYNAMIC_PROXY_REPROBE_EXCLUDED_COMMAND_PREFIXES):
+            continue
+        match = re.search(r"(127\.0\.0\.1|localhost):(\d+)", line)
+        if match is None:
+            continue
         port = int(match.group(2))
         if port in LEGACY_PROXY_REPROBE_EXCLUDED_PORTS:
             continue

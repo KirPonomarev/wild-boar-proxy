@@ -12273,6 +12273,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 external_routes_packet=routes_list_packet(route_id),
                 native_bridge_lease=None,
                 last_launch_packet=None,
+                runtime_health_result={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "human_message": "Healthcheck passed.",
+                    "next_action": "none",
+                    "packet": command_packet(human_message="Healthcheck passed."),
+                },
             )
 
         self.assertEqual(packet["status"], "ok")
@@ -14662,6 +14669,123 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(packet["silent_fallback_used"])
         self.assertFalse(packet["live_call_attempted"])
         self.assertFalse(packet["custom_codex_launch_attempted"])
+
+    def test_quick_start_config_admission_blocks_chatgpt_when_healthcheck_is_red(self) -> None:
+        payloads = live_payloads()
+        payloads[("healthcheck", "--json")] = command_packet(
+            status="error",
+            exit_code=1,
+            human_message="Proxy path is broken.",
+            machine_error_code="PROXY_REPROBE_FAILED",
+            next_action="restore_or_start_last_known_good_proxy_then_reprobe",
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/quick-start/config-admission",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertEqual(packet["launch_admission"], "blocked")
+        self.assertEqual(packet["chatgpt_model"]["status"], "admitted")
+        self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
+        self.assertEqual(
+            packet["runtime_health_gate"]["runtime_health_machine_error_code"],
+            "PROXY_REPROBE_FAILED",
+        )
+        self.assertEqual(
+            packet["next_action"],
+            "restore_or_start_last_known_good_proxy_then_reprobe",
+        )
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["new_launch_started"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertIn(("healthcheck", "--json"), runner.calls)
+
+    def test_custom_native_launch_blocks_chatgpt_when_healthcheck_is_red(self) -> None:
+        payloads = live_payloads()
+        payloads[("healthcheck", "--json")] = command_packet(
+            status="error",
+            exit_code=1,
+            human_message="Proxy path is broken.",
+            machine_error_code="PROXY_REPROBE_FAILED",
+            next_action="restore_or_start_last_known_good_proxy_then_reprobe",
+        )
+        runner = MappingRunner(payloads)
+        with (
+            mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+            mock.patch.object(live_server, "launch_custom_native_app_packet") as launch_native,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase=(
+                        "разрешаю тебе любые законные действия в рамках разработки проекта"
+                    ),
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/native-launch",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertEqual(packet["preflight_packet"]["status"], "blocked")
+        self.assertEqual(
+            packet["preflight_packet"]["runtime_health_machine_error_code"],
+            "PROXY_REPROBE_FAILED",
+        )
+        self.assertFalse(packet["new_launch_started"])
+        self.assertFalse(packet["process_started"])
+        self.assertFalse(packet["show_window_attempted"])
+        self.assertFalse(packet["native_window_observed"])
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["asar_touched"])
+        launch_native.assert_not_called()
+        self.assertIn(("healthcheck", "--json"), runner.calls)
 
     def test_codex_custom_chatgpt_plus_api_slot_truth_endpoint_is_non_live(self) -> None:
         payloads = live_payloads()
