@@ -1733,8 +1733,11 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "remove_forbidden_browser_fields" || action === "remove_browser_payload_fields") {
     return "remove fields";
   }
+  if (action === "relaunch_custom_codex_with_new_selection") {
+    return "relaunch ready";
+  }
   if (action.includes("launch_custom_codex") || action.includes("launch_or_reuse_custom_codex")) {
-    return "launch gated";
+    return "ready to launch";
   }
   if (action === "show_existing_window") {
     return "show window";
@@ -2505,6 +2508,8 @@ function setQuickStartRouteResponse(packet) {
       config_status: packet?.config_status || "",
       existing_window_reuse_admissible:
         packet?.existing_window_reuse_admissible === true,
+      existing_window_relaunch_admissible:
+        packet?.existing_window_relaunch_admissible === true,
       new_launch_required: packet?.new_launch_required === true,
       running_status: packet?.running_status === true,
       process_started: packet?.process_started === true,
@@ -2548,6 +2553,15 @@ async function runQuickStartCustomLaunchAction() {
 function renderQuickStartLaunchPreflight(packet) {
   const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const ownerBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
+  const nextAction = packet?.next_action || "";
+  const nextActionReady = ok && (
+    !nextAction
+    || nextAction === "none"
+    || nextAction === "show_existing_window"
+    || nextAction === "relaunch_custom_codex_with_new_selection"
+    || nextAction.includes("launch_custom_codex")
+    || nextAction.includes("launch_or_reuse_custom_codex")
+  );
   const bridgeLabel = packet?.bridge_required === true
     ? (packet?.bridge_alive === true ? "жив" : "упал")
     : "не нужен";
@@ -2598,8 +2612,8 @@ function renderQuickStartLaunchPreflight(packet) {
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    ok && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
-    quickStartNextActionLabel(packet?.next_action || "")
+    nextActionReady ? "green" : "amber",
+    quickStartNextActionLabel(nextAction)
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -2614,6 +2628,7 @@ function renderQuickStartLaunchPreflight(packet) {
     owner_authorization_phrase_present:
       packet?.owner_authorization_phrase_present === true,
     existing_window_reuse_admissible: packet?.existing_window_reuse_admissible === true,
+    existing_window_relaunch_admissible: packet?.existing_window_relaunch_admissible === true,
     new_launch_required: packet?.new_launch_required === true,
     custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
     new_launch_started: packet?.new_launch_started === true,

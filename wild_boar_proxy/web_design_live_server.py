@@ -20,6 +20,7 @@ from queue import Empty, Queue
 import socket
 import sqlite3
 import subprocess
+import time
 from threading import RLock, Thread
 from typing import Any, Callable
 import urllib.error
@@ -84,6 +85,7 @@ from wild_boar_proxy.native_window_probe import (
 from wild_boar_proxy.native_filesystem_probe import (
     collect_codex_process_inventory,
     default_persistent_custom_profile_paths,
+    terminate_custom_processes,
 )
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
@@ -3242,6 +3244,28 @@ def _quick_start_launch_fields_from_packet(packet: dict[str, Any] | None) -> dic
     }
 
 
+def _custom_native_last_launch_packet_allows_window_relaunch(
+    packet: dict[str, Any] | None,
+) -> bool:
+    if not isinstance(packet, dict):
+        return False
+    if packet.get("status") == "ok":
+        return True
+    return bool(
+        packet.get("mode_id") == "codex_custom"
+        and packet.get("owner_authorization_phrase_present") is True
+        and packet.get("process_started") is True
+        and packet.get("native_window_observed") is True
+        and packet.get("native_app_usable") is True
+        and packet.get("current_codex_touched") is not True
+        and packet.get("original_codex_touched") is not True
+        and packet.get("asar_touched") is not True
+        and packet.get("browser_raw_backend_authority_widened") is not True
+        and packet.get("raw_backend_details_exposed") is not True
+        and packet.get("secret_value_exposed") is not True
+    )
+
+
 def _custom_native_process_inventory_summary() -> dict[str, Any]:
     paths = default_persistent_custom_profile_paths(
         profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
@@ -3266,6 +3290,30 @@ def _custom_native_process_inventory_summary() -> dict[str, Any]:
         "custom_process_count": custom_process_count,
         "default_process_count": int(inventory.get("default_process_count") or 0),
         "profile_id": DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+        "raw_process_lines_exposed": False,
+        "raw_path_exposed": False,
+    }
+
+
+def _redacted_custom_process_termination_summary(
+    termination: dict[str, Any],
+) -> dict[str, Any]:
+    final_inventory = termination.get("final_inventory")
+    if not isinstance(final_inventory, dict):
+        final_inventory = {}
+    initial_pids = termination.get("initial_custom_pids")
+    if not isinstance(initial_pids, list):
+        initial_pids = []
+    return {
+        "attempted": True,
+        "status": (
+            "ok" if termination.get("custom_processes_gone") is True else "blocked"
+        ),
+        "initial_custom_process_count": len(initial_pids),
+        "custom_processes_gone": termination.get("custom_processes_gone") is True,
+        "final_custom_process_count": int(
+            final_inventory.get("custom_process_count") or 0
+        ),
         "raw_process_lines_exposed": False,
         "raw_path_exposed": False,
     }
@@ -3443,11 +3491,14 @@ def _custom_native_launch_preflight_packet(
     current_digest = _quick_start_launch_selection_digest(current_fields)
     last_fields = _quick_start_launch_fields_from_packet(last_launch_packet)
     last_digest = _quick_start_launch_selection_digest(last_fields) if last_launch_packet else ""
+    last_relaunch_admissible = (
+        _custom_native_last_launch_packet_allows_window_relaunch(last_launch_packet)
+    )
     last_packet_ok = (
         isinstance(last_launch_packet, dict) and last_launch_packet.get("status") == "ok"
     )
     selection_matches_last = bool(
-        last_packet_ok and last_digest and current_digest == last_digest
+        last_relaunch_admissible and last_digest and current_digest == last_digest
     )
     if not isinstance(last_launch_packet, dict):
         config_status = "no_previous_launch"
@@ -3456,14 +3507,24 @@ def _custom_native_launch_preflight_packet(
     else:
         config_status = "changed"
     reuse_admissible = bool(custom_process_observed and selection_matches_last)
+    relaunch_admissible = bool(
+        custom_process_observed
+        and last_relaunch_admissible
+        and not selection_matches_last
+        and config_status == "changed"
+    )
     new_launch_required = not reuse_admissible
     next_action = (
         "show_existing_window"
         if reuse_admissible
         else (
-            "block_existing_window_without_matching_launch_packet"
-            if custom_process_observed and not selection_matches_last
-            else bridge_next_action
+            "relaunch_custom_codex_with_new_selection"
+            if relaunch_admissible
+            else (
+                "block_existing_window_without_matching_launch_packet"
+                if custom_process_observed and not selection_matches_last
+                else bridge_next_action
+            )
         )
     )
     return {
@@ -3484,6 +3545,9 @@ def _custom_native_launch_preflight_packet(
         "selection_packet": execution_packet or {},
         "selection_digest": current_digest,
         "last_launch_packet_present": isinstance(last_launch_packet, dict),
+        "last_launch_packet_status": str((last_launch_packet or {}).get("status") or ""),
+        "last_launch_packet_status_ok": last_packet_ok,
+        "last_launch_packet_relaunch_admissible": last_relaunch_admissible,
         "last_launch_selection_digest": last_digest,
         "selection_matches_last_launch": selection_matches_last,
         "config_status": config_status,
@@ -3492,6 +3556,7 @@ def _custom_native_launch_preflight_packet(
         "window_status": "found" if custom_process_observed else "not_found",
         "window_inventory_status": str(window_inventory.get("window_inventory_status") or ""),
         "existing_window_reuse_admissible": reuse_admissible,
+        "existing_window_relaunch_admissible": relaunch_admissible,
         "new_launch_required": new_launch_required,
         "show_window_attempted": False,
         "new_launch_started": False,
@@ -9965,7 +10030,10 @@ def build_handler(
                 for route in _enabled_external_route_records(external_routes_packet)
             }
             requested_model_id = str(payload.get("model_id") or "").strip()
-            if str(payload.get("execution_mode") or "").strip() == "api_only":
+            if str(payload.get("execution_mode") or "").strip() in {
+                "api_only",
+                "chatgpt_plus_api",
+            }:
                 requested_model_id = str(payload.get("api_model_id") or "").strip()
             api_route_selected = (
                 bool(requested_model_id) and requested_model_id in route_model_ids
@@ -10043,6 +10111,44 @@ def build_handler(
                 preflight_packet,
                 native_bridge_lease=custom_native_bridge_lease,
             )
+            if (
+                stable_bridge_gate.get("status") != "ok"
+                and stable_bridge_prewarm.get("status") == "ok"
+                and stable_bridge_prewarm.get("prewarm_required") is True
+            ):
+                stable_bridge_retry_prewarm = (
+                    _custom_native_stable_bridge_prewarm_packet(
+                        preflight_packet,
+                        requested_model_id=requested_model_id,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                        external_routes_packet=external_routes_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
+                    )
+                )
+                preflight_packet["stable_bridge_prewarm_retry_attempted"] = True
+                preflight_packet["stable_bridge_prewarm_retry_status"] = str(
+                    stable_bridge_retry_prewarm.get("status") or ""
+                )
+                preflight_packet["stable_bridge_prewarm_retry_packet"] = (
+                    stable_bridge_retry_prewarm
+                )
+                time.sleep(1.0)
+                stable_bridge_retry_gate = (
+                    _custom_native_stable_bridge_launch_gate_packet(
+                        preflight_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
+                    )
+                )
+                preflight_packet["stable_bridge_preflight_retry_attempted"] = True
+                preflight_packet["stable_bridge_preflight_retry_packet"] = (
+                    stable_bridge_retry_gate
+                )
+                preflight_packet["stable_bridge_preflight_retry_status"] = str(
+                    stable_bridge_retry_gate.get("status") or ""
+                )
+                if stable_bridge_retry_gate.get("status") == "ok":
+                    stable_bridge_gate = stable_bridge_retry_gate
             preflight_packet["stable_bridge_preflight_required"] = (
                 stable_bridge_gate.get("bridge_preflight_required") is True
             )
@@ -10094,8 +10200,50 @@ def build_handler(
             if (
                 preflight_packet.get("custom_process_observed") is True
             ):
+                existing_window_relaunch_cleared = False
                 config_status = str(preflight_packet.get("config_status") or "")
-                if config_status == "changed":
+                if (
+                    config_status == "changed"
+                    and preflight_packet.get("existing_window_relaunch_admissible")
+                    is True
+                ):
+                    paths = default_persistent_custom_profile_paths(
+                        profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+                    )
+                    termination = terminate_custom_processes(
+                        str(paths.get("user_data_dir") or "")
+                    )
+                    termination_summary = _redacted_custom_process_termination_summary(
+                        termination
+                    )
+                    preflight_packet["existing_window_relaunch_attempted"] = True
+                    preflight_packet["existing_window_relaunch_termination"] = (
+                        termination_summary
+                    )
+                    preflight_packet["custom_process_observed_before_relaunch"] = True
+                    preflight_packet["custom_process_observed_after_relaunch_stop"] = (
+                        not termination_summary["custom_processes_gone"]
+                    )
+                    preflight_packet["custom_process_count_after_relaunch_stop"] = (
+                        termination_summary["final_custom_process_count"]
+                    )
+                    preflight_packet["raw_process_lines_exposed"] = False
+                    preflight_packet["raw_path_exposed"] = False
+                    if termination_summary["custom_processes_gone"] is not True:
+                        packet = _custom_native_launch_stability_guard_packet(
+                            preflight_packet,
+                            status="blocked",
+                            machine_error_code="CUSTOM_NATIVE_CONFIG_CHANGED_RELAUNCH_STOP_FAILED",
+                            human_message="Existing Custom Codex process uses a different launch selection, and same-profile relaunch stop did not complete.",
+                        )
+                        packet["existing_window_relaunch_attempted"] = True
+                        packet["existing_window_relaunch_termination"] = (
+                            termination_summary
+                        )
+                        self._send_json(packet)
+                        return
+                    existing_window_relaunch_cleared = True
+                elif config_status == "changed":
                     machine_error_code = (
                         "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
                     )
@@ -10105,14 +10253,15 @@ def build_handler(
                         "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
                     )
                     human_message = "Existing Custom Codex process is running, but no matching previous launch packet proves it belongs to the selected config; second-window launch is blocked."
-                packet = _custom_native_launch_stability_guard_packet(
-                    preflight_packet,
-                    status="blocked",
-                    machine_error_code=machine_error_code,
-                    human_message=human_message,
-                )
-                self._send_json(packet)
-                return
+                if not existing_window_relaunch_cleared:
+                    packet = _custom_native_launch_stability_guard_packet(
+                        preflight_packet,
+                        status="blocked",
+                        machine_error_code=machine_error_code,
+                        human_message=human_message,
+                    )
+                    self._send_json(packet)
+                    return
             account_commands = (
                 {}
                 if api_route_launch_selected
@@ -10167,7 +10316,48 @@ def build_handler(
                 "stable_bridge_preflight_packet",
                 {},
             )
+            packet["stable_bridge_preflight_retry_attempted"] = (
+                preflight_packet.get("stable_bridge_preflight_retry_attempted") is True
+            )
+            packet["stable_bridge_preflight_retry_status"] = str(
+                preflight_packet.get("stable_bridge_preflight_retry_status") or ""
+            )
+            packet["stable_bridge_prewarm_retry_attempted"] = (
+                preflight_packet.get("stable_bridge_prewarm_retry_attempted") is True
+            )
+            packet["stable_bridge_prewarm_retry_status"] = str(
+                preflight_packet.get("stable_bridge_prewarm_retry_status") or ""
+            )
             packet["launch_stability_guard_checked"] = True
+            packet["config_status"] = str(preflight_packet.get("config_status") or "")
+            packet["selection_matches_last_launch"] = (
+                preflight_packet.get("selection_matches_last_launch") is True
+            )
+            packet["existing_window_reuse_admissible"] = (
+                preflight_packet.get("existing_window_reuse_admissible") is True
+            )
+            packet["existing_window_relaunch_admissible"] = (
+                preflight_packet.get("existing_window_relaunch_admissible") is True
+            )
+            packet["new_launch_required"] = (
+                preflight_packet.get("new_launch_required") is True
+            )
+            if preflight_packet.get("existing_window_relaunch_attempted") is True:
+                packet["existing_window_relaunch_attempted"] = True
+                packet["existing_window_relaunch_admissible"] = (
+                    preflight_packet.get("existing_window_relaunch_admissible") is True
+                )
+                packet["existing_window_relaunch_termination"] = (
+                    preflight_packet.get("existing_window_relaunch_termination", {})
+                )
+                packet["custom_process_observed_before_relaunch"] = (
+                    preflight_packet.get("custom_process_observed_before_relaunch")
+                    is True
+                )
+                packet["custom_process_count_after_relaunch_stop"] = int(
+                    preflight_packet.get("custom_process_count_after_relaunch_stop")
+                    or 0
+                )
             packet["reused_existing_window"] = (
                 packet.get("reused_existing_window") is True
                 or packet.get("existing_custom_window_reused") is True

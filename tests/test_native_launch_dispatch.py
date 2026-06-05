@@ -701,6 +701,98 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["process_started"])
         launch_native_candidate.assert_not_called()
 
+    def test_live_custom_native_launch_stops_same_profile_process_then_launches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={
+                        "custom_processes_gone": True,
+                        "initial_custom_pids": [222],
+                    },
+                ) as terminate_custom,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value={
+                        "custom_process_observed": True,
+                        "custom_process_still_observed_after_wait": True,
+                        "post_observation_wait_seconds": 2.0,
+                        "startup_inventory": {
+                            "root_app_pids": [333],
+                            "custom_process_lines": ["redacted"],
+                            "sample": ["redacted"],
+                        },
+                        "launcher_pid": 333,
+                    },
+                ) as launch_native_candidate,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._wait_for_window_observation_via_ax",
+                    return_value={
+                        "window_observed": True,
+                        "window_visible": True,
+                        "window_frontmost": True,
+                        "observed_pid": 333,
+                        "blocked_reason_class": "",
+                        "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={"native_window_usable": True, "blocked_reason_class": ""},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._runtime_ready_from_launcher_stdout",
+                    return_value={"runtime_ready_observed": True, "runtime_ready_source": "test"},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["prelaunch_existing_custom_process_stop_attempted"])
+        self.assertTrue(packet["prelaunch_existing_custom_processes_gone"])
+        self.assertEqual(packet["prelaunch_existing_custom_process_initial_pids"], [222])
+        self.assertTrue(packet["process_started"])
+        self.assertTrue(packet["new_launch_started"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertTrue(packet["native_app_usable"])
+        self.assertTrue(packet["real_codex_app_launched"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["current_original_profile_shortcut_used"])
+        self.assertFalse(packet.get("asar_touched", False))
+        terminate_custom.assert_called_once()
+        launch_native_candidate.assert_called_once()
+
     def test_live_custom_native_launch_reuses_existing_window_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
