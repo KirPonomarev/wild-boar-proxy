@@ -9,14 +9,23 @@ import argparse
 from http.server import ThreadingHTTPServer
 import ipaddress
 import json
+import os
+from pathlib import Path
+import shutil
 import sys
+import tempfile
 import threading
 from typing import Any
 from urllib import error, request
 import webbrowser
 
 from .runtime import RuntimePaths
-from .web_design_live_server import LIVE_READONLY_ACTION_PHASE, build_handler
+from .web_design_live_server import (
+    LIVE_READONLY_ACTION_PHASE,
+    SANDBOX_ACTION_PHASE,
+    LaunchCopyContract,
+    build_handler,
+)
 from .web_ingress import unsafe_bind_requested
 from .web_token import (
     WEB_CSRF_META_NAME,
@@ -34,6 +43,17 @@ DESKTOP_WEB_SHELL_DEFAULT_PORT = 8788
 DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH = "/api/action"
 DESKTOP_WEB_SHELL_PUBLIC_BIND_ERROR = "DESKTOP_WEB_SHELL_PUBLIC_BIND_REJECTED"
 DESKTOP_WEB_SHELL_BIND_ERROR = "DESKTOP_WEB_SHELL_BIND_FAILED"
+DESKTOP_WEB_SHELL_ACTION_PHASES = (
+    LIVE_READONLY_ACTION_PHASE,
+    SANDBOX_ACTION_PHASE,
+)
+DESKTOP_WEB_SHELL_R1_ACTIONS = (
+    "onboard_account_dry_run",
+    "onboard_account",
+    "api_route_connect",
+    "api_route_credential_check",
+    "quick_start_check_all",
+)
 
 
 class DesktopWebShellError(ValueError):
@@ -100,10 +120,68 @@ def _post_json_without_auth(url: str, *, timeout_seconds: float = 3.0) -> dict[s
         }
 
 
+def _desktop_sandbox_copy_port(action_server_port: int) -> int:
+    if action_server_port > 0 and action_server_port != 9321:
+        return 9321
+    if action_server_port > 0:
+        return action_server_port + 1
+    return 9321
+
+
+def _desktop_sandbox_root() -> Path:
+    return (
+        Path(tempfile.gettempdir())
+        / f"wild-boar-proxy-desktop-sandbox-{os.getpid()}"
+    )
+
+
+def _desktop_sandbox_launch_copy_contract(
+    *, action_server_port: int
+) -> LaunchCopyContract:
+    sandbox_root = _desktop_sandbox_root()
+    profile_dir = sandbox_root / "profile"
+    data_dir = sandbox_root / "managed"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return LaunchCopyContract(
+        profile_dir=str(profile_dir),
+        data_dir=str(data_dir),
+        copy_port=_desktop_sandbox_copy_port(action_server_port),
+        action_server_port=action_server_port,
+    )
+
+
+def _desktop_launch_copy_contract_for_phase(
+    *, action_phase: str, action_server_port: int
+) -> LaunchCopyContract | None:
+    if action_phase == SANDBOX_ACTION_PHASE:
+        return _desktop_sandbox_launch_copy_contract(
+            action_server_port=action_server_port
+        )
+    return None
+
+
+def _cleanup_desktop_sandbox_root_if_needed(action_phase: str) -> None:
+    if action_phase != SANDBOX_ACTION_PHASE:
+        return
+    sandbox_root = _desktop_sandbox_root()
+    temp_root = Path(tempfile.gettempdir()).resolve(strict=False)
+    try:
+        resolved = sandbox_root.resolve(strict=False)
+    except OSError:
+        return
+    if resolved.parent != temp_root:
+        return
+    if not resolved.name.startswith("wild-boar-proxy-desktop-sandbox-"):
+        return
+    shutil.rmtree(resolved, ignore_errors=True)
+
+
 def build_desktop_web_shell_server(
     *,
     host: str = DESKTOP_WEB_SHELL_DEFAULT_HOST,
     port: int = DESKTOP_WEB_SHELL_DEFAULT_PORT,
+    action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> tuple[ThreadingHTTPServer, Any]:
     admitted_host = validate_desktop_bind_host(host)
     if port < 0:
@@ -111,23 +189,35 @@ def build_desktop_web_shell_server(
             "Desktop web shell port must be non-negative.",
             machine_error_code="DESKTOP_WEB_SHELL_PORT_INVALID",
         )
+    if action_phase not in DESKTOP_WEB_SHELL_ACTION_PHASES:
+        raise DesktopWebShellError(
+            "Desktop web shell admits only live_readonly or sandbox_actions.",
+            machine_error_code="DESKTOP_WEB_SHELL_ACTION_PHASE_INVALID",
+        )
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
+    launch_copy_contract = _desktop_launch_copy_contract_for_phase(
+        action_phase=action_phase,
+        action_server_port=port,
+    )
     try:
         server = ThreadingHTTPServer(
             (admitted_host, port),
             build_handler(
-                action_phase=LIVE_READONLY_ACTION_PHASE,
+                action_phase=action_phase,
+                launch_copy_contract=launch_copy_contract,
                 web_token_state=web_token_state,
             ),
         )
     except OSError as exc:
         delete_web_token(web_token_state)
+        _cleanup_desktop_sandbox_root_if_needed(action_phase)
         raise DesktopWebShellError(
             f"Desktop web shell failed to bind {admitted_host}:{port}.",
             machine_error_code=DESKTOP_WEB_SHELL_BIND_ERROR,
         ) from exc
     except Exception:
         delete_web_token(web_token_state)
+        _cleanup_desktop_sandbox_root_if_needed(action_phase)
         raise
     return server, web_token_state
 
@@ -137,6 +227,7 @@ def build_desktop_web_shell_packet(
     host: str,
     base_url: str,
     port: int,
+    action_phase: str,
     index_html: str,
     live_readonly: dict[str, Any],
     accounts_readonly: dict[str, Any],
@@ -168,6 +259,22 @@ def build_desktop_web_shell_packet(
     live_readonly_endpoint_ok = "status" in live_readonly
     accounts_readonly_endpoint_ok = "status" in accounts_readonly
     api_connections_readonly_endpoint_ok = "status" in api_connections_readonly
+    actions_metadata = action_metadata.get("actions")
+    if not isinstance(actions_metadata, dict):
+        actions_metadata = {}
+    r1_action_metadata: dict[str, dict[str, Any]] = {}
+    for ui_action in DESKTOP_WEB_SHELL_R1_ACTIONS:
+        action = actions_metadata.get(ui_action)
+        if not isinstance(action, dict):
+            action = {}
+        r1_action_metadata[ui_action] = {
+            "available": action.get("available") is True,
+            "availability_state": str(action.get("availability_state", "")),
+            "disabled_reason_code": str(action.get("disabled_reason_code", "")),
+        }
+    sandbox_preflight = action_metadata.get("sandbox_preflight")
+    if not isinstance(sandbox_preflight, dict):
+        sandbox_preflight = {}
     status_ok = (
         token_meta_present
         and csrf_meta_present
@@ -196,7 +303,8 @@ def build_desktop_web_shell_packet(
             "base_url": base_url,
             "local_only_bind": True,
             "public_bind_allowed": False,
-            "action_phase": LIVE_READONLY_ACTION_PHASE,
+            "action_phase": action_phase,
+            "full_action_phase_admitted_by_desktop_shell": False,
         },
         "first_screen": {
             "html_loaded": bool(index_html),
@@ -230,6 +338,11 @@ def build_desktop_web_shell_packet(
             "status": action_metadata.get("status"),
             "source": action_metadata.get("source"),
             "action_phase": action_metadata.get("action_phase"),
+            "sandbox_preflight_status": sandbox_preflight.get("status"),
+            "sandbox_preflight_machine_error_code": sandbox_preflight.get(
+                "machine_error_code"
+            ),
+            "r1_actions": r1_action_metadata,
             "live_actions_remain_server_guarded": True,
         },
         "packet_contents": {
@@ -252,9 +365,14 @@ def run_desktop_web_shell_smoke(
     *,
     host: str = DESKTOP_WEB_SHELL_DEFAULT_HOST,
     port: int = 0,
+    action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> tuple[dict[str, Any], int]:
     try:
-        server, web_token_state = build_desktop_web_shell_server(host=host, port=port)
+        server, web_token_state = build_desktop_web_shell_server(
+            host=host,
+            port=port,
+            action_phase=action_phase,
+        )
     except DesktopWebShellError as exc:
         return (
             {
@@ -287,6 +405,7 @@ def run_desktop_web_shell_smoke(
             host=admitted_host,
             base_url=base_url,
             port=actual_port,
+            action_phase=action_phase,
             index_html=index_html,
             live_readonly=live_readonly,
             accounts_readonly=accounts_readonly,
@@ -315,6 +434,7 @@ def run_desktop_web_shell_smoke(
         thread.join(timeout=5)
         server.server_close()
         delete_web_token(web_token_state)
+        _cleanup_desktop_sandbox_root_if_needed(action_phase)
 
 
 def run_desktop_web_shell(
@@ -322,8 +442,13 @@ def run_desktop_web_shell(
     host: str = DESKTOP_WEB_SHELL_DEFAULT_HOST,
     port: int = DESKTOP_WEB_SHELL_DEFAULT_PORT,
     open_browser: bool = True,
+    action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> int:
-    server, web_token_state = build_desktop_web_shell_server(host=host, port=port)
+    server, web_token_state = build_desktop_web_shell_server(
+        host=host,
+        port=port,
+        action_phase=action_phase,
+    )
     base_url = _base_url(validate_desktop_bind_host(host), int(server.server_port))
     print(base_url, flush=True)
     try:
@@ -335,6 +460,7 @@ def run_desktop_web_shell(
     finally:
         server.server_close()
         delete_web_token(web_token_state)
+        _cleanup_desktop_sandbox_root_if_needed(action_phase)
     return 0
 
 
@@ -344,11 +470,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-open-browser", action="store_true")
     parser.add_argument("--smoke-json", action="store_true")
+    parser.add_argument(
+        "--action-phase",
+        default=LIVE_READONLY_ACTION_PHASE,
+        choices=DESKTOP_WEB_SHELL_ACTION_PHASES,
+    )
     args = parser.parse_args(argv)
     if args.smoke_json:
         packet, exit_code = run_desktop_web_shell_smoke(
             host=args.host,
             port=args.port if args.port is not None else 0,
+            action_phase=args.action_phase,
         )
         print(json.dumps(packet, ensure_ascii=False, sort_keys=True))
         return exit_code
@@ -357,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             host=args.host,
             port=args.port if args.port is not None else DESKTOP_WEB_SHELL_DEFAULT_PORT,
             open_browser=not args.no_open_browser,
+            action_phase=args.action_phase,
         )
     except DesktopWebShellError as exc:
         print(f"{exc.machine_error_code}: {exc}", file=sys.stderr)
