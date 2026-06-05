@@ -7830,6 +7830,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "build_api_connections_readonly_snapshot",
                 return_value={"status": "ok", "source": "api_connections_readonly", "primary_truth_ok": True, "routes": []},
             ),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
         ):
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
@@ -7951,6 +7960,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                             "provider": "deepseek",
                             "upstream_model": "deepseek-v4-pro",
                             "enabled": True,
+                            "selection_enabled": True,
                             "secret_ref": "DEEPSEEK_API_KEY",
                             "thinking": {
                                 "type": "enabled",
@@ -7964,6 +7974,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server,
                 "build_custom_codex_stable_bridge_preflight_packet",
             ) as stable_preflight,
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
             mock.patch.object(live_server._CustomNativeBridgeLease, "ensure") as ensure_bridge,
             mock.patch.object(
                 live_server,
@@ -8013,7 +8032,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(endpoint_packet["api_line_used_as_executor"])
         self.assertTrue(endpoint_packet["quick_start_launch_route_truth_proven_with_limits"])
 
-    def test_custom_native_chatgpt_plus_api_launch_preserves_slots_without_delegation_claim(self) -> None:
+    def test_custom_native_chatgpt_plus_api_launch_preserves_slots_and_routes_api_bridge(self) -> None:
         native_packet = {
             "schema_version": 1,
             "captured_at_utc": "2026-05-30T00:00:00Z",
@@ -8091,7 +8110,25 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "build_custom_codex_stable_bridge_preflight_packet",
                 return_value=dict(stable_preflight_ok),
             ) as stable_preflight,
-            mock.patch.object(live_server._CustomNativeBridgeLease, "ensure") as ensure_bridge,
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "_custom_native_stable_bridge_prewarm_packet",
+                return_value=self.stable_bridge_prewarm_ok_packet(),
+            ) as bridge_prewarm,
+            mock.patch.object(
+                live_server._CustomNativeBridgeLease,
+                "ensure",
+                return_value="http://127.0.0.1:9543/v1",
+            ) as ensure_bridge,
             mock.patch.object(
                 live_server,
                 "launch_custom_native_app_packet",
@@ -8128,10 +8165,22 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(endpoint_packet["status"], "ok")
         stable_preflight.assert_called_once()
-        ensure_bridge.assert_not_called()
+        bridge_prewarm.assert_called_once()
+        ensure_bridge.assert_called_once()
+        self.assertEqual(
+            ensure_bridge.call_args.kwargs["forced_route_model_id"],
+            "wbp-deepseek-v4-pro-max",
+        )
         launch_native.assert_called_once()
+        self.assertEqual(
+            launch_native.call_args.kwargs["endpoint"],
+            "http://127.0.0.1:9543/v1",
+        )
+        self.assertEqual(launch_native.call_args.kwargs["model"], "gpt-5.3-codex")
         self.assertEqual(endpoint_packet["execution_mode"], "chatgpt_plus_api")
         self.assertEqual(endpoint_packet["selected_model"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["launch_model_id"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["route_model_id"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(endpoint_packet["primary_model_slot"]["model_id"], "gpt-5.3-codex")
         self.assertEqual(
             endpoint_packet["coding_agent_model_slot"]["model_id"],
@@ -8146,9 +8195,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
         self.assertFalse(endpoint_packet["api_only_calls_chatgpt"])
         self.assertFalse(endpoint_packet["chatgpt_only_calls_api"])
-        self.assertFalse(endpoint_packet["external_route_selected"])
-        self.assertFalse(endpoint_packet["bridge_endpoint_configured"])
-        self.assertFalse(endpoint_packet["route_selected"])
+        self.assertTrue(endpoint_packet["external_route_selected"])
+        self.assertTrue(endpoint_packet["bridge_endpoint_configured"])
+        self.assertTrue(endpoint_packet["route_selected"])
+        self.assertTrue(endpoint_packet["route_packet_matches_selection_packet"])
         self.assertTrue(endpoint_packet["stable_bridge_preflight_required"])
         self.assertEqual(endpoint_packet["stable_bridge_preflight_status"], "ok")
         self.assertTrue(endpoint_packet["stable_bridge_launch_allowed"])
@@ -8724,6 +8774,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     "build_api_connections_readonly_snapshot",
                     return_value={"status": "ok", "source": "api_connections_readonly", "primary_truth_ok": True, "routes": []},
                 ),
+                mock.patch.object(
+                    live_server,
+                    "collect_codex_process_inventory",
+                    return_value={
+                        "custom_process_count": 0,
+                        "default_process_count": 0,
+                        "custom_process_lines": [],
+                    },
+                ),
             ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
@@ -9175,6 +9234,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 },
             ),
             mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+            mock.patch.object(
                 live_server._CustomNativeBridgeLease,
                 "ensure",
                 return_value="http://127.0.0.1:9543/v1",
@@ -9303,6 +9371,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                             "provider": "deepseek",
                             "upstream_model": "deepseek-v4-pro",
                             "enabled": True,
+                            "selection_enabled": True,
                             "secret_ref": "DEEPSEEK_API_KEY",
                             "thinking": {
                                 "type": "enabled",
@@ -9310,6 +9379,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                             },
                         }
                     ],
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
                 },
             ),
             mock.patch.object(
@@ -11564,6 +11642,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         "routes": [],
                     },
                 ),
+                mock.patch.object(
+                    live_server,
+                    "collect_codex_process_inventory",
+                    return_value={
+                        "custom_process_count": 0,
+                        "default_process_count": 0,
+                        "custom_process_lines": [],
+                    },
+                ),
             ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
@@ -12006,6 +12093,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                             "enabled": True,
                             "selection_enabled": True,
                             "secret_ref": "DEEPSEEK_API_KEY",
+                            "thinking": {
+                                "type": "enabled",
+                                "reasoning_effort": "max",
+                            },
                         }
                     ],
                 },
@@ -12131,6 +12222,76 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             packet["final_status"],
             "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
         )
+
+    def test_custom_native_launch_preflight_routes_chatgpt_plus_api_bridge_from_coding_slot(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        with (
+            mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+        ):
+            packet = live_server._custom_native_launch_preflight_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.3-codex",
+                    "api_model_id": route_id,
+                    "api_reasoning_option_id": "provider_declared_max",
+                },
+                owner_authorized=True,
+                operator_status={
+                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                },
+                api_snapshot={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": route_id,
+                            "display_name": "DeepSeek V4 Pro · Максимум",
+                            "provider": "deepseek",
+                            "upstream_model": "deepseek-v4-pro",
+                            "enabled": True,
+                            "selection_enabled": True,
+                            "secret_ref": "DEEPSEEK_API_KEY",
+                            "thinking": {
+                                "type": "enabled",
+                                "reasoning_effort": "max",
+                            },
+                        }
+                    ],
+                },
+                external_routes_packet=routes_list_packet(route_id),
+                native_bridge_lease=None,
+                last_launch_packet=None,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["selected_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["launch_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["route_model_id"], route_id)
+        self.assertEqual(packet["selection_packet"]["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["selection_packet"]["coding_agent_model_slot"]["model_id"], route_id)
+        self.assertTrue(packet["route_selected"])
+        self.assertTrue(packet["bridge_required"])
+        self.assertFalse(packet["bridge_alive"])
+        self.assertEqual(packet["bridge_status"], "not_started_or_down")
+        self.assertEqual(packet["next_action"], "launch_custom_codex_to_create_bridge")
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["asar_touched"])
 
     def test_custom_native_launch_preflight_marks_existing_window_reuse_only_when_config_matches(self) -> None:
         with mock.patch.object(

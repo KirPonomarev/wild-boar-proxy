@@ -3197,6 +3197,61 @@ def _custom_native_launch_selected_model_id(
     return str(payload.get("model_id") or "").strip()
 
 
+def _custom_native_launch_route_model_id(
+    *,
+    execution_packet: dict[str, Any],
+    selected_model: str,
+) -> str:
+    if not execution_packet:
+        return str(selected_model or "").strip()
+    execution_mode = str(execution_packet.get("execution_mode") or "")
+    if execution_mode == "chatgpt_plus_api":
+        coding_slot = execution_packet.get("coding_agent_model_slot")
+        if isinstance(coding_slot, dict):
+            route_model = str(coding_slot.get("model_id") or "").strip()
+            if route_model:
+                return route_model
+        return str(execution_packet.get("api_model_id") or "").strip()
+    if execution_mode == "api_only":
+        return str(execution_packet.get("api_model_id") or selected_model or "").strip()
+    return str(selected_model or "").strip()
+
+
+def _custom_native_route_matches_selection_packet(
+    *,
+    execution_packet: dict[str, Any],
+    launch_model_id: str,
+    route_model_id: str,
+) -> bool:
+    if not execution_packet:
+        return True
+    execution_mode = str(execution_packet.get("execution_mode") or "")
+    primary_slot = (
+        execution_packet.get("primary_model_slot")
+        if isinstance(execution_packet.get("primary_model_slot"), dict)
+        else {}
+    )
+    coding_slot = (
+        execution_packet.get("coding_agent_model_slot")
+        if isinstance(execution_packet.get("coding_agent_model_slot"), dict)
+        else {}
+    )
+    primary_model_id = str(primary_slot.get("model_id") or "")
+    coding_model_id = str(coding_slot.get("model_id") or "")
+    if execution_mode == "chatgpt_plus_api":
+        return bool(
+            launch_model_id
+            and route_model_id
+            and launch_model_id == primary_model_id
+            and route_model_id == coding_model_id
+        )
+    if execution_mode == "api_only":
+        return bool(route_model_id and route_model_id == primary_model_id)
+    if execution_mode == "chatgpt_only":
+        return bool(launch_model_id and launch_model_id == primary_model_id)
+    return False
+
+
 def _quick_start_launch_selection_digest(fields: dict[str, Any]) -> str:
     safe_fields = {
         "execution_mode": str(fields.get("execution_mode") or ""),
@@ -3460,7 +3515,11 @@ def _custom_native_launch_preflight_packet(
         api_snapshot=api_snapshot,
     )
     endpoint = str(registry.get("endpoint") or "")
-    route_record = _external_route_record_for_model(external_routes_packet, selected_model)
+    route_model_id = _custom_native_launch_route_model_id(
+        execution_packet=execution_packet or {},
+        selected_model=selected_model,
+    )
+    route_record = _external_route_record_for_model(external_routes_packet, route_model_id)
     route_selected = bool(route_record)
     bridge_port = (
         native_bridge_lease.bridge_port
@@ -3542,6 +3601,8 @@ def _custom_native_launch_preflight_packet(
         "api_model_id": current_fields["api_model_id"],
         "api_reasoning_option_id": current_fields["api_reasoning_option_id"],
         "selected_model": selected_model,
+        "launch_model_id": selected_model,
+        "route_model_id": route_model_id,
         "selection_packet": execution_packet or {},
         "selection_digest": current_digest,
         "last_launch_packet_present": isinstance(last_launch_packet, dict),
@@ -4895,14 +4956,18 @@ def _launch_custom_native_codex_packet(
     )
     endpoint = str(registry.get("endpoint") or "")
     hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
-    route_record = _external_route_record_for_model(external_routes_packet, model_id)
+    route_model_id = _custom_native_launch_route_model_id(
+        execution_packet=execution_packet or {},
+        selected_model=model_id,
+    )
+    route_record = _external_route_record_for_model(external_routes_packet, route_model_id)
     try:
         bridge_endpoint = (
             native_bridge_lease.ensure(
                 downstream_endpoint=endpoint,
                 routes_packet=external_routes_packet,
                 hidden_native_model_ids=hidden_native_model_ids,
-                forced_route_model_id=model_id,
+                forced_route_model_id=route_model_id,
             )
             if native_bridge_lease is not None and route_record
             else endpoint
@@ -4935,6 +5000,8 @@ def _launch_custom_native_codex_packet(
             "chatgpt_model_id": execution_packet.get("chatgpt_model_id") if execution_packet else "",
             "selection_packet": execution_packet or {},
             "selected_model": model_id,
+            "launch_model_id": model_id,
+            "route_model_id": route_model_id,
             "model_auto_selected": False,
             "fallback_used": False,
             "browser_raw_backend_authority_widened": False,
@@ -4998,14 +5065,18 @@ def _launch_custom_native_codex_packet(
     packet["bridge_endpoint_configured"] = bridge_endpoint != endpoint
     packet["configured_bridge_endpoint"] = bridge_endpoint
     packet["selected_model"] = model_id
+    packet["launch_model_id"] = model_id
+    packet["route_model_id"] = route_model_id
     packet["model_auto_selected"] = False
     packet["fallback_used"] = False
     packet["route_packet_matches_selection_packet"] = bool(
-        execution_packet
-        and str(packet.get("execution_mode") or "")
+        str(packet.get("execution_mode") or "")
         == str((packet.get("execution_mode_packet") or {}).get("execution_mode") or "")
-        and str(packet.get("selected_model") or "")
-        == str((packet.get("primary_model_slot") or {}).get("model_id") or "")
+        and _custom_native_route_matches_selection_packet(
+            execution_packet=execution_packet or {},
+            launch_model_id=model_id,
+            route_model_id=route_model_id,
+        )
     )
     packet["quick_start_launch_route_truth_proven_with_limits"] = bool(
         execution_packet
@@ -5030,7 +5101,7 @@ def _launch_custom_native_codex_packet(
     packet["asar_touched"] = False
     packet["external_route_selected"] = bool(
         any(
-            str(route.get("route_id") or "").strip() == model_id
+            str(route.get("route_id") or "").strip() in {model_id, route_model_id}
             for route in _enabled_external_route_records(external_routes_packet)
         )
     )
@@ -5045,6 +5116,9 @@ def _launch_custom_native_codex_packet(
             machine_error_code=str(packet.get("machine_error_code") or ""),
         )
     )
+    packet["selected_model"] = model_id
+    packet["launch_model_id"] = model_id
+    packet["route_model_id"] = route_model_id
     _add_custom_codex_window_launch_trace_context(packet, route_record=route_record)
     if native_bridge_lease is not None:
         native_bridge_lease.set_trace_context(
