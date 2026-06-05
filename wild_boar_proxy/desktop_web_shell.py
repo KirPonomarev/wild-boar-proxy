@@ -21,10 +21,12 @@ import webbrowser
 
 from .runtime import RuntimePaths
 from .web_design_live_server import (
+    FULL_ACTION_PHASE,
     LIVE_READONLY_ACTION_PHASE,
     SANDBOX_ACTION_PHASE,
     LaunchCopyContract,
     build_handler,
+    owner_authorization_phrase_present,
 )
 from .web_ingress import unsafe_bind_requested
 from .web_token import (
@@ -46,12 +48,14 @@ DESKTOP_WEB_SHELL_BIND_ERROR = "DESKTOP_WEB_SHELL_BIND_FAILED"
 DESKTOP_WEB_SHELL_ACTION_PHASES = (
     LIVE_READONLY_ACTION_PHASE,
     SANDBOX_ACTION_PHASE,
+    FULL_ACTION_PHASE,
 )
 DESKTOP_WEB_SHELL_R1_ACTIONS = (
     "onboard_account_dry_run",
     "onboard_account",
     "api_route_connect",
     "api_route_credential_check",
+    "launch_custom_client_native",
     "quick_start_check_all",
 )
 
@@ -182,6 +186,7 @@ def build_desktop_web_shell_server(
     host: str = DESKTOP_WEB_SHELL_DEFAULT_HOST,
     port: int = DESKTOP_WEB_SHELL_DEFAULT_PORT,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    owner_authorization_phrase: str | None = None,
 ) -> tuple[ThreadingHTTPServer, Any]:
     admitted_host = validate_desktop_bind_host(host)
     if port < 0:
@@ -191,8 +196,15 @@ def build_desktop_web_shell_server(
         )
     if action_phase not in DESKTOP_WEB_SHELL_ACTION_PHASES:
         raise DesktopWebShellError(
-            "Desktop web shell admits only live_readonly or sandbox_actions.",
+            "Desktop web shell admits only live_readonly, sandbox_actions, or owner-authorized full.",
             machine_error_code="DESKTOP_WEB_SHELL_ACTION_PHASE_INVALID",
+        )
+    if action_phase == FULL_ACTION_PHASE and not owner_authorization_phrase_present(
+        owner_authorization_phrase
+    ):
+        raise DesktopWebShellError(
+            "Desktop web shell full action phase requires exact owner authorization phrase.",
+            machine_error_code="DESKTOP_WEB_SHELL_OWNER_AUTHORIZATION_REQUIRED",
         )
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
     launch_copy_contract = _desktop_launch_copy_contract_for_phase(
@@ -205,6 +217,7 @@ def build_desktop_web_shell_server(
             build_handler(
                 action_phase=action_phase,
                 launch_copy_contract=launch_copy_contract,
+                owner_authorization_phrase=owner_authorization_phrase,
                 web_token_state=web_token_state,
             ),
         )
@@ -304,7 +317,8 @@ def build_desktop_web_shell_packet(
             "local_only_bind": True,
             "public_bind_allowed": False,
             "action_phase": action_phase,
-            "full_action_phase_admitted_by_desktop_shell": False,
+            "full_action_phase_admitted_by_desktop_shell": action_phase
+            == FULL_ACTION_PHASE,
         },
         "first_screen": {
             "html_loaded": bool(index_html),
@@ -366,12 +380,14 @@ def run_desktop_web_shell_smoke(
     host: str = DESKTOP_WEB_SHELL_DEFAULT_HOST,
     port: int = 0,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    owner_authorization_phrase: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     try:
         server, web_token_state = build_desktop_web_shell_server(
             host=host,
             port=port,
             action_phase=action_phase,
+            owner_authorization_phrase=owner_authorization_phrase,
         )
     except DesktopWebShellError as exc:
         return (
@@ -443,11 +459,13 @@ def run_desktop_web_shell(
     port: int = DESKTOP_WEB_SHELL_DEFAULT_PORT,
     open_browser: bool = True,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    owner_authorization_phrase: str | None = None,
 ) -> int:
     server, web_token_state = build_desktop_web_shell_server(
         host=host,
         port=port,
         action_phase=action_phase,
+        owner_authorization_phrase=owner_authorization_phrase,
     )
     base_url = _base_url(validate_desktop_bind_host(host), int(server.server_port))
     print(base_url, flush=True)
@@ -475,12 +493,14 @@ def main(argv: list[str] | None = None) -> int:
         default=LIVE_READONLY_ACTION_PHASE,
         choices=DESKTOP_WEB_SHELL_ACTION_PHASES,
     )
+    parser.add_argument("--owner-authorization-phrase", default=None)
     args = parser.parse_args(argv)
     if args.smoke_json:
         packet, exit_code = run_desktop_web_shell_smoke(
             host=args.host,
             port=args.port if args.port is not None else 0,
             action_phase=args.action_phase,
+            owner_authorization_phrase=args.owner_authorization_phrase,
         )
         print(json.dumps(packet, ensure_ascii=False, sort_keys=True))
         return exit_code
@@ -490,6 +510,7 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port if args.port is not None else DESKTOP_WEB_SHELL_DEFAULT_PORT,
             open_browser=not args.no_open_browser,
             action_phase=args.action_phase,
+            owner_authorization_phrase=args.owner_authorization_phrase,
         )
     except DesktopWebShellError as exc:
         print(f"{exc.machine_error_code}: {exc}", file=sys.stderr)

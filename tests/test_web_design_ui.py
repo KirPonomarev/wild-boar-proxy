@@ -1411,9 +1411,12 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartConfigState"', section)
         self.assertIn('id="quickStartNextActionState"', section)
         self.assertIn(
-            'document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartLaunchAdmissionProjection())',
+            'document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction())',
             js,
         )
+        self.assertIn("async function runQuickStartCustomLaunchAction()", js)
+        self.assertIn('metadataFor("launch_custom_client_native")', js)
+        self.assertIn("await runCodexCustomLaunch()", js)
         self.assertIn('document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight())', js)
         self.assertIn('fetch("api/codex/custom/native-launch-preflight"', js)
         self.assertIn("runQuickStartLaunchAdmissionProjection", js)
@@ -1832,7 +1835,7 @@ sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
         if result.returncode != 0:
             self.fail(result.stderr or result.stdout)
 
-    def test_quick_start_primary_launch_action_is_admission_projection_only(self) -> None:
+    def test_quick_start_primary_launch_action_falls_back_to_projection_when_not_admitted(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -1973,7 +1976,16 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
-sandbox.runQuickStartLaunchAdmissionProjection().then(() => {
+vm.runInContext(`
+  actionMetadata = {
+    launch_custom_client_native: {
+      available: false,
+      disabled_reason_code: "UI_ACTION_PHASE_NOT_ADMITTED",
+      availability_state: "disabled_live_action"
+    }
+  };
+`, sandbox);
+sandbox.runQuickStartCustomLaunchAction().then(() => {
   const expected = [
     "api/codex/custom/quick-start/config-admission",
     "api/codex/custom/native-launch-preflight"
@@ -2007,6 +2019,259 @@ sandbox.runQuickStartLaunchAdmissionProjection().then(() => {
   }
   if (rendered.next_action !== "provide_exact_owner_authorization_phrase") {
     throw new Error(`next_action not preserved: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_primary_launch_action_calls_native_launch_when_admitted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.src = "";
+    this.alt = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.3-codex";
+node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+
+const urls = [];
+const packets = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options.body);
+    packets.push(body);
+    for (const forbidden of ["route_id", "secret_ref", "api_key", "base_url", "path", "CODEX_HOME"]) {
+      if (JSON.stringify(body).includes(forbidden)) {
+        throw new Error(`forbidden browser field leaked into launch body: ${forbidden}`);
+      }
+    }
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+          execution_mode: "chatgpt_plus_api",
+          chatgpt_model: { status: "admitted", model_id: "gpt-5.3-codex" },
+          api_model: { status: "admitted", model_id: "wbp-deepseek-v3" },
+          api_reasoning: { status: "defaulted", option_id: "catalog_default" },
+          api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+          launch_admission: "admitted",
+          launch_admission_summary: "Config admission ok.",
+          dry_server_truth_only: true,
+          custom_codex_launch_attempted: false,
+          new_launch_started: false,
+          network_calls_made: false,
+          live_call_attempted: false,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "native_launch_preflight"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
+          execution_mode: "chatgpt_plus_api",
+          owner_authorization_phrase_present: true,
+          bridge_required: true,
+          bridge_alive: true,
+          bridge_status: "running",
+          custom_process_observed: false,
+          window_status: "not_found",
+          config_status: "admitted",
+          new_launch_started: false,
+          custom_codex_launch_attempted: false,
+          live_call_attempted: false,
+          provider_called: false,
+          next_action: "native_launch"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
+          execution_mode: "chatgpt_plus_api",
+          running_status: true,
+          isolated_home: true,
+          isolated_codex_home: true,
+          isolated_profile_dir: true,
+          server_issued_model_list: true,
+          wbp_endpoint_configured: true,
+          browser_route_injection: false,
+          browser_backend_injection: false,
+          current_codex_touched: false,
+          process_started: true,
+          expected_custom_identity_observed: true,
+          native_window_observed: true,
+          real_codex_app_launched: true,
+          native_app_usable: true,
+          launch_claim_scope: "native_custom_codex_launch_packet_truth",
+          selection_packet: {
+            selected_source_class: "server_owned_route",
+            selected_route_digest: "digest",
+            selected_model: "gpt-5.3-codex"
+          },
+          new_launch_started: true,
+          live_call_attempted: true,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "none"
+        })
+      });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+  actionMetadata = {
+    launch_custom_client_native: {
+      available: true,
+      disabled_reason_code: "",
+      availability_state: "enabled"
+    }
+  };
+`, sandbox);
+sandbox.runQuickStartCustomLaunchAction().then(() => {
+  const expected = [
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight",
+    "api/codex/custom/native-launch"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected launch fetches ${JSON.stringify(urls)}`);
+  }
+  for (const packet of packets) {
+    if (packet.execution_mode !== "chatgpt_plus_api") {
+      throw new Error(`wrong execution mode in payload: ${JSON.stringify(packet)}`);
+    }
+    if (packet.chatgpt_model_id !== "gpt-5.3-codex") {
+      throw new Error(`wrong ChatGPT model in payload: ${JSON.stringify(packet)}`);
+    }
+    if (packet.api_model_id !== "wbp-deepseek-v3") {
+      throw new Error(`wrong API model in payload: ${JSON.stringify(packet)}`);
+    }
+  }
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "запущен") {
+    throw new Error(`launch state not rendered as launched: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (rendered.status !== "ok" || rendered.native_window_observed !== true) {
+    throw new Error(`native launch truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);
@@ -8817,6 +9082,113 @@ if (rendered.model_self_report_counts_as_runtime_truth !== false) {
 }
 if (rendered.history_persistence_claimed !== false || rendered.visible_thread_history_restored_claimed !== false) {
   throw new Error(`history must not be claimed by window smoke: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_custom_launch_render_shows_limited_window_launch_without_green_claim(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+node("codexLaunchModesChip").lastElementChild = { textContent: "" };
+node("quickStartLaunchState").lastElementChild = { textContent: "" };
+node("quickStartRouteChip").lastElementChild = { textContent: "" };
+node("customCodexStatus");
+node("customCodexSession");
+node("codexLaunchDryRunResponse");
+node("quickStartRouteResponse");
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "overview" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  status: "blocked",
+  machine_error_code: "CUSTOM_NATIVE_WINDOW_NOT_PROVEN",
+  session_created: false,
+  running_status: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_profile_dir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
+  process_started: true,
+  expected_custom_identity_observed: true,
+  native_window_observed: true,
+  native_app_usable: true,
+  real_codex_app_launched: false,
+  launch_claim_scope: "custom_native_app_window_launch_only",
+  next_action: "stop_and_diagnose_native_launch"
+});
+`, sandbox);
+
+if (!node("codexLaunchModesChip").className.includes("amber")) {
+  throw new Error(`limited native window launch must stay amber: ${node("codexLaunchModesChip").className}`);
+}
+if (node("codexLaunchModesChip").className.includes("green")) {
+  throw new Error(`limited native window launch must not be green: ${node("codexLaunchModesChip").className}`);
+}
+if (node("codexLaunchModesChip").lastElementChild.textContent !== "window visible / proof incomplete") {
+  throw new Error(`unexpected chip label: ${node("codexLaunchModesChip").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "окно открыто") {
+  throw new Error(`quick-start launch state did not show opened window: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartRouteChip").lastElementChild.textContent !== "proof incomplete") {
+  throw new Error(`route chip did not show limited proof: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+if (node("customCodexSession").textContent !== "window visible; native proof incomplete") {
+  throw new Error(`unexpected session label: ${node("customCodexSession").textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (rendered.status !== "blocked" || rendered.native_window_observed !== true || rendered.real_codex_app_launched !== false) {
+  throw new Error(`limited native launch truth not preserved: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(

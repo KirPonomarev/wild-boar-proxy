@@ -1092,6 +1092,11 @@ function renderCodexCustomLaunch(packet) {
     && claimScope !== ""
     && !normalizedClaimScope.includes("dispatch")
     && !normalizedClaimScope.includes("workbench");
+  const limitedWindowLaunch = packet?.status === "blocked"
+    && packet?.process_started === true
+    && packet?.running_status === true
+    && packet?.native_window_observed === true
+    && packet?.native_app_usable === true;
   codexLaunchSetChip(
     nativeProofOk
       ? "green"
@@ -1105,7 +1110,7 @@ function renderCodexCustomLaunch(packet) {
       : (
         packet?.status === "ok"
           ? (workbenchOnly ? "workbench/session only" : "native proof pending")
-          : (packet?.status || "failed")
+          : (limitedWindowLaunch ? "window visible / proof incomplete" : (packet?.status || "failed"))
       )
   );
   codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${claimScope || "native_proof_required"}`);
@@ -1117,9 +1122,11 @@ function renderCodexCustomLaunch(packet) {
         workbenchOnly
           ? "workbench/session only"
           : (
-            packet?.process_started === true
+            limitedWindowLaunch
+              ? "window visible; native proof incomplete"
+              : (packet?.process_started === true
               ? "process only; native proof missing"
-              : (packet?.next_action || "native proof missing")
+              : (packet?.next_action || "native proof missing"))
           )
       )
   );
@@ -1191,12 +1198,14 @@ function renderCodexCustomLaunch(packet) {
   setQuickStartChip(
     "quickStartLaunchState",
     packet?.status === "ok" ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    packet?.status === "ok" ? "запущен" : (packet?.machine_error_code || packet?.status || "ошибка")
+    packet?.status === "ok"
+      ? "запущен"
+      : (limitedWindowLaunch ? "окно открыто" : (packet?.machine_error_code || packet?.status || "ошибка"))
   );
   setQuickStartChip(
     "quickStartRouteChip",
     packet?.status === "ok" ? "green" : "amber",
-    packet?.status === "ok" ? "запуск ok" : "проверь пакет"
+    packet?.status === "ok" ? "запуск ok" : (limitedWindowLaunch ? "proof incomplete" : "проверь пакет")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -1236,7 +1245,17 @@ function renderCodexCustomLaunch(packet) {
     api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
     persistent_profile_id: packet?.persistent_profile_id || "",
     temp_profile_used: packet?.temp_profile_used === true,
+    running_status: packet?.running_status === true,
+    process_started: packet?.process_started === true,
     native_window_observed: packet?.native_window_observed === true,
+    real_codex_app_launched: packet?.real_codex_app_launched === true,
+    native_app_usable: packet?.native_app_usable === true,
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    provider_called: packet?.provider_called === true,
+    launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
     raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
     original_codex_touched: packet?.original_codex_touched === true,
     launch_claim_scope: packet?.launch_claim_scope || "",
@@ -2487,6 +2506,11 @@ function setQuickStartRouteResponse(packet) {
       existing_window_reuse_admissible:
         packet?.existing_window_reuse_admissible === true,
       new_launch_required: packet?.new_launch_required === true,
+      running_status: packet?.running_status === true,
+      process_started: packet?.process_started === true,
+      native_window_observed: packet?.native_window_observed === true,
+      real_codex_app_launched: packet?.real_codex_app_launched === true,
+      native_app_usable: packet?.native_app_usable === true,
       custom_codex_launch_attempted:
         packet?.custom_codex_launch_attempted === true,
       new_launch_started: packet?.new_launch_started === true,
@@ -2510,6 +2534,15 @@ function setQuickStartRouteResponse(packet) {
       next_action: packet?.next_action || ""
     }, null, 2);
   }
+}
+
+async function runQuickStartCustomLaunchAction() {
+  const launchMetadata = metadataFor("launch_custom_client_native");
+  if (launchMetadata?.available === true) {
+    await runCodexCustomLaunch();
+    return;
+  }
+  await runQuickStartLaunchAdmissionProjection();
 }
 
 function renderQuickStartLaunchPreflight(packet) {
@@ -12924,7 +12957,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
   document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
-  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartLaunchAdmissionProjection());
+  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
   document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow());
   document.getElementById("quickStartVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
