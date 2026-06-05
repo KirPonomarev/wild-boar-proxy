@@ -15,6 +15,35 @@ from wild_boar_proxy import runtime
 from wild_boar_proxy.process_runner import DetachedProcessStartResult
 
 
+def _runtime_paths(root: Path) -> runtime.RuntimePaths:
+    profile_dir = root / "profile"
+    managed_dir = profile_dir / "managed"
+    stable_dir = root / "stable"
+    return runtime.RuntimePaths(
+        profile_dir=profile_dir,
+        managed_dir=managed_dir,
+        stable_config=stable_dir / "config.yaml",
+        auth_file=profile_dir / "auth.json",
+        config_toml=profile_dir / "config.toml",
+        runtime_mode_file=profile_dir / "runtime-mode.txt",
+        runtime_effective_mode_file=profile_dir / "runtime-effective-mode.txt",
+        registry_file=managed_dir / "backend-registry.json",
+        state_file=managed_dir / "supervisor-state.json",
+        managed_config_file=managed_dir / "managed-config.yaml",
+        launcher_script=profile_dir / "codex-custom-launch.sh",
+        sync_script=managed_dir / "supervisor-sync.sh",
+        accounts_bin=managed_dir / "bin" / "codex-accounts",
+        onboard_bin=managed_dir / "bin" / "codex-account-onboard",
+        lock_file=managed_dir / "wild-boar-proxy.lock",
+        launcher_lock_file=managed_dir / "stable-runtime-launch.lock",
+        repair_target_inventory_dir=managed_dir / "stable-repair-target",
+        repair_target_reference_file=managed_dir / "approved-repair-target.json",
+        target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+        stable_runtime_generated_config_file=managed_dir
+        / "stable-runtime-config.generated.yaml",
+    )
+
+
 class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
     def test_auth_pool_hygiene_uses_snapshot_as_observed_selection_when_runtime_loaded_ids_empty(
         self,
@@ -293,6 +322,146 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             )
         )
         self.assertTrue(any(item.endswith("codex-test-session.json") for item in changed))
+
+    def test_refresh_codex_login_session_does_not_revive_expired_materialized_session(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = _runtime_paths(root)
+            auth_dir = root / "stable"
+            (paths.managed_dir / "login-sessions").mkdir(parents=True, exist_ok=True)
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            auth_path = auth_dir / "codex-expired.json"
+            auth_path.write_text('{"email":"expired@example.com"}\n', encoding="utf-8")
+            session_path = runtime.sandbox_login_session_path(
+                paths, "codex-expired-session"
+            )
+            session_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "login_session_id": "codex-expired-session",
+                        "provider": "codex",
+                        "mode": "device",
+                        "pid": 0,
+                        "created_at": "2026-05-29T02:44:09+00:00",
+                        "expires_at": "2000-01-01T00:00:00+00:00",
+                        "state": "expired",
+                        "device_url": "https://auth.openai.com/codex/device",
+                        "device_code": "OLD-CODE",
+                        "device_code_present": True,
+                        "auth_materialized": True,
+                        "auth_ref": str(auth_path),
+                        "auth_inventory_before": [str(auth_path)],
+                        "auth_inventory_before_metadata": {},
+                        "auth_inventory_before_digest": "fixture",
+                        "auth_inventory_source": {"source": "auth-dir"},
+                        "sandbox_scope": True,
+                        "inventory_scope": "admitted_owner_login",
+                        "used": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with unittest.mock.patch(
+                "wild_boar_proxy.runtime.login_session_auth_inventory_dir",
+                return_value=(auth_dir, {"source": "auth-dir"}),
+            ):
+                refreshed, changed = runtime.refresh_codex_login_session(
+                    paths, "codex-expired-session"
+                )
+
+        self.assertEqual(refreshed["state"], "expired")
+        self.assertTrue(refreshed["auth_materialized"])
+        self.assertEqual(changed, [])
+
+    def test_run_accounts_login_start_skips_expired_reused_codex_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = _runtime_paths(root)
+            stable_dir = root / "stable"
+            (paths.managed_dir / "login-sessions").mkdir(parents=True, exist_ok=True)
+            (paths.managed_dir / "bin").mkdir(parents=True, exist_ok=True)
+            stable_dir.mkdir(parents=True, exist_ok=True)
+            paths.stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{stable_dir}"\n',
+                encoding="utf-8",
+            )
+            fake_cli = paths.managed_dir / "bin" / "fake-cli-proxy"
+            fake_cli.write_text("", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            old_session_path = runtime.sandbox_login_session_path(
+                paths, "codex-expired-session"
+            )
+            old_session_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "login_session_id": "codex-expired-session",
+                        "provider": "codex",
+                        "mode": "device",
+                        "pid": 0,
+                        "created_at": "2026-05-29T02:44:09+00:00",
+                        "expires_at": "2000-01-01T00:00:00+00:00",
+                        "state": "expired",
+                        "device_url": "https://auth.openai.com/codex/device",
+                        "device_code": "OLD-CODE",
+                        "device_code_present": True,
+                        "auth_materialized": True,
+                        "auth_ref": str(stable_dir / "codex-expired.json"),
+                        "auth_inventory_before": [],
+                        "auth_inventory_before_metadata": {},
+                        "auth_inventory_before_digest": "fixture",
+                        "auth_inventory_source": {"source": "auth-dir"},
+                        "sandbox_scope": True,
+                        "inventory_scope": "admitted_owner_login",
+                        "used": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_start_detached_process(*args, **kwargs):
+                stdout_handle = kwargs["stdout"]
+                assert isinstance(stdout_handle, io.TextIOBase)
+                stdout_handle.write(
+                    "Codex device URL: https://auth.openai.com/codex/device\n"
+                    "Codex device code: NEW-CODE\n"
+                )
+                stdout_handle.flush()
+                return DetachedProcessStartResult(
+                    status="ok",
+                    machine_error_code=runtime.PROCESS_OK,
+                    pid=os.getpid() + 1000,
+                    launch_observed=True,
+                    error="",
+                    duration_seconds=0.01,
+                )
+
+            with (
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.resolve_cli_proxy_bin",
+                    return_value=fake_cli,
+                ),
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.start_detached_process",
+                    side_effect=fake_start_detached_process,
+                ),
+                unittest.mock.patch(
+                    "wild_boar_proxy.runtime.login_session_pid_is_running",
+                    return_value=True,
+                ),
+            ):
+                payload = runtime.run_accounts_login_start(
+                    paths, "codex", mode="device"
+                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["device_code"], "NEW-CODE")
+        self.assertNotEqual(payload["session_id"], "codex-expired-session")
+        self.assertEqual(payload["next_action"], "wait_for_login")
 
     def test_classify_onboarded_backend_selection_accepts_existing_matching_backend_for_explicit_auth_ref(
         self,

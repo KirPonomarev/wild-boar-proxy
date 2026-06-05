@@ -4613,6 +4613,7 @@ def refresh_codex_login_session(
             changed = True
 
     current_state = str(session.get("state", ""))
+    terminal_states = {"completed", "cancelled", "expired"}
     if sandbox_login_session_expired(session) and current_state not in {
         "completed",
         "cancelled",
@@ -4623,7 +4624,7 @@ def refresh_codex_login_session(
             terminate_login_session_pid(pid)
         session["state"] = "expired"
         changed = True
-    elif auth_materialized and current_state not in {"completed", "cancelled"}:
+    elif auth_materialized and current_state not in terminal_states:
         if current_state != "auth_materialized":
             session["state"] = "auth_materialized"
             changed = True
@@ -13506,13 +13507,20 @@ def run_accounts_command(
 def build_codex_login_start_payload(
     session: dict[str, Any], *, changed_files: list[str], reused: bool
 ) -> dict[str, Any]:
-    return build_command_payload(
-        ok=True,
-        human_message=(
+    current_state = str(session.get("state", ""))
+    next_action = "accounts_onboard" if current_state == "auth_materialized" else "wait_for_login"
+    human_message = (
+        "Codex device login session has materialized auth and is ready for onboarding."
+        if current_state == "auth_materialized"
+        else (
             "Codex device login session is already waiting for operator completion."
             if reused
             else "Codex device login session started."
-        ),
+        )
+    )
+    return build_command_payload(
+        ok=True,
+        human_message=human_message,
         machine_error_code="OK",
         liveness="unknown",
         severity="recoverable",
@@ -13520,7 +13528,7 @@ def build_codex_login_start_payload(
         changed_files=changed_files,
         effect=EFFECT_MUTATE,
         extra={
-            "next_action": "wait_for_login",
+            "next_action": next_action,
             "provider": "codex",
             "mode": "device",
             "session_id": str(session.get("login_session_id", "")),
@@ -13569,7 +13577,10 @@ def run_accounts_login_start(
             if not login_session_id:
                 continue
             refreshed, changed_files = refresh_codex_login_session(paths, login_session_id)
-            if str(refreshed.get("state", "")) in {"waiting_for_user", "auth_materialized"}:
+            if str(refreshed.get("state", "")) in {
+                "waiting_for_user",
+                "auth_materialized",
+            } and not sandbox_login_session_expired(refreshed):
                 return build_codex_login_start_payload(
                     refreshed,
                     changed_files=changed_files,
