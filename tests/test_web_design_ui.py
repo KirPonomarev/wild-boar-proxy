@@ -1395,7 +1395,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("Мышление DeepSeek", section)
         self.assertIn("<option value=\"\" selected>по каталогу</option>", section)
         self.assertIn('id="quickStartExecutionModeSelect"', section)
-        self.assertIn('<option value="chatgpt_plus_api">ChatGPT + API</option>', section)
+        self.assertIn('<option value="chatgpt_plus_api" selected>ChatGPT + API</option>', section)
         self.assertIn('<option value="api_only">API</option>', section)
         self.assertIn('id="quickStartDeepSeekCoderCheckAction"', section)
         self.assertIn("Проверить DeepSeek-кодера", section)
@@ -1829,7 +1829,8 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn("role_map: codexCustomAgentAliasRoleMap()", js)
         self.assertIn("alias_role_map: aliasMetadata.role_map", js)
         self.assertIn("setupCodexCustomAgentAliases();", js)
-        self.assertNotIn("localStorage", js)
+        alias_js = js.split('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";', 1)[1].split("function codexLaunchSetText", 1)[0]
+        self.assertNotIn("localStorage", alias_markup + alias_js)
         self.assertIn(".quick-start-alias-card", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
 
@@ -2905,18 +2906,363 @@ sandbox.renderCodexCustomModels({
 });
 
 const payload = sandbox.quickStartLaunchPayloadFromSelects();
-if (payload.execution_mode !== "chatgpt_only") {
+if (payload.execution_mode !== "chatgpt_plus_api") {
   throw new Error(`stale v1 storage reset execution mode: ${JSON.stringify(payload)}`);
 }
 if (payload.chatgpt_model_id !== "gpt-5.5") {
   throw new Error(`Quick Start did not prefer gpt-5.5: ${JSON.stringify(payload)}`);
 }
-if (payload.api_model_id !== "") {
-  throw new Error(`ChatGPT-only payload must not carry API model: ${JSON.stringify(payload)}`);
+if (payload.api_model_id !== "wbp-deepseek-chat") {
+  throw new Error(`Quick Start did not prefer DeepSeek Chat: ${JSON.stringify(payload)}`);
+}
+if (payload.api_reasoning_option_id !== "provider_declared_disabled") {
+  throw new Error(`Quick Start did not preserve DeepSeek Chat reasoning: ${JSON.stringify(payload)}`);
 }
 const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
-if (persisted.execution_mode !== "chatgpt_only" || persisted.chatgpt_model_id !== "gpt-5.5") {
+if (
+  persisted.execution_mode !== "chatgpt_plus_api"
+  || persisted.chatgpt_model_id !== "gpt-5.5"
+  || persisted.api_model_id !== "wbp-deepseek-chat"
+  || persisted.api_reasoning_option_id !== "provider_declared_disabled"
+) {
   throw new Error(`fresh v2 selection was not persisted: ${JSON.stringify(persisted)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_restores_valid_persisted_mixed_selection(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "chatgpt_only";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v2", JSON.stringify({
+  execution_mode: "chatgpt_plus_api",
+  chatgpt_model_id: "gpt-5.5",
+  api_model_id: "wbp-deepseek-chat",
+  api_reasoning_option_id: "provider_declared_disabled"
+}));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("valid persisted selection restore test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.3-codex",
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+const payload = sandbox.quickStartLaunchPayloadFromSelects();
+if (payload.execution_mode !== "chatgpt_plus_api") {
+  throw new Error(`valid persisted selection did not restore mixed mode: ${JSON.stringify(payload)}`);
+}
+if (payload.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`valid persisted selection did not restore gpt-5.5: ${JSON.stringify(payload)}`);
+}
+if (payload.api_model_id !== "wbp-deepseek-chat") {
+  throw new Error(`valid persisted selection did not restore DeepSeek Chat: ${JSON.stringify(payload)}`);
+}
+if (payload.api_reasoning_option_id !== "provider_declared_disabled") {
+  throw new Error(`valid persisted selection did not restore reasoning: ${JSON.stringify(payload)}`);
+}
+if (node("codexCustomExecutionModeSelect").value !== "chatgpt_plus_api") {
+  throw new Error(`master mode did not mirror persisted Quick Start: ${node("codexCustomExecutionModeSelect").value}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_rejects_invalid_persisted_selection_without_silent_fallback(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "chatgpt_only";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const invalidSelection = {
+  execution_mode: "chatgpt_plus_api",
+  chatgpt_model_id: "gpt-5.5",
+  api_model_id: "not-server-issued-route",
+  api_reasoning_option_id: "provider_declared_disabled"
+};
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v2", JSON.stringify(invalidSelection));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("invalid persisted selection rejection test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.3-codex",
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
+if (persisted.api_model_id !== "not-server-issued-route") {
+  throw new Error(`invalid persisted selection was silently overwritten: ${JSON.stringify(persisted)}`);
+}
+if (node("quickStartRouteChip").lastElementChild.textContent !== "invalid selection") {
+  throw new Error(`invalid selection chip missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+const packet = JSON.parse(node("quickStartRouteResponse").textContent);
+if (packet.status !== "blocked" || packet.machine_error_code !== "QUICK_START_PERSISTED_SELECTION_INVALID") {
+  throw new Error(`invalid selection packet missing: ${node("quickStartRouteResponse").textContent}`);
+}
+if (packet.silent_fallback_used !== false || packet.fallback_used !== false) {
+  throw new Error(`invalid selection must not claim fallback: ${node("quickStartRouteResponse").textContent}`);
 }
 """
         result = subprocess.run(
@@ -3755,6 +4101,7 @@ if (sandbox.accountTableCheckLabel("") !== "—") {
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
 
         self.assertIn('id="accountDetailOverlay"', html)
+        account_detail_markup = self._overlay_html(html, "accountDetailOverlay", "actionLedgerOverlay")
         self.assertIn('id="accountDetailDrawer"', html)
         self.assertIn('id="accountDetailActions"', html)
         self.assertIn("currentAccountsSnapshot", js)
@@ -3779,8 +4126,8 @@ if (sandbox.accountTableCheckLabel("") !== "—") {
         self.assertIn('id="accountDetailLastCommandChip"', html)
         self.assertIn("Payload только ui_action + account_id", html)
         self.assertIn("Command result не является состоянием аккаунта до refresh", html)
-        self.assertNotIn("localStorage", js)
-        self.assertNotIn("sessionStorage", js)
+        self.assertNotIn("localStorage", account_detail_markup)
+        self.assertNotIn("sessionStorage", account_detail_markup)
         self.assertNotIn('type="file"', html)
         self.assertNotIn("readAsText", js)
         self.assertIn(".account-detail-drawer", css)
@@ -4319,6 +4666,7 @@ if (!rolePill.title.includes("admitted metadata")) {
             'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
         )
+        diagnostics_markup = html.split('id="diagnosticsScreen"', 1)[1].split('id="settingsScreen"', 1)[0]
         self.assertIn("renderDiagnosticsAction", js)
         self.assertIn("artifactReference(data.bundle_path)", js)
         self.assertNotIn("Показать журнал", html)
@@ -4326,12 +4674,11 @@ if (!rolePill.title.includes("admitted metadata")) {
         self.assertNotIn("В резерв", html)
         self.assertNotIn('type="file"', html)
         self.assertNotIn("readAsText", js)
-        self.assertNotIn("localStorage", js)
+        self.assertNotIn("localStorage", diagnostics_markup)
         self.assertNotIn("diagnostics export --json", html + js)
         self.assertNotIn("runtime healthy", (html + js).lower())
         self.assertNotIn("pilot", html + js)
         self.assertNotIn("scale proof", html + js)
-        diagnostics_markup = html.split('id="diagnosticsScreen"', 1)[1].split('id="settingsScreen"', 1)[0]
         self.assertEqual(diagnostics_markup.count('data-ui-action="export_diagnostics"'), 0)
         self.assertNotIn("bounded history view", diagnostics_markup)
         self.assertNotIn("history unavailable", diagnostics_markup)
@@ -4659,7 +5006,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertNotIn("showDirectoryPicker", settings_markup + js)
         self.assertNotIn("webkitdirectory", settings_markup + js)
         self.assertNotIn("readAsText", settings_markup + js)
-        self.assertNotIn("localStorage", settings_markup + js)
+        self.assertNotIn("localStorage", settings_markup)
         self.assertNotIn("policy_stage", html + js)
         self.assertNotIn("rollout stage", html + js)
         self.assertNotIn("JSON.stringify({ command_id", js)

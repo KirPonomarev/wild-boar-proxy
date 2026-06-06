@@ -95,8 +95,10 @@ const ACCOUNT_VISUAL_CLASS = {
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id", "session_id"];
 const CODEX_ROUTE_SELECTION_STORAGE_KEY = "wbp.codex.route-selection.v2";
-const QUICK_START_DEFAULT_EXECUTION_MODE = "chatgpt_only";
+const QUICK_START_DEFAULT_EXECUTION_MODE = "chatgpt_plus_api";
 const QUICK_START_PREFERRED_CHATGPT_MODEL_ID = "gpt-5.5";
+const QUICK_START_PREFERRED_API_MODEL_ID = "wbp-deepseek-chat";
+const QUICK_START_PREFERRED_API_REASONING_OPTION_ID = "provider_declared_disabled";
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
 const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
 const UI_READONLY_LANE_BLOCKERS = [
@@ -2653,13 +2655,31 @@ function codexRouteSelectionFromUi(preferQuickStart = codexRouteSelectionPrefers
   };
 }
 
+function codexExecutionModeIsKnown(mode) {
+  return ["chatgpt_only", "chatgpt_plus_api", "api_only"].includes(mode);
+}
+
+function codexExecutionModeNeedsChatGPT(mode) {
+  return mode === "chatgpt_only" || mode === "chatgpt_plus_api";
+}
+
+function codexExecutionModeNeedsApi(mode) {
+  return mode === "chatgpt_plus_api" || mode === "api_only";
+}
+
 function quickStartSelectionWithDefaults(selection) {
   const next = { ...(selection || {}) };
   if (!next.execution_mode) {
     next.execution_mode = QUICK_START_DEFAULT_EXECUTION_MODE;
   }
-  if (next.execution_mode !== "api_only" && !next.chatgpt_model_id) {
+  if (codexExecutionModeNeedsChatGPT(next.execution_mode) && !next.chatgpt_model_id) {
     next.chatgpt_model_id = QUICK_START_PREFERRED_CHATGPT_MODEL_ID;
+  }
+  if (codexExecutionModeNeedsApi(next.execution_mode) && !next.api_model_id) {
+    next.api_model_id = QUICK_START_PREFERRED_API_MODEL_ID;
+  }
+  if (codexExecutionModeNeedsApi(next.execution_mode) && !next.api_reasoning_option_id) {
+    next.api_reasoning_option_id = QUICK_START_PREFERRED_API_REASONING_OPTION_ID;
   }
   return next;
 }
@@ -2703,6 +2723,53 @@ function codexSelectCanUseValue(select, value) {
   return options.some((option) => option.value === value && !option.disabled);
 }
 
+function codexSelectPairCanUseValue(masterId, quickStartId, value) {
+  return codexSelectCanUseValue(document.getElementById(masterId), value)
+    && codexSelectCanUseValue(document.getElementById(quickStartId), value);
+}
+
+function codexRouteSelectionCanApplyFully(selection, options = {}) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return false;
+  }
+  const mode = selection.execution_mode || "";
+  if (!codexExecutionModeIsKnown(mode)) {
+    return false;
+  }
+  if (!codexSelectPairCanUseValue("codexCustomExecutionModeSelect", "quickStartExecutionModeSelect", mode)) {
+    return false;
+  }
+  if (
+    codexExecutionModeNeedsChatGPT(mode)
+    && !codexSelectPairCanUseValue("codexCustomModelSelect", "quickStartChatModelSelect", selection.chatgpt_model_id)
+  ) {
+    return false;
+  }
+  if (
+    codexExecutionModeNeedsApi(mode)
+    && !codexSelectPairCanUseValue("codexCustomApiModelSelect", "quickStartApiModelSelect", selection.api_model_id)
+  ) {
+    return false;
+  }
+  if (
+    options.reasoning !== false
+    && codexExecutionModeNeedsApi(mode)
+    && !codexSelectPairCanUseValue(
+      "codexCustomApiReasoningOptionSelect",
+      "quickStartApiReasoningOptionSelect",
+      selection.api_reasoning_option_id
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function codexRenderedRouteSelectionFromUi(preferQuickStart = codexRouteSelectionPrefersQuickStart()) {
+  const selection = codexRouteSelectionFromUi(preferQuickStart);
+  return codexRouteSelectionCanApplyFully(selection, { reasoning: false }) ? selection : null;
+}
+
 function setCodexSelectPairValue(masterId, quickStartId, value) {
   if (!value) {
     return false;
@@ -2716,6 +2783,32 @@ function setCodexSelectPairValue(masterId, quickStartId, value) {
     }
   }
   return applied;
+}
+
+function renderQuickStartInvalidPersistedSelection(selection, machineErrorCode = "QUICK_START_PERSISTED_SELECTION_INVALID") {
+  if (!codexRouteSelectionPrefersQuickStart()) {
+    return;
+  }
+  setQuickStartChip("quickStartRouteChip", "amber", "invalid selection");
+  setQuickStartRouteResponse({
+    status: "blocked",
+    machine_error_code: machineErrorCode,
+    final_status: "QUICK_START_PERSISTED_SELECTION_REJECTED",
+    execution_mode: selection?.execution_mode || "",
+    chatgpt_model_id: selection?.chatgpt_model_id || "",
+    api_model_id: selection?.api_model_id || "",
+    api_reasoning_option_id: selection?.api_reasoning_option_id || "",
+    selected_model: selection?.chatgpt_model_id || selection?.api_model_id || "",
+    launch_admission: "blocked",
+    launch_admission_summary: "Persisted Quick Start selection is not bounded by the current server-issued catalog.",
+    dry_server_truth_only: true,
+    live_call_attempted: false,
+    provider_called: false,
+    fallback_used: false,
+    silent_fallback_used: false,
+    runtime_readiness_claimed: false,
+    next_action: "choose_server_issued_quick_start_selection"
+  });
 }
 
 function applyCodexRouteSelection(selection, options = {}) {
@@ -3286,11 +3379,13 @@ function renderCodexCustomModels(registry, compat) {
   const chatSelect = document.getElementById("codexCustomModelSelect");
   const apiSelect = document.getElementById("codexCustomApiModelSelect");
   const preferQuickStart = codexRouteSelectionPrefersQuickStart();
+  const storedSelection = readStoredCodexRouteSelection();
+  const visibleSelection = codexRenderedRouteSelectionFromUi(preferQuickStart);
   const preservedSelection = preferQuickStart
     ? quickStartSelectionWithDefaults(
-        readStoredCodexRouteSelection() || codexRouteSelectionFromUi(true)
+        storedSelection || visibleSelection
       )
-    : (readStoredCodexRouteSelection() || codexRouteSelectionFromUi(false));
+    : (storedSelection || visibleSelection || codexRouteSelectionFromUi(false));
   const chatEntries = codexCustomAvailableModelEntries(registry);
   const apiEntries = codexCustomApiModelEntries(registry);
   const seedEntries = codexCustomSeedEntries(registry);
@@ -3345,11 +3440,27 @@ function renderCodexCustomModels(registry, compat) {
   }
   mirrorSelectOptions(chatSelect, "quickStartChatModelSelect");
   mirrorSelectOptions(apiSelect, "quickStartApiModelSelect");
-  const restoredSelection = applyCodexRouteSelection(preservedSelection, { reasoning: false });
+  const persistedSelectionInvalid = Boolean(
+    preferQuickStart
+    && storedSelection
+    && !codexRouteSelectionCanApplyFully(preservedSelection, { reasoning: false })
+  );
+  const restoredSelection = persistedSelectionInvalid
+    ? false
+    : applyCodexRouteSelection(preservedSelection, { reasoning: false });
   renderApiReasoningOptionSelects();
-  applyCodexRouteSelection(preservedSelection);
-  if (restoredSelection) {
+  const persistedReasoningInvalid = Boolean(
+    preferQuickStart
+    && storedSelection
+    && !codexRouteSelectionCanApplyFully(preservedSelection)
+  );
+  if (!persistedSelectionInvalid && !persistedReasoningInvalid) {
+    applyCodexRouteSelection(preservedSelection);
+  }
+  if (restoredSelection && !persistedReasoningInvalid) {
     saveCodexRouteSelection(codexRouteSelectionFromUi(preferQuickStart));
+  } else if (persistedSelectionInvalid || persistedReasoningInvalid) {
+    renderQuickStartInvalidPersistedSelection(preservedSelection);
   } else {
     syncCodexRouteSelects("codexCustomExecutionModeSelect");
   }
@@ -3388,11 +3499,13 @@ function renderCodexCustomModels(registry, compat) {
   codexCustomModelsSetText("codexCustomApiModelCount", String(apiEntries.length));
   codexCustomModelsSetText("codexCustomSeedModelCount", String(seedEntries.length));
   codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
-  setQuickStartChip(
-    "quickStartRouteChip",
-    chatEntries.length || apiEntries.length ? "neutral" : "amber",
-    chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
-  );
+  if (!persistedSelectionInvalid && !persistedReasoningInvalid) {
+    setQuickStartChip(
+      "quickStartRouteChip",
+      chatEntries.length || apiEntries.length ? "neutral" : "amber",
+      chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
+    );
+  }
   if (
     currentScreen() === "quick-start"
     && currentAccountsSnapshot
