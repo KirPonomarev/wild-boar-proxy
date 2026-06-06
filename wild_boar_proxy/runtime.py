@@ -2413,6 +2413,32 @@ def build_native_auth_recovery_hint(
     )
 
 
+def stable_auth_gap_recovery_eligible(
+    *,
+    machine_error_code: str,
+    auth_pool_hygiene: dict[str, Any],
+) -> bool:
+    if machine_error_code != "AUTH_UNAVAILABLE":
+        return False
+    try:
+        launch_capable_backend_count = int(
+            auth_pool_hygiene.get("launch_capable_backend_count", 0) or 0
+        )
+    except (TypeError, ValueError):
+        launch_capable_backend_count = 0
+    selected_backend_ids_observed = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_observed")
+    )
+    selected_backend_ids_runtime_loaded = normalize_selected_backend_ids(
+        auth_pool_hygiene.get("selected_backend_ids_runtime_loaded")
+    )
+    return (
+        launch_capable_backend_count > 0
+        and bool(selected_backend_ids_observed)
+        and not selected_backend_ids_runtime_loaded
+    )
+
+
 def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
     eligibility_class, reasons = classify_backend_runtime_eligibility(backend)
     if eligibility_class == "live_capable":
@@ -9101,6 +9127,7 @@ def run_healthcheck(
             effectful_claim_allowed=False,
         )
     recovery_attempt: StableRuntimeLaunchAttempt | None = None
+    recovery_entry_lane = ""
     if allow_recovery and startup_runtime_followup_safe:
         reported_effective_mode = reconcile_effective_mode_for_reporting(
             effective_mode, listener_ok=listener_ok
@@ -9113,6 +9140,11 @@ def run_healthcheck(
                 paths, registry, policy_drift
             )
             recovery_attempt = run_stable_runtime_launcher_attempt(paths, selection)
+            recovery_entry_lane = (
+                "managed_preflight_failure"
+                if managed_preflight_failure_candidate
+                else "stable_service_disabled"
+            )
             emit_subprocess_output(
                 stdout=recovery_attempt.stdout, stderr=recovery_attempt.stderr
             )
@@ -9328,6 +9360,67 @@ def run_healthcheck(
     if (
         not ok
         and effect == EFFECT_REPAIR
+        and allow_recovery
+        and startup_runtime_followup_safe
+        and recovery_attempt is None
+        and reported_effective_mode == "stable"
+        and stable_auth_gap_recovery_eligible(
+            machine_error_code=machine_error_code,
+            auth_pool_hygiene=auth_pool_hygiene,
+        )
+    ):
+        registry = read_json(paths.registry_file)
+        policy_drift = get_stable_policy_drift(paths, registry)
+        selection = get_stable_runtime_consumer_selection_context(
+            paths, registry, policy_drift
+        )
+        recovery_attempt = run_stable_runtime_launcher_attempt(paths, selection)
+        recovery_entry_lane = "explicit_stable_recovery_lane"
+        emit_subprocess_output(
+            stdout=recovery_attempt.stdout, stderr=recovery_attempt.stderr
+        )
+        if recovery_attempt.launcher_exit_code == 0:
+            reproof_payload = run_healthcheck(
+                paths,
+                model=model,
+                allow_recovery=False,
+                allow_last_known_good_proxy_write=False,
+                allow_current_proxy_auto_adoption=False,
+                allow_stable_fallback_write=False,
+                allow_stale_pid_cleanup=False,
+            )
+            state = read_json(paths.state_file, required=False)
+            attestation = reproof_payload["attestation"]
+            listener_ok = bool(attestation["listener_ok"])
+            models_ok = bool(attestation["models_ok"])
+            responses_ok = bool(attestation["responses_ok"])
+            effective_mode_match = bool(attestation["effective_mode_match"])
+            base_url_match = bool(attestation["base_url_match"])
+            model_match = bool(attestation["model_match"])
+            proxy_url_match = bool(attestation["proxy_url_match"])
+            error_detail = str(reproof_payload.get("last_error", ""))
+            effective_mode = str(reproof_payload["effective_mode"])
+            reported_effective_mode = effective_mode
+            _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+            host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+            configured_base_url = read_toml_string(paths.config_toml, "base_url")
+            configured_proxy_url = get_configured_proxy_url(
+                paths, reported_effective_mode
+            )
+            current_proxy_truth_url = get_reported_current_proxy_url(
+                paths, state, reported_effective_mode
+            )
+            liveness = str(reproof_payload["liveness"])
+            severity = str(reproof_payload["severity"])
+            operator_action = str(reproof_payload["operator_action"])
+            machine_error_code = str(reproof_payload["machine_error_code"])
+            human_message = str(reproof_payload["human_message"])
+            auth_pool_hygiene = dict(reproof_payload.get("auth_pool_hygiene", {}))
+            ok = reproof_payload["status"] == "ok"
+
+    if (
+        not ok
+        and effect == EFFECT_REPAIR
         and startup_runtime_followup_safe
         and reported_effective_mode == "stable"
         and machine_error_code in PROXY_PATH_FAILURE_CODES
@@ -9522,11 +9615,12 @@ def run_healthcheck(
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
-        recovery_entry_lane = (
-            "managed_preflight_failure"
-            if managed_preflight_failure_candidate
-            else "stable_service_disabled"
-        )
+        if not recovery_entry_lane:
+            recovery_entry_lane = (
+                "managed_preflight_failure"
+                if managed_preflight_failure_candidate
+                else "stable_service_disabled"
+            )
         recovery_outcome = "recovery_failed_before_stable_healthy"
         re_enable_method = "bounded_healthcheck_owner_retry"
         recovery_selected_kind = (
@@ -9609,7 +9703,11 @@ def run_healthcheck(
             fallback_reason = (
                 "launcher_exit_nonzero"
                 if recovery_attempt.launcher_exit_code != 0
-                else "stable_listener_unreachable_after_recovery"
+                else (
+                    "stable_listener_unreachable_after_recovery"
+                    if not listener_ok
+                    else "stable_live_attestation_failed_after_recovery"
+                )
             )
             confirmation_basis = "live_runtime_observation_not_confirmed"
         recovery_result = build_deterministic_stable_recovery_result(

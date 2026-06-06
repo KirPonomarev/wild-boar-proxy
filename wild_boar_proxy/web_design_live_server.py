@@ -556,6 +556,69 @@ def _mark_operator_status_timeout_fallback(packet: dict[str, Any]) -> dict[str, 
     return packet
 
 
+def _api_catalog_available(api_snapshot: dict[str, Any] | None) -> bool:
+    if not isinstance(api_snapshot, dict):
+        return False
+    routes = api_snapshot.get("routes")
+    if isinstance(routes, list) and any(isinstance(route, dict) for route in routes):
+        return True
+    summary = api_snapshot.get("summary")
+    if isinstance(summary, dict):
+        for key in ("route_count", "routes_count", "visible_count", "configured_count"):
+            try:
+                if int(summary.get(key) or 0) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def _mark_custom_status_operator_timeout_fallback(
+    packet: dict[str, Any],
+    *,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(packet, dict):
+        return packet
+    packet["status"] = "degraded"
+    packet["machine_error_code"] = CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE
+    packet["operator_surface_ready"] = False
+    packet["operator_status_timeout"] = True
+    packet["api_lane_catalog_available"] = _api_catalog_available(api_snapshot)
+    packet["native_lane_catalog_incomplete"] = True
+    packet["fallback_used"] = True
+    packet["model_auto_selected"] = False
+    packet["availability_reason"] = "operator_status_timeout_api_catalog_only"
+    packet["launch_claim_scope"] = "readonly_catalog_fallback_no_runtime_success_claim"
+    packet["next_action"] = "retry_operator_status_or_use_api_catalog_lane"
+    return packet
+
+
+def _mark_api_action_gate_operator_timeout_fallback(
+    packet: dict[str, Any],
+    *,
+    api_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(packet, dict):
+        return packet
+    api_catalog_available = _api_catalog_available(api_snapshot)
+    packet["operator_status_timeout"] = True
+    packet["operator_status_machine_error_code"] = CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE
+    packet["native_lane_catalog_incomplete"] = True
+    packet["api_lane_catalog_available"] = api_catalog_available
+    packet["fallback_used"] = True
+    packet["model_auto_selected"] = False
+    packet["selector_runtime_readiness_claimed"] = False
+    summary = packet.get("summary_packet")
+    if isinstance(summary, dict):
+        summary["operator_status_timeout"] = True
+        summary["operator_status_machine_error_code"] = CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE
+        summary["api_lane_catalog_available"] = api_catalog_available
+        summary["native_lane_catalog_incomplete"] = True
+        summary["selector_runtime_readiness_claimed"] = False
+    return packet
+
+
 def _custom_model_selector_timeout_fallback_packet(
     timeout_packet: dict[str, Any],
     *,
@@ -9675,7 +9738,19 @@ def build_handler(
         def _handle_get_api_codex_custom_status(self, request_path: str) -> None:
             parsed = urlparse(request_path)
             def build_custom_status_snapshot() -> dict[str, Any]:
-                return build_custom_status_packet(operator_surface_session.status_payload())
+                api_snapshot = build_api_connections_readonly_snapshot(
+                    api_connections_readonly_runner
+                )
+                operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
+                packet = build_custom_status_packet(operator_status)
+                if operator_status_timeout:
+                    packet = _mark_custom_status_operator_timeout_fallback(
+                        packet,
+                        api_snapshot=api_snapshot,
+                    )
+                return packet
 
             self._send_json(
                 _run_custom_codex_readonly_snapshot(
@@ -9756,18 +9831,26 @@ def build_handler(
                 api_snapshot = build_api_connections_readonly_snapshot(
                     api_connections_readonly_runner
                 )
-                operator_status = operator_surface_session.status_payload()
+                operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                    operator_surface_session
+                )
                 availability_lattice_packet = _build_live_native_availability_lattice_packet(
                     operator_status,
                     api_snapshot=api_snapshot,
                 )
-                return build_custom_api_action_gate_packet(
+                packet = build_custom_api_action_gate_packet(
                     {},
                     operator_status,
                     api_snapshot=api_snapshot,
                     availability_lattice_packet=availability_lattice_packet,
                     owner_authorized=codex_custom_live_prompt_authorized,
                 )
+                if operator_status_timeout:
+                    packet = _mark_api_action_gate_operator_timeout_fallback(
+                        packet,
+                        api_snapshot=api_snapshot,
+                    )
+                return packet
 
             self._send_json(
                 _run_custom_codex_readonly_snapshot(
@@ -10870,20 +10953,26 @@ def build_handler(
         def _handle_post_api_codex_custom_api_action_gate(self, actual_path: str) -> None:
             payload = self._read_json_body()
             api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
-            operator_status = operator_surface_session.status_payload()
+            operator_status, operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
             availability_lattice_packet = _build_live_native_availability_lattice_packet(
                 operator_status,
                 api_snapshot=api_snapshot,
             )
-            self._send_json(
-                build_custom_api_action_gate_packet(
-                    payload,
-                    operator_status,
-                    api_snapshot=api_snapshot,
-                    availability_lattice_packet=availability_lattice_packet,
-                    owner_authorized=codex_custom_live_prompt_authorized,
-                )
+            packet = build_custom_api_action_gate_packet(
+                payload,
+                operator_status,
+                api_snapshot=api_snapshot,
+                availability_lattice_packet=availability_lattice_packet,
+                owner_authorized=codex_custom_live_prompt_authorized,
             )
+            if operator_status_timeout:
+                packet = _mark_api_action_gate_operator_timeout_fallback(
+                    packet,
+                    api_snapshot=api_snapshot,
+                )
+            self._send_json(packet)
             return
 
         def _handle_post_api_codex_custom_execution_mode_dry_run(self, actual_path: str) -> None:

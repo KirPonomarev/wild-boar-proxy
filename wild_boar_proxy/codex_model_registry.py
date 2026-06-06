@@ -76,6 +76,7 @@ CANONICAL_INTERNAL_MODEL_IDS = (
     "gpt-5.4-mini",
     "gpt-5.5",
 )
+PREFERRED_CHATGPT_SELECTOR_DEFAULT_MODEL_ID = "gpt-5.5"
 CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS = {
     "api_key",
     "apikey",
@@ -283,6 +284,15 @@ def _reported_configured_model(operator_status: dict[str, Any] | None) -> str:
         if isinstance(configured, str) and configured:
             return configured
     return DEFAULT_MODEL
+
+
+def _operator_configured_model(operator_status: dict[str, Any] | None) -> str:
+    status = (operator_status or {}).get("status")
+    if isinstance(status, dict):
+        configured = status.get("configured_model")
+        if isinstance(configured, str) and configured:
+            return configured
+    return ""
 
 
 def _model_source_hint(model_id: str, *, lane: str = "") -> str:
@@ -1252,6 +1262,70 @@ def _default_selector_model_id(rows: list[dict[str, Any]], preferred_model_id: s
     return ""
 
 
+def _selector_default_resolution(
+    rows: list[dict[str, Any]],
+    *,
+    preferred_model_id: str = "",
+    fallback_model_id: str = "",
+    fallback_source: str = "configured",
+) -> dict[str, Any]:
+    selectable_ids = [
+        str(row.get("model_id") or "")
+        for row in rows
+        if row.get("selection_enabled") is True and str(row.get("model_id") or "")
+    ]
+    visible_ids = [
+        str(row.get("model_id") or "") for row in rows if str(row.get("model_id") or "")
+    ]
+    if preferred_model_id and preferred_model_id in selectable_ids:
+        return {
+            "model_id": preferred_model_id,
+            "default_resolution_status": "ok",
+            "default_resolution_reason": "preferred_selectable_default_available",
+            "preferred_default_available": True,
+            "default_model_fallback_used": False,
+        }
+    if fallback_model_id and fallback_model_id in selectable_ids:
+        return {
+            "model_id": fallback_model_id,
+            "default_resolution_status": "degraded" if preferred_model_id else "ok",
+            "default_resolution_reason": (
+                f"preferred_selectable_default_unavailable_using_{fallback_source}_fallback"
+                if preferred_model_id
+                else f"{fallback_source}_selectable_default_available"
+            ),
+            "preferred_default_available": False if preferred_model_id else None,
+            "default_model_fallback_used": bool(preferred_model_id),
+        }
+    if selectable_ids:
+        return {
+            "model_id": selectable_ids[0],
+            "default_resolution_status": "degraded" if preferred_model_id else "ok",
+            "default_resolution_reason": (
+                "preferred_selectable_default_unavailable_using_first_selectable"
+                if preferred_model_id
+                else "first_selectable_default_available"
+            ),
+            "preferred_default_available": False if preferred_model_id else None,
+            "default_model_fallback_used": bool(preferred_model_id),
+        }
+    if visible_ids:
+        return {
+            "model_id": visible_ids[0],
+            "default_resolution_status": "blocked",
+            "default_resolution_reason": "no_selectable_model_available_using_visible_reference",
+            "preferred_default_available": False if preferred_model_id else None,
+            "default_model_fallback_used": bool(preferred_model_id),
+        }
+    return {
+        "model_id": "",
+        "default_resolution_status": "blocked",
+        "default_resolution_reason": "no_visible_models_available",
+        "preferred_default_available": False if preferred_model_id else None,
+        "default_model_fallback_used": False,
+    }
+
+
 def _selector_entry_from_row(
     row: dict[str, Any],
     *,
@@ -1362,18 +1436,32 @@ def build_dual_lane_model_selection_ui_packet(
         for row in current_api_rows
     ]
     seed_entries = [_seed_reference_entry_from_row(row) for row in seed_rows]
-    reported_configured_model = _reported_configured_model(operator_status)
-    chatgpt_default = _default_selector_model_id(
+    operator_configured_model = _operator_configured_model(operator_status)
+    fallback_default_model = operator_configured_model or recommended_default_model
+    fallback_default_source = "operator_configured" if operator_configured_model else "recommended_default"
+    chatgpt_default_resolution = _selector_default_resolution(
         chatgpt_entries,
-        reported_configured_model or recommended_default_model,
+        preferred_model_id=PREFERRED_CHATGPT_SELECTOR_DEFAULT_MODEL_ID,
+        fallback_model_id=fallback_default_model,
+        fallback_source=fallback_default_source,
     )
+    chatgpt_default = str(chatgpt_default_resolution.get("model_id") or "")
     api_default = _default_selector_model_id(api_entries)
+    packet_status = "ok" if chatgpt_entries or api_entries or seed_entries else "blocked"
+    machine_error_code = "OK" if packet_status == "ok" else "CUSTOM_SELECTOR_EMPTY"
+    if (
+        packet_status == "ok"
+        and chatgpt_entries
+        and chatgpt_default_resolution.get("default_resolution_status") == "degraded"
+    ):
+        packet_status = "degraded"
+        machine_error_code = "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE"
     return {
         "schema_version": 1,
         "packet_kind": "dual_lane_model_selection_ui",
         "captured_at_utc": utc_now(),
-        "status": "ok" if chatgpt_entries or api_entries or seed_entries else "blocked",
-        "machine_error_code": "OK" if chatgpt_entries or api_entries or seed_entries else "CUSTOM_SELECTOR_EMPTY",
+        "status": packet_status,
+        "machine_error_code": machine_error_code,
         "selection_truth_scope": "display_and_intent_only",
         "selection_intent_only": True,
         "selector_runtime_readiness_claimed": False,
@@ -1401,6 +1489,22 @@ def build_dual_lane_model_selection_ui_packet(
                 1 for entry in chatgpt_entries if entry.get("selection_enabled") is True
             ),
             "default_model_id": chatgpt_default,
+            "preferred_default_model_id": PREFERRED_CHATGPT_SELECTOR_DEFAULT_MODEL_ID,
+            "reported_configured_model_id": operator_configured_model,
+            "fallback_default_model_id": fallback_default_model,
+            "fallback_default_source": fallback_default_source,
+            "default_resolution_status": chatgpt_default_resolution.get(
+                "default_resolution_status"
+            ),
+            "default_resolution_reason": chatgpt_default_resolution.get(
+                "default_resolution_reason"
+            ),
+            "preferred_default_available": chatgpt_default_resolution.get(
+                "preferred_default_available"
+            ),
+            "default_model_fallback_used": chatgpt_default_resolution.get(
+                "default_model_fallback_used"
+            ),
             "selection_note": "used by the current execution path in this contour",
         },
         "api_lane": {

@@ -289,6 +289,52 @@ class CodexModelRegistryTests(unittest.TestCase):
 
         self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
 
+    def test_selector_prefers_canonical_chatgpt_default_over_older_configured_model(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.3-codex",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.5", "wbp-deepseek-v4-pro-max"],
+            },
+        }
+
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+
+        self.assertEqual(selector["status"], "ok")
+        self.assertEqual(selector["machine_error_code"], "OK")
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
+        self.assertEqual(
+            selector["chatgpt_lane"]["default_resolution_reason"],
+            "preferred_selectable_default_available",
+        )
+        self.assertTrue(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertFalse(selector["chatgpt_lane"]["default_model_fallback_used"])
+
+    def test_selector_marks_chatgpt_default_degraded_when_preferred_model_absent(self) -> None:
+        selector = build_dual_lane_model_selection_ui_packet(
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+        )
+
+        self.assertEqual(selector["status"], "degraded")
+        self.assertEqual(selector["machine_error_code"], "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE")
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.3-codex")
+        self.assertEqual(
+            selector["chatgpt_lane"]["default_resolution_reason"],
+            "preferred_selectable_default_unavailable_using_operator_configured_fallback",
+        )
+        self.assertFalse(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertTrue(selector["chatgpt_lane"]["default_model_fallback_used"])
+
     def test_api_compat_only_declares_openai_shape_without_live_calls(self) -> None:
         packet = build_custom_api_compat_packet(operator_status(claim_gate="passed"))
 

@@ -12327,6 +12327,75 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
         )
 
+    def test_custom_native_launch_preflight_chatgpt_only_does_not_require_api_bridge(self) -> None:
+        with (
+            mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+        ):
+            packet = live_server._custom_native_launch_preflight_packet(
+                {
+                    "execution_mode": "chatgpt_only",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": "",
+                    "api_reasoning_option_id": "",
+                },
+                owner_authorized=True,
+                operator_status={
+                    "status": {"configured_model": "gpt-5.5"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
+                },
+                api_snapshot={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [],
+                },
+                external_routes_packet=routes_list_packet("wbp-deepseek-v4-pro-max"),
+                native_bridge_lease=None,
+                last_launch_packet=None,
+                runtime_health_result={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "human_message": "Healthcheck passed.",
+                    "next_action": "none",
+                    "packet": healthcheck_ok_packet(),
+                },
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["execution_mode"], "chatgpt_only")
+        self.assertEqual(packet["selected_model"], "gpt-5.5")
+        self.assertEqual(packet["launch_model_id"], "gpt-5.5")
+        self.assertEqual(packet["route_model_id"], "gpt-5.5")
+        self.assertEqual(packet["api_model_id"], "")
+        self.assertEqual(packet["api_reasoning_option_id"], "")
+        self.assertFalse(packet["route_selected"])
+        self.assertFalse(packet["bridge_required"])
+        self.assertFalse(packet["bridge_alive"])
+        self.assertEqual(packet["bridge_status"], "not_required")
+        self.assertEqual(packet["next_action"], "launch_custom_codex")
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["selection_packet"]["api_line_used_as_executor"])
+        self.assertFalse(packet["selection_packet"]["chatgpt_only_calls_api"])
+        self.assertEqual(
+            packet["selection_packet"]["coding_agent_model_slot"]["status"],
+            "not_bound_for_mode",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
+        )
+
     def test_custom_native_launch_preflight_routes_chatgpt_plus_api_bridge_from_coding_slot(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
         with (
@@ -14558,7 +14627,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 thread.join(timeout=2)
                 server.server_close()
 
-        self.assertEqual(selector["status"], "ok")
+        self.assertEqual(selector["status"], "degraded")
+        self.assertEqual(selector["machine_error_code"], "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE")
         self.assertTrue(selector["server_issued"])
         self.assertFalse(selector["flat_model_truth_presented"])
         self.assertFalse(selector["selector_runtime_readiness_claimed"])
@@ -14577,6 +14647,13 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         )
         self.assertTrue(
             all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
+        )
+        self.assertEqual(selector["chatgpt_lane"]["preferred_default_model_id"], "gpt-5.5")
+        self.assertFalse(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertTrue(selector["chatgpt_lane"]["default_model_fallback_used"])
+        self.assertEqual(
+            selector["chatgpt_lane"]["default_resolution_reason"],
+            "preferred_selectable_default_unavailable_using_recommended_default_fallback",
         )
 
     def test_codex_custom_dual_lane_selector_timeout_returns_degraded_api_lane_fallback(self) -> None:
@@ -14623,12 +14700,24 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 time.sleep(0.2)
                 return super().status_payload()
 
+            def probe_models(self) -> dict[str, object]:
+                return {
+                    "ok": True,
+                    "captured_at_utc": "2026-05-23T00:00:00Z",
+                    "model_ids": ["gpt-5.4", "wbp-deepseek-v3"],
+                    "server_issued": True,
+                }
+
         with mock.patch.object(
             live_server,
             "OperatorSurfaceSession",
             return_value=SlowOperatorSurfaceSession(),
         ):
-            with mock.patch.object(live_server, "CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS", 0.01):
+            with mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS",
+                0.01,
+            ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
                     build_handler(runner=MappingRunner(live_payloads())),
@@ -14643,12 +14732,18 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                     thread.join(timeout=2)
                     server.server_close()
 
-        self.assertEqual(custom_status["status"], "integration_failure")
-        self.assertEqual(custom_status["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
-        self.assertEqual(custom_status["endpoint"], "/api/codex/custom/status")
-        self.assertEqual(custom_status["timeout_scope"], "custom_status_readonly_snapshot")
-        self.assertFalse(custom_status["fallback_used"])
+        self.assertEqual(custom_status["status"], "degraded")
+        self.assertEqual(
+            custom_status["machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+        self.assertTrue(custom_status["operator_status_timeout"])
+        self.assertTrue(custom_status["api_lane_catalog_available"])
+        self.assertTrue(custom_status["native_lane_catalog_incomplete"])
+        self.assertTrue(custom_status["fallback_used"])
         self.assertFalse(custom_status["model_auto_selected"])
+        self.assertFalse(custom_status["operator_surface_ready"])
+        self.assertNotEqual(custom_status["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
 
     def test_codex_custom_dual_lane_selector_keeps_readonly_catalog_free_of_live_native_probe(self) -> None:
         lattice = build_catalog_availability_lattice_packet(
@@ -15859,6 +15954,188 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertFalse(boundary["original_codex_touched"])
         self.assertFalse(boundary["raw_secret_recorded"])
         self.assertFalse(boundary["secret_value_recorded"])
+        self.assertNotIn(
+            ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+            runner.calls,
+        )
+
+    def test_codex_custom_api_action_gate_get_uses_bounded_operator_status(self) -> None:
+        class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+            def probe_models(self) -> dict[str, object]:
+                return {
+                    "ok": True,
+                    "captured_at_utc": "2026-05-23T00:00:00Z",
+                    "model_ids": ["gpt-5.4", "wbp-deepseek-v3"],
+                    "server_issued": True,
+                }
+
+        runner = MappingRunner(live_payloads())
+        with (
+            mock.patch.object(
+                live_server,
+                "OperatorSurfaceSession",
+                return_value=SlowOperatorSurfaceSession(),
+            ),
+            mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS",
+                0.01,
+            ),
+        ):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(fetch(f"{base}/api/codex/custom/api-action-gate"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_API_ACTION_GATE_API_MODEL_REQUIRED",
+        )
+        self.assertTrue(packet["operator_status_timeout"])
+        self.assertEqual(
+            packet["operator_status_machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+        self.assertTrue(packet["api_lane_catalog_available"])
+        self.assertTrue(packet["fallback_used"])
+        self.assertFalse(packet["model_auto_selected"])
+        self.assertEqual(
+            packet["summary_packet"]["operator_status_machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+        self.assertNotEqual(packet["machine_error_code"], "CUSTOM_CODEX_READONLY_TIMEOUT")
+
+    def test_codex_custom_api_action_gate_timeout_does_not_claim_missing_api_catalog(self) -> None:
+        class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+            def probe_models(self) -> dict[str, object]:
+                return {
+                    "ok": True,
+                    "captured_at_utc": "2026-05-23T00:00:00Z",
+                    "model_ids": ["gpt-5.4"],
+                    "server_issued": True,
+                }
+
+        api_snapshot = {
+            "status": "ok",
+            "source": "api_connections_readonly",
+            "primary_truth_ok": True,
+            "summary": {"route_count": 0, "visible_count": 0, "configured_count": 0},
+            "routes": [],
+        }
+        runner = MappingRunner(live_payloads())
+        with (
+            mock.patch.object(
+                live_server,
+                "OperatorSurfaceSession",
+                return_value=SlowOperatorSurfaceSession(),
+            ),
+            mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS",
+                0.01,
+            ),
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value=api_snapshot,
+            ),
+        ):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(fetch(f"{base}/api/codex/custom/api-action-gate"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertTrue(packet["operator_status_timeout"])
+        self.assertFalse(packet["api_lane_catalog_available"])
+        self.assertFalse(packet["summary_packet"]["api_lane_catalog_available"])
+        self.assertFalse(packet["model_auto_selected"])
+        self.assertEqual(
+            packet["operator_status_machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+
+    def test_codex_custom_api_action_gate_post_uses_bounded_operator_status(self) -> None:
+        class SlowOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+            def probe_models(self) -> dict[str, object]:
+                return {
+                    "ok": True,
+                    "captured_at_utc": "2026-05-23T00:00:00Z",
+                    "model_ids": ["gpt-5.4", "wbp-deepseek-v3"],
+                    "server_issued": True,
+                }
+
+        runner = MappingRunner(live_payloads())
+        with (
+            mock.patch.object(
+                live_server,
+                "OperatorSurfaceSession",
+                return_value=SlowOperatorSurfaceSession(),
+            ),
+            mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS",
+                0.01,
+            ),
+        ):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-action-gate",
+                        {"api_model_id": "wbp-deepseek-v3"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_API_ACTION_GATE_OWNER_AUTH_REQUIRED",
+        )
+        self.assertEqual(packet["manual_api_choice_packet"]["status"], "ok")
+        self.assertEqual(packet["manual_api_choice_packet"]["route_id"], "wbp-deepseek-v3")
+        self.assertTrue(packet["manual_api_choice_packet"]["selection_intent_only"])
+        self.assertFalse(packet["manual_api_choice_packet"]["execution_proven"])
+        self.assertTrue(packet["operator_status_timeout"])
+        self.assertEqual(
+            packet["operator_status_machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+        self.assertTrue(packet["api_lane_catalog_available"])
+        self.assertTrue(packet["fallback_used"])
+        self.assertFalse(packet["model_auto_selected"])
+        self.assertFalse(packet["live_provider_request_boundary_packet"]["live_call_attempted"])
         self.assertNotIn(
             ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
             runner.calls,

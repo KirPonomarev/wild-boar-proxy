@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import socket
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -455,6 +457,91 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         self.assertEqual(payload["mutation_ledger"]["changed_files"], [])
         self.assertFalse(payload["mutation_ledger"]["rollback_available"])
         self.assertIsNone(payload["mutation_ledger"]["rollback_id"])
+
+    def test_healthcheck_repair_attempts_stable_activation_for_auth_gap(
+        self,
+    ) -> None:
+        state = json.loads(self.paths.state_file.read_text(encoding="utf-8"))
+        state["selected_backend_ids"] = []
+        state["selected_backend_snapshot"] = runtime_mod.build_selected_backend_snapshot_payload(
+            selected_backend_ids=["backend-a"],
+            observed_at_utc="2026-06-01T00:00:00+00:00",
+            source_class="supervisor_owner_observed",
+            source_name="sync --json",
+            source_run_id="sync:2026-06-01T00:00:00+00:00",
+            producer_version="2",
+        )
+        self.paths.state_file.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        auth_error = urllib.error.HTTPError(
+            url="http://127.0.0.1:8318/v1/responses",
+            code=503,
+            msg="Service Unavailable",
+            hdrs=None,
+            fp=io.BytesIO(
+                b'{"error":{"message":"auth_unavailable: no auth available"}}'
+            ),
+        )
+        process_result = {
+            "status": "ok",
+            "machine_error_code": runtime_mod.PROCESS_OK,
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "stdout_truncated": False,
+            "stderr_truncated": False,
+            "timed_out": False,
+            "duration_seconds": 0.0,
+        }
+        launch_attempt = runtime_mod.StableRuntimeLaunchAttempt(
+            desired_kind="approved_repair_target",
+            observed_path=self.auth_dir,
+            activation_attempted=True,
+            generated_config_regenerated=True,
+            activation_method="process_local_env_override",
+            selected_config_file=str(self.paths.stable_runtime_generated_config_file),
+            selected_source_kind="approved_repair_target",
+            selected_source_path=str(self.paths.repair_target_inventory_dir),
+            launcher_exit_code=0,
+            stdout="",
+            stderr="",
+            process_result=process_result,
+        )
+
+        with (
+            mock.patch.object(runtime_mod, "socket_is_listening", return_value=True),
+            mock.patch.object(
+                runtime_mod,
+                "http_get_json",
+                return_value={"data": [{"id": "gpt-5.4"}]},
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "http_post_json",
+                side_effect=[auth_error, {"output_text": "OK"}],
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "run_stable_runtime_launcher_attempt",
+                return_value=launch_attempt,
+            ) as launcher,
+        ):
+            payload = runtime_mod.run_healthcheck(
+                self.paths,
+                effect=runtime_mod.EFFECT_REPAIR,
+            )
+
+        launcher.assert_called_once()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["entry_lane"], "explicit_stable_recovery_lane")
+        self.assertEqual(recovery["outcome"], "approved_target_recovered")
+        self.assertTrue(recovery["live_runtime_observation_confirmed"])
+        self.assertEqual(
+            recovery["confirmation_basis"],
+            "approved_target_activation_plus_live_runtime_observation",
+        )
 
     def test_healthcheck_repair_temp_cleanup_ledger_reports_file_delete(self) -> None:
         self.pid_file.unlink()

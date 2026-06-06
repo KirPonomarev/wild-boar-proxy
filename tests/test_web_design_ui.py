@@ -3096,6 +3096,529 @@ if (payload.api_reasoning_option_id !== "provider_declared_disabled") {
 if (node("codexCustomExecutionModeSelect").value !== "chatgpt_plus_api") {
   throw new Error(`master mode did not mirror persisted Quick Start: ${node("codexCustomExecutionModeSelect").value}`);
 }
+sandbox.buildCodexCustomLaunchSelectionPayload().then((launchPayload) => {
+  if (launchPayload.execution_mode !== "chatgpt_plus_api") {
+    throw new Error(`restored launch payload did not stay mixed: ${JSON.stringify(launchPayload)}`);
+  }
+  if (launchPayload.chatgpt_model_id !== "gpt-5.5") {
+    throw new Error(`restored launch payload did not keep gpt-5.5: ${JSON.stringify(launchPayload)}`);
+  }
+  if (launchPayload.api_model_id !== "wbp-deepseek-chat") {
+    throw new Error(`restored launch payload did not keep DeepSeek Chat: ${JSON.stringify(launchPayload)}`);
+  }
+  if (launchPayload.api_reasoning_option_id !== "provider_declared_disabled") {
+    throw new Error(`restored launch payload did not keep API reasoning: ${JSON.stringify(launchPayload)}`);
+  }
+  const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
+  if (persisted.selection_persistence_schema_version !== 3) {
+    throw new Error(`restored mixed selection was not saved with schema v3: ${JSON.stringify(persisted)}`);
+  }
+  if (
+    persisted.execution_mode !== "chatgpt_plus_api"
+    || persisted.chatgpt_model_id !== "gpt-5.5"
+    || persisted.api_model_id !== "wbp-deepseek-chat"
+    || persisted.api_reasoning_option_id !== "provider_declared_disabled"
+  ) {
+    throw new Error(`restored mixed selection changed while preparing launch: ${JSON.stringify(persisted)}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_replaces_legacy_gpt_53_default_with_server_default(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "api_only";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v2", JSON.stringify({
+  execution_mode: "api_only",
+  chatgpt_model_id: "gpt-5.3-codex",
+  api_model_id: "wbp-deepseek-chat",
+  api_reasoning_option_id: "provider_declared_disabled"
+}));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("legacy default replacement test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.5",
+    preferred_default_available: true,
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+if (node("quickStartChatModelSelect").value !== "gpt-5.5") {
+  throw new Error(`legacy gpt-5.3 default survived hard reload: ${node("quickStartChatModelSelect").value}`);
+}
+if (node("codexCustomModelSelect").value !== "gpt-5.5") {
+  throw new Error(`master model did not mirror server default: ${node("codexCustomModelSelect").value}`);
+}
+const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
+if (persisted.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`legacy persisted model was not upgraded: ${JSON.stringify(persisted)}`);
+}
+if (persisted.chatgpt_model_selected_by_user === true) {
+  throw new Error(`legacy default must not become explicit user selection: ${JSON.stringify(persisted)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_restores_valid_persisted_chatgpt_only_selection(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "api_only";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v2", JSON.stringify({
+  execution_mode: "chatgpt_only",
+  chatgpt_model_id: "gpt-5.5",
+  api_model_id: "wbp-deepseek-chat",
+  api_reasoning_option_id: "provider_declared_disabled"
+}));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("chatgpt-only persisted selection restore test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.3-codex",
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+const payload = sandbox.quickStartLaunchPayloadFromSelects();
+if (payload.execution_mode !== "chatgpt_only") {
+  throw new Error(`valid persisted selection did not restore ChatGPT-only mode: ${JSON.stringify(payload)}`);
+}
+if (payload.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`valid persisted selection did not restore gpt-5.5: ${JSON.stringify(payload)}`);
+}
+if (payload.api_model_id !== "") {
+  throw new Error(`ChatGPT-only restore must clear API model in launch payload: ${JSON.stringify(payload)}`);
+}
+if (payload.api_reasoning_option_id !== "") {
+  throw new Error(`ChatGPT-only restore must clear API reasoning in launch payload: ${JSON.stringify(payload)}`);
+}
+if (node("quickStartExecutionModeSelect").value !== "chatgpt_only") {
+  throw new Error(`Quick Start mode select did not restore ChatGPT-only: ${node("quickStartExecutionModeSelect").value}`);
+}
+if (node("codexCustomExecutionModeSelect").value !== "chatgpt_only") {
+  throw new Error(`master mode did not mirror persisted ChatGPT-only: ${node("codexCustomExecutionModeSelect").value}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_preserves_explicit_user_selected_gpt_53(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v2", JSON.stringify({
+  execution_mode: "chatgpt_only",
+  chatgpt_model_id: "gpt-5.3-codex",
+  chatgpt_model_selected_by_user: true
+}));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("explicit user selection preservation test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.5",
+    preferred_default_available: true,
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      { model_id: "wbp-deepseek-chat", display_name: "WBP DeepSeek Chat", selection_enabled: true }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+if (node("quickStartChatModelSelect").value !== "gpt-5.3-codex") {
+  throw new Error(`explicit user gpt-5.3 selection was overwritten: ${node("quickStartChatModelSelect").value}`);
+}
+const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
+if (persisted.chatgpt_model_selected_by_user !== true) {
+  throw new Error(`explicit user selection marker lost: ${JSON.stringify(persisted)}`);
+}
 """
         result = subprocess.run(
             ["node", "-e", script],

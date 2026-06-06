@@ -97,6 +97,7 @@ const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id", "session_id"];
 const CODEX_ROUTE_SELECTION_STORAGE_KEY = "wbp.codex.route-selection.v2";
 const QUICK_START_DEFAULT_EXECUTION_MODE = "chatgpt_plus_api";
 const QUICK_START_PREFERRED_CHATGPT_MODEL_ID = "gpt-5.5";
+const QUICK_START_LEGACY_CHATGPT_DEFAULT_MODEL_IDS = new Set(["gpt-5.3-codex"]);
 const QUICK_START_PREFERRED_API_MODEL_ID = "wbp-deepseek-chat";
 const QUICK_START_PREFERRED_API_REASONING_OPTION_ID = "provider_declared_disabled";
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
@@ -2785,6 +2786,38 @@ function readStoredCodexRouteSelection() {
   }
 }
 
+function quickStartSelectionPreservesUserChatGptModel(selection, currentSelection = null) {
+  return Boolean(
+    selection?.chatgpt_model_selected_by_user === true
+    || (
+      currentSelection?.chatgpt_model_selected_by_user === true
+      && currentSelection?.chatgpt_model_id
+      && currentSelection.chatgpt_model_id === selection?.chatgpt_model_id
+    )
+  );
+}
+
+function quickStartStoredSelectionForRegistry(selection, registry) {
+  if (!selection) {
+    return null;
+  }
+  const next = { ...selection };
+  const serverDefault = String(registry?.chatgpt_lane?.default_model_id || "");
+  const preferredAvailable = registry?.chatgpt_lane?.preferred_default_available === true;
+  const preservesExplicitUserChoice = next.chatgpt_model_selected_by_user === true;
+  if (
+    !preservesExplicitUserChoice
+    && preferredAvailable
+    && serverDefault
+    && next.chatgpt_model_id !== serverDefault
+    && QUICK_START_LEGACY_CHATGPT_DEFAULT_MODEL_IDS.has(next.chatgpt_model_id)
+  ) {
+    next.chatgpt_model_id = serverDefault;
+    next.chatgpt_model_id_replaced_reason = "legacy_default_replaced_by_server_default";
+  }
+  return next;
+}
+
 function codexSelectCanUseValue(select, value) {
   if (!select || !value) {
     return false;
@@ -2917,13 +2950,29 @@ function applyCodexRouteSelection(selection, options = {}) {
   return applied;
 }
 
-function saveCodexRouteSelection(selection = codexRouteSelectionFromUi(codexRouteSelectionPrefersQuickStart())) {
+function saveCodexRouteSelection(
+  selection = codexRouteSelectionFromUi(codexRouteSelectionPrefersQuickStart()),
+  options = {}
+) {
   if (!codexRouteSelectionHasValue(selection)) {
     return;
   }
-  const persisted = codexRouteSelectionPrefersQuickStart()
+  const currentSelection = readStoredCodexRouteSelection();
+  const persistedSource = codexRouteSelectionPrefersQuickStart()
     ? quickStartSelectionWithDefaults(selection)
     : selection;
+  const persisted = { ...persistedSource };
+  persisted.selection_persistence_schema_version = 3;
+  if (quickStartSelectionPreservesUserChatGptModel(persisted, currentSelection)) {
+    persisted.chatgpt_model_selected_by_user = true;
+  }
+  if (
+    options.userInitiated === true
+    && ["codexCustomModelSelect", "quickStartChatModelSelect"].includes(options.sourceId)
+  ) {
+    persisted.chatgpt_model_selected_by_user = true;
+    persisted.selection_source = "user_change";
+  }
   try {
     window.localStorage?.setItem(CODEX_ROUTE_SELECTION_STORAGE_KEY, JSON.stringify(persisted));
   } catch (error) {
@@ -2931,7 +2980,7 @@ function saveCodexRouteSelection(selection = codexRouteSelectionFromUi(codexRout
   }
 }
 
-function syncCodexRouteSelects(sourceId) {
+function syncCodexRouteSelects(sourceId, options = {}) {
   const pairs = [
     ["codexCustomModelSelect", "quickStartChatModelSelect"],
     ["codexCustomApiModelSelect", "quickStartApiModelSelect"],
@@ -2947,7 +2996,10 @@ function syncCodexRouteSelects(sourceId) {
   const target = document.getElementById(targetId);
   if (source && target) {
     target.value = source.value;
-    saveCodexRouteSelection(codexRouteSelectionFromUi(sourceId.startsWith("quickStart")));
+    saveCodexRouteSelection(codexRouteSelectionFromUi(sourceId.startsWith("quickStart")), {
+      ...options,
+      sourceId
+    });
   }
 }
 
@@ -3478,7 +3530,10 @@ function renderCodexCustomModels(registry, compat) {
   const chatSelect = document.getElementById("codexCustomModelSelect");
   const apiSelect = document.getElementById("codexCustomApiModelSelect");
   const preferQuickStart = codexRouteSelectionPrefersQuickStart();
-  const storedSelection = readStoredCodexRouteSelection();
+  const storedSelection = quickStartStoredSelectionForRegistry(
+    readStoredCodexRouteSelection(),
+    registry
+  );
   const visibleSelection = codexRenderedRouteSelectionFromUi(preferQuickStart);
   const preservedSelection = preferQuickStart
     ? quickStartSelectionWithDefaults(
@@ -13649,7 +13704,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
-  document.getElementById("codexCustomModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomModelSelect"));
+  document.getElementById("codexCustomModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("codexCustomModelSelect", { userInitiated: true });
+  });
   document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("codexCustomApiModelSelect");
     renderApiReasoningOptionSelects();
@@ -13658,7 +13715,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("codexCustomApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomApiReasoningOptionSelect"));
   document.getElementById("codexCustomExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomExecutionModeSelect"));
-  document.getElementById("quickStartChatModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartChatModelSelect"));
+  document.getElementById("quickStartChatModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("quickStartChatModelSelect", { userInitiated: true });
+  });
   document.getElementById("quickStartApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("quickStartApiModelSelect");
     renderApiReasoningOptionSelects();
