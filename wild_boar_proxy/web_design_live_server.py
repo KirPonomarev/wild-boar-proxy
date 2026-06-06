@@ -4246,6 +4246,25 @@ def _custom_native_launch_stability_guard_packet(
         "existing_window_reuse_admissible": (
             preflight_packet.get("existing_window_reuse_admissible") is True
         ),
+        "existing_window_relaunch_admissible": (
+            preflight_packet.get("existing_window_relaunch_admissible") is True
+        ),
+        "existing_window_relaunch_attempted": (
+            preflight_packet.get("existing_window_relaunch_attempted") is True
+        ),
+        "existing_window_relaunch_termination": preflight_packet.get(
+            "existing_window_relaunch_termination",
+            {},
+        ),
+        "custom_process_observed_before_relaunch": (
+            preflight_packet.get("custom_process_observed_before_relaunch") is True
+        ),
+        "custom_process_observed_after_relaunch_stop": (
+            preflight_packet.get("custom_process_observed_after_relaunch_stop") is True
+        ),
+        "custom_process_count_after_relaunch_stop": int(
+            preflight_packet.get("custom_process_count_after_relaunch_stop") or 0
+        ),
         "reused_existing_window": bool(
             status == "ok" and preflight_packet.get("existing_window_reuse_admissible") is True
         ),

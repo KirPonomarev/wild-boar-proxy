@@ -1109,6 +1109,30 @@ function renderCodexCustomLaunch(packet) {
     && packet?.running_status === true
     && packet?.native_window_observed === true
     && packet?.native_app_usable !== true;
+  const launchPacketTruth = packet?.launch_packet_is_truth_source === true;
+  const reusedExistingWindow = packet?.status === "ok"
+    && launchPacketTruth
+    && packet?.reused_existing_window === true
+    && packet?.existing_window_reuse_admissible === true
+    && packet?.selection_matches_last_launch === true
+    && packet?.show_window_attempted === true
+    && packet?.native_window_observed === true
+    && packet?.native_app_usable === true
+    && packet?.new_launch_started !== true;
+  const relaunchSucceeded = nativeProofOk
+    && launchPacketTruth
+    && packet?.existing_window_relaunch_admissible === true
+    && packet?.existing_window_relaunch_attempted === true
+    && packet?.existing_window_relaunch_termination?.status === "ok"
+    && packet?.new_launch_started === true;
+  const existingWindowBlocked = packet?.status === "blocked"
+    && (
+      packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_RELAUNCH_STOP_FAILED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN"
+    );
   codexLaunchSetChip(
     nativeProofOk
       ? "green"
@@ -1227,15 +1251,39 @@ function renderCodexCustomLaunch(packet) {
   }
   setQuickStartChip(
     "quickStartLaunchState",
-    nativeProofOk ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" || packet?.status === "ok" ? "amber" : "red"),
-    nativeProofOk
-      ? "запущен"
-      : (limitedWindowLaunch ? "окно открыто" : (packet?.machine_error_code || packet?.status || "ошибка"))
+    nativeProofOk || reusedExistingWindow
+      ? "green"
+      : (packet?.status === "blocked" || packet?.status === "rejected" || packet?.status === "ok" ? "amber" : "red"),
+    relaunchSucceeded
+      ? "перезапущен"
+      : (
+        nativeProofOk
+          ? "запущен"
+          : (
+            reusedExistingWindow
+              ? "старое окно"
+              : (
+                limitedWindowLaunch
+                  ? "окно открыто"
+                  : (existingWindowBlocked ? "blocked" : (packet?.machine_error_code || packet?.status || "ошибка"))
+              )
+          )
+      )
   );
   setQuickStartChip(
     "quickStartRouteChip",
-    nativeProofOk ? "green" : "amber",
-    nativeProofOk ? "запуск ok" : (limitedWindowLaunch ? "proof incomplete" : "проверь пакет")
+    nativeProofOk || reusedExistingWindow ? "green" : "amber",
+    relaunchSucceeded
+      ? "relaunch ok"
+      : (
+        nativeProofOk
+          ? "запуск ok"
+          : (
+            reusedExistingWindow
+              ? "reuse ok"
+              : (limitedWindowLaunch ? "proof incomplete" : (existingWindowBlocked ? "blocked" : "проверь пакет"))
+          )
+      )
   );
   const launchUsesApiRoute = (
     launchExecutionMode === "api_only"
@@ -1306,6 +1354,34 @@ function renderCodexCustomLaunch(packet) {
       packet?.stable_custom_codex_wbp_bridge_final_status || "",
     window_status: packet?.window_status || "",
     config_status: packet?.config_status || "",
+    selection_matches_last_launch:
+      packet?.selection_matches_last_launch === true,
+    existing_window_reuse_admissible:
+      packet?.existing_window_reuse_admissible === true,
+    existing_window_relaunch_admissible:
+      packet?.existing_window_relaunch_admissible === true,
+    existing_window_relaunch_attempted:
+      packet?.existing_window_relaunch_attempted === true,
+    existing_window_relaunch_termination:
+      packet?.existing_window_relaunch_termination || {},
+    custom_process_observed:
+      packet?.custom_process_observed === true,
+    custom_process_count:
+      Number(packet?.custom_process_count || 0),
+    custom_process_observed_before_relaunch:
+      packet?.custom_process_observed_before_relaunch === true,
+    custom_process_observed_after_relaunch_stop:
+      packet?.custom_process_observed_after_relaunch_stop === true,
+    custom_process_count_after_relaunch_stop:
+      Number(packet?.custom_process_count_after_relaunch_stop || 0),
+    reused_existing_window:
+      packet?.reused_existing_window === true,
+    launch_blocked:
+      packet?.launch_blocked === true,
+    show_window_attempted:
+      packet?.show_window_attempted === true,
+    window_unresponsive_with_limits:
+      packet?.window_unresponsive_with_limits === true,
     owner_authorization_phrase_present:
       packet?.owner_authorization_phrase_present === true,
     profile_persistence_proven: packet?.profile_persistence_proven === true,
@@ -2973,10 +3049,33 @@ function setQuickStartRouteResponse(packet) {
       bridge_status: packet?.bridge_status || "",
       window_status: packet?.window_status || "",
       config_status: packet?.config_status || "",
+      selection_matches_last_launch:
+        packet?.selection_matches_last_launch === true,
       existing_window_reuse_admissible:
         packet?.existing_window_reuse_admissible === true,
       existing_window_relaunch_admissible:
         packet?.existing_window_relaunch_admissible === true,
+      existing_window_relaunch_attempted:
+        packet?.existing_window_relaunch_attempted === true,
+      existing_window_relaunch_termination:
+        packet?.existing_window_relaunch_termination || {},
+      custom_process_observed:
+        packet?.custom_process_observed === true,
+      custom_process_count: Number(packet?.custom_process_count || 0),
+      custom_process_observed_before_relaunch:
+        packet?.custom_process_observed_before_relaunch === true,
+      custom_process_observed_after_relaunch_stop:
+        packet?.custom_process_observed_after_relaunch_stop === true,
+      custom_process_count_after_relaunch_stop:
+        Number(packet?.custom_process_count_after_relaunch_stop || 0),
+      reused_existing_window:
+        packet?.reused_existing_window === true,
+      launch_blocked:
+        packet?.launch_blocked === true,
+      show_window_attempted:
+        packet?.show_window_attempted === true,
+      window_unresponsive_with_limits:
+        packet?.window_unresponsive_with_limits === true,
       new_launch_required: packet?.new_launch_required === true,
       running_status: packet?.running_status === true,
       process_started: packet?.process_started === true,

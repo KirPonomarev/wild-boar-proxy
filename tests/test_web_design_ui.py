@@ -3553,6 +3553,341 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
         if result.returncode != 0:
             self.fail(result.stderr or result.stdout)
 
+    def test_custom_launch_render_labels_existing_window_reuse_without_fake_new_launch(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  codexLaunchModesChip: makeChip(),
+  customCodexStatus: new Node(),
+  customCodexSession: new Node(),
+  codexLaunchDryRunResponse: new Node(),
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartChatSlotState: makeChip(),
+  quickStartApiSlotState: makeChip(),
+  quickStartOwnerAuthState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartBridgeState: makeChip(),
+  quickStartWindowState: makeChip(),
+  quickStartConfigState: makeChip(),
+  quickStartHistoryState: makeChip(),
+  quickStartNextActionState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  window: { location: { search: "" }, history: { replaceState() {} } },
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  packet_kind: "custom_native_launch_stability_guard",
+  status: "ok",
+  machine_error_code: "OK",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  owner_authorization_phrase_present: true,
+  running_status: false,
+  process_started: false,
+  new_launch_started: false,
+  native_window_observed: true,
+  native_app_usable: true,
+  real_codex_app_launched: false,
+  launch_claim_scope: "custom_codex_launch_stability_and_recovery",
+  config_status: "matches_last_launch",
+  selection_matches_last_launch: true,
+  existing_window_reuse_admissible: true,
+  existing_window_relaunch_admissible: false,
+  reused_existing_window: true,
+  launch_blocked: false,
+  launch_packet_is_truth_source: true,
+  show_window_attempted: true,
+  custom_process_observed: true,
+  custom_process_count: 1,
+  next_action: "continue_in_existing_custom_window"
+});
+`, sandbox);
+
+if (!nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`reused window should be green as a successful reuse action: ${nodes.quickStartLaunchState.className}`);
+}
+if (nodes.quickStartLaunchState.lastElementChild.textContent !== "старое окно") {
+  throw new Error(`reuse label should not fake a new launch: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+}
+if (nodes.quickStartRouteChip.lastElementChild.textContent !== "reuse ok") {
+  throw new Error(`route chip did not show reuse truth: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (rendered.reused_existing_window !== true || rendered.new_launch_started !== false || rendered.existing_window_reuse_admissible !== true) {
+  throw new Error(`existing-window reuse truth missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_custom_launch_render_does_not_green_reused_window_without_launch_packet_truth(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  codexLaunchModesChip: makeChip(),
+  customCodexStatus: new Node(),
+  customCodexSession: new Node(),
+  codexLaunchDryRunResponse: new Node(),
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartChatSlotState: makeChip(),
+  quickStartApiSlotState: makeChip(),
+  quickStartOwnerAuthState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartBridgeState: makeChip(),
+  quickStartWindowState: makeChip(),
+  quickStartConfigState: makeChip(),
+  quickStartHistoryState: makeChip(),
+  quickStartNextActionState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  window: { location: { search: "" }, history: { replaceState() {} } },
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  packet_kind: "custom_native_launch_stability_guard",
+  status: "ok",
+  machine_error_code: "OK",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  owner_authorization_phrase_present: true,
+  running_status: false,
+  process_started: false,
+  new_launch_started: false,
+  native_window_observed: true,
+  native_app_usable: true,
+  real_codex_app_launched: false,
+  launch_claim_scope: "custom_codex_launch_stability_and_recovery",
+  config_status: "matches_last_launch",
+  selection_matches_last_launch: true,
+  existing_window_reuse_admissible: true,
+  reused_existing_window: true,
+  launch_packet_is_truth_source: false,
+  show_window_attempted: true,
+  custom_process_observed: true,
+  custom_process_count: 1,
+  next_action: "continue_in_existing_custom_window"
+});
+`, sandbox);
+
+if (nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`stale reuse packet without launch-packet truth must not be green: ${nodes.quickStartLaunchState.className}`);
+}
+if (nodes.quickStartRouteChip.lastElementChild.textContent === "reuse ok") {
+  throw new Error("stale reuse packet must not claim reuse ok");
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (rendered.launch_packet_is_truth_source !== false || rendered.reused_existing_window !== true) {
+  throw new Error(`stale reuse packet truth fields missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_custom_launch_render_labels_relaunch_success_as_relaunch(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  codexLaunchModesChip: makeChip(),
+  customCodexStatus: new Node(),
+  customCodexSession: new Node(),
+  codexLaunchDryRunResponse: new Node(),
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartChatSlotState: makeChip(),
+  quickStartApiSlotState: makeChip(),
+  quickStartOwnerAuthState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartBridgeState: makeChip(),
+  quickStartWindowState: makeChip(),
+  quickStartConfigState: makeChip(),
+  quickStartHistoryState: makeChip(),
+  quickStartNextActionState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  window: { location: { search: "" }, history: { replaceState() {} } },
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomLaunch({
+  status: "ok",
+  machine_error_code: "OK",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  running_status: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_profile_dir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
+  process_started: true,
+  expected_custom_identity_observed: true,
+  native_window_observed: true,
+  native_app_usable: true,
+  real_codex_app_launched: true,
+  route_packet_matches_selection_packet: true,
+  quick_start_launch_route_truth_proven_with_limits: true,
+  launch_claim_scope: "native_custom_codex_launch_packet_truth",
+  config_status: "changed",
+  selection_matches_last_launch: false,
+  existing_window_reuse_admissible: false,
+  existing_window_relaunch_admissible: true,
+  existing_window_relaunch_attempted: true,
+  existing_window_relaunch_termination: {
+    status: "ok",
+    initial_custom_process_count: 1,
+    custom_processes_gone: true,
+    final_custom_process_count: 0,
+    raw_process_lines_exposed: false,
+    raw_path_exposed: false
+  },
+  custom_process_observed_before_relaunch: true,
+  custom_process_count_after_relaunch_stop: 0,
+  new_launch_started: true,
+  reused_existing_window: false,
+  launch_packet_is_truth_source: true,
+  next_action: "none"
+});
+`, sandbox);
+
+if (nodes.quickStartLaunchState.lastElementChild.textContent !== "перезапущен") {
+  throw new Error(`relaunch success must be labeled as relaunch: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+}
+if (nodes.quickStartRouteChip.lastElementChild.textContent !== "relaunch ok") {
+  throw new Error(`route chip did not show relaunch truth: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (rendered.existing_window_relaunch_attempted !== true || rendered.new_launch_started !== true || rendered.existing_window_relaunch_termination.status !== "ok") {
+  throw new Error(`relaunch truth missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_primary_launch_action_preserves_chatgpt_only_gpt_5_5_payload_when_admitted(self) -> None:
         script = r"""
 const fs = require("fs");
