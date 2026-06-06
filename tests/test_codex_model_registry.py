@@ -10,6 +10,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_api_only_deepseek_live_route_format_packet,
     build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
+    build_dual_lane_model_selection_ui_packet,
     build_model_catalog_fidelity_packets,
     build_custom_api_compat_packet,
     build_custom_codex_execution_mode_selector_packet,
@@ -202,6 +203,91 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(first_model["direct_egress_proven_by_registry"])
         self.assertFalse(packet["claim_limits"]["model_listed_means_usable"])
         self.assertFalse(packet["claim_limits"]["registry_proves_live_availability"])
+
+    def test_registry_restores_canonical_configured_native_model_when_catalog_is_api_only(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.5",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["wbp-deepseek-v4-pro-max"],
+            },
+        }
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
+
+        registry = build_custom_model_registry_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot,
+        )
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot,
+        )
+
+        native_row = next(
+            entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.5"
+        )
+        self.assertTrue(registry["configured_model_visible"])
+        self.assertEqual(native_row["lane"], "codex_native")
+        self.assertEqual(native_row["model_lane"], "codex_account_lane")
+        self.assertTrue(native_row["model_lane_classified"])
+        self.assertFalse(native_row["model_lane_fallback_used"])
+        self.assertTrue(native_row["selection_enabled"])
+        self.assertFalse(native_row["live_availability_proven"])
+        self.assertFalse(registry["live_api_checked"])
+        self.assertFalse(registry["network_calls_made"])
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
+        self.assertGreaterEqual(selector["api_lane"]["model_count"], 1)
+
+    def test_registry_does_not_restore_unknown_gpt_configured_model_without_catalog_truth(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-unknown-local",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["wbp-deepseek-v4-pro-max"],
+            },
+        }
+        registry = build_custom_model_registry_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+        model_ids = {entry["model_id"] for entry in registry["available_models"]}
+
+        self.assertNotIn("gpt-unknown-local", model_ids)
+        self.assertFalse(registry["configured_model_visible"])
+
+    def test_selector_prefers_reported_configured_native_model_over_static_default(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.5",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.5", "wbp-deepseek-v4-pro-max"],
+            },
+        }
+
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
 
     def test_api_compat_only_declares_openai_shape_without_live_calls(self) -> None:
         packet = build_custom_api_compat_packet(operator_status(claim_gate="passed"))

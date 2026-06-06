@@ -214,7 +214,7 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             human_message=exc.message,
             machine_error_code=exc.machine_error_code,
             changed_files=getattr(exc, "changed_files", []),
-            next_action=exc.operator_action,
+            next_action=str(getattr(exc, "next_action", exc.operator_action)),
             severity=exc.severity,
             liveness="unknown",
             exit_code=exc.exit_code,

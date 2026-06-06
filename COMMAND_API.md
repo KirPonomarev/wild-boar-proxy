@@ -123,8 +123,26 @@ Every command response must include all required fields on both success and fail
 - `machine_error_code` must be stable enough for UI and automation branching
 - `changed_files` must be an array and may be empty
 - `next_action` must be present even when the correct action is `none`
-- `next_action` must use documented machine-readable tokens such as `none`,
-  `retry`, `user_action`, or `stop`
+- `operator_action` must use the generic operator-action vocabulary such as
+  `none`, `retry`, `user_action`, or `stop`
+- `next_action` must be a machine-readable next-step token. The core generic
+  tokens are `none`, `retry`, `user_action`, and `stop`. Command-specific
+  tokens such as `wait_for_login`, `accounts_onboard`,
+  `accounts_refresh`, `api_route_connect`, and `login_complete` are the
+  documented active examples.
+- For compatibility, the shared semantic validator accepts other token-shaped
+  `next_action` values as legacy values. That compatibility acceptance is not
+  new command authority: command owners must document any new command-specific
+  token with the surface that emits it.
+- `next_action` values must use token shape
+  `^[A-Za-z][A-Za-z0-9_]{0,127}$`. They must not contain prose, whitespace,
+  path fragments, slashes, shell snippets, secret material, or free-form error
+  details.
+- `next_action=operator_action` is a reserved placeholder and must not be
+  emitted as a positive command result.
+- new command surfaces should prefer the core generic `next_action` values
+  unless domain-specific machine branching is required; any new
+  command-specific token must be documented with the surface that emits it
 - commands that report runtime health must expose `liveness`, `severity`, and
   `operator_action` as separate top-level fields instead of overloading
   `status`

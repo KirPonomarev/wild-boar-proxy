@@ -146,6 +146,26 @@ def command_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def healthcheck_ok_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Healthcheck passed.",
+        effect="probe",
+        attestation={
+            "listener_ok": True,
+            "models_ok": True,
+            "responses_ok": True,
+            "effective_mode_match": True,
+            "base_url_match": True,
+            "selected_backends_digest": "test-backends-digest",
+            "observed_at_utc": "2026-01-01T00:00:00Z",
+            "runtime_version": "test-runtime",
+            "attestation_source": "healthcheck --json",
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
 def credential_status_packet(
     *,
     present: bool = True,
@@ -3584,6 +3604,56 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner.calls,
         )
 
+    def test_full_action_default_runner_uses_owner_external_models_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            captured: list[dict[str, object]] = []
+
+            class CapturingJsonCommandRunner:
+                def __init__(
+                    self,
+                    *,
+                    base_command: list[str] | None = None,
+                    cwd: str | None = None,
+                    env: dict[str, str] | None = None,
+                ) -> None:
+                    captured.append(
+                        {
+                            "base_command": base_command,
+                            "cwd": cwd,
+                            "env": dict(env or {}),
+                        }
+                    )
+
+            with (
+                mock.patch.dict(os.environ, env_updates, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "JsonCommandRunner",
+                    CapturingJsonCommandRunner,
+                ),
+            ):
+                build_handler(action_phase=FULL_ACTION_PHASE)
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["cwd"], str(profile_dir))
+        runner_env = captured[0]["env"]
+        self.assertIsInstance(runner_env, dict)
+        self.assertEqual(runner_env["WBP_PROFILE_DIR"], str(profile_dir))
+        self.assertEqual(runner_env["WBP_MANAGED_DIR"], str(managed_dir))
+        self.assertEqual(
+            runner_env["WBP_EXTERNAL_MODELS_DIR"],
+            str(managed_dir / "external-models"),
+        )
+        pythonpath = str(runner_env["PYTHONPATH"]).split(os.pathsep)
+        self.assertIn(str(live_server.ROOT), pythonpath)
+
     def test_api_route_credential_check_surfaces_missing_owner_env_without_route_mutation(self) -> None:
         payloads = live_payloads()
         payloads[("external-models", "routes", "list", "--json")] = command_packet(
@@ -5848,7 +5918,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
 def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
     return {
         ("status", "--json"): status_packet(),
-        ("healthcheck", "--json"): command_packet(human_message="Healthcheck passed."),
+        ("healthcheck", "--json"): healthcheck_ok_packet(),
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
         (
@@ -6868,7 +6938,11 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
             server.server_close()
 
         self.assertEqual(live_readonly["status"], "ok")
-        self.assertEqual(operator_status["status"]["status"], "ok")
+        self.assertIn(
+            operator_status["status"]["machine_error_code"],
+            {"OK", "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY"},
+        )
+        self.assertTrue(operator_status["models"]["server_issued"])
         self.assertIn(custom_status["status"], {"ok", "degraded"})
         self.assertEqual(sessions["status"], "ok")
         self.assertEqual(transcript["status"], "rejected")
@@ -9453,6 +9527,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(endpoint_packet["api_line_used_as_executor"])
         self.assertFalse(endpoint_packet["chatgpt_line_used_as_executor"])
         self.assertFalse(endpoint_packet["api_only_calls_chatgpt"])
+        self.assertNotIn(("healthcheck", "--json"), runner.calls)
         self.assertFalse(endpoint_packet["fallback_used"])
         self.assertFalse(endpoint_packet["model_auto_selected"])
         self.assertTrue(endpoint_packet["route_packet_matches_selection_packet"])
@@ -9570,6 +9645,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "launch_route_digest": route_digest,
                 "custom_codex_window_deepseek_launch_proven_with_limits": True,
                 "native_window_observed": True,
+                "native_app_usable": True,
                 "real_codex_app_launched": True,
                 "original_codex_touched": False,
                 "asar_touched": False,
@@ -9630,6 +9706,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["provider_id"], "deepseek")
         self.assertEqual(packet["upstream_model"], "deepseek-v4-pro")
         self.assertEqual(packet["selected_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(packet["native_app_usable"])
         self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
         self.assertTrue(packet["known_smoke_phrase_matched"])
         self.assertTrue(packet["route_digest_matches_launch"])
@@ -9651,6 +9728,23 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["model_self_report_counts_as_runtime_truth"])
         self.assertFalse(packet["history_persistence_claimed"])
         self.assertFalse(packet["live_coding_claimed"])
+
+    def test_custom_window_prompt_trace_blocks_legacy_window_proof_without_usability(self) -> None:
+        launch, bridge = self._window_input_route_trace_fixture()
+        launch.pop("native_app_usable", None)
+
+        packet = live_server.build_custom_codex_window_prompt_trace_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=bridge,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["window_launch_proven_with_limits"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN",
+        )
 
     def test_custom_window_prompt_trace_rejects_browser_authority_fields(self) -> None:
         packet = live_server.build_custom_codex_window_prompt_trace_packet(
@@ -9691,6 +9785,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "launch_route_digest": route_digest,
             "custom_codex_window_deepseek_launch_proven_with_limits": True,
             "native_window_observed": True,
+            "native_app_usable": True,
             "custom_window_visible": True,
             "real_codex_app_launched": True,
             "custom_window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 783},
@@ -11896,6 +11991,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "custom_process_pid": 222,
                 "custom_window_visible": True,
                 "custom_window_frontmost": True,
+                "native_app_usable": True,
+                "input_capable_ui_observed": True,
+                "native_app_usability_source": "input_capable_ui",
                 "original_codex_touched": False,
                 "asar_touched": False,
             },
@@ -11926,6 +12024,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(accepted["status"], "ok")
         self.assertEqual(accepted["result"]["machine_error_code"], "OK")
         self.assertTrue(accepted["result"]["data"]["custom_window_visible"])
+        self.assertTrue(accepted["result"]["data"]["native_app_usable"])
         self.assertFalse(accepted["result"]["data"]["original_codex_touched"])
         self.assertFalse(accepted["result"]["data"]["asar_touched"])
         show_window.assert_called_once()
@@ -11942,6 +12041,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "custom_process_pid": 222,
                 "custom_window_visible": True,
                 "custom_window_frontmost": True,
+                "native_app_usable": True,
+                "input_capable_ui_observed": True,
+                "native_app_usability_source": "input_capable_ui",
                 "original_codex_touched": False,
                 "asar_touched": False,
             },
@@ -11969,6 +12071,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["native_app_usable"])
         self.assertFalse(packet["original_codex_touched"])
         self.assertFalse(packet["asar_touched"])
         show_window.assert_called_once()
@@ -12168,6 +12271,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         api_snapshot.assert_called_once()
         launch_native.assert_not_called()
         self.assertIn(("external-models", "routes", "list", "--json"), runner.calls)
+        self.assertNotIn(("healthcheck", "--json"), runner.calls)
 
     def test_custom_native_launch_preflight_classifies_window_bridge_and_model_truth_boundaries(self) -> None:
         with mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False):
@@ -12278,7 +12382,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     "machine_error_code": "OK",
                     "human_message": "Healthcheck passed.",
                     "next_action": "none",
-                    "packet": command_packet(human_message="Healthcheck passed."),
+                    "packet": healthcheck_ok_packet(),
                 },
             )
 
@@ -12647,6 +12751,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     "machine_error_code": "OK",
                     "custom_window_visible": True,
                     "custom_window_frontmost": True,
+                    "native_app_usable": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usability_source": "input_capable_ui",
                     "original_codex_touched": False,
                     "asar_touched": False,
                 },
@@ -12694,6 +12801,53 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(bridge_prewarm.call_count, 2)
         launch.assert_called_once()
         show_window.assert_called_once()
+
+    def test_custom_native_launch_stability_guard_does_not_promote_visible_window_to_usable(self) -> None:
+        packet = live_server._custom_native_launch_stability_guard_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-chat",
+                "selected_model": "wbp-deepseek-chat",
+                "owner_authorization_phrase_present": True,
+                "existing_window_reuse_admissible": True,
+                "custom_process_observed": True,
+                "custom_process_count": 1,
+                "config_status": "matches_last_launch",
+            },
+            status="blocked",
+            machine_error_code="CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN",
+            human_message="Existing Custom Codex window is visible, but input-capable UI was not proven.",
+            show_window_packet={
+                "schema_version": 1,
+                "packet_kind": "custom_codex_show_window",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "custom_window_visible": True,
+                "custom_window_frontmost": True,
+                "native_app_usable": False,
+                "input_capable_ui_observed": False,
+                "native_app_usability_source": "not_proven",
+                "native_app_usability_blocked_reason_class": "input_capable_ui_not_proven_for_pid_window_present",
+                "original_codex_touched": False,
+                "asar_touched": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN",
+        )
+        self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertTrue(packet["launch_blocked"])
+        self.assertFalse(packet["reused_existing_window"])
+        self.assertEqual(
+            packet["native_app_usability_blocked_reason_class"],
+            "input_capable_ui_not_proven_for_pid_window_present",
+        )
 
     def test_custom_native_launch_endpoint_relaunches_changed_config_when_previous_launch_is_proven(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
@@ -13872,6 +14026,62 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         )
         self.assertTrue(packet["models"]["server_issued"])
 
+    def test_operator_status_endpoint_uses_bounded_status_snapshot(self) -> None:
+        class SlowStatusFastModelsSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                time.sleep(0.2)
+                return super().status_payload()
+
+            def probe_models(self) -> dict[str, object]:
+                return {
+                    "ok": True,
+                    "server_issued": True,
+                    "model_ids": ["gpt-5.4", "wbp-deepseek-v4-pro-max"],
+                    "model_entries": [
+                        {"model_id": "gpt-5.4", "lane": "codex_native"},
+                        {
+                            "model_id": "wbp-deepseek-v4-pro-max",
+                            "lane": "wbp_api",
+                        },
+                    ],
+                }
+
+        with (
+            mock.patch.object(
+                live_server,
+                "OperatorSurfaceSession",
+                return_value=SlowStatusFastModelsSession(),
+            ),
+            mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS",
+                0.01,
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(live_payloads())),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(fetch(f"{base}/api/operator/status"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(
+            packet["status"]["machine_error_code"],
+            "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY",
+        )
+        self.assertEqual(
+            packet["models"]["model_ids"],
+            ["gpt-5.4", "wbp-deepseek-v4-pro-max"],
+        )
+        self.assertTrue(packet["models"]["server_issued"])
+
     def test_codex_custom_model_registry_includes_server_owned_external_route_models(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
@@ -14516,6 +14726,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertNotIn('"endpoint_path"', packet_json)
         self.assertNotIn('"route_id"', packet_json)
         self.assertNotIn("native-launch", packet_json)
+        self.assertNotIn(("healthcheck", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"), runner.calls)
 
     def test_quick_start_config_admission_rejects_forbidden_browser_fields(self) -> None:
@@ -14704,6 +14915,9 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(packet["launch_admission"], "blocked")
         self.assertEqual(packet["chatgpt_model"]["status"], "admitted")
+        self.assertEqual(packet["api_model"]["status"], "not_required")
+        self.assertEqual(packet["api_route"]["status"], "not_required")
+        self.assertEqual(packet["api_reasoning"]["status"], "not_required")
         self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
         self.assertEqual(
             packet["runtime_health_gate"]["runtime_health_machine_error_code"],
@@ -14713,6 +14927,54 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             packet["next_action"],
             "restore_or_start_last_known_good_proxy_then_reprobe",
         )
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["new_launch_started"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertIn(("healthcheck", "--json"), runner.calls)
+
+    def test_quick_start_config_admission_blocks_chatgpt_when_healthcheck_attestation_missing(self) -> None:
+        payloads = live_payloads()
+        payloads[("healthcheck", "--json")] = command_packet(
+            human_message="Healthcheck passed without attestation.",
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/quick-start/config-admission",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.3-codex",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RUNTIME_ATTESTATION_INVALID",
+        )
+        self.assertEqual(packet["launch_admission"], "blocked")
+        self.assertEqual(packet["chatgpt_model"]["status"], "admitted")
+        self.assertEqual(packet["api_model"]["status"], "not_required")
+        self.assertEqual(packet["api_route"]["status"], "not_required")
+        self.assertEqual(packet["api_reasoning"]["status"], "not_required")
+        self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
+        self.assertEqual(
+            packet["runtime_health_gate"]["runtime_health_machine_error_code"],
+            "CUSTOM_CODEX_RUNTIME_ATTESTATION_INVALID",
+        )
+        self.assertEqual(packet["next_action"], "retry_healthcheck_attestation")
         self.assertFalse(packet["custom_codex_launch_attempted"])
         self.assertFalse(packet["new_launch_started"])
         self.assertFalse(packet["live_call_attempted"])
@@ -18636,6 +18898,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                 "selected_model": "wbp-deepseek-v4-pro-max",
                 "api_reasoning_option_id": "provider_declared_max",
                 "custom_codex_window_deepseek_launch_proven_with_limits": True,
+                "native_app_usable": True,
                 "real_codex_app_launched": True,
                 "stable_bridge_preflight_required": True,
                 "stable_bridge_preflight_status": "ok",
@@ -18711,6 +18974,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertTrue(packet["stable_bridge_preflight_ok"])
         self.assertTrue(packet["stable_bridge_preflight_required"])
         self.assertTrue(packet["stable_bridge_launch_allowed"])
+        self.assertTrue(packet["native_app_usable"])
         self.assertTrue(packet["file_edit_observed"])
         self.assertTrue(packet["file_mutation_observed"])
         self.assertTrue(packet["file_content_matches_expected"])
@@ -18731,6 +18995,19 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
         self.assertFalse(packet["ui_label_counts_as_proof"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
+
+    def test_api_only_deepseek_live_code_edit_truth_blocks_legacy_window_proof_without_usability(self) -> None:
+        packet = self._api_only_live_code_edit_truth_packet(
+            launch_overrides={"native_app_usable": False},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["window_launch_proven_with_limits"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_API_ONLY_LIVE_CODE_EDIT_NOT_PROVEN",
+        )
 
     def test_api_only_deepseek_live_code_edit_truth_blocks_missing_stable_preflight(self) -> None:
         packet = self._api_only_live_code_edit_truth_packet(
@@ -18963,6 +19240,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "selected_model": "wbp-deepseek-v4-pro-max",
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
+                    "native_app_usable": True,
                     "real_codex_app_launched": True,
                     "stable_bridge_preflight_required": True,
                     "stable_bridge_preflight_status": "ok",
@@ -19077,6 +19355,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "selected_model": "wbp-deepseek-v4-pro-max",
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
+                    "native_app_usable": True,
                     "real_codex_app_launched": True,
                     "stable_bridge_preflight_required": True,
                     "stable_bridge_preflight_status": "ok",
@@ -19227,6 +19506,7 @@ class WebDesignCodexCustomDeepSeekCodeEditProofTests(unittest.TestCase):
                     "selected_model": "wbp-deepseek-v4-pro-max",
                     "api_reasoning_option_id": "provider_declared_max",
                     "custom_codex_window_deepseek_launch_proven_with_limits": True,
+                    "native_app_usable": True,
                     "real_codex_app_launched": True,
                     "stable_bridge_preflight_required": True,
                     "stable_bridge_preflight_status": "ok",

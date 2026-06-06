@@ -34,7 +34,8 @@ def _extract_local_listener_token(config_path: Path) -> str:
     raise RuntimeErrorInfo(
         "Stable runtime generated config does not contain a bounded local listener token shape.",
         machine_error_code="WBP_TOKEN_SOURCE_INVALID",
-        operator_action="repair_runtime",
+        operator_action="user_action",
+        next_action="repair_runtime",
         severity="high",
     )
 
@@ -45,7 +46,8 @@ def emit_local_token(paths: RuntimePaths) -> str:
         raise RuntimeErrorInfo(
             "Stable runtime generated config is missing for token command.",
             machine_error_code="WBP_TOKEN_SOURCE_UNAVAILABLE",
-            operator_action="repair_runtime",
+            operator_action="user_action",
+            next_action="repair_runtime",
             severity="high",
         )
     _write_audit_stamp_if_requested()
@@ -58,7 +60,8 @@ def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:
         raise RuntimeErrorInfo(
             "Stable runtime generated config is missing for token command.",
             machine_error_code="WBP_TOKEN_SOURCE_UNAVAILABLE",
-            operator_action="repair_runtime",
+            operator_action="user_action",
+            next_action="repair_runtime",
             severity="high",
         )
     _token = _extract_local_listener_token(config_path)

@@ -34,7 +34,11 @@ COMMAND_LIVENESS_VALUES = (
 )
 COMMAND_SEVERITY_VALUES = ("recoverable", "fatal", "high")
 COMMAND_OPERATOR_ACTION_VALUES = ("none", "retry", "user_action", "stop")
-COMMAND_NEXT_ACTION_VALUES = ("none", "retry", "user_action", "stop")
+COMMAND_NEXT_ACTION_CORE_VALUES = ("none", "retry", "user_action", "stop")
+# `next_action` is compatibility-wide: core generic values classify as "core";
+# documented command-specific token-shaped values classify as "legacy".
+COMMAND_NEXT_ACTION_VALUES = COMMAND_NEXT_ACTION_CORE_VALUES
+COMMAND_NEXT_ACTION_RESERVED_VALUES = ("operator_action",)
 COMMAND_PACKET_REDACTION_PLACEHOLDER = "<redacted>"
 COMMAND_PACKET_SENSITIVE_KEY_TOKENS = (
     "api_key",
@@ -332,6 +336,9 @@ def _inspect_string_token_field(
     field: str,
     classifier: Any,
     violations: list[dict[str, str]],
+    *,
+    allow_legacy: bool = True,
+    reserved_values: tuple[str, ...] = (),
 ) -> None:
     value = packet.get(field)
     if not isinstance(value, str):
@@ -339,12 +346,30 @@ def _inspect_string_token_field(
             _command_packet_violation(field, "type", f"{field} must be a string.")
         )
         return
-    if classifier(value) == "invalid_shape":
+    if value in reserved_values:
+        violations.append(
+            _command_packet_violation(
+                field,
+                "reserved_value",
+                f"{field} must not use reserved placeholder token {value}.",
+            )
+        )
+        return
+    classification = classifier(value)
+    if classification == "invalid_shape":
         violations.append(
             _command_packet_violation(
                 field,
                 "invalid_shape",
                 f"{field} must use a machine-readable token shape.",
+            )
+        )
+    elif classification == "legacy" and not allow_legacy:
+        violations.append(
+            _command_packet_violation(
+                field,
+                "invalid_value",
+                f"{field} must use a documented core command value.",
             )
         )
 
@@ -386,7 +411,11 @@ def inspect_command_packet_semantics(
         )
     if "next_action" in packet:
         _inspect_string_token_field(
-            packet, "next_action", classify_command_next_action, violations
+            packet,
+            "next_action",
+            classify_command_next_action,
+            violations,
+            reserved_values=COMMAND_NEXT_ACTION_RESERVED_VALUES,
         )
     if "liveness" in packet:
         _inspect_string_token_field(
@@ -402,6 +431,7 @@ def inspect_command_packet_semantics(
             "operator_action",
             classify_command_operator_action,
             violations,
+            allow_legacy=False,
         )
 
     if "exit_code" in packet:

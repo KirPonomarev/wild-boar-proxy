@@ -45,6 +45,40 @@ def _runtime_paths(root: Path) -> runtime.RuntimePaths:
 
 
 class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
+    def test_repo_owned_default_launcher_enables_renderer_accessibility_for_desktop_app(
+        self,
+    ) -> None:
+        payload = runtime.build_repo_owned_default_launcher_script_payload()
+
+        self.assertIn(
+            'CODEX_RENDERER_ACCESSIBILITY_FLAG="--force-renderer-accessibility=complete"',
+            payload,
+        )
+        self.assertEqual(
+            payload.count(' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'),
+            4,
+        )
+        self.assertIn(
+            'CODEX_REMOTE_DEBUGGING_ADDRESS="127.0.0.1"',
+            payload,
+        )
+        self.assertIn(
+            'CODEX_REMOTE_DEBUGGING_PORT="${WBP_CODEX_REMOTE_DEBUGGING_PORT:-9223}"',
+            payload,
+        )
+        self.assertEqual(
+            payload.count('"--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'),
+            4,
+        )
+        self.assertEqual(
+            payload.count('"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'),
+            4,
+        )
+        self.assertIn(
+            '"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT" "--user-data-dir=$APP_USER_DATA_DIR"',
+            payload,
+        )
+
     def test_auth_pool_hygiene_uses_snapshot_as_observed_selection_when_runtime_loaded_ids_empty(
         self,
     ) -> None:

@@ -222,7 +222,7 @@ def build_packets() -> dict[str, dict[str, Any]]:
                 "status": "ok",
             },
             {
-                "id": "current_execution_path_model_id_is_operator_reported_not_browser_selected",
+                "id": "current_execution_path_model_id_remains_operator_reported_when_browser_default_matches",
                 "status": "ok",
             },
             {

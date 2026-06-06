@@ -121,6 +121,7 @@ class TokenCommandCliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "WBP_TOKEN_SOURCE_UNAVAILABLE")
+        self.assertEqual(payload["operator_action"], "user_action")
         self.assertEqual(payload["next_action"], "repair_runtime")
 
     def test_token_plain_fails_without_json_when_generated_config_missing(self) -> None:

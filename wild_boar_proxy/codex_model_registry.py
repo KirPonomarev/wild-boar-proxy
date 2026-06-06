@@ -1362,7 +1362,11 @@ def build_dual_lane_model_selection_ui_packet(
         for row in current_api_rows
     ]
     seed_entries = [_seed_reference_entry_from_row(row) for row in seed_rows]
-    chatgpt_default = _default_selector_model_id(chatgpt_entries, recommended_default_model)
+    reported_configured_model = _reported_configured_model(operator_status)
+    chatgpt_default = _default_selector_model_id(
+        chatgpt_entries,
+        reported_configured_model or recommended_default_model,
+    )
     api_default = _default_selector_model_id(api_entries)
     return {
         "schema_version": 1,
@@ -3659,6 +3663,21 @@ def build_custom_model_registry_packet(
 ) -> dict[str, Any]:
     models = _models_payload(operator_status)
     model_specs = _server_catalog_model_specs(models)
+    reported_configured_model = _reported_configured_model(operator_status)
+    if (
+        _is_native_model_id(reported_configured_model)
+        and reported_configured_model
+        and reported_configured_model
+        not in {str(spec.get("model_id") or "") for spec in model_specs}
+    ):
+        model_specs.append(
+            {
+                "model_id": reported_configured_model,
+                "lane": "codex_native",
+                "server_lane_explicit": True,
+                "source": "operator_reported_configured_model",
+            }
+        )
     model_ids = [str(spec["model_id"]) for spec in model_specs]
     claim_gate_status = claim_gate_status_from_operator_status(operator_status)
     status, machine_error_code = _status_for_models(
@@ -3666,7 +3685,6 @@ def build_custom_model_registry_packet(
         claim_gate_status,
         bool(models.get("ok")) or bool(model_ids),
     )
-    reported_configured_model = _reported_configured_model(operator_status)
     availability_rows = _availability_rows_by_model_id(availability_lattice_packet)
     available_models = []
     for spec in model_specs:

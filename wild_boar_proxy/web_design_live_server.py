@@ -109,6 +109,7 @@ from wild_boar_proxy.runtime import (
     DEFAULT_LAUNCHER_SCRIPT_NAME,
     RuntimePaths,
     build_command_payload,
+    build_launcher_subprocess_env,
     proxyless_urlopen,
     run_legacy_import,
 )
@@ -3901,7 +3902,35 @@ def _command_result_health_ok(result: dict[str, Any] | None) -> bool:
         and result.get("machine_error_code") == "OK"
         and packet.get("status") == "ok"
         and packet.get("machine_error_code") == "OK"
+        and packet.get("effect") == "probe"
+        and packet.get("changed_files") == []
+        and _healthcheck_attestation_ok(packet)
     )
+
+
+def _healthcheck_attestation_ok(packet: dict[str, Any] | None) -> bool:
+    if not isinstance(packet, dict):
+        return False
+    attestation = packet.get("attestation")
+    if not isinstance(attestation, dict):
+        return False
+    for key in (
+        "listener_ok",
+        "models_ok",
+        "responses_ok",
+        "effective_mode_match",
+        "base_url_match",
+    ):
+        if attestation.get(key) is not True:
+            return False
+    for key in (
+        "selected_backends_digest",
+        "observed_at_utc",
+        "runtime_version",
+    ):
+        if not str(attestation.get(key) or "").strip():
+            return False
+    return str(attestation.get("attestation_source") or "") == "healthcheck --json"
 
 
 def _custom_native_chatgpt_runtime_health_gate_packet(
@@ -3951,6 +3980,10 @@ def _custom_native_chatgpt_runtime_health_gate_packet(
     if not next_action:
         next_action = str(packet.get("next_action") or "repair_runtime_proxy")
     ok = _command_result_health_ok(runtime_health_result)
+    if not ok and machine_error_code == "OK":
+        machine_error_code = "CUSTOM_CODEX_RUNTIME_ATTESTATION_INVALID"
+    if not ok and next_action == "none":
+        next_action = "retry_healthcheck_attestation"
     return {
         "schema_version": 1,
         "packet_kind": "custom_native_chatgpt_runtime_health_gate",
@@ -3967,6 +4000,11 @@ def _custom_native_chatgpt_runtime_health_gate_packet(
         "runtime_health_next_action": "none" if ok else next_action,
         "source_command": "healthcheck --json",
     }
+
+
+def _payload_requires_chatgpt_runtime_health(payload: dict[str, Any]) -> bool:
+    execution_mode = str(payload.get("execution_mode") or "").strip()
+    return execution_mode in {"chatgpt_only", "chatgpt_plus_api"}
 
 
 def build_quick_start_config_admission_packet(
@@ -4152,6 +4190,10 @@ def _custom_native_launch_stability_guard_packet(
     show_window_ok = bool(
         isinstance(show_window_packet, dict) and show_window_packet.get("status") == "ok"
     )
+    window_usable = bool(
+        isinstance(show_window_packet, dict)
+        and show_window_packet.get("native_app_usable") is True
+    )
     window_unresponsive = bool(show_window_attempted and (not show_window_ok or not window_visible))
     show_window_machine_error = str(
         show_window_packet.get("machine_error_code") if isinstance(show_window_packet, dict) else ""
@@ -4216,12 +4258,26 @@ def _custom_native_launch_stability_guard_packet(
             isinstance(show_window_packet, dict)
             and show_window_packet.get("custom_window_frontmost") is True
         ),
+        "input_capable_ui_observed": bool(
+            isinstance(show_window_packet, dict)
+            and show_window_packet.get("input_capable_ui_observed") is True
+        ),
+        "native_app_usability_source": str(
+            show_window_packet.get("native_app_usability_source")
+            if isinstance(show_window_packet, dict)
+            else ""
+        ),
+        "native_app_usability_blocked_reason_class": str(
+            show_window_packet.get("native_app_usability_blocked_reason_class")
+            if isinstance(show_window_packet, dict)
+            else ""
+        ),
         "window_response_timeout": window_response_timeout,
         "window_unresponsive_with_limits": window_unresponsive,
         "new_launch_started": False,
         "process_started": False,
         "native_window_observed": window_visible,
-        "native_app_usable": window_visible,
+        "native_app_usable": window_usable,
         "live_provider_called": False,
         "model_auto_selected": False,
         "fallback_used": False,
@@ -5459,6 +5515,7 @@ def _add_custom_codex_window_deepseek_smoke_truth(packet: dict[str, Any]) -> Non
         and packet.get("process_started") is True
         and packet.get("expected_custom_identity_observed") is True
         and packet.get("native_window_observed") is True
+        and packet.get("native_app_usable") is True
         and packet.get("real_codex_app_launched") is True
         and packet.get("route_packet_matches_selection_packet") is True
         and packet.get("quick_start_launch_route_truth_proven_with_limits") is True
@@ -5518,6 +5575,7 @@ def build_custom_codex_window_prompt_trace_packet(
         launch.get("custom_codex_window_deepseek_launch_proven_with_limits") is True
         and launch.get("status") == "ok"
         and launch.get("native_window_observed") is True
+        and launch.get("native_app_usable") is True
         and launch.get("real_codex_app_launched") is True
     )
     selected_model = str(launch.get("selected_model") or "")
@@ -5572,6 +5630,7 @@ def build_custom_codex_window_prompt_trace_packet(
             else "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
         ),
         "window_launch_proven_with_limits": launch_proven,
+        "native_app_usable": launch.get("native_app_usable") is True,
         "launch_id": launch_id,
         "trace_id": trace_id,
         "trace_server_issued": bool(launch_id and trace_id),
@@ -7027,6 +7086,7 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
     launch_alive_enough = (
         launch.get("status") == "ok"
         and launch.get("custom_codex_window_deepseek_launch_proven_with_limits") is True
+        and launch.get("native_app_usable") is True
         and launch.get("real_codex_app_launched") is True
     )
     success = bool(
@@ -7103,6 +7163,7 @@ def build_custom_codex_deepseek_code_edit_reproduction_packet(
         "thread_model": thread_model,
         "thread_model_provider": thread_provider,
         "window_launch_proven_with_limits": launch_alive_enough,
+        "native_app_usable": launch.get("native_app_usable") is True,
         "stable_bridge_preflight": stable_bridge_preflight_status,
         "stable_bridge_preflight_ok": stable_bridge_preflight_ok,
         "stable_bridge_preflight_required": launch.get("stable_bridge_preflight_required") is True,
@@ -9090,7 +9151,15 @@ def build_handler(
     post_rate_limiter: WebPostRateLimiter | None = None,
     post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
 ) -> type[BaseHTTPRequestHandler]:
-    command_runner = runner or JsonCommandRunner()
+    owner_paths = RuntimePaths.from_env()
+    command_runner = runner or (
+        JsonCommandRunner(
+            cwd=str(owner_paths.profile_dir),
+            env=_owner_action_runner_env(owner_paths),
+        )
+        if action_phase == FULL_ACTION_PHASE
+        else JsonCommandRunner()
+    )
     readonly_runner = command_runner
     accounts_readonly_runner = command_runner
     api_connections_readonly_runner = command_runner
@@ -9527,7 +9596,10 @@ def build_handler(
 
         def _handle_get_api_operator_status(self, request_path: str) -> None:
             parsed = urlparse(request_path)
-            self._send_json(operator_surface_session.status_payload())
+            status_packet, _operator_status_timeout = _bounded_operator_status_payload(
+                operator_surface_session
+            )
+            self._send_json(status_packet)
             return
 
         def _handle_get_api_operator_models(self, request_path: str) -> None:
@@ -10263,7 +10335,11 @@ def build_handler(
                 operator_status, _operator_status_timeout = _bounded_operator_status_payload(
                     operator_surface_session
                 )
-            runtime_health_result = execute_command(readonly_runner, "healthcheck")
+            runtime_health_result = (
+                execute_command(readonly_runner, "healthcheck")
+                if _payload_requires_chatgpt_runtime_health(payload)
+                else None
+            )
             self._send_json(
                 _custom_native_launch_preflight_packet(
                     payload,
@@ -10340,7 +10416,11 @@ def build_handler(
                 operator_status, _operator_status_timeout = _bounded_operator_status_payload(
                     operator_surface_session
                 )
-            runtime_health_result = execute_command(readonly_runner, "healthcheck")
+            runtime_health_result = (
+                execute_command(readonly_runner, "healthcheck")
+                if _payload_requires_chatgpt_runtime_health(payload)
+                else None
+            )
             preflight_packet = _custom_native_launch_preflight_packet(
                 payload,
                 owner_authorized=codex_custom_live_prompt_authorized,
@@ -10478,6 +10558,7 @@ def build_handler(
                 show_ok = (
                     show_window_packet.get("status") == "ok"
                     and show_window_packet.get("custom_window_visible") is True
+                    and show_window_packet.get("native_app_usable") is True
                 )
                 packet = _custom_native_launch_stability_guard_packet(
                     preflight_packet,
@@ -10485,12 +10566,20 @@ def build_handler(
                     machine_error_code=(
                         "OK"
                         if show_ok
-                        else "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+                        else (
+                            "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN"
+                            if show_window_packet.get("custom_window_visible") is True
+                            else "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+                        )
                     ),
                     human_message=(
                         "Existing Custom Codex window reused; no new launch was started."
                         if show_ok
-                        else "Existing Custom Codex process matched the launch config, but the window could not be proven usable."
+                        else (
+                            "Existing Custom Codex process matched the launch config, but input-capable UI was not proven."
+                            if show_window_packet.get("custom_window_visible") is True
+                            else "Existing Custom Codex process matched the launch config, but the window could not be proven usable."
+                        )
                     ),
                     show_window_packet=show_window_packet,
                 )
@@ -10819,7 +10908,11 @@ def build_handler(
                     payload,
                     operator_status,
                     api_snapshot=api_snapshot,
-                    runtime_health_result=execute_command(readonly_runner, "healthcheck"),
+                    runtime_health_result=(
+                        execute_command(readonly_runner, "healthcheck")
+                        if _payload_requires_chatgpt_runtime_health(payload)
+                        else None
+                    ),
                 )
             )
             return
@@ -11793,6 +11886,18 @@ def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     env["WBP_LAUNCHER_LOCK_FILE"] = str(data_dir / "stable-runtime-launch.lock")
     env["WBP_EXTERNAL_MODELS_DIR"] = str(data_dir / "external-models")
     env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
+    return env
+
+
+def _owner_action_runner_env(paths: RuntimePaths) -> dict[str, str]:
+    env = build_launcher_subprocess_env(paths)
+    repo_root = str(ROOT)
+    current_pythonpath = env.get("PYTHONPATH", "")
+    pythonpath_parts = [part for part in current_pythonpath.split(os.pathsep) if part]
+    if repo_root not in pythonpath_parts:
+        pythonpath_parts.insert(0, repo_root)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    env["WBP_EXTERNAL_MODELS_DIR"] = str(paths.managed_dir / "external-models")
     return env
 
 

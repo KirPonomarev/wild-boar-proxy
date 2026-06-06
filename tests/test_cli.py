@@ -642,6 +642,27 @@ class CliTests(unittest.TestCase):
         self.assertEqual(false_green_check["status"], "fail")
         self.assertEqual(false_green_check["machine_error_code"], "LISTENER_DOWN")
 
+    def test_invariant_check_listener_down_uses_generic_operator_action(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+            )
+
+        shape_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "command_packet_shape"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["operator_action"], "user_action")
+        self.assertEqual(payload["next_action"], "required_repair")
+        self.assertNotEqual(payload["next_action"], "operator_action")
+        self.assertEqual(shape_check["status"], "pass")
+        self.assertEqual(
+            runtime_mod.command_packets.inspect_command_packet_semantics(payload),
+            [],
+        )
+
     def test_recovery_hints_are_sorted_by_priority(self) -> None:
         unused_stable_port = free_port()
         (self.stable_dir / "config.yaml").write_text(
@@ -995,6 +1016,117 @@ class CliTests(unittest.TestCase):
             self.assertFalse(
                 runtime_mod.managed_pid_matches_expected(paths, "not-a-pid")
             )
+
+    def test_stable_pid_matches_expected_consumes_bounded_process_probe(
+        self,
+    ) -> None:
+        command = ["/bin/ps", "-p", "123", "-o", "command="]
+        matching = subprocess.CompletedProcess(
+            command,
+            0,
+            f"cli-proxy-api -config {self.stable_dir / 'config.yaml'}\n",
+            "",
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch.object(
+                runtime_mod, "_run_process_probe_ps", return_value=matching
+            ):
+                self.assertTrue(runtime_mod.stable_pid_matches_expected(paths, "123"))
+            with mock.patch.object(
+                runtime_mod, "_run_process_probe_ps", return_value=None
+            ):
+                self.assertFalse(runtime_mod.stable_pid_matches_expected(paths, "123"))
+            self.assertFalse(runtime_mod.stable_pid_matches_expected(paths, "bad-pid"))
+
+    def test_stable_proxyless_recovery_restarts_and_accepts_live_reproof(
+        self,
+    ) -> None:
+        self.stable_dir.joinpath("config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            "auth-dir: \"~/.cli-proxy-api\"\n"
+            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            encoding="utf-8",
+        )
+        self.profile_dir.joinpath("runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        reproof_payload = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Runtime attestation passed.",
+            "liveness": "healthy",
+            "severity": "recoverable",
+            "operator_action": "none",
+            "effective_mode": "stable",
+            "last_error": "",
+            "attestation": {
+                "listener_ok": True,
+                "models_ok": True,
+                "responses_ok": True,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+        }
+        restart_result = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "listener_was_present": True,
+            "discovered_pids": [123],
+            "terminated_pids": [123],
+            "launch_result": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "pid": 456,
+                "launch_observed": True,
+            },
+        }
+
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=False),
+            mock.patch.object(
+                runtime_mod,
+                "restart_owned_stable_runtime_process",
+                return_value=restart_result,
+            ),
+            mock.patch.object(runtime_mod, "run_healthcheck", return_value=reproof_payload),
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
+                paths,
+                model="gpt-5.5",
+                configured_proxy_url="http://127.0.0.1:10808",
+            )
+
+        self.assertIs(reproof, reproof_payload)
+        self.assertEqual(result["adoption_outcome"], "stable_proxyless_recovered")
+        self.assertTrue(result["stable_config_rewritten"])
+        self.assertTrue(result["stable_runtime_restarted"])
+        self.assertTrue(result["live_runtime_observation_confirmed"])
+        self.assertFalse(result["rollback_restored"])
+        self.assertNotIn(
+            "proxy-url:",
+            self.stable_dir.joinpath("config.yaml").read_text(encoding="utf-8"),
+        )
+        state = json.loads(
+            self.managed_dir.joinpath("supervisor-state.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["status"], "healthy")
+        self.assertEqual(
+            self.profile_dir.joinpath("runtime-effective-mode.txt").read_text(
+                encoding="utf-8"
+            ),
+            "stable\n",
+        )
+        self.assertIn(
+            'base_url = "http://127.0.0.1:8318/v1"',
+            self.profile_dir.joinpath("config.toml").read_text(encoding="utf-8"),
+        )
 
     def test_dynamic_local_proxy_candidates_use_bounded_lsof_probe(
         self,
@@ -5321,8 +5453,8 @@ class CliTests(unittest.TestCase):
             str(self.managed_dir / "supervisor-state.json"),
             payload["changed_files"],
         )
-        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
-        self.assertIn(
+        self.assertNotIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertNotIn(
             str(self.profile_dir / "runtime-effective-mode.txt"),
             payload["changed_files"],
         )

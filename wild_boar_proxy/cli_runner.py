@@ -494,9 +494,10 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
             ),
             liveness="unknown",
             severity="recoverable",
-            operator_action="repair_model_registry_truth",
+            operator_action="user_action",
             changed_files=[],
             extra={
+                "next_action": "repair_model_registry_truth",
                 "consumer_kind": "codex_cli_runner",
                 "native_app_claimed": False,
                 "runner_launch_surface": RUNNER_SURFACE,
@@ -598,9 +599,10 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
         machine_error_code=machine_error_code,
         liveness="healthy" if not failed_checks else "degraded",
         severity="recoverable",
-        operator_action="none" if not failed_checks else "stop_and_diagnose",
+        operator_action="none" if not failed_checks else "stop",
         changed_files=[],
         extra={
+            "next_action": "none" if not failed_checks else "stop_and_diagnose",
             "consumer_kind": "codex_cli_runner",
             "native_app_claimed": False,
             "runner_launch_surface": RUNNER_SURFACE,

@@ -259,7 +259,9 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertEqual(paths.secrets_file.read_text(encoding="utf-8"), "")
             self.assertEqual(paths.secrets_file.stat().st_mode & 0o777, 0o600)
 
-    def test_build_external_models_payload_keeps_domain_actions_passthrough(self) -> None:
+    def test_build_external_models_payload_keeps_domain_next_action_generic_operator(
+        self,
+    ) -> None:
         packet = contracts.build_external_models_payload(
             ok=False,
             human_message="owner action required",
@@ -270,18 +272,19 @@ class ExternalModelContractTests(unittest.TestCase):
             liveness="warming_up",
         )
 
-        self.assertEqual(packet["operator_action"], "api_route_connect")
+        self.assertEqual(packet["operator_action"], "user_action")
         self.assertEqual(packet["next_action"], "api_route_connect")
         self.assertEqual(packet["severity"], "critical")
         self.assertEqual(packet["liveness"], "warming_up")
         self.assertEqual(
             packets.classify_command_operator_action(packet["operator_action"]),
-            "legacy",
+            "core",
         )
         self.assertEqual(
             packets.classify_command_next_action(packet["next_action"]),
             "legacy",
         )
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_credential_admit_packets_declare_mutate_effect(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

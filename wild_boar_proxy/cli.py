@@ -10,6 +10,7 @@ from typing import Any
 
 from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
+from .core import packets as command_packets
 from .external_models import run_external_models_command
 from .runtime_health import run_healthcheck_probe
 from .runtime_repair import run_healthcheck_repair
@@ -750,16 +751,22 @@ def main(argv: list[str] | None = None) -> int:
             operator_action="user_action",
         )
     except RuntimeErrorInfo as exc:
+        next_action = str(getattr(exc, "next_action", exc.operator_action))
+        operator_action = (
+            exc.operator_action
+            if exc.operator_action in command_packets.COMMAND_OPERATOR_ACTION_VALUES
+            else "user_action"
+        )
         payload = {
             "status": "error",
             "exit_code": exc.exit_code,
             "human_message": exc.message,
             "machine_error_code": exc.machine_error_code,
             "changed_files": [],
-            "next_action": exc.operator_action,
+            "next_action": next_action,
             "liveness": "unknown",
             "severity": exc.severity,
-            "operator_action": exc.operator_action,
+            "operator_action": operator_action,
         }
         if command_effect is not None:
             payload["effect"] = command_effect

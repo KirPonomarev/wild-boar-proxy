@@ -1548,6 +1548,15 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("height: auto", css)
         self.assertIn("padding: 32px var(--qs-main-padding) 24px", css)
         self.assertIn("@media (max-width: 1100px)", css)
+        self.assertIn('.desktop[data-screen="quick-start"] .main-header', css)
+        self.assertIn("position: fixed", css)
+        self.assertIn("z-index: 120", css)
+        self.assertIn("padding-top: 112px", css)
+        self.assertIn("async function refreshCurrentSource()", js)
+        self.assertIn('setRefreshButtonFeedback("busy", "Обновляю...", { disabled: true })', js)
+        self.assertIn('setRefreshButtonFeedback("success", "Обновлено", { resetAfterMs: 1000 })', js)
+        self.assertIn('setRefreshButtonFeedback("error", "Ошибка", { resetAfterMs: 1800 })', js)
+        self.assertIn("resetRefreshButtonLabelIfIdle()", js)
         self.assertIn("grid-template-columns: minmax(280px, 1fr) minmax(280px, .82fr)", css)
         self.assertNotIn("@media (max-width: 1511px)", css)
         self.assertIn(".main-header > div:first-child::before", css)
@@ -1616,6 +1625,83 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("missing_secret_ref", js)
         self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
         self.assertIn('const primary = source === "live"', js)
+
+    def test_quick_start_api_selector_uses_available_api_routes_when_api_lane_is_absent(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "live" } }; },
+    querySelectorAll() { return []; },
+    getElementById() { return null; },
+    createElement() { return {}; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const entries = sandbox.codexCustomApiModelEntries({
+  status: "degraded",
+  machine_error_code: "CLAIM_GATE_BLOCKED",
+  available_models: [
+    {
+      model_id: "gpt-5.4",
+      selection_enabled: true,
+      model_lane: "codex_account_lane",
+      source: "server_native_catalog"
+    },
+    {
+      model_id: "wbp-deepseek-v4-pro-max",
+      display_name: "WBP DeepSeek V4 Pro · Максимум",
+      selection_enabled: true,
+      model_lane: "api_route_lane",
+      source: "server_owned_external_route",
+      thinking: { type: "enabled", reasoning_effort: "max" }
+    },
+    {
+      model_id: "wbp-disabled-openrouter",
+      selection_enabled: false,
+      model_lane: "api_route_lane",
+      source: "server_owned_external_route"
+    },
+    {
+      model_id: "gpt-image-2",
+      selection_enabled: true,
+      model_lane: "unknown_lane",
+      source: "cliproxy_external_alias"
+    }
+  ]
+});
+
+if (entries.length !== 1) {
+  throw new Error(`expected one fallback API route entry, got ${entries.length}`);
+}
+if (entries[0].model_id !== "wbp-deepseek-v4-pro-max") {
+  throw new Error(`wrong fallback model: ${entries[0].model_id}`);
+}
+if (entries[0].thinking.reasoning_effort !== "max") {
+  throw new Error("DeepSeek reasoning metadata was not preserved");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_quick_start_launch_preflight_renders_relaunch_as_ready_state(self) -> None:
         script = r"""
@@ -1843,6 +1929,7 @@ node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
 node("quickStartApiReasoningOptionSelect").value = "catalog_default";
 
 let requestBody = null;
+let routeCheckCall = null;
 const sandbox = {
   console,
   document: {
@@ -1896,6 +1983,26 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.runUiAction = async (uiAction, extraPayload = {}) => {
+  routeCheckCall = { uiAction, extraPayload };
+  return {
+    payload: {
+      status: "ok",
+      ui_action: "api_route_check",
+      route_id: extraPayload.route_id,
+      action_role: "api_route_smoke_check",
+      post_action_refresh_required: true,
+      result: {
+        status: "ok",
+        machine_error_code: "OK",
+        human_message: "route check ok",
+        next_action: "none",
+        changed_files: []
+      }
+    },
+    refreshState: "complete"
+  };
+};
 sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
   const keys = Object.keys(requestBody).sort();
   const expected = ["api_model_id", "api_reasoning_option_id", "chatgpt_model_id", "execution_mode"];
@@ -1909,6 +2016,28 @@ sandbox.runQuickStartConfigAdmission("quickStartCheckApiAction").then(() => {
   }
   if (requestBody.execution_mode !== "chatgpt_plus_api" || requestBody.api_model_id !== "wbp-deepseek-v3") {
     throw new Error(`selection body mismatch ${JSON.stringify(requestBody)}`);
+  }
+  if (!routeCheckCall) {
+    throw new Error("API-capable quick start check did not run selected route check");
+  }
+  if (routeCheckCall.uiAction !== "api_route_check") {
+    throw new Error(`wrong chained UI action ${routeCheckCall.uiAction}`);
+  }
+  if (routeCheckCall.extraPayload.route_id !== "wbp-deepseek-v3") {
+    throw new Error(`wrong route check payload ${JSON.stringify(routeCheckCall.extraPayload)}`);
+  }
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "OK") {
+    throw new Error(`route chip did not show OK: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+  }
+  const routeResponse = JSON.parse(node("quickStartRouteResponse").textContent);
+  if (routeResponse.ui_action !== "api_route_check" || routeResponse.action_machine_error_code !== "OK") {
+    throw new Error(`route action result not rendered in quick start response: ${JSON.stringify(routeResponse)}`);
+  }
+  if (routeResponse.route_id !== "wbp-deepseek-v3" || routeResponse.action_refresh_state !== "complete") {
+    throw new Error(`route check truth fields missing: ${JSON.stringify(routeResponse)}`);
+  }
+  if (routeResponse.runtime_readiness_claimed !== false) {
+    throw new Error("route check response must not claim runtime readiness");
   }
 }).catch((error) => {
   console.error(error);
@@ -2004,6 +2133,168 @@ sandbox.buildCodexCustomLaunchSelectionPayload().then((payload) => {
   console.error(error);
   process.exit(1);
 });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_preserves_visible_mixed_selection(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "provider_declared_disabled";
+node("codexCustomExecutionModeSelect").value = "chatgpt_only";
+node("codexCustomModelSelect").value = "gpt-5.3-codex";
+node("codexCustomApiModelSelect").value = "wbp-deepseek-chat";
+node("codexCustomApiReasoningOptionSelect").value = "provider_declared_disabled";
+
+const storage = new Map();
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("model render preservation test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.3-codex",
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+const payload = sandbox.quickStartLaunchPayloadFromSelects();
+if (payload.execution_mode !== "chatgpt_plus_api") {
+  throw new Error(`model refresh reset execution mode: ${JSON.stringify(payload)}`);
+}
+if (payload.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`model refresh reset ChatGPT model: ${JSON.stringify(payload)}`);
+}
+if (payload.api_model_id !== "wbp-deepseek-chat") {
+  throw new Error(`model refresh reset API model: ${JSON.stringify(payload)}`);
+}
+if (node("codexCustomExecutionModeSelect").value !== "chatgpt_plus_api") {
+  throw new Error(`master mode did not follow Quick Start: ${node("codexCustomExecutionModeSelect").value}`);
+}
+if (node("codexCustomModelSelect").value !== "gpt-5.5") {
+  throw new Error(`master ChatGPT model did not follow Quick Start: ${node("codexCustomModelSelect").value}`);
+}
 """
         result = subprocess.run(
             ["node", "-e", script],
@@ -2435,6 +2726,9 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
     throw new Error(`unexpected launch fetches ${JSON.stringify(urls)}`);
   }
+  if (new Set(packets.map((packet) => JSON.stringify(packet))).size !== 1) {
+    throw new Error(`launch chain mutated selection payloads: ${JSON.stringify(packets)}`);
+  }
   for (const packet of packets) {
     if (packet.execution_mode !== "chatgpt_plus_api") {
       throw new Error(`wrong execution mode in payload: ${JSON.stringify(packet)}`);
@@ -2452,6 +2746,716 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
   if (rendered.status !== "ok" || rendered.native_window_observed !== true) {
     throw new Error(`native launch truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_refresh_ignores_stale_v1_storage_and_prefers_gpt_5_5(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+node("quickStartExecutionModeSelect").value = "chatgpt_only";
+node("quickStartChatModelSelect").value = "";
+node("quickStartApiModelSelect").value = "";
+node("quickStartApiReasoningOptionSelect").value = "";
+node("codexCustomExecutionModeSelect").value = "";
+node("codexCustomModelSelect").value = "";
+node("codexCustomApiModelSelect").value = "";
+node("codexCustomApiReasoningOptionSelect").value = "";
+
+const storage = new Map();
+storage.set("wbp.codex.route-selection.v1", JSON.stringify({
+  execution_mode: "api_only",
+  chatgpt_model_id: "gpt-5.3-codex",
+  api_model_id: "wbp-deepseek-chat",
+  api_reasoning_option_id: "catalog_default"
+}));
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("model refresh storage migration test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.3-codex",
+    models: [
+      { model_id: "gpt-5.3-codex", display_name: "gpt-5.3-codex", selection_enabled: true },
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+const payload = sandbox.quickStartLaunchPayloadFromSelects();
+if (payload.execution_mode !== "chatgpt_only") {
+  throw new Error(`stale v1 storage reset execution mode: ${JSON.stringify(payload)}`);
+}
+if (payload.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`Quick Start did not prefer gpt-5.5: ${JSON.stringify(payload)}`);
+}
+if (payload.api_model_id !== "") {
+  throw new Error(`ChatGPT-only payload must not carry API model: ${JSON.stringify(payload)}`);
+}
+const persisted = JSON.parse(storage.get("wbp.codex.route-selection.v2"));
+if (persisted.execution_mode !== "chatgpt_only" || persisted.chatgpt_model_id !== "gpt-5.5") {
+  throw new Error(`fresh v2 selection was not persisted: ${JSON.stringify(persisted)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_primary_launch_action_preserves_api_only_payload_when_admitted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "api_only";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+
+const urls = [];
+const packets = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: { setItem() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options.body);
+    packets.push(body);
+    for (const forbidden of ["route_id", "secret_ref", "api_key", "base_url", "path", "CODEX_HOME"]) {
+      if (JSON.stringify(body).includes(forbidden)) {
+        throw new Error(`forbidden browser field leaked into launch body: ${forbidden}`);
+      }
+    }
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+          execution_mode: "api_only",
+          chatgpt_model: { status: "not_required", model_id: "" },
+          api_model: { status: "admitted", model_id: "wbp-deepseek-chat" },
+          api_reasoning: { status: "defaulted", option_id: "catalog_default" },
+          api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+          launch_admission: "admitted",
+          dry_server_truth_only: true,
+          custom_codex_launch_attempted: false,
+          new_launch_started: false,
+          network_calls_made: false,
+          live_call_attempted: false,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "native_launch_preflight"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
+          execution_mode: "api_only",
+          selected_model: "wbp-deepseek-chat",
+          owner_authorization_phrase_present: true,
+          bridge_required: true,
+          bridge_alive: true,
+          bridge_status: "running",
+          custom_process_observed: false,
+          window_status: "not_found",
+          config_status: "admitted",
+          new_launch_started: false,
+          custom_codex_launch_attempted: false,
+          live_call_attempted: false,
+          provider_called: false,
+          next_action: "native_launch"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
+          execution_mode: "api_only",
+          selected_model: "wbp-deepseek-chat",
+          launch_model_id: "wbp-deepseek-chat",
+          route_model_id: "wbp-deepseek-chat",
+          chatgpt_model_id: "",
+          api_model_id: "wbp-deepseek-chat",
+          running_status: true,
+          wbp_endpoint_configured: true,
+          bridge_alive: true,
+          stable_custom_codex_wbp_bridge_final_status: "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS",
+          process_started: true,
+          native_window_observed: true,
+          native_app_usable: true,
+          launch_claim_scope: "native_custom_codex_launch_packet_truth",
+          selection_packet: {
+            execution_mode: "api_only",
+            chatgpt_model_id: "",
+            api_model_id: "wbp-deepseek-chat",
+            primary_model_slot: {
+              lane: "api_route_lane",
+              model_id: "wbp-deepseek-chat"
+            },
+            chatgpt_line_used_as_executor: false,
+            api_line_used_as_executor: true,
+            api_only_calls_chatgpt: false
+          },
+          route_packet_matches_selection_packet: true,
+          quick_start_launch_route_truth_proven_with_limits: true,
+          config_status: "matches_last_launch",
+          new_launch_started: true,
+          live_call_attempted: true,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "continue_in_existing_custom_window"
+        })
+      });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+  actionMetadata = {
+    launch_custom_client_native: {
+      available: true,
+      disabled_reason_code: "",
+      availability_state: "enabled"
+    }
+  };
+`, sandbox);
+sandbox.runQuickStartCustomLaunchAction().then(() => {
+  const expected = [
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight",
+    "api/codex/custom/native-launch"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected launch fetches ${JSON.stringify(urls)}`);
+  }
+  for (const packet of packets) {
+    if (packet.execution_mode !== "api_only") {
+      throw new Error(`wrong execution mode in payload: ${JSON.stringify(packet)}`);
+    }
+    if (packet.chatgpt_model_id !== "") {
+      throw new Error(`API-only payload must not carry ChatGPT model: ${JSON.stringify(packet)}`);
+    }
+    if (packet.api_model_id !== "wbp-deepseek-chat") {
+      throw new Error(`wrong API model in payload: ${JSON.stringify(packet)}`);
+    }
+  }
+  if (nodes.quickStartChatSlotState.lastElementChild.textContent !== "not required") {
+    throw new Error(`ChatGPT slot not rendered as not required: ${nodes.quickStartChatSlotState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartBridgeState.lastElementChild.textContent !== "жив") {
+    throw new Error(`bridge chip did not render launch truth: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "найдено") {
+    throw new Error(`window chip did not render launch truth: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartConfigState.lastElementChild.textContent !== "совпадает") {
+    throw new Error(`config chip did not render route truth: ${nodes.quickStartConfigState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartNextActionState.lastElementChild.textContent !== "existing window") {
+    throw new Error(`next action chip did not render existing window: ${nodes.quickStartNextActionState.lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (rendered.execution_mode !== "api_only" || rendered.selected_model !== "wbp-deepseek-chat") {
+    throw new Error(`API-only launch truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  if (rendered.primary_model_slot_lane !== "api_route_lane" || rendered.api_only_calls_chatgpt !== false) {
+    throw new Error(`API-only slot truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  if (rendered.config_status !== "matches_last_launch" || rendered.next_action !== "continue_in_existing_custom_window") {
+    throw new Error(`existing-window launch truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_primary_launch_action_preserves_chatgpt_only_gpt_5_5_payload_when_admitted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_only";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live" };
+const urls = [];
+const packets = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: { setItem() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options.body);
+    packets.push(body);
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+          execution_mode: "chatgpt_only",
+          chatgpt_model: { status: "admitted", model_id: "gpt-5.5" },
+          api_model: { status: "not_required", model_id: "" },
+          api_reasoning: { status: "not_required", option_id: "" },
+          api_route: { status: "not_required", route_reference: "" },
+          launch_admission: "admitted",
+          dry_server_truth_only: true,
+          custom_codex_launch_attempted: false,
+          new_launch_started: false,
+          network_calls_made: false,
+          live_call_attempted: false,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "native_launch_preflight"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
+          execution_mode: "chatgpt_only",
+          selected_model: "gpt-5.5",
+          owner_authorization_phrase_present: true,
+          bridge_required: false,
+          bridge_alive: false,
+          bridge_status: "not_required",
+          custom_process_observed: false,
+          window_status: "not_found",
+          config_status: "admitted",
+          new_launch_started: false,
+          custom_codex_launch_attempted: false,
+          live_call_attempted: false,
+          provider_called: false,
+          next_action: "native_launch"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-launch") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
+          execution_mode: "chatgpt_only",
+          selected_model: "gpt-5.5",
+          launch_model_id: "gpt-5.5",
+          route_model_id: "gpt-5.5",
+          chatgpt_model_id: "gpt-5.5",
+          api_model_id: "",
+          running_status: true,
+          process_started: true,
+          native_window_observed: true,
+          native_app_usable: true,
+          selection_packet: {
+            execution_mode: "chatgpt_only",
+            chatgpt_model_id: "gpt-5.5",
+            api_model_id: "",
+            primary_model_slot: {
+              lane: "chatgpt_lane",
+              model_id: "gpt-5.5"
+            },
+            chatgpt_line_used_as_executor: true,
+            api_line_used_as_executor: false,
+            chatgpt_only_calls_api: false
+          },
+          route_packet_matches_selection_packet: true,
+          quick_start_launch_route_truth_proven_with_limits: true,
+          config_status: "matches_last_launch",
+          new_launch_started: true,
+          live_call_attempted: true,
+          provider_called: false,
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          raw_path_exposed: false,
+          original_codex_touched: false,
+          asar_touched: false,
+          next_action: "none"
+        })
+      });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+  actionMetadata = {
+    launch_custom_client_native: {
+      available: true,
+      disabled_reason_code: "",
+      availability_state: "enabled"
+    }
+  };
+`, sandbox);
+sandbox.runQuickStartCustomLaunchAction().then(() => {
+  const expected = [
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight",
+    "api/codex/custom/native-launch"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected launch fetches ${JSON.stringify(urls)}`);
+  }
+  for (const packet of packets) {
+    if (packet.execution_mode !== "chatgpt_only") {
+      throw new Error(`wrong execution mode in payload: ${JSON.stringify(packet)}`);
+    }
+    if (packet.chatgpt_model_id !== "gpt-5.5") {
+      throw new Error(`wrong ChatGPT model in payload: ${JSON.stringify(packet)}`);
+    }
+    if (packet.api_model_id !== "") {
+      throw new Error(`ChatGPT-only payload must not carry API model: ${JSON.stringify(packet)}`);
+    }
+    if (packet.api_reasoning_option_id !== "") {
+      throw new Error(`ChatGPT-only payload must not carry API reasoning: ${JSON.stringify(packet)}`);
+    }
+  }
+  if (nodes.quickStartChatSlotState.lastElementChild.textContent !== "admitted") {
+    throw new Error(`ChatGPT slot not rendered as admitted: ${nodes.quickStartChatSlotState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartApiSlotState.lastElementChild.textContent !== "not required") {
+    throw new Error(`API slot not rendered as not required: ${nodes.quickStartApiSlotState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartBridgeState.lastElementChild.textContent !== "не нужен") {
+    throw new Error(`bridge chip did not render ChatGPT-only truth: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (rendered.execution_mode !== "chatgpt_only" || rendered.selected_model !== "gpt-5.5") {
+    throw new Error(`ChatGPT-only launch truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  if (rendered.api_model_id !== "" || rendered.chatgpt_only_calls_api !== false) {
+    throw new Error(`ChatGPT-only slot truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);
@@ -2632,6 +3636,51 @@ if (routeOnlyText.includes("wbp-raw-route-id")) {
 }
 if (!routeOnlyText.includes("openrouter")) {
   throw new Error(`quick-start API summary lost safe provider fallback: ${routeOnlyText}`);
+}
+const selectedRouteSummary = sandbox.quickStartApiModel({
+  status: "ok",
+  source: "api_connections_readonly",
+  routes: [{
+    route_id: "wbp-deepseek-chat",
+    provider: "deepseek",
+    upstream_model: "deepseek-chat",
+    enabled: true,
+    role_label: "Кандидат",
+    secret_status_label: "available",
+    secret_visual_state: "green",
+    validation_label: "ok",
+    validation_visual_state: "green"
+  }]
+}, "live", "wbp-deepseek-chat");
+if (selectedRouteSummary.state !== "ok" || selectedRouteSummary.visual !== "green") {
+  throw new Error(`selected route proof not projected: ${JSON.stringify(selectedRouteSummary)}`);
+}
+if (selectedRouteSummary.selectedRoute !== true || selectedRouteSummary.confirmed !== true) {
+  throw new Error(`selected route proof flags missing: ${JSON.stringify(selectedRouteSummary)}`);
+}
+if (selectedRouteSummary.provider !== "WBP deepseek-chat") {
+  throw new Error(`selected route provider summary wrong: ${selectedRouteSummary.provider}`);
+}
+if (`${selectedRouteSummary.provider} ${selectedRouteSummary.model}`.includes("wbp-deepseek-chat")) {
+  throw new Error(`selected route summary leaked raw route id: ${JSON.stringify(selectedRouteSummary)}`);
+}
+const selectedRouteWithoutProof = sandbox.quickStartApiModel({
+  status: "ok",
+  source: "api_connections_readonly",
+  routes: [{
+    route_id: "wbp-deepseek-chat",
+    provider: "deepseek",
+    upstream_model: "deepseek-chat",
+    enabled: true,
+    role_label: "Кандидат",
+    secret_status_label: "available",
+    secret_visual_state: "green",
+    validation_label: "not checked",
+    validation_visual_state: "neutral"
+  }]
+}, "live", "wbp-deepseek-chat");
+if (selectedRouteWithoutProof.state === "ok" || selectedRouteWithoutProof.visual === "green") {
+  throw new Error(`selector-only route should not project green: ${JSON.stringify(selectedRouteWithoutProof)}`);
 }
 """
         result = subprocess.run(
@@ -5024,7 +6073,7 @@ sandbox.setActionPanel({
     status: "ok",
     machine_error_code: "OK",
     human_message: "Onboarding owner packet emitted.",
-    next_action: "operator_action",
+    next_action: "accounts_onboard",
     changed_files: [],
     onboarding: {
       ui_state: "needs_user_action",
@@ -9223,13 +10272,16 @@ renderCodexCustomLaunch({
 });
 `, sandbox);
 
-if (!nodes.codexLaunchModesChip.className.includes("green")) {
-  throw new Error(`pid-bound window proof should turn chip green: ${nodes.codexLaunchModesChip.className}`);
+if (!nodes.codexLaunchModesChip.className.includes("amber")) {
+  throw new Error(`window-only proof should stay amber: ${nodes.codexLaunchModesChip.className}`);
 }
-if (nodes.codexLaunchModesChip.lastElementChild.textContent !== "native proof confirmed") {
+if (nodes.codexLaunchModesChip.className.includes("green")) {
+  throw new Error(`window-only proof must not turn chip green: ${nodes.codexLaunchModesChip.className}`);
+}
+if (nodes.codexLaunchModesChip.lastElementChild.textContent !== "window visible / proof incomplete") {
   throw new Error(`unexpected chip label: ${nodes.codexLaunchModesChip.lastElementChild.textContent}`);
 }
-if (nodes.customCodexSession.textContent !== "native app/window proven") {
+if (nodes.customCodexSession.textContent !== "window visible; native proof incomplete") {
   throw new Error(`unexpected session label: ${nodes.customCodexSession.textContent}`);
 }
 const rendered = JSON.parse(nodes.codexLaunchDryRunResponse.textContent);
@@ -9341,7 +10393,7 @@ renderCodexCustomLaunch({
   process_started: true,
   expected_custom_identity_observed: true,
   native_window_observed: true,
-  native_app_usable: true,
+  native_app_usable: false,
   real_codex_app_launched: false,
   launch_claim_scope: "custom_native_app_window_launch_only",
   next_action: "stop_and_diagnose_native_launch"
@@ -9369,6 +10421,90 @@ if (node("customCodexSession").textContent !== "window visible; native proof inc
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (rendered.status !== "blocked" || rendered.native_window_observed !== true || rendered.real_codex_app_launched !== false) {
   throw new Error(`limited native launch truth not preserved: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_deepseek_code_edit_proof_does_not_green_window_without_usability(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return nodes[id] || null; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartDeepSeekCodeEditProof({
+  status: "blocked",
+  machine_error_code: "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_NOT_PROVEN",
+  final_status: "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-v4-pro-max",
+  api_model_id: "wbp-deepseek-v4-pro-max",
+  native_app_usable: false,
+  window_launch_proven_with_limits: true
+});
+`, sandbox);
+
+if (nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`legacy window proof must not turn launch state green: ${nodes.quickStartLaunchState.className}`);
+}
+if (!nodes.quickStartLaunchState.className.includes("amber")) {
+  throw new Error(`legacy window proof should stay amber: ${nodes.quickStartLaunchState.className}`);
+}
+if (nodes.quickStartLaunchState.lastElementChild.textContent !== "окно не доказано") {
+  throw new Error(`unexpected launch label: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (rendered.window_launch_proven_with_limits !== true || rendered.native_app_usable !== false) {
+  throw new Error(`rendered packet lost the split truth: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 import unittest
@@ -217,6 +218,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 return_value=(False, "ax_unavailable"),
             ),
             mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable",
+                return_value=(False, "ax_fallback_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_input_capable",
+                return_value=(False, "cdp_unavailable"),
+            ),
+            mock.patch(
                 "wild_boar_proxy.native_window_probe._cg_input_capable",
                 return_value=(True, "[{'window_number': 1}]"),
             ),
@@ -231,6 +240,308 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             packet["blocked_reason_class"],
             "input_capable_ui_not_proven_for_pid_window_present",
         )
+
+    def test_window_usability_accepts_pid_bound_ax_fallback_before_cg(self) -> None:
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable_by_name",
+                return_value=(False, "ax_guarded_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable",
+                return_value=(True, "Codex, true"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_input_capable",
+                return_value=(True, "[{'window_number': 1}]"),
+            ) as cg_probe,
+        ):
+            packet = native_probe._window_usability_from_observation(
+                {"window_observed": True, "observed_pid": 222}
+            )
+
+        self.assertTrue(packet["input_capable_ui_observed"])
+        self.assertTrue(packet["native_window_usable"])
+        self.assertIn("mechanism_0_pid_fallback: Codex, true", packet["ax_query_result"])
+        cg_probe.assert_not_called()
+
+    def test_window_usability_accepts_pid_bound_cdp_dom_input_before_cg(self) -> None:
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable_by_name",
+                return_value=(False, "ax_guarded_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable",
+                return_value=(False, "ax_fallback_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_input_capable",
+                return_value=(
+                    True,
+                    '{"cdp_port_owner_pids":"222","cdp_visible_input_candidate_count":1,"cdp_text_value_captured":false}',
+                ),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_input_capable",
+                return_value=(True, "[{'window_number': 1}]"),
+            ) as cg_probe,
+        ):
+            packet = native_probe._window_usability_from_observation(
+                {"window_observed": True, "observed_pid": 222}
+            )
+
+        self.assertTrue(packet["input_capable_ui_observed"])
+        self.assertTrue(packet["native_window_usable"])
+        self.assertIn("mechanism_cdp_pid_bound_dom_input", packet["ax_query_result"])
+        self.assertEqual(packet["native_app_usability_source"], "cdp_renderer_input_capable_ui")
+        self.assertTrue(packet["cdp_localhost_only"])
+        self.assertTrue(packet["cdp_endpoint_redacted"])
+        self.assertTrue(packet["cdp_target_bound_to_custom_launch"])
+        self.assertTrue(packet["cdp_editable_surface_observed"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_ax_tree_exposed"])
+        self.assertFalse(packet["browser_cdp_authority_widened"])
+        self.assertEqual(
+            packet["input_capable_query_method"],
+            "CDP localhost launched-renderer DOM/AX editable-surface proof",
+        )
+        cg_probe.assert_not_called()
+
+    def test_window_usability_reports_cdp_target_without_editable_surface_before_cg(self) -> None:
+        cdp_result = json.dumps(
+            {
+                "cdp_port": 9223,
+                "cdp_port_owner_pids": "222",
+                "cdp_target_url": "app://-/index.html",
+                "cdp_target_type": "page",
+                "cdp_ready_state": "complete",
+                "cdp_input_candidate_count": 0,
+                "cdp_visible_input_candidate_count": 0,
+                "cdp_text_value_captured": False,
+                "cdp_prompt_attempted": False,
+                "cdp_route_trace_bound": False,
+            },
+            sort_keys=True,
+        )
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable_by_name",
+                return_value=(False, "ax_guarded_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable",
+                return_value=(False, "ax_fallback_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_input_capable",
+                return_value=(False, cdp_result),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_input_capable",
+                return_value=(True, "[{'window_number': 1}]"),
+            ) as cg_probe,
+        ):
+            packet = native_probe._window_usability_from_observation(
+                {"window_observed": True, "observed_pid": 222}
+            )
+
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["native_window_usable"])
+        self.assertEqual(packet["blocked_reason_class"], "cdp_renderer_input_surface_not_observed")
+        self.assertEqual(
+            packet["native_app_usability_source"],
+            "cdp_renderer_target_without_editable_surface",
+        )
+        self.assertTrue(packet["cdp_localhost_only"])
+        self.assertTrue(packet["cdp_endpoint_redacted"])
+        self.assertTrue(packet["cdp_target_bound_to_custom_launch"])
+        self.assertFalse(packet["cdp_editable_surface_observed"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_ax_tree_exposed"])
+        self.assertFalse(packet["browser_cdp_authority_widened"])
+        self.assertIn("mechanism_cdp_pid_bound_dom_input", packet["ax_query_result"])
+        self.assertEqual(
+            packet["input_capable_query_method"],
+            "CDP localhost launched-renderer target observed, editable surface not proven",
+        )
+        cg_probe.assert_not_called()
+
+    def test_codex_desktop_auth_blocker_refines_cdp_surface_block_without_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "\n".join(
+                    [
+                        "DevTools listening on ws://127.0.0.1:9223/devtools/browser/old",
+                        "older unrelated stderr",
+                        "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current",
+                        "Sign in to ChatGPT in Codex Desktop to check remote control authorization.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "cdp_renderer_input_surface_not_observed",
+                    "native_app_usability_source": "cdp_renderer_target_without_editable_surface",
+                    "cdp_localhost_only": True,
+                    "cdp_endpoint_redacted": True,
+                    "cdp_target_bound_to_custom_launch": True,
+                    "cdp_editable_surface_observed": False,
+                    "raw_dom_exposed": False,
+                    "raw_ax_tree_exposed": False,
+                    "browser_cdp_authority_widened": False,
+                },
+                profile_dir=profile_dir,
+            )
+
+        self.assertFalse(packet["native_window_usable"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "codex_desktop_sign_in_required_for_renderer_surface",
+        )
+        self.assertEqual(
+            packet["renderer_surface_blocked_reason_class"],
+            "cdp_renderer_input_surface_not_observed",
+        )
+        self.assertEqual(packet["native_app_usability_source"], "codex_desktop_auth_blocker")
+        self.assertTrue(packet["codex_desktop_auth_blocker_observed"])
+        self.assertEqual(
+            packet["codex_desktop_auth_error_class"],
+            "codex_desktop_remote_control_authorization_sign_in_required",
+        )
+        self.assertTrue(packet["launcher_stderr_redacted"])
+        self.assertFalse(packet["cdp_editable_surface_observed"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_ax_tree_exposed"])
+        self.assertFalse(packet["browser_cdp_authority_widened"])
+
+    def test_cdp_input_capable_blocks_when_debug_port_not_owned_by_pid(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+            return_value=(False, "999"),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(222, port=9223)
+
+        self.assertFalse(input_capable)
+        self.assertIn("cdp_port_owner_mismatch_or_absent", result)
+
+    def test_cdp_input_capable_blocks_non_app_page_target(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.read.return_value = json.dumps([
+            {
+                "type": "page",
+                "url": "https://example.invalid/",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+            }
+        ]).encode("utf-8")
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch("wild_boar_proxy.native_window_probe.urllib.request.urlopen", return_value=response),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(222, port=9223)
+
+        self.assertFalse(input_capable)
+        self.assertEqual(result, "cdp_app_page_target_not_found")
+
+    def test_cdp_input_capable_blocks_app_page_without_visible_editable_surface(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.read.return_value = json.dumps([
+            {
+                "type": "page",
+                "url": "app://-/index.html",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+            }
+        ]).encode("utf-8")
+        cdp_packet = {
+            "id": 1,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 0,
+                        "visibleInputCandidateCount": 0,
+                        "textValueCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch("wild_boar_proxy.native_window_probe.urllib.request.urlopen", return_value=response),
+            mock.patch("wild_boar_proxy.native_window_probe._cdp_command", return_value=cdp_packet),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(222, port=9223)
+
+        self.assertFalse(input_capable)
+        bounded = json.loads(result)
+        self.assertEqual(bounded["cdp_target_url"], "app://-/index.html")
+        self.assertEqual(bounded["cdp_ready_state"], "complete")
+        self.assertEqual(bounded["cdp_visible_input_candidate_count"], 0)
+        self.assertFalse(bounded["cdp_text_value_captured"])
+        self.assertFalse(bounded["cdp_prompt_attempted"])
+        self.assertFalse(bounded["cdp_route_trace_bound"])
+
+    def test_cdp_input_capable_accepts_visible_editable_surface_without_raw_dom(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.read.return_value = json.dumps([
+            {
+                "type": "page",
+                "url": "app://-/index.html",
+                "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+            }
+        ]).encode("utf-8")
+        cdp_packet = {
+            "id": 1,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "textValueCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch("wild_boar_proxy.native_window_probe.urllib.request.urlopen", return_value=response),
+            mock.patch("wild_boar_proxy.native_window_probe._cdp_command", return_value=cdp_packet),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(222, port=9223)
+
+        self.assertTrue(input_capable)
+        bounded = json.loads(result)
+        self.assertEqual(bounded["cdp_visible_input_candidate_count"], 1)
+        self.assertFalse(bounded["cdp_text_value_captured"])
+        self.assertFalse(bounded["cdp_prompt_attempted"])
+        self.assertFalse(bounded["cdp_route_trace_bound"])
 
     def test_show_custom_native_window_focuses_only_wbp_profile_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -277,6 +588,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                         "window_focus_bounds": after["window_bounds"],
                     },
                 ) as focus,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ),
             ):
                 packet = native_probe.show_custom_native_window_packet(
                     persistent_profile_base_dir=profile_base,
@@ -287,10 +606,71 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["custom_process_pid"], 222)
         self.assertTrue(packet["custom_window_visible"])
         self.assertTrue(packet["custom_window_frontmost"])
+        self.assertTrue(packet["native_app_usable"])
+        self.assertTrue(packet["input_capable_ui_observed"])
         self.assertEqual(packet["custom_window_bounds"]["x"], 120)
         self.assertFalse(packet["original_codex_touched"])
         self.assertFalse(packet["asar_touched"])
         focus.assert_called_once_with(222)
+
+    def test_show_custom_native_window_does_not_promote_visible_window_to_usable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            user_data_dir = (
+                profile_base / "wbp-custom-main" / "electron-user-data"
+            )
+            process_inventory = {
+                "root_app_pids": [222],
+                "custom_process_lines": [
+                    f"222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir={user_data_dir}"
+                ],
+            }
+            after = {
+                "window_observed": True,
+                "observed_pid": 222,
+                "window_visible": True,
+                "window_frontmost": True,
+                "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=process_inventory,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    return_value=after,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": True,
+                        "window_focus_observed_pid": 222,
+                        "window_focus_bounds": after["window_bounds"],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": False,
+                        "input_capable_ui_observed": False,
+                        "blocked_reason_class": "input_capable_ui_not_proven_for_pid_window_present",
+                    },
+                ),
+            ):
+                packet = native_probe.show_custom_native_window_packet(
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN")
+        self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["custom_window_frontmost"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertEqual(packet["next_action"], "stop_and_diagnose_window_usability")
 
     def test_live_custom_native_launch_accepts_pid_bound_window_proof_without_usability_greenwash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -360,6 +740,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     endpoint="http://127.0.0.1:8318/v1",
                     model="gpt-5.3-codex",
                     owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    keep_running_on_window_observed=True,
                 )
 
         self.assertEqual(packet["status"], "blocked")
@@ -457,6 +838,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     endpoint="http://127.0.0.1:8318/v1",
                     model="gpt-5.3-codex",
                     owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    keep_running_on_window_observed=True,
                 )
 
         self.assertEqual(packet["status"], "blocked")
@@ -472,7 +854,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             "input_capable_window_not_proven_for_pid",
         )
 
-    def test_live_custom_native_launch_accepts_visible_window_when_ax_input_is_not_proven(self) -> None:
+    def test_live_custom_native_launch_does_not_accept_visible_window_without_input_capable_ui(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             launcher_stdout = temp_root / "launcher.stdout.log"
@@ -559,17 +941,20 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     endpoint="http://127.0.0.1:8318/v1",
                     model="gpt-5.3-codex",
                     owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    keep_running_on_window_observed=True,
                 )
 
-        self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["machine_error_code"], "OK")
-        self.assertTrue(packet["real_codex_app_launched"])
-        self.assertTrue(packet["native_app_usable"])
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN")
+        self.assertFalse(packet["real_codex_app_launched"])
+        self.assertFalse(packet["native_app_usable"])
         self.assertFalse(packet["input_capable_ui_observed"])
         self.assertTrue(packet["runtime_ready_observed"])
+        self.assertTrue(packet["running_status"])
         self.assertTrue(packet["custom_window_visible"])
         self.assertTrue(packet["custom_window_frontmost"])
-        self.assertEqual(packet["native_app_usability_source"], "visible_custom_window")
+        self.assertEqual(packet["native_app_usability_source"], "not_proven")
+        self.assertEqual(packet["next_action"], "stop_and_diagnose_custom_window_usability")
         self.assertEqual(packet["custom_window_bounds"]["width"], 1320)
 
     def test_live_custom_native_launch_blocks_when_process_dies_after_initial_observation(self) -> None:
@@ -832,6 +1217,9 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                         "custom_window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
                         "window_focus_action_attempted": True,
                         "window_focus_action_succeeded": True,
+                        "native_app_usable": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usability_source": "input_capable_ui",
                     },
                 ) as show_window,
                 mock.patch("wild_boar_proxy.native_window_probe.terminate_custom_processes") as terminate,
@@ -852,6 +1240,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["new_launch_started"])
         self.assertFalse(packet["process_started"])
         self.assertTrue(packet["native_window_observed"])
+        self.assertTrue(packet["native_app_usable"])
         self.assertEqual(packet["custom_process_pid"], 222)
         self.assertEqual(packet["cleanup_result"]["status"], "existing_window_reused")
         show_window.assert_called_once()

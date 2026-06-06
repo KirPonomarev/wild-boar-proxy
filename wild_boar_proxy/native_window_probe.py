@@ -9,10 +9,15 @@ builders, and bounded cleanup model.
 
 from __future__ import annotations
 
+import base64
 import json
+import os
+import socket
 import subprocess
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +49,7 @@ from .native_launch_dispatch import (
     build_native_window_observation_packet,
     build_native_window_usability_packet,
 )
+from .runtime import CODEX_REMOTE_DEBUGGING_PORT
 from .runtime import RuntimePaths
 from .token_command import emit_local_token
 
@@ -56,6 +62,9 @@ RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
     "method=model/list",
     "browser_use_iab_backend_startup_ready",
+)
+CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER = (
+    "Sign in to ChatGPT in Codex Desktop to check remote control authorization."
 )
 
 
@@ -358,19 +367,47 @@ def show_custom_native_window_packet(
     focus = _focus_custom_window_by_pid(observed_pid)
     after_inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     after = _window_observation_via_ax(after_inventory)
+    usability_packet = _window_usability_from_observation(after)
+    usability_packet = _apply_codex_desktop_auth_blocker(
+        usability_packet,
+        profile_dir=Path(str(paths["persistent_profile_root"])),
+    )
     visible = after.get("window_observed") is True and after.get("window_visible") is True
     frontmost = after.get("window_frontmost") is True
-    status_ok = visible and focus.get("window_focus_action_succeeded") is True
+    native_app_usable = usability_packet.get("native_window_usable") is True
+    native_app_usability_source = (
+        str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
+        if native_app_usable
+        else "not_proven"
+    )
+    window_focused = focus.get("window_focus_action_succeeded") is True
+    status_ok = visible and window_focused and native_app_usable
+    window_visible_but_unusable = visible and window_focused and not native_app_usable
+    desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
     return {
         "schema_version": 1,
         "captured_at_utc": utc_now(),
         "packet_kind": "custom_codex_show_window",
         "status": "ok" if status_ok else "blocked",
-        "machine_error_code": "OK" if status_ok else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN",
-        "human_message": (
-            "Custom Codex window is visible and frontmost."
+        "machine_error_code": (
+            "OK"
             if status_ok
-            else "Custom Codex window could not be proven visible and frontmost."
+            else (
+                "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN"
+                if window_visible_but_unusable
+                else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN"
+            )
+        ),
+        "human_message": (
+            "Custom Codex window is visible, frontmost, and input-capable UI was proven."
+            if status_ok
+            else (
+                "Custom Codex window is visible and frontmost, but Codex Desktop sign-in is required before input-capable UI can be proven."
+                if window_visible_but_unusable and desktop_auth_blocker
+                else "Custom Codex window is visible and frontmost, but input-capable UI was not proven."
+                if window_visible_but_unusable
+                else "Custom Codex window could not be proven visible and frontmost."
+            )
         ),
         "persistent_profile_id": persistent_profile_id,
         "persistent_user_data_dir": user_data_dir,
@@ -383,11 +420,43 @@ def show_custom_native_window_packet(
         "window_focus_action_attempted": focus.get("window_focus_action_attempted") is True,
         "window_focus_action_succeeded": focus.get("window_focus_action_succeeded") is True,
         "window_focus_packet": focus,
+        "native_app_usable": native_app_usable,
+        "input_capable_ui_observed": usability_packet.get("input_capable_ui_observed") is True,
+        "native_app_usability_source": native_app_usability_source,
+        "native_app_usability_blocked_reason_class": str(
+            "" if native_app_usable else usability_packet.get("blocked_reason_class") or ""
+        ),
+        "cdp_localhost_only": usability_packet.get("cdp_localhost_only") is True,
+        "cdp_endpoint_redacted": usability_packet.get("cdp_endpoint_redacted") is True,
+        "cdp_target_bound_to_custom_launch": usability_packet.get("cdp_target_bound_to_custom_launch") is True,
+        "cdp_editable_surface_observed": usability_packet.get("cdp_editable_surface_observed") is True,
+        "raw_dom_exposed": usability_packet.get("raw_dom_exposed") is True,
+        "raw_ax_tree_exposed": usability_packet.get("raw_ax_tree_exposed") is True,
+        "browser_cdp_authority_widened": usability_packet.get("browser_cdp_authority_widened") is True,
+        "codex_desktop_auth_blocker_observed": desktop_auth_blocker,
+        "codex_desktop_auth_blocked_reason_class": str(
+            usability_packet.get("codex_desktop_auth_blocked_reason_class") or ""
+        ),
+        "codex_desktop_auth_error_class": str(
+            usability_packet.get("codex_desktop_auth_error_class") or ""
+        ),
+        "renderer_surface_blocked_reason_class": str(
+            usability_packet.get("renderer_surface_blocked_reason_class") or ""
+        ),
+        "native_window_usability_packet": usability_packet,
         "window_observation_before_focus": before,
         "window_observation_after_focus": after,
         "original_codex_touched": False,
         "asar_touched": False,
-        "next_action": "none" if status_ok else "stop_and_diagnose_window_visibility",
+        "next_action": (
+            "none"
+            if status_ok
+            else (
+                "stop_and_diagnose_window_usability"
+                if window_visible_but_unusable
+                else "stop_and_diagnose_window_visibility"
+            )
+        ),
     }
 
 
@@ -417,7 +486,7 @@ def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
         '  set w to front window of p\n'
         '  set hasField to false\n'
         '  try\n'
-        '    set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '    set hasField to exists (first UI element of (entire contents of w) whose role is "AXTextField" or role is "AXTextArea")\n'
         '  end try\n'
         '  return {name of w, hasField}\n'
         'end tell\n'
@@ -447,7 +516,7 @@ def _ax_input_capable_by_name(
         '  set w to front window of p\n'
         '  set hasField to false\n'
         '  try\n'
-        '    set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '    set hasField to exists (first UI element of (entire contents of w) whose role is "AXTextField" or role is "AXTextArea")\n'
         '  end try\n'
         '  return (name of p as text) & tab & (name of w as text) & tab & (hasField as text)\n'
         'end tell\n'
@@ -504,6 +573,280 @@ def _cg_window_presence(observed_pid: int) -> tuple[bool, str]:
     return False, cg_result
 
 
+def _read_exact(sock: socket.socket, byte_count: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = byte_count
+    while remaining > 0:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise OSError("websocket_closed")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _websocket_send_text(sock: socket.socket, payload: str) -> None:
+    data = payload.encode("utf-8")
+    if len(data) < 126:
+        header = bytes([0x81, 0x80 | len(data)])
+    elif len(data) < 65536:
+        header = bytes([0x81, 0x80 | 126]) + len(data).to_bytes(2, "big")
+    else:
+        header = bytes([0x81, 0x80 | 127]) + len(data).to_bytes(8, "big")
+    mask = os.urandom(4)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(data))
+    sock.sendall(header + mask + masked)
+
+
+def _websocket_read_text(sock: socket.socket) -> str:
+    first = _read_exact(sock, 2)
+    opcode = first[0] & 0x0F
+    length = first[1] & 0x7F
+    if length == 126:
+        length = int.from_bytes(_read_exact(sock, 2), "big")
+    elif length == 127:
+        length = int.from_bytes(_read_exact(sock, 8), "big")
+    masked = bool(first[1] & 0x80)
+    mask = _read_exact(sock, 4) if masked else b""
+    payload = bytearray(_read_exact(sock, length))
+    if masked:
+        for index, byte in enumerate(payload):
+            payload[index] = byte ^ mask[index % 4]
+    if opcode == 8:
+        raise OSError("websocket_closed")
+    if opcode not in {1, 0}:
+        return ""
+    return payload.decode("utf-8", errors="replace")
+
+
+def _cdp_command(ws_url: str, message: dict[str, Any], *, timeout_seconds: float = 2.0) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(ws_url)
+    if parsed.scheme != "ws" or parsed.hostname != "127.0.0.1" or parsed.port is None:
+        return {"status": "blocked", "error": "cdp_websocket_url_not_loopback"}
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    with socket.create_connection(("127.0.0.1", int(parsed.port)), timeout=timeout_seconds) as sock:
+        sock.settimeout(timeout_seconds)
+        sock.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{parsed.port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+        header = b""
+        while b"\r\n\r\n" not in header:
+            header += sock.recv(4096)
+            if not header:
+                raise OSError("cdp_websocket_handshake_empty")
+        if b" 101 " not in header.split(b"\r\n", 1)[0]:
+            return {"status": "blocked", "error": "cdp_websocket_handshake_not_upgraded"}
+        _websocket_send_text(sock, json.dumps(message, separators=(",", ":")))
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            text = _websocket_read_text(sock)
+            if not text:
+                continue
+            packet = json.loads(text)
+            if packet.get("id") == message.get("id"):
+                return packet
+    return {"status": "blocked", "error": "cdp_response_timeout"}
+
+
+def _devtools_port_owned_by_pid(observed_pid: int, port: int) -> tuple[bool, str]:
+    result = subprocess.run(
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    pids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode != 0 or not pids:
+        return False, str(result.stderr.strip() or "cdp_port_not_listening")
+    return str(observed_pid) in pids, ",".join(pids)
+
+
+def _cdp_input_capable(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> tuple[bool, str]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    if not port_owned:
+        return False, f"cdp_port_owner_mismatch_or_absent:{owner_result}"
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/list",
+            timeout=1.5,
+        ) as response:
+            targets = json.loads(response.read().decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"cdp_target_list_failed:{type(exc).__name__}"
+    page = next(
+        (
+            target
+            for target in targets
+            if target.get("type") == "page"
+            and str(target.get("url") or "").startswith("app://-/")
+            and isinstance(target.get("webSocketDebuggerUrl"), str)
+        ),
+        None,
+    )
+    if not isinstance(page, dict):
+        return False, "cdp_app_page_target_not_found"
+    expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const visibleNodes = nodes.filter((node) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= 80 && rect.height >= 20 && style.display !== 'none' &&
+      style.visibility !== 'hidden' && node.getAttribute('aria-hidden') !== 'true' &&
+      node.disabled !== true;
+  });
+  return {
+    readyState: document.readyState,
+    url: location.href,
+    title: document.title,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: visibleNodes.length,
+    textValueCaptured: false,
+    selector
+  };
+})()
+""".strip()
+    try:
+        cdp_result = _cdp_command(
+            str(page["webSocketDebuggerUrl"]),
+            {
+                "id": 1,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expression, "returnByValue": True},
+            },
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"cdp_runtime_evaluate_failed:{type(exc).__name__}"
+    value = (
+        (cdp_result.get("result") or {})
+        .get("result", {})
+        .get("value", {})
+    )
+    if not isinstance(value, dict):
+        return False, "cdp_runtime_evaluate_missing_value"
+    input_capable = (
+        value.get("url") == "app://-/index.html"
+        and value.get("readyState") in {"interactive", "complete"}
+        and int(value.get("visibleInputCandidateCount") or 0) > 0
+        and value.get("textValueCaptured") is False
+    )
+    bounded = {
+        "cdp_port": port,
+        "cdp_port_owner_pids": owner_result,
+        "cdp_target_url": page.get("url"),
+        "cdp_target_type": page.get("type"),
+        "cdp_ready_state": value.get("readyState"),
+        "cdp_input_candidate_count": value.get("inputCandidateCount"),
+        "cdp_visible_input_candidate_count": value.get("visibleInputCandidateCount"),
+        "cdp_text_value_captured": value.get("textValueCaptured") is True,
+        "cdp_prompt_attempted": False,
+        "cdp_route_trace_bound": False,
+    }
+    return input_capable, json.dumps(bounded, sort_keys=True)
+
+
+def _cdp_blocked_surface_details(result: str) -> dict[str, Any]:
+    try:
+        packet = json.loads(result)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(packet, dict):
+        return {}
+    target_url = str(packet.get("cdp_target_url") or "")
+    ready_state = str(packet.get("cdp_ready_state") or "")
+    try:
+        visible_count = int(packet.get("cdp_visible_input_candidate_count") or 0)
+    except (TypeError, ValueError):
+        visible_count = -1
+    if target_url == "app://-/index.html" and ready_state in {"interactive", "complete"} and visible_count <= 0:
+        return {
+            "blocked_reason_class": "cdp_renderer_input_surface_not_observed",
+            "native_app_usability_source": "cdp_renderer_target_without_editable_surface",
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "cdp_editable_surface_observed": False,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+        }
+    return {}
+
+
+def _latest_launch_stderr_segment(text: str) -> str:
+    marker = "DevTools listening"
+    index = text.rfind(marker)
+    return text[index:] if index >= 0 else text
+
+
+def _codex_desktop_auth_blocker_from_profile(profile_dir: Path) -> dict[str, Any]:
+    stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+    try:
+        text = stderr_path.read_text(errors="replace")
+    except OSError:
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_diagnostic_source": "launcher_stderr_missing",
+        }
+    segment = _latest_launch_stderr_segment(text)
+    if CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER not in segment:
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_diagnostic_source": "launcher_stderr_latest_segment",
+        }
+    return {
+        "codex_desktop_auth_blocker_observed": True,
+        "codex_desktop_auth_blocked_reason_class": (
+            "codex_desktop_sign_in_required_for_renderer_surface"
+        ),
+        "codex_desktop_auth_error_class": (
+            "codex_desktop_remote_control_authorization_sign_in_required"
+        ),
+        "codex_desktop_auth_diagnostic_source": "launcher_stderr_latest_segment",
+        "launcher_stderr_redacted": True,
+    }
+
+
+def _apply_codex_desktop_auth_blocker(
+    usability_packet: dict[str, Any],
+    *,
+    profile_dir: Path,
+) -> dict[str, Any]:
+    if usability_packet.get("blocked_reason_class") != "cdp_renderer_input_surface_not_observed":
+        return usability_packet
+    auth_blocker = _codex_desktop_auth_blocker_from_profile(profile_dir)
+    if auth_blocker.get("codex_desktop_auth_blocker_observed") is not True:
+        return usability_packet
+    packet = dict(usability_packet)
+    packet.update(auth_blocker)
+    packet["renderer_surface_blocked_reason_class"] = str(
+        usability_packet.get("blocked_reason_class") or ""
+    )
+    packet["blocked_reason_class"] = str(
+        auth_blocker["codex_desktop_auth_blocked_reason_class"]
+    )
+    packet["native_app_usability_source"] = "codex_desktop_auth_blocker"
+    return packet
+
+
 def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
     if not window_observed:
@@ -531,8 +874,68 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
             "input_capable_query_method": "AX/System Events process-name UI scripting (Mechanism 1)",
         })
         return packet
+    input_capable_m0, result_m0 = _ax_input_capable(observed_pid)
+    if input_capable_m0:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=True,
+            blocked_reason_class="",
+        )
+        packet.update({
+            "ax_query_result": f"mechanism_1_pid_guarded: {result_m1}; mechanism_0_pid_fallback: {result_m0}",
+            "input_capable_query_method": "AX/System Events pid-bound UI scripting fallback (Mechanism 0)",
+        })
+        return packet
+    input_capable_cdp, result_cdp = _cdp_input_capable(observed_pid)
+    if input_capable_cdp:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=True,
+            blocked_reason_class="",
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": "CDP localhost launched-renderer DOM/AX editable-surface proof",
+            "native_app_usability_source": "cdp_renderer_input_capable_ui",
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "cdp_editable_surface_observed": True,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+        })
+        return packet
+    cdp_blocked_surface = _cdp_blocked_surface_details(result_cdp)
+    if cdp_blocked_surface:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=False,
+            blocked_reason_class=str(cdp_blocked_surface["blocked_reason_class"]),
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": (
+                "CDP localhost launched-renderer target observed, editable surface not proven"
+            ),
+            **cdp_blocked_surface,
+        })
+        return packet
     input_capable_m2, result_m2 = _cg_input_capable(observed_pid)
-    query_result = f"mechanism_1_pid_guarded: {result_m1}; mechanism_2_cg_pid_window_only: {result_m2}"
+    query_result = (
+        f"mechanism_1_pid_guarded: {result_m1}; "
+        f"mechanism_0_pid_fallback: {result_m0}; "
+        f"mechanism_cdp_pid_bound_dom_input: {result_cdp}; "
+        f"mechanism_2_cg_pid_window_only: {result_m2}"
+    )
     query_method = (
         "CGWindowList inspection (pid-bound window present, input-capable UI not proven)"
         if input_capable_m2
@@ -852,24 +1255,34 @@ def launch_custom_native_app_packet(
                     persistent_profile_base_dir=persistent_profile_base_dir,
                 )
                 existing_window_visible = show_packet.get("status") == "ok"
+                existing_window_usable = show_packet.get("native_app_usable") is True
+                existing_machine_error = (
+                    "OK"
+                    if existing_window_usable
+                    else (
+                        "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN"
+                        if existing_window_visible
+                        else "CUSTOM_CODEX_EXISTING_WINDOW_VISIBILITY_NOT_PROVEN"
+                    )
+                )
                 return {
                     **base,
                     **persistent_fields,
                     **keychain_fields,
-                    "status": "ok" if existing_window_visible else "blocked",
-                    "machine_error_code": (
-                        "OK"
-                        if existing_window_visible
-                        else "CUSTOM_CODEX_EXISTING_WINDOW_VISIBILITY_NOT_PROVEN"
-                    ),
+                    "status": "ok" if existing_window_usable else "blocked",
+                    "machine_error_code": existing_machine_error,
                     "human_message": (
                         "Existing Custom Codex window was reused; no new launch was started."
-                        if existing_window_visible
-                        else "Existing Custom Codex process was found, but window visibility was not proven."
+                        if existing_window_usable
+                        else (
+                            "Existing Custom Codex window is visible, but input-capable UI was not proven."
+                            if existing_window_visible
+                            else "Existing Custom Codex process was found, but window visibility was not proven."
+                        )
                     ),
                     "next_action": (
                         "none"
-                        if existing_window_visible
+                        if existing_window_usable
                         else "show_existing_custom_codex_window_or_stop_same_profile_process"
                     ),
                     "running_status": existing_window_visible,
@@ -885,10 +1298,23 @@ def launch_custom_native_app_packet(
                     "custom_window_bounds": show_packet.get("custom_window_bounds", {}),
                     "window_focus_action_attempted": show_packet.get("window_focus_action_attempted") is True,
                     "window_focus_action_succeeded": show_packet.get("window_focus_action_succeeded") is True,
-                    "native_app_usable": existing_window_visible,
+                    "native_app_usable": existing_window_usable,
                     "native_app_usability_source": (
-                        "existing_visible_custom_window" if existing_window_visible else "not_proven"
+                        str(show_packet.get("native_app_usability_source") or "")
+                        if existing_window_usable
+                        else "not_proven"
                     ),
+                    "native_app_usability_blocked_reason_class": str(
+                        show_packet.get("native_app_usability_blocked_reason_class") or ""
+                    ),
+                    "cdp_localhost_only": show_packet.get("cdp_localhost_only") is True,
+                    "cdp_endpoint_redacted": show_packet.get("cdp_endpoint_redacted") is True,
+                    "cdp_target_bound_to_custom_launch": show_packet.get("cdp_target_bound_to_custom_launch") is True,
+                    "cdp_editable_surface_observed": show_packet.get("cdp_editable_surface_observed") is True,
+                    "raw_dom_exposed": show_packet.get("raw_dom_exposed") is True,
+                    "raw_ax_tree_exposed": show_packet.get("raw_ax_tree_exposed") is True,
+                    "browser_cdp_authority_widened": show_packet.get("browser_cdp_authority_widened") is True,
+                    "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
                     "real_codex_app_launched": False,
                     "isolated_home": True,
                     "isolated_codex_home": True,
@@ -902,7 +1328,7 @@ def launch_custom_native_app_packet(
                     "cleanup_deferred_while_running": existing_window_visible,
                     "keep_running_on_window_observed": keep_running_on_window_observed,
                     "existing_custom_window_detected": True,
-                    "existing_custom_window_reused": existing_window_visible,
+                    "existing_custom_window_reused": existing_window_usable,
                     "new_launch_started": False,
                     "show_existing_window_packet": show_packet,
                     "cleanup_result": {
@@ -978,6 +1404,10 @@ def launch_custom_native_app_packet(
                 )
             )
         usability_packet = _window_usability_from_observation(window_packet)
+        usability_packet = _apply_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+        )
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
@@ -988,11 +1418,32 @@ def launch_custom_native_app_packet(
         custom_window_frontmost = window_packet.get("window_frontmost") is True
         input_capable_ui_observed = usability_packet.get("native_window_usable") is True
         runtime_ready_observed = runtime_ready_packet.get("runtime_ready_observed") is True
-        native_app_usable = input_capable_ui_observed or custom_window_visible
+        native_app_usable = input_capable_ui_observed
         native_app_usability_source = (
-            "input_capable_ui"
+            str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
             if input_capable_ui_observed
-            else ("visible_custom_window" if custom_window_visible else "not_proven")
+            else "not_proven"
+        )
+        desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
+        blocked_machine_error = (
+            "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
+            if launcher_failed_before_process
+            else (
+                "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+                if custom_window_visible and not native_app_usable
+                else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
+            )
+        )
+        blocked_human_message = (
+            "Custom Codex launcher exited before a Custom process was observed."
+            if launcher_failed_before_process
+            else (
+                "Custom Codex native window was observed, but Codex Desktop sign-in is required before input-capable UI can be proven."
+                if custom_window_visible and not native_app_usable and desktop_auth_blocker
+                else "Custom Codex native window was observed, but input-capable UI was not proven."
+                if custom_window_visible and not native_app_usable
+                else "Custom Codex native launch did not satisfy process/window proof."
+            )
         )
         success = (
             process_started
@@ -1020,23 +1471,11 @@ def launch_custom_native_app_packet(
             **keychain_fields,
             **prelaunch_fields,
             "status": "ok" if success else "blocked",
-            "machine_error_code": (
-                "OK"
-                if success
-                else (
-                    "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
-                    if launcher_failed_before_process
-                    else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
-                )
-            ),
+            "machine_error_code": "OK" if success else blocked_machine_error,
             "human_message": (
                 "Custom Codex native app launched and pid-bound window proof passed."
                 if success
-                else (
-                    "Custom Codex launcher exited before a Custom process was observed."
-                    if launcher_failed_before_process
-                    else "Custom Codex native launch did not satisfy process/window proof."
-                )
+                else blocked_human_message
             ),
             "running_status": success or keep_running_with_limited_proof,
             "process_started": process_started,
@@ -1059,6 +1498,23 @@ def launch_custom_native_app_packet(
             "native_app_usable": native_app_usable,
             "native_app_usability_source": native_app_usability_source,
             "input_capable_ui_observed": input_capable_ui_observed,
+            "cdp_localhost_only": usability_packet.get("cdp_localhost_only") is True,
+            "cdp_endpoint_redacted": usability_packet.get("cdp_endpoint_redacted") is True,
+            "cdp_target_bound_to_custom_launch": usability_packet.get("cdp_target_bound_to_custom_launch") is True,
+            "cdp_editable_surface_observed": usability_packet.get("cdp_editable_surface_observed") is True,
+            "raw_dom_exposed": usability_packet.get("raw_dom_exposed") is True,
+            "raw_ax_tree_exposed": usability_packet.get("raw_ax_tree_exposed") is True,
+            "browser_cdp_authority_widened": usability_packet.get("browser_cdp_authority_widened") is True,
+            "codex_desktop_auth_blocker_observed": desktop_auth_blocker,
+            "codex_desktop_auth_blocked_reason_class": str(
+                usability_packet.get("codex_desktop_auth_blocked_reason_class") or ""
+            ),
+            "codex_desktop_auth_error_class": str(
+                usability_packet.get("codex_desktop_auth_error_class") or ""
+            ),
+            "renderer_surface_blocked_reason_class": str(
+                usability_packet.get("renderer_surface_blocked_reason_class") or ""
+            ),
             **runtime_ready_packet,
             "real_codex_app_launched": success,
             "isolated_home": True,
@@ -1082,7 +1538,11 @@ def launch_custom_native_app_packet(
                 else (
                     "stop_and_diagnose_custom_native_launcher"
                     if launcher_failed_before_process
-                    else "stop_and_diagnose_native_launch"
+                    else (
+                        "stop_and_diagnose_custom_window_usability"
+                        if custom_window_visible and not native_app_usable
+                        else "stop_and_diagnose_native_launch"
+                    )
                 )
             ),
             "new_launch_started": True,
@@ -1094,6 +1554,7 @@ def launch_custom_native_app_packet(
                 if native_app_usable
                 else usability_packet.get("blocked_reason_class") or ""
             ),
+            "native_window_usability_packet": usability_packet,
             "identity_chain_status": identity_packet.get("status"),
             "launch_receipt": {
                 "tmp_root_redacted": True,

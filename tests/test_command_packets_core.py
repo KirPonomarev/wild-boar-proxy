@@ -18,6 +18,7 @@ from wild_boar_proxy.core import packets
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS_CORE = ROOT / "wild_boar_proxy" / "core" / "errors.py"
 PACKETS_CORE = ROOT / "wild_boar_proxy" / "core" / "packets.py"
+COMMAND_API = ROOT / "COMMAND_API.md"
 
 
 def _dotted_name(node: ast.AST) -> str:
@@ -130,8 +131,36 @@ class CommandPacketsCoreTests(unittest.TestCase):
             ("none", "retry", "user_action", "stop"),
         )
         self.assertEqual(
+            packets.COMMAND_NEXT_ACTION_CORE_VALUES,
+            ("none", "retry", "user_action", "stop"),
+        )
+        self.assertEqual(
             packets.COMMAND_NEXT_ACTION_VALUES,
             ("none", "retry", "user_action", "stop"),
+        )
+
+    def test_command_api_documents_next_action_compatibility_contract(self) -> None:
+        command_api = COMMAND_API.read_text(encoding="utf-8")
+
+        self.assertIn("operator_action` must use the generic", command_api)
+        self.assertIn("next_action` must be a machine-readable next-step token", command_api)
+        self.assertIn("Command-specific", command_api)
+        self.assertIn("wait_for_login", command_api)
+        self.assertIn("accounts_onboard", command_api)
+        self.assertIn("api_route_connect", command_api)
+        self.assertIn("shared semantic validator accepts other token-shaped", command_api)
+        self.assertIn("new command authority", command_api)
+        self.assertIn(r"^[A-Za-z][A-Za-z0-9_]{0,127}$", command_api)
+        self.assertIn("next_action=operator_action` is a reserved placeholder", command_api)
+        self.assertEqual(packets.classify_command_next_action("none"), "core")
+        self.assertEqual(
+            packets.classify_command_next_action("accounts_onboard"),
+            "legacy",
+        )
+        self.assertEqual(packets.classify_command_next_action("foo_bar"), "legacy")
+        self.assertEqual(
+            packets.classify_command_next_action("bad/action"),
+            "invalid_shape",
         )
 
     def test_packet_value_classification_is_additive(self) -> None:
@@ -256,22 +285,25 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "stop")
         self.assertEqual(payload["effect"], "raw-extra-effect")
 
-    def test_build_command_packet_keeps_legacy_action_values_passthrough(self) -> None:
+    def test_build_command_packet_keeps_legacy_next_action_but_operator_action_is_generic(
+        self,
+    ) -> None:
         payload = packets.build_command_packet(
             ok=True,
-            human_message="legacy action",
+            human_message="domain next action",
             machine_error_code="OK",
-            liveness="warming_up",
-            severity="critical",
-            operator_action="repair_runtime",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
             changed_files=[],
+            extra={"next_action": "repair_runtime"},
         )
 
-        self.assertEqual(payload["operator_action"], "repair_runtime")
+        self.assertEqual(payload["operator_action"], "none")
         self.assertEqual(payload["next_action"], "repair_runtime")
         self.assertEqual(
             packets.classify_command_operator_action(payload["operator_action"]),
-            "legacy",
+            "core",
         )
         self.assertEqual(
             packets.classify_command_next_action(payload["next_action"]),
@@ -280,24 +312,26 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertEqual(
             runtime_mod.build_command_payload(
                 ok=True,
-                human_message="legacy action",
+                human_message="domain next action",
                 machine_error_code="OK",
-                liveness="warming_up",
-                severity="critical",
-                operator_action="repair_runtime",
+                liveness="healthy",
+                severity="recoverable",
+                operator_action="none",
                 changed_files=[],
+                extra={"next_action": "repair_runtime"},
             ),
             payload,
         )
         self.assertEqual(
             runtime_modes._build_command_payload(
                 ok=True,
-                human_message="legacy action",
+                human_message="domain next action",
                 machine_error_code="OK",
-                liveness="warming_up",
-                severity="critical",
-                operator_action="repair_runtime",
+                liveness="healthy",
+                severity="recoverable",
+                operator_action="none",
                 changed_files=[],
+                extra={"next_action": "repair_runtime"},
             ),
             payload,
         )
@@ -369,7 +403,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
     def test_build_command_packet_redacts_payload_by_default(self) -> None:
         payload = packets.build_command_packet(
             ok=True,
-            human_message="Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+            human_message="Authorization: " + "Bearer " + "abcdefghijklmnopqrstuvwxyz",
             machine_error_code="OK",
             liveness="healthy",
             severity="recoverable",
@@ -449,7 +483,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertFalse(packets.command_packet_has_secret_leak(payload))
 
     def test_build_command_packet_fails_safe_on_unredactable_secret_leak(self) -> None:
-        sentinel = "sk-wbp-unredactable-secret-1234567890"
+        sentinel = "sk-" + "wbp-unredactable-secret-1234567890"
 
         payload = packets.build_command_packet(
             ok=True,
@@ -514,7 +548,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertEqual(runtime_modes._build_command_payload(**kwargs), expected)
         self.assertNotIn(sentinel, json.dumps(expected))
 
-    def test_semantic_inspector_accepts_core_and_legacy_tokens(self) -> None:
+    def test_semantic_inspector_accepts_core_and_domain_next_action_tokens(self) -> None:
         core_payload = packets.build_command_packet(
             ok=True,
             human_message="ok",
@@ -531,13 +565,49 @@ class CommandPacketsCoreTests(unittest.TestCase):
             machine_error_code="provider_network_failed",
             liveness="warming_up",
             severity="critical",
-            operator_action="repair_runtime",
+            operator_action="user_action",
             changed_files=[],
+            extra={"next_action": "repair_runtime"},
         )
 
         self.assertEqual(packets.inspect_command_packet_semantics(core_payload), [])
         self.assertEqual(packets.inspect_command_packet_semantics(legacy_payload), [])
         self.assertFalse(packets.has_command_packet_semantic_violation(core_payload))
+
+    def test_semantic_inspector_rejects_legacy_operator_action(self) -> None:
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message="legacy operator action",
+            machine_error_code="REPAIR_REQUIRED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="repair_runtime",
+            changed_files=[],
+        )
+
+        self.assertIn(
+            ("operator_action", "invalid_value"),
+            _violation_codes(packets.inspect_command_packet_semantics(payload)),
+        )
+
+    def test_semantic_inspector_rejects_next_action_operator_action_placeholder(
+        self,
+    ) -> None:
+        payload = packets.build_command_packet(
+            ok=False,
+            human_message="placeholder next action",
+            machine_error_code="REPAIR_REQUIRED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={"next_action": "operator_action"},
+        )
+
+        self.assertIn(
+            ("next_action", "reserved_value"),
+            _violation_codes(packets.inspect_command_packet_semantics(payload)),
+        )
 
     def test_semantic_inspector_reports_missing_and_non_object_packets(self) -> None:
         self.assertEqual(
@@ -605,7 +675,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         payload = {
             "status": "ok",
             "exit_code": 0,
-            "human_message": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+            "human_message": "Authorization: " + "Bearer " + "abcdefghijklmnopqrstuvwxyz",
             "machine_error_code": "OK",
             "changed_files": [],
             "next_action": "none",
@@ -640,7 +710,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         )
 
     def test_redact_command_packet_redacts_nested_explicit_secret_values(self) -> None:
-        sentinel = "sk-wbp-command-packet-secret-1234567890"
+        sentinel = "sk-" + "wbp-command-packet-secret-1234567890"
         payload = packets.build_command_packet(
             ok=False,
             human_message=f"failed with token {sentinel}",
@@ -685,7 +755,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         self.assertNotIn(sentinel, json.dumps(redacted, default=str))
 
     def test_redact_command_packet_does_not_mutate_original_payload(self) -> None:
-        sentinel = "sk-wbp-nonmutating-secret-1234567890"
+        sentinel = "sk-" + "wbp-nonmutating-secret-1234567890"
         payload = {
             "status": "ok",
             "exit_code": 0,
@@ -761,7 +831,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
     def test_command_packet_has_secret_leak_detects_explicit_secret_after_serialization(
         self,
     ) -> None:
-        sentinel = "sk-wbp-serialized-secret-1234567890"
+        sentinel = "sk-" + "wbp-serialized-secret-1234567890"
         payload = {"data": {"messages": ["safe", {"text": f"raw={sentinel}"}]}}
 
         self.assertTrue(
@@ -769,7 +839,7 @@ class CommandPacketsCoreTests(unittest.TestCase):
         )
 
     def test_command_packet_has_secret_leak_ignores_redacted_payload(self) -> None:
-        sentinel = "sk-wbp-redacted-secret-1234567890"
+        sentinel = "sk-" + "wbp-redacted-secret-1234567890"
         payload = {
             "data": {
                 "api_key": sentinel,
@@ -787,10 +857,10 @@ class CommandPacketsCoreTests(unittest.TestCase):
     def test_redaction_catches_high_confidence_secret_shapes(self) -> None:
         payload = {
             "data": {
-                "authorization_header": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
-                "env_text": "OPENAI_API_KEY=abcdefghijklmnopqrstuvwxyz",
+                "authorization_header": "Authorization: " + "Bearer " + "abcdefghijklmnopqrstuvwxyz",
+                "env_text": "OPENAI_API_KEY=" + "abcdefghijklmnopqrstuvwxyz",
                 "plain_api_key": "plain-fixture-value",
-                "sk_value": "sk-wbp-secret-shape-1234567890",
+                "sk_value": "sk-" + "wbp-secret-shape-1234567890",
                 "url": "https://user:password@example.test/path",
                 "note": "token bucket remains observable",
                 "next_action": "accounts_login_start",

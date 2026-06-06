@@ -94,6 +94,9 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id", "session_id"];
+const CODEX_ROUTE_SELECTION_STORAGE_KEY = "wbp.codex.route-selection.v2";
+const QUICK_START_DEFAULT_EXECUTION_MODE = "chatgpt_only";
+const QUICK_START_PREFERRED_CHATGPT_MODEL_ID = "gpt-5.5";
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
 const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
 const UI_READONLY_LANE_BLOCKERS = [
@@ -465,6 +468,7 @@ let currentApiConnectionsSnapshot = null;
 let lastOnboardingActionPayload = null;
 let lastApiCredentialActionPayload = null;
 let lastApiCredentialActionRefreshState = "none";
+let refreshButtonFeedbackTimer = null;
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
@@ -1070,6 +1074,11 @@ function renderCodexCustomLaunchDryRun(packet) {
 function renderCodexCustomLaunch(packet) {
   const response = document.getElementById("codexLaunchDryRunResponse");
   const claimScope = String(packet?.launch_claim_scope || "");
+  const selectionPacket = packet?.selection_packet || {};
+  const launchExecutionMode = packet?.execution_mode || selectionPacket?.execution_mode || "";
+  const launchChatgptModelId = packet?.chatgpt_model_id || selectionPacket?.chatgpt_model_id || "";
+  const launchApiModelId = packet?.api_model_id || selectionPacket?.api_model_id || "";
+  const launchRouteModelId = packet?.route_model_id || "";
   const normalizedClaimScope = claimScope.toLowerCase();
   const workbenchOnly = packet?.session_created === true
     || packet?.workbench_ready === true
@@ -1088,15 +1097,16 @@ function renderCodexCustomLaunch(packet) {
     && packet?.process_started === true
     && packet?.expected_custom_identity_observed === true
     && packet?.native_window_observed === true
+    && packet?.native_app_usable === true
     && packet?.real_codex_app_launched === true
     && claimScope !== ""
     && !normalizedClaimScope.includes("dispatch")
     && !normalizedClaimScope.includes("workbench");
-  const limitedWindowLaunch = packet?.status === "blocked"
+  const limitedWindowLaunch = (packet?.status === "blocked" || packet?.status === "ok")
     && packet?.process_started === true
     && packet?.running_status === true
     && packet?.native_window_observed === true
-    && packet?.native_app_usable === true;
+    && packet?.native_app_usable !== true;
   codexLaunchSetChip(
     nativeProofOk
       ? "green"
@@ -1109,7 +1119,11 @@ function renderCodexCustomLaunch(packet) {
       ? "native proof confirmed"
       : (
         packet?.status === "ok"
-          ? (workbenchOnly ? "workbench/session only" : "native proof pending")
+          ? (
+            limitedWindowLaunch
+              ? "window visible / proof incomplete"
+              : (workbenchOnly ? "workbench/session only" : "native proof pending")
+          )
           : (limitedWindowLaunch ? "window visible / proof incomplete" : (packet?.status || "failed"))
       )
   );
@@ -1134,6 +1148,10 @@ function renderCodexCustomLaunch(packet) {
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: launchExecutionMode,
+      chatgpt_model_id: launchChatgptModelId,
+      api_model_id: launchApiModelId,
       session_created: packet?.session_created === true,
       running_status: packet?.running_status === true,
       isolated_home: packet?.isolated_home === true,
@@ -1149,10 +1167,20 @@ function renderCodexCustomLaunch(packet) {
       native_window_observed: packet?.native_window_observed === true,
       real_codex_app_launched: packet?.real_codex_app_launched === true,
       native_app_usable: packet?.native_app_usable === true,
+      input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+      native_app_usability_source: packet?.native_app_usability_source || "",
+      native_app_usability_blocked_reason_class:
+        packet?.native_app_usability_blocked_reason_class || "",
       workbench_ready: packet?.workbench_ready === true,
-      selected_source_class: packet?.selection_packet?.selected_source_class || "",
-      selected_route_digest: packet?.selection_packet?.selected_route_digest || "",
+      selected_source_class: selectionPacket?.selected_source_class || "",
+      selected_route_digest: selectionPacket?.selected_route_digest || "",
       selected_model: packet?.selected_model || "",
+      launch_model_id: packet?.launch_model_id || "",
+      route_model_id: launchRouteModelId,
+      bridge_alive: packet?.bridge_alive === true,
+      stable_custom_codex_wbp_bridge_final_status:
+        packet?.stable_custom_codex_wbp_bridge_final_status || "",
+      bridge_status: packet?.bridge_status || "",
       launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
       quick_start_stable_custom_launch_final_status:
         packet?.quick_start_stable_custom_launch_final_status || "",
@@ -1197,25 +1225,87 @@ function renderCodexCustomLaunch(packet) {
   }
   setQuickStartChip(
     "quickStartLaunchState",
-    packet?.status === "ok" ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    packet?.status === "ok"
+    nativeProofOk ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" || packet?.status === "ok" ? "amber" : "red"),
+    nativeProofOk
       ? "запущен"
       : (limitedWindowLaunch ? "окно открыто" : (packet?.machine_error_code || packet?.status || "ошибка"))
   );
   setQuickStartChip(
     "quickStartRouteChip",
-    packet?.status === "ok" ? "green" : "amber",
-    packet?.status === "ok" ? "запуск ok" : (limitedWindowLaunch ? "proof incomplete" : "проверь пакет")
+    nativeProofOk ? "green" : "amber",
+    nativeProofOk ? "запуск ok" : (limitedWindowLaunch ? "proof incomplete" : "проверь пакет")
+  );
+  const launchUsesApiRoute = (
+    launchExecutionMode === "api_only"
+    || launchExecutionMode === "chatgpt_plus_api"
+    || packet?.external_route_selected === true
+    || Boolean(launchApiModelId)
+  );
+  const launchBridgeAlive = (
+    packet?.bridge_alive === true
+    || packet?.stable_custom_codex_wbp_bridge_final_status
+      === "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS"
+  );
+  const launchBridgeConfigured = packet?.wbp_endpoint_configured === true;
+  setQuickStartChip(
+    "quickStartBridgeState",
+    launchUsesApiRoute
+      ? (launchBridgeAlive ? "green" : (launchBridgeConfigured ? "neutral" : "amber"))
+      : "neutral",
+    launchUsesApiRoute
+      ? (launchBridgeAlive ? "жив" : (launchBridgeConfigured ? "configured" : "не проверен"))
+      : "не нужен"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_window_observed === true
+      ? "green"
+      : (packet?.process_started === true ? "amber" : "neutral"),
+    packet?.native_window_observed === true
+      ? "найдено"
+      : (packet?.process_started === true ? "process" : "не найдено")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.quick_start_launch_route_truth_proven_with_limits === true
+      || packet?.route_packet_matches_selection_packet === true
+      || packet?.config_status === "matches_last_launch"
+      ? "green"
+      : (packet?.status === "ok" ? "neutral" : "amber"),
+    packet?.quick_start_launch_route_truth_proven_with_limits === true
+      || packet?.route_packet_matches_selection_packet === true
+      || packet?.config_status === "matches_last_launch"
+      ? "совпадает"
+      : (packet?.status === "ok" ? "launch packet" : "blocked")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    !packet?.next_action || packet?.next_action === "none" ? "green" : "amber",
+    quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
     machine_error_code: packet?.machine_error_code || "UNKNOWN",
-    selected_model: packet?.selected_model || packet?.selection_packet?.selected_model || packet?.model || "",
+    final_status: packet?.final_status || "",
+    execution_mode: launchExecutionMode,
+    chatgpt_model_id: launchChatgptModelId,
+    api_model_id: launchApiModelId,
+    selected_model: packet?.selected_model || selectionPacket?.selected_model || packet?.model || "",
+    launch_model_id: packet?.launch_model_id || "",
+    route_model_id: launchRouteModelId,
     launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
     quick_start_stable_custom_launch_final_status:
       packet?.quick_start_stable_custom_launch_final_status || "",
     profile_final_status: packet?.profile_final_status || "",
     session_storage_final_status: packet?.session_storage_final_status || "",
+    bridge_status: packet?.bridge_status || "",
+    bridge_alive: packet?.bridge_alive === true,
+    stable_custom_codex_wbp_bridge_final_status:
+      packet?.stable_custom_codex_wbp_bridge_final_status || "",
+    window_status: packet?.window_status || "",
+    config_status: packet?.config_status || "",
+    owner_authorization_phrase_present:
+      packet?.owner_authorization_phrase_present === true,
     profile_persistence_proven: packet?.profile_persistence_proven === true,
     persistent_profile_reused: packet?.persistent_profile_reused === true,
     profile_path_stable: packet?.profile_path_stable === true,
@@ -1241,8 +1331,28 @@ function renderCodexCustomLaunch(packet) {
     history_persistence_claimed: packet?.history_persistence_claimed === true,
     visible_thread_history_restored_claimed:
       packet?.visible_thread_history_restored_claimed === true,
-    api_reasoning_option_id: packet?.api_reasoning_option_id || "",
-    api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
+    api_reasoning_option_id:
+      packet?.api_reasoning_option_id || selectionPacket?.api_reasoning_option_id || "",
+    api_reasoning_option_packet:
+      packet?.api_reasoning_option_packet || selectionPacket?.api_reasoning_option_packet || {},
+    primary_model_slot: packet?.primary_model_slot || selectionPacket?.primary_model_slot || {},
+    coding_agent_model_slot:
+      packet?.coding_agent_model_slot || selectionPacket?.coding_agent_model_slot || {},
+    chatgpt_line_used_as_executor:
+      packet?.chatgpt_line_used_as_executor === true
+      || selectionPacket?.chatgpt_line_used_as_executor === true,
+    api_line_used_as_executor:
+      packet?.api_line_used_as_executor === true
+      || selectionPacket?.api_line_used_as_executor === true,
+    api_only_calls_chatgpt:
+      packet?.api_only_calls_chatgpt === true
+      || selectionPacket?.api_only_calls_chatgpt === true,
+    chatgpt_only_calls_api:
+      packet?.chatgpt_only_calls_api === true
+      || selectionPacket?.chatgpt_only_calls_api === true,
+    server_issued_catalog_used:
+      packet?.server_issued_catalog_used === true
+      || selectionPacket?.server_issued_catalog_used === true,
     persistent_profile_id: packet?.persistent_profile_id || "",
     temp_profile_used: packet?.temp_profile_used === true,
     running_status: packet?.running_status === true,
@@ -1250,6 +1360,10 @@ function renderCodexCustomLaunch(packet) {
     native_window_observed: packet?.native_window_observed === true,
     real_codex_app_launched: packet?.real_codex_app_launched === true,
     native_app_usable: packet?.native_app_usable === true,
+    input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+    native_app_usability_source: packet?.native_app_usability_source || "",
+    native_app_usability_blocked_reason_class:
+      packet?.native_app_usability_blocked_reason_class || "",
     custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
     new_launch_started: packet?.new_launch_started === true,
     network_calls_made: packet?.network_calls_made === true,
@@ -1550,6 +1664,7 @@ async function buildCodexCustomLaunchSelectionPayload() {
     syncCodexRouteSelects("codexCustomExecutionModeSelect");
     payload = quickStartLaunchPayloadFromSelects();
   }
+  saveCodexRouteSelection(payload);
   return payload;
 }
 
@@ -1731,6 +1846,9 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "show_existing_window") {
     return "show window";
   }
+  if (action === "continue_in_existing_custom_window") {
+    return "existing window";
+  }
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
 
@@ -1847,7 +1965,16 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
     if (!response.ok) {
       throw new Error(`quick start config admission http ${response.status}`);
     }
-    renderQuickStartConfigAdmission(await response.json());
+    const admissionPacket = await response.json();
+    renderQuickStartConfigAdmission(admissionPacket);
+    if (quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket)) {
+      setQuickStartChip("quickStartRouteChip", "neutral", "route check");
+      if (responseNode) {
+        responseNode.textContent = "admission ok; проверяю выбранный API route...";
+      }
+      const actionOutcome = await runUiAction("api_route_check", { route_id: payload.api_model_id });
+      renderQuickStartApiRouteCheckResult(payload, actionOutcome);
+    }
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderQuickStartConfigAdmission({
@@ -1889,6 +2016,57 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
     codexLaunchDryRunInFlight = false;
     button?.removeAttribute("disabled");
   }
+}
+
+function quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket) {
+  return Boolean(
+    payload
+    && admissionPacket
+    && payload.execution_mode !== "chatgpt_only"
+    && typeof payload.api_model_id === "string"
+    && payload.api_model_id
+    && admissionPacket.status === "ok"
+    && admissionPacket.machine_error_code === "OK"
+    && admissionPacket.launch_admission === "admitted"
+  );
+}
+
+function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome) {
+  const actionPacket = actionOutcome?.payload || actionOutcome || {};
+  const result = actionPacket?.result || {};
+  const status = result.status || actionPacket.status || "unknown";
+  const machineCode = result.machine_error_code || actionPacket.machine_error_code || "UNKNOWN";
+  const refreshState = actionOutcome?.refreshState || "none";
+  const refreshRequired = actionPacket?.post_action_refresh_required === true;
+  const routeId = selectionPayload?.api_model_id || actionPacket?.route_id || result?.data?.route_id || "";
+  const routeOk = status === "ok" && machineCode === "OK";
+  const refreshOk = !refreshRequired || refreshState === "complete";
+  const blockedLabel = machineCode.length > 18 ? `${machineCode.slice(0, 18)}...` : machineCode;
+  setQuickStartChip(
+    "quickStartRouteChip",
+    routeOk && refreshOk ? "green" : "amber",
+    routeOk && refreshOk ? "OK" : blockedLabel
+  );
+  setQuickStartRouteResponse({
+    status,
+    machine_error_code: machineCode,
+    final_status: "API_ROUTE_CHECK_ACTION_PACKET_RECEIVED",
+    execution_mode: selectionPayload?.execution_mode || "",
+    api_model_id: routeId,
+    selected_model: routeId,
+    api_reasoning_option_id: selectionPayload?.api_reasoning_option_id || "",
+    api_route_status: routeOk ? "checked" : "blocked",
+    api_route_reference: routeId,
+    ui_action: actionPacket?.ui_action || "api_route_check",
+    route_id: routeId,
+    action_status: status,
+    action_machine_error_code: machineCode,
+    action_refresh_state: refreshState,
+    human_message: result.human_message || "",
+    next_action: result.next_action || "",
+    post_action_refresh_required: refreshRequired,
+    runtime_readiness_claimed: false
+  });
 }
 
 async function runQuickStartLaunchPreflight() {
@@ -2053,6 +2231,11 @@ function renderCodexCustomShowWindow(packet) {
     custom_process_pid: packet?.custom_process_pid ?? null,
     custom_window_visible: packet?.custom_window_visible === true,
     custom_window_frontmost: packet?.custom_window_frontmost === true,
+    native_app_usable: packet?.native_app_usable === true,
+    input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+    native_app_usability_source: packet?.native_app_usability_source || "",
+    native_app_usability_blocked_reason_class:
+      packet?.native_app_usability_blocked_reason_class || "",
     visible_window_counts_as_model_truth: false,
     response_text_counts_as_route_truth: false,
     launch_packet_is_truth_source: false,
@@ -2070,18 +2253,24 @@ function renderCodexCustomShowWindow(packet) {
   if (quickResponse) {
     quickResponse.textContent = JSON.stringify(summary, null, 2);
   }
-  const ok = packet?.status === "ok" && packet?.custom_window_visible === true;
+  const ok = packet?.status === "ok"
+    && packet?.custom_window_visible === true
+    && packet?.native_app_usable === true;
+  const visibleOnly = packet?.custom_window_visible === true && packet?.native_app_usable !== true;
   setQuickStartChip(
     "quickStartLaunchState",
     ok ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    ok ? "окно видно" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? "окно usable" : (visibleOnly ? "окно видно" : (packet?.machine_error_code || packet?.status || "ошибка"))
   );
   setQuickStartChip(
     "quickStartRouteChip",
     ok ? "green" : "amber",
-    ok ? "окно ok" : "пакет окна"
+    ok ? "окно ok" : (visibleOnly ? "proof incomplete" : "пакет окна")
   );
-  codexLaunchSetChip(ok ? "green" : "amber", ok ? "window visible" : "window packet");
+  codexLaunchSetChip(
+    ok ? "green" : "amber",
+    ok ? "window usable" : (visibleOnly ? "window visible / proof incomplete" : "window packet")
+  );
 }
 
 async function showCodexCustomWindow() {
@@ -2314,7 +2503,18 @@ function codexCustomAvailableModelEntries(packet) {
 }
 
 function codexCustomApiModelEntries(packet) {
-  return codexCustomLaneEntries(packet, "api_lane");
+  const laneEntries = codexCustomLaneEntries(packet, "api_lane");
+  if (laneEntries.length) {
+    return laneEntries;
+  }
+  return (Array.isArray(packet?.available_models) ? packet.available_models : [])
+    .filter((entry) => (
+      typeof entry?.model_id === "string"
+      && entry.model_id
+      && entry?.selection_enabled === true
+      && entry?.model_lane === "api_route_lane"
+      && entry?.source === "server_owned_external_route"
+    ));
 }
 
 function codexCustomDisabledReasonText(entry) {
@@ -2433,6 +2633,135 @@ function renderApiReasoningOptionSelects() {
   }
 }
 
+function codexRouteSelectionPrefersQuickStart() {
+  const desktop = document.querySelector(".desktop");
+  return desktop?.dataset?.screen === "quick-start";
+}
+
+function codexRoutePairValue(masterId, quickStartId, preferQuickStart = false) {
+  const primary = preferQuickStart ? quickStartId : masterId;
+  const fallback = preferQuickStart ? masterId : quickStartId;
+  return selectValue(primary) || selectValue(fallback);
+}
+
+function codexRouteSelectionFromUi(preferQuickStart = codexRouteSelectionPrefersQuickStart()) {
+  return {
+    execution_mode: codexRoutePairValue("codexCustomExecutionModeSelect", "quickStartExecutionModeSelect", preferQuickStart),
+    chatgpt_model_id: codexRoutePairValue("codexCustomModelSelect", "quickStartChatModelSelect", preferQuickStart),
+    api_model_id: codexRoutePairValue("codexCustomApiModelSelect", "quickStartApiModelSelect", preferQuickStart),
+    api_reasoning_option_id: codexRoutePairValue("codexCustomApiReasoningOptionSelect", "quickStartApiReasoningOptionSelect", preferQuickStart)
+  };
+}
+
+function quickStartSelectionWithDefaults(selection) {
+  const next = { ...(selection || {}) };
+  if (!next.execution_mode) {
+    next.execution_mode = QUICK_START_DEFAULT_EXECUTION_MODE;
+  }
+  if (next.execution_mode !== "api_only" && !next.chatgpt_model_id) {
+    next.chatgpt_model_id = QUICK_START_PREFERRED_CHATGPT_MODEL_ID;
+  }
+  return next;
+}
+
+function codexRouteSelectionHasValue(selection) {
+  return Boolean(
+    selection
+    && (
+      selection.execution_mode
+      || selection.chatgpt_model_id
+      || selection.api_model_id
+      || selection.api_reasoning_option_id
+    )
+  );
+}
+
+function readStoredCodexRouteSelection() {
+  try {
+    const raw = window.localStorage?.getItem(CODEX_ROUTE_SELECTION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return codexRouteSelectionHasValue(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function codexSelectCanUseValue(select, value) {
+  if (!select || !value) {
+    return false;
+  }
+  if (!select.options || typeof select.options[Symbol.iterator] !== "function") {
+    return true;
+  }
+  const options = [...select.options];
+  if (!options.length) {
+    return true;
+  }
+  return options.some((option) => option.value === value && !option.disabled);
+}
+
+function setCodexSelectPairValue(masterId, quickStartId, value) {
+  if (!value) {
+    return false;
+  }
+  let applied = false;
+  for (const id of [masterId, quickStartId]) {
+    const node = document.getElementById(id);
+    if (codexSelectCanUseValue(node, value)) {
+      node.value = value;
+      applied = true;
+    }
+  }
+  return applied;
+}
+
+function applyCodexRouteSelection(selection, options = {}) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return false;
+  }
+  let applied = false;
+  applied = setCodexSelectPairValue(
+    "codexCustomExecutionModeSelect",
+    "quickStartExecutionModeSelect",
+    selection.execution_mode
+  ) || applied;
+  applied = setCodexSelectPairValue(
+    "codexCustomModelSelect",
+    "quickStartChatModelSelect",
+    selection.chatgpt_model_id
+  ) || applied;
+  applied = setCodexSelectPairValue(
+    "codexCustomApiModelSelect",
+    "quickStartApiModelSelect",
+    selection.api_model_id
+  ) || applied;
+  if (options.reasoning !== false) {
+    applied = setCodexSelectPairValue(
+      "codexCustomApiReasoningOptionSelect",
+      "quickStartApiReasoningOptionSelect",
+      selection.api_reasoning_option_id
+    ) || applied;
+  }
+  return applied;
+}
+
+function saveCodexRouteSelection(selection = codexRouteSelectionFromUi(codexRouteSelectionPrefersQuickStart())) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return;
+  }
+  const persisted = codexRouteSelectionPrefersQuickStart()
+    ? quickStartSelectionWithDefaults(selection)
+    : selection;
+  try {
+    window.localStorage?.setItem(CODEX_ROUTE_SELECTION_STORAGE_KEY, JSON.stringify(persisted));
+  } catch (error) {
+    // Selection persistence is a UI convenience; command packets remain the source of truth.
+  }
+}
+
 function syncCodexRouteSelects(sourceId) {
   const pairs = [
     ["codexCustomModelSelect", "quickStartChatModelSelect"],
@@ -2449,6 +2778,7 @@ function syncCodexRouteSelects(sourceId) {
   const target = document.getElementById(targetId);
   if (source && target) {
     target.value = source.value;
+    saveCodexRouteSelection(codexRouteSelectionFromUi(sourceId.startsWith("quickStart")));
   }
 }
 
@@ -2458,7 +2788,7 @@ function selectValue(id) {
 }
 
 function quickStartLaunchPayloadFromSelects() {
-  const executionMode = selectValue("quickStartExecutionModeSelect") || "chatgpt_only";
+  const executionMode = selectValue("quickStartExecutionModeSelect") || QUICK_START_DEFAULT_EXECUTION_MODE;
   return {
     execution_mode: executionMode,
     chatgpt_model_id: executionMode === "api_only" ? "" : selectValue("quickStartChatModelSelect"),
@@ -2496,6 +2826,8 @@ function setQuickStartChip(id, visual, label) {
 function setQuickStartRouteResponse(packet) {
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
+    const primarySlot = packet?.primary_model_slot || {};
+    const codingSlot = packet?.coding_agent_model_slot || {};
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || packet?.final_status || "UNKNOWN",
@@ -2504,10 +2836,32 @@ function setQuickStartRouteResponse(packet) {
       chatgpt_model_id: packet?.chatgpt_model_id || "",
       api_model_id: packet?.api_model_id || "",
       selected_model: packet?.selected_model || packet?.api_model_id || packet?.chatgpt_model_id || "",
+      launch_model_id: packet?.launch_model_id || "",
+      route_model_id: packet?.route_model_id || "",
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
       api_reasoning_status: packet?.api_reasoning_status || "",
       api_route_status: packet?.api_route_status || "",
       api_route_reference: packet?.api_route_reference || "",
+      primary_model_slot_lane: primarySlot?.lane || "",
+      primary_model_slot_model_id: primarySlot?.model_id || "",
+      coding_agent_model_slot_status: codingSlot?.status || "",
+      coding_agent_model_slot_model_id: codingSlot?.model_id || "",
+      chatgpt_line_used_as_executor:
+        packet?.chatgpt_line_used_as_executor === true,
+      api_line_used_as_executor:
+        packet?.api_line_used_as_executor === true,
+      api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
+      chatgpt_only_calls_api: packet?.chatgpt_only_calls_api === true,
+      server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      ui_action: packet?.ui_action || "",
+      route_id: packet?.route_id || "",
+      action_status: packet?.action_status || "",
+      action_machine_error_code: packet?.action_machine_error_code || "",
+      action_refresh_state: packet?.action_refresh_state || "",
+      human_message: packet?.human_message || "",
+      next_action: packet?.next_action || "",
+      post_action_refresh_required: packet?.post_action_refresh_required === true,
+      runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
       fallback_used: packet?.fallback_used === true,
       silent_fallback_used: packet?.silent_fallback_used === true,
       launch_admission: packet?.launch_admission || "",
@@ -2520,6 +2874,9 @@ function setQuickStartRouteResponse(packet) {
         packet?.quick_start_stable_custom_launch_final_status || "",
       profile_final_status: packet?.profile_final_status || "",
       session_storage_final_status: packet?.session_storage_final_status || "",
+      bridge_alive: packet?.bridge_alive === true,
+      stable_custom_codex_wbp_bridge_final_status:
+        packet?.stable_custom_codex_wbp_bridge_final_status || "",
       bridge_status: packet?.bridge_status || "",
       window_status: packet?.window_status || "",
       config_status: packet?.config_status || "",
@@ -2743,6 +3100,8 @@ function renderQuickStartDeepSeekCoderCheck(packet) {
 
 function renderQuickStartDeepSeekCodeEditProof(packet) {
   const ok = packet?.final_status === "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS";
+  const windowLaunchUsable = packet?.window_launch_proven_with_limits === true
+    && packet?.native_app_usable === true;
   setQuickStartChip(
     "quickStartRouteChip",
     ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
@@ -2755,8 +3114,8 @@ function renderQuickStartDeepSeekCodeEditProof(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    packet?.window_launch_proven_with_limits === true ? "green" : "amber",
-    packet?.window_launch_proven_with_limits === true ? "окно ok" : "окно не доказано"
+    windowLaunchUsable ? "green" : "amber",
+    windowLaunchUsable ? "окно usable" : "окно не доказано"
   );
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
@@ -2767,6 +3126,9 @@ function renderQuickStartDeepSeekCodeEditProof(packet) {
       execution_mode: packet?.execution_mode || "",
       selected_model: packet?.selected_model || "",
       api_model_id: packet?.api_model_id || "",
+      window_launch_proven_with_limits:
+        packet?.window_launch_proven_with_limits === true,
+      native_app_usable: packet?.native_app_usable === true,
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
       cwd: packet?.cwd || "",
       repo_root: packet?.repo_root || "",
@@ -2923,6 +3285,12 @@ async function runQuickStartDeepSeekCodeEditProof() {
 function renderCodexCustomModels(registry, compat) {
   const chatSelect = document.getElementById("codexCustomModelSelect");
   const apiSelect = document.getElementById("codexCustomApiModelSelect");
+  const preferQuickStart = codexRouteSelectionPrefersQuickStart();
+  const preservedSelection = preferQuickStart
+    ? quickStartSelectionWithDefaults(
+        readStoredCodexRouteSelection() || codexRouteSelectionFromUi(true)
+      )
+    : (readStoredCodexRouteSelection() || codexRouteSelectionFromUi(false));
   const chatEntries = codexCustomAvailableModelEntries(registry);
   const apiEntries = codexCustomApiModelEntries(registry);
   const seedEntries = codexCustomSeedEntries(registry);
@@ -2977,8 +3345,14 @@ function renderCodexCustomModels(registry, compat) {
   }
   mirrorSelectOptions(chatSelect, "quickStartChatModelSelect");
   mirrorSelectOptions(apiSelect, "quickStartApiModelSelect");
+  const restoredSelection = applyCodexRouteSelection(preservedSelection, { reasoning: false });
   renderApiReasoningOptionSelects();
-  syncCodexRouteSelects("codexCustomExecutionModeSelect");
+  applyCodexRouteSelection(preservedSelection);
+  if (restoredSelection) {
+    saveCodexRouteSelection(codexRouteSelectionFromUi(preferQuickStart));
+  } else {
+    syncCodexRouteSelects("codexCustomExecutionModeSelect");
+  }
   renderCodexCustomModelCatalog("codexCustomChatLaneCatalog", chatEntries);
   renderCodexCustomModelCatalog("codexCustomApiLaneCatalog", apiEntries);
   renderCodexCustomModelCatalog("codexCustomSeedLaneCatalog", seedEntries);
@@ -3019,6 +3393,18 @@ function renderCodexCustomModels(registry, compat) {
     chatEntries.length || apiEntries.length ? "neutral" : "amber",
     chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
   );
+  if (
+    currentScreen() === "quick-start"
+    && currentAccountsSnapshot
+    && currentApiConnectionsSnapshot
+  ) {
+    renderQuickStart(
+      currentAccountsSnapshot,
+      currentApiConnectionsSnapshot,
+      document.getElementById("sourcePicker")?.value || "live",
+      document.querySelector(".desktop")?.dataset?.fixtureState || "unknown"
+    );
+  }
 }
 
 function renderCodexCustomSelectorIntent(packet) {
@@ -7075,7 +7461,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
   const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : onboardLoginWindowRef;
   if (activeActionRequestKey) {
     const sameRequest = activeActionRequestKey === requestKey;
-    setActionPanel({
+    const duplicatePayload = {
       status: "duplicate_blocked",
       ui_action: uiAction,
       action_role: "ui_session_guard",
@@ -7091,8 +7477,9 @@ async function runUiAction(uiAction, extraPayload = {}) {
         next_action: "wait",
         changed_files: []
       }
-    });
-    return;
+    };
+    setActionPanel(duplicatePayload);
+    return { payload: duplicatePayload, refreshState: "none" };
   }
   activeActionRequestKey = requestKey;
   activeActionAbortReason = "";
@@ -7124,7 +7511,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       throw new Error(`action http ${response.status}`);
     }
     const payload = await response.json();
-    await handleActionPayload(payload, onboardLoginWindow);
+    return await handleActionPayload(payload, onboardLoginWindow);
   } catch (error) {
     const abortedByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";
     const timeoutFailure = !abortedByUser && (
@@ -7148,7 +7535,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       : (error instanceof SyntaxError
         ? "UI_ACTION_INVALID_JSON"
         : (timeoutFailure ? "UI_ACTION_TIMEOUT" : "UI_ACTION_FETCH_FAILED"));
-    setActionPanel({
+    const failurePayload = {
       ui_action: uiAction,
       action_role: abortedByUser ? "user_cancelled" : "integration_failure",
       account_id: requestPayload.account_id || "",
@@ -7163,7 +7550,9 @@ async function runUiAction(uiAction, extraPayload = {}) {
         next_action: abortedByUser ? "refresh" : "retry",
         changed_files: []
       }
-    });
+    };
+    setActionPanel(failurePayload);
+    return { payload: failurePayload, refreshState: "failed" };
   } finally {
     activeActionRequestKey = "";
     activeActionAbortController = null;
@@ -7686,6 +8075,7 @@ async function handleActionPayload(payload, loginWindow = null) {
     }
   }
   setActionPanel(payload);
+  let refreshState = "none";
   if (payload.post_action_refresh_required) {
     const refreshTarget = currentScreen() === "accounts"
       ? "accounts"
@@ -7697,7 +8087,7 @@ async function handleActionPayload(payload, loginWindow = null) {
     text("actionRefreshStatus", `обновление live ${refreshTarget}`);
     const refreshed = await refreshLiveReadonlyForActionPayload(payload, false);
     if (actionRefreshSucceeded(payload, refreshed)) {
-      const refreshState = canonicalActionRefreshState(payload, refreshed);
+      refreshState = canonicalActionRefreshState(payload, refreshed);
       setActionPanel(payload, refreshState);
       setMiniPill(
         "onboardingResultRefreshChip",
@@ -7705,9 +8095,11 @@ async function handleActionPayload(payload, loginWindow = null) {
         refreshState === "mismatch" ? "amber" : "green"
       );
     } else {
+      refreshState = "failed";
       setActionPanel(payload, "failed");
     }
   }
+  return { payload, refreshState };
 }
 
 function actionRequestKey(payload) {
@@ -8207,6 +8599,50 @@ function setLiveReadonlyPendingUi() {
   setSourceCopy("live");
   setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
   renderUiReadonlyLaneExitSummary();
+}
+
+function setRefreshButtonText(label) {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  const labelNode = refresh.lastElementChild || refresh;
+  labelNode.textContent = label;
+}
+
+function setRefreshButtonFeedback(state, label, options = {}) {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  if (refreshButtonFeedbackTimer) {
+    clearTimeout(refreshButtonFeedbackTimer);
+    refreshButtonFeedbackTimer = null;
+  }
+  refresh.dataset.refreshState = state;
+  refresh.disabled = Boolean(options.disabled);
+  setRefreshButtonText(label);
+  if (options.resetAfterMs) {
+    refreshButtonFeedbackTimer = setTimeout(() => {
+      refresh.dataset.refreshState = "idle";
+      refresh.disabled = false;
+      setRefreshButtonText("Обновить");
+      refreshButtonFeedbackTimer = null;
+    }, options.resetAfterMs);
+  }
+}
+
+function resetRefreshButtonLabelIfIdle() {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  if (["busy", "success", "error"].includes(refresh.dataset.refreshState)) {
+    return;
+  }
+  refresh.dataset.refreshState = "idle";
+  refresh.disabled = false;
+  setRefreshButtonText("Обновить");
 }
 
 function renderOverviewLivePendingState() {
@@ -11114,7 +11550,18 @@ function quickStartCompactApiMeta(route) {
   return [provider, role].filter(Boolean).join(" · ") || "server-owned route";
 }
 
-function quickStartApiModel(snapshot, source) {
+function quickStartSelectedRouteHasBoundedProof(route) {
+  if (!route || typeof route !== "object") {
+    return false;
+  }
+  const validation = String(route.validation_label || "").toLowerCase();
+  return route.enabled === true
+    && route.secret_status_label === "available"
+    && route.secret_visual_state === "green"
+    && (route.validation_visual_state === "green" || validation === "ok");
+}
+
+function quickStartApiModel(snapshot, source, selectedRouteId = "") {
   const routes = Array.isArray(snapshot.routes) ? snapshot.routes : [];
   if (snapshot.status === "stale") {
     const primary = routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true) || routes[0];
@@ -11168,7 +11615,12 @@ function quickStartApiModel(snapshot, source) {
   const primary = source === "live"
     ? routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true)
     : routes.find((route) => route.enabled === true) || routes[0];
-  if (!primary) {
+  const selectedRoute = source === "live" && selectedRouteId
+    ? routes.find((route) => route.route_id === selectedRouteId)
+    : null;
+  const selectedRouteAdmitted = !primary && quickStartSelectedRouteHasBoundedProof(selectedRoute);
+  const routeForSummary = primary || (selectedRouteAdmitted ? selectedRoute : null);
+  if (!routeForSummary) {
     return {
       state: "not_configured",
       visual: "neutral",
@@ -11184,27 +11636,28 @@ function quickStartApiModel(snapshot, source) {
       confirmed: false
     };
   }
-  const missingSecret = primary.status_code === "missing_secret" || primary.secret_visual_state === "amber" || primary.secret_status_label === "missing";
-  const failed = primary.visual_state === "red" || primary.validation_visual_state === "red";
-  const stale = snapshot.status === "stale" || primary.status_code === "stale";
-  const visual = missingSecret || stale ? "amber" : (failed ? "red" : (primary.enabled === true ? "green" : "neutral"));
+  const missingSecret = routeForSummary.status_code === "missing_secret" || routeForSummary.secret_visual_state === "amber" || routeForSummary.secret_status_label === "missing";
+  const failed = routeForSummary.visual_state === "red" || routeForSummary.validation_visual_state === "red";
+  const stale = snapshot.status === "stale" || routeForSummary.status_code === "stale";
+  const visual = missingSecret || stale ? "amber" : (failed ? "red" : (routeForSummary.enabled === true ? "green" : "neutral"));
   const title = missingSecret
     ? "Нужен secret_ref"
-    : (failed ? "Ошибка" : (stale ? "Устарело" : (primary.enabled === true ? "Работает" : "Deferred")));
+    : (failed ? "Ошибка" : (stale ? "Устарело" : (routeForSummary.enabled === true ? (selectedRouteAdmitted ? "Выбранный route подтверждён" : "Работает") : "Deferred")));
   return {
-    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (primary.enabled === true ? "ok" : "unsupported_provider"))),
+    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (routeForSummary.enabled === true ? "ok" : "unsupported_provider"))),
     visual,
     title,
-    provider: quickStartCompactApiLabel(primary),
-    model: quickStartCompactApiMeta(primary),
-    routeId: primary.route_id || "",
-    secretRef: primary.secret_ref || "—",
-    secretState: missingSecret ? "missing" : (primary.secret_status_label || "unknown"),
-    validationState: primary.validation_label || primary.status_label || "not checked",
-    lastCheck: primary.last_checked || "нет данных",
+    provider: quickStartCompactApiLabel(routeForSummary),
+    model: quickStartCompactApiMeta(routeForSummary),
+    routeId: routeForSummary.route_id || "",
+    secretRef: routeForSummary.secret_ref || "—",
+    secretState: missingSecret ? "missing" : (routeForSummary.secret_status_label || "unknown"),
+    validationState: routeForSummary.validation_label || routeForSummary.status_label || "not checked",
+    lastCheck: routeForSummary.last_checked || "нет данных",
     routeCount: routes.length,
-    confirmed: source !== "live" || primary.role_label === "main route" || primary.role_label === "primary" || primary.is_primary === true || primary.primary === true,
-    routeEnabled: primary.enabled === true
+    confirmed: selectedRouteAdmitted || source !== "live" || routeForSummary.role_label === "main route" || routeForSummary.role_label === "primary" || routeForSummary.is_primary === true || routeForSummary.primary === true,
+    selectedRoute: selectedRouteAdmitted,
+    routeEnabled: routeForSummary.enabled === true
   };
 }
 
@@ -11232,7 +11685,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const accounts = safeAccounts.accounts || [];
@@ -11262,7 +11715,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   );
   renderQuickStartAccountRows(safeAccounts);
 
-  const apiModel = quickStartApiModel(safeApi, source);
+  const apiModel = quickStartApiModel(safeApi, source, selectValue("quickStartApiModelSelect"));
   const apiChip = document.getElementById("quickStartApiChip");
   apiChip.className = `chip ${apiModel.visual}`;
   apiChip.lastElementChild.textContent = apiModel.title;
@@ -11287,7 +11740,9 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
     apiModel.state === "missing_secret_ref"
       ? "Основной route выбран, но secret_ref не подтверждён bounded packet. Это не runtime failure."
       : (apiModel.state === "ok"
-        ? "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно."
+        ? (apiModel.selectedRoute === true
+          ? "Выбранный route подтверждён bounded packet. Runtime readiness подтверждается отдельно."
+          : "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно.")
         : (apiModel.state === "stale"
           ? "Основной route показан из устаревшего bounded snapshot. Требуется обновление."
           : "Основной route не подтверждён bounded snapshot."))
@@ -11687,7 +12142,7 @@ function renderAccountsSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const banner = document.getElementById("accountsBanner");
@@ -11751,7 +12206,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const banner = document.getElementById("apiConnectionsBanner");
@@ -12770,7 +13225,7 @@ function renderSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("brandCaption").textContent = "";
   setSourceCopy(source);
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
 
   const runtimeChip = document.getElementById("runtimeChip");
   setClassName(runtimeChip, "chip", visualState);
@@ -12886,12 +13341,25 @@ async function refreshLiveReadonlyForActionPayload(payload, updateUrl = false) {
   return { accounts, runtime };
 }
 
-function refreshCurrentSource() {
-  const source = document.getElementById("sourcePicker").value;
-  if (source === "live") {
-    return setLiveReadonly(false);
+async function refreshCurrentSource() {
+  const startedAt = Date.now();
+  setRefreshButtonFeedback("busy", "Обновляю...", { disabled: true });
+  try {
+    const source = document.getElementById("sourcePicker").value;
+    const result = source === "live"
+      ? await setLiveReadonly(false)
+      : await setFixtureState(document.getElementById("statePicker").value, false);
+    const remainingBusyMs = Math.max(0, 250 - (Date.now() - startedAt));
+    if (remainingBusyMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remainingBusyMs));
+    }
+    setRefreshButtonFeedback("success", "Обновлено", { resetAfterMs: 1000 });
+    return result;
+  } catch (error) {
+    setRefreshButtonFeedback("error", "Ошибка", { resetAfterMs: 1800 });
+    console.error("Failed to refresh current source", error);
+    return null;
   }
-  return setFixtureState(document.getElementById("statePicker").value, false);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -12905,6 +13373,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   applyActionAvailability();
   setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
+  applyCodexRouteSelection(readStoredCodexRouteSelection());
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
@@ -12972,6 +13441,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("codexCustomApiModelSelect");
     renderApiReasoningOptionSelects();
+    saveCodexRouteSelection(codexRouteSelectionFromUi(false));
     refreshCodexCustomApiActionGate();
   });
   document.getElementById("codexCustomApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomApiReasoningOptionSelect"));
@@ -12980,6 +13450,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("quickStartApiModelSelect");
     renderApiReasoningOptionSelects();
+    saveCodexRouteSelection(codexRouteSelectionFromUi(true));
     refreshCodexCustomApiActionGate();
   });
   document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));

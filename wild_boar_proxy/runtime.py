@@ -60,6 +60,9 @@ from .runtime_errors import RuntimeErrorInfo
 
 
 DEFAULT_LAUNCHER_SCRIPT_NAME = "codex-custom-launch.sh"
+CODEX_RENDERER_ACCESSIBILITY_FLAG = "--force-renderer-accessibility=complete"
+CODEX_REMOTE_DEBUGGING_ADDRESS = "127.0.0.1"
+CODEX_REMOTE_DEBUGGING_PORT = "9223"
 REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
 REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
@@ -1090,6 +1093,9 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             'CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"',
             'CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"',
+            f'CODEX_RENDERER_ACCESSIBILITY_FLAG="{CODEX_RENDERER_ACCESSIBILITY_FLAG}"',
+            f'CODEX_REMOTE_DEBUGGING_ADDRESS="{CODEX_REMOTE_DEBUGGING_ADDRESS}"',
+            f'CODEX_REMOTE_DEBUGGING_PORT="${{WBP_CODEX_REMOTE_DEBUGGING_PORT:-{CODEX_REMOTE_DEBUGGING_PORT}}}"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
             '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
@@ -1144,11 +1150,17 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             ' https_proxy="$WBP_CURRENT_PROXY_URL"'
             ' all_proxy="$WBP_CURRENT_PROXY_URL"'
             ' "$CODEX_APP_BIN"'
+            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
+            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
+            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
             ' "--open-project=$WORKSPACE_PATH"'
             ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
             "    else",
             '      "$CODEX_APP_BIN"'
+            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
+            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
+            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
             ' "--open-project=$WORKSPACE_PATH"'
             ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
@@ -1166,10 +1178,16 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             ' https_proxy="$WBP_CURRENT_PROXY_URL"'
             ' all_proxy="$WBP_CURRENT_PROXY_URL"'
             ' "$CODEX_APP_BIN"'
+            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
+            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
+            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
             ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
             "  else",
             '    "$CODEX_APP_BIN"'
+            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
+            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
+            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
             ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
             "  fi",
@@ -3259,6 +3277,14 @@ def restore_current_proxy_owner_path_runtime_surfaces(
 
 
 def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
+    return pid_command_line_contains_path(pid_text, paths.managed_config_file)
+
+
+def stable_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
+    return pid_command_line_contains_path(pid_text, paths.stable_config)
+
+
+def pid_command_line_contains_path(pid_text: str, expected_path: Path) -> bool:
     try:
         pid = int(pid_text.strip())
     except ValueError:
@@ -3267,8 +3293,278 @@ def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
     if result is None or result.returncode != 0:
         return False
     command_line = result.stdout.strip()
-    expected = f"{paths.managed_config_file}"
+    expected = f"{expected_path}"
     return bool(command_line) and expected in command_line
+
+
+def discover_stable_runtime_pids(paths: RuntimePaths) -> list[int]:
+    lsof_bin = shutil.which("lsof")
+    if not lsof_bin:
+        return []
+    stable_host, stable_port, _ = get_endpoint(paths, "stable")
+    process_result = _process_runner.run_bounded_process(
+        [lsof_bin, "-nP", f"-iTCP@{stable_host}:{stable_port}", "-sTCP:LISTEN", "-t"],
+        env=sanitized_env(),
+        timeout_seconds=PROCESS_PROBE_TIMEOUT_SECONDS,
+        output_cap_bytes=PROCESS_PROBE_OUTPUT_CAP_BYTES,
+    )
+    if process_result.status != "ok":
+        return []
+    pids: list[int] = []
+    for raw_line in process_result.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        if pid > 0:
+            pids.append(pid)
+    return pids
+
+
+def terminate_pid(pid: int, *, grace_seconds: float = 2.0) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        if not process_is_alive(str(pid)):
+            return True
+        time.sleep(0.05)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    deadline = time.monotonic() + 0.5
+    while time.monotonic() < deadline:
+        if not process_is_alive(str(pid)):
+            return True
+        time.sleep(0.05)
+    return not process_is_alive(str(pid))
+
+
+def remove_proxy_url_lines(config_text: str) -> tuple[str, bool]:
+    lines = config_text.splitlines()
+    kept = [line for line in lines if not line.strip().startswith("proxy-url:")]
+    changed = len(kept) != len(lines)
+    if not changed:
+        return config_text, False
+    return "\n".join(kept).rstrip() + "\n", True
+
+
+def stable_proxyless_reproof_timeout_seconds() -> float:
+    raw = os.environ.get("WBP_STABLE_PROXYLESS_REPROOF_SECONDS", "12")
+    try:
+        value = float(raw)
+    except ValueError:
+        return 12.0
+    return value if value >= 0 else 12.0
+
+
+def launch_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
+    cli_proxy_bin = resolve_cli_proxy_bin()
+    if not cli_proxy_bin.exists():
+        return {
+            "status": "error",
+            "machine_error_code": "CLIPROXY_BIN_MISSING",
+            "exit_code": 127,
+            "pid": None,
+            "launch_observed": False,
+            "error": f"Missing cli-proxy-api binary: {cli_proxy_bin}",
+        }
+    launch_result = start_detached_process(
+        [str(cli_proxy_bin), "-config", str(paths.stable_config)],
+        env=sanitized_env(),
+        cwd=paths.stable_config.parent,
+        text=True,
+    )
+    return launch_result.to_dict()
+
+
+def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
+    stable_host, stable_port, _ = get_endpoint(paths, "stable")
+    listener_was_present = socket_is_listening(stable_host, stable_port)
+    raw_pids = discover_stable_runtime_pids(paths) if listener_was_present else []
+    owned_pids = [
+        pid for pid in raw_pids if stable_pid_matches_expected(paths, str(pid))
+    ]
+    if listener_was_present and not owned_pids:
+        return {
+            "status": "error",
+            "machine_error_code": "STABLE_RUNTIME_OWNER_UNPROVEN",
+            "listener_was_present": True,
+            "discovered_pids": raw_pids,
+            "terminated_pids": [],
+            "launch_result": None,
+        }
+    terminated_pids: list[int] = []
+    failed_terminations: list[int] = []
+    for pid in owned_pids:
+        if terminate_pid(pid, grace_seconds=5.0):
+            terminated_pids.append(pid)
+        else:
+            failed_terminations.append(pid)
+    if failed_terminations:
+        return {
+            "status": "error",
+            "machine_error_code": "STABLE_RUNTIME_TERMINATION_FAILED",
+            "listener_was_present": listener_was_present,
+            "discovered_pids": raw_pids,
+            "terminated_pids": terminated_pids,
+            "failed_terminations": failed_terminations,
+            "launch_result": None,
+        }
+    launch_result = launch_stable_runtime_process(paths)
+    if str(launch_result.get("status", "")) != "ok":
+        return {
+            "status": "error",
+            "machine_error_code": str(
+                launch_result.get("machine_error_code", "STABLE_RUNTIME_LAUNCH_FAILED")
+            ),
+            "listener_was_present": listener_was_present,
+            "discovered_pids": raw_pids,
+            "terminated_pids": terminated_pids,
+            "launch_result": launch_result,
+        }
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if socket_is_listening(stable_host, stable_port):
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "listener_was_present": listener_was_present,
+                "discovered_pids": raw_pids,
+                "terminated_pids": terminated_pids,
+                "launch_result": launch_result,
+            }
+        time.sleep(0.05)
+    return {
+        "status": "error",
+        "machine_error_code": "STABLE_RUNTIME_LISTENER_NOT_READY",
+        "listener_was_present": listener_was_present,
+        "discovered_pids": raw_pids,
+        "terminated_pids": terminated_pids,
+        "launch_result": launch_result,
+    }
+
+
+def attempt_stable_proxyless_recovery_under_lock(
+    paths: RuntimePaths,
+    *,
+    model: str | None,
+    configured_proxy_url: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    snapshots = {
+        "stable_config": snapshot_path_state(paths.stable_config),
+        "state_file": snapshot_path_state(paths.state_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+    }
+    result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "activation_surface_kind": "stable_proxyless_runtime_restart",
+        "configured_proxy_url": configured_proxy_url,
+        "selected_proxy_url": "",
+        "selected_config_file": str(paths.stable_config),
+        "adoption_outcome": "stable_proxyless_not_attempted",
+        "stable_config_rewritten": False,
+        "stable_runtime_restarted": False,
+        "live_runtime_observation_confirmed": False,
+        "rollback_restored": False,
+    }
+    if not configured_proxy_url:
+        result["adoption_outcome"] = "stable_proxyless_not_required"
+        return result, None
+    if not paths.stable_config.exists():
+        result["adoption_outcome"] = "stable_config_missing"
+        return result, None
+    next_config_text, changed = remove_proxy_url_lines(
+        paths.stable_config.read_text(encoding="utf-8")
+    )
+    if not changed:
+        result["adoption_outcome"] = "stable_proxyless_config_unchanged"
+        return result, None
+
+    write_text_atomic(paths.stable_config, next_config_text)
+    result["stable_config_rewritten"] = True
+    restart_result = restart_owned_stable_runtime_process(paths)
+    result["restart_result"] = restart_result
+    result["stable_runtime_restarted"] = restart_result.get("status") == "ok"
+    if restart_result.get("status") != "ok":
+        restore_path_state(
+            paths.stable_config, snapshots.get("stable_config", {"state": "missing"})
+        )
+        result["rollback_restart_result"] = restart_owned_stable_runtime_process(paths)
+        result["rollback_restored"] = True
+        result["adoption_outcome"] = "stable_proxyless_restart_failed"
+        return result, None
+
+    state = read_json(paths.state_file, required=False)
+    _, _, stable_endpoint = get_endpoint(paths, "stable")
+    state["effective_mode"] = "stable"
+    state["last_error"] = ""
+    write_json_atomic(paths.state_file, state)
+    write_text_atomic(paths.runtime_effective_mode_file, "stable")
+    write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
+    reproof_payload: dict[str, Any] | None = None
+    reproof_ok = False
+    deadline = time.monotonic() + stable_proxyless_reproof_timeout_seconds()
+    while True:
+        reproof_payload = run_healthcheck(
+            paths,
+            model=model,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
+            allow_stable_fallback_write=False,
+            allow_stale_pid_cleanup=False,
+        )
+        reproof_ok = (
+            reproof_payload.get("status") == "ok"
+            and str(reproof_payload.get("effective_mode", "")) == "stable"
+        )
+        if reproof_ok or time.monotonic() >= deadline:
+            break
+        time.sleep(0.5)
+    result["reproof_result"] = {
+        "status": str(reproof_payload.get("status", "")),
+        "machine_error_code": str(reproof_payload.get("machine_error_code", "")),
+        "last_error": str(reproof_payload.get("last_error", "")),
+    }
+    if reproof_ok:
+        state = read_json(paths.state_file, required=False)
+        reconcile_stable_recovery_success(
+            paths,
+            state,
+            stable_endpoint=stable_endpoint,
+        )
+        result["adoption_outcome"] = "stable_proxyless_recovered"
+        result["live_runtime_observation_confirmed"] = True
+        return result, reproof_payload
+
+    for key, path in (
+        ("stable_config", paths.stable_config),
+        ("state_file", paths.state_file),
+        ("config_toml", paths.config_toml),
+        ("runtime_effective_mode_file", paths.runtime_effective_mode_file),
+    ):
+        restore_path_state(path, snapshots.get(key, {"state": "missing"}))
+    result["rollback_restart_result"] = restart_owned_stable_runtime_process(paths)
+    result["rollback_restored"] = True
+    result["adoption_outcome"] = "stable_proxyless_live_reproof_failed"
+    return result, None
 
 
 def snapshot_sync_current_proxy_recovery_runtime_surfaces(
@@ -4666,6 +4962,7 @@ def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
     return [
         paths.registry_file,
         paths.managed_config_file,
+        paths.stable_config,
         paths.config_toml,
         paths.state_file,
         paths.runtime_effective_mode_file,
@@ -5098,7 +5395,7 @@ def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
                 operator_action=exc.operator_action,
                 changed_files=[],
                 extra={
-                    "next_action": exc.operator_action,
+                    "next_action": str(getattr(exc, "next_action", exc.operator_action)),
                     "command_mode": "apply",
                     "target_surface": build_target_switch_surface_context(paths),
                     "write_surface_declared": True,
@@ -8118,6 +8415,7 @@ def managed_paths_bound_failure(paths: RuntimePaths, desired_mode: str, effectiv
         paths.registry_file,
         paths.state_file,
         paths.managed_config_file,
+        paths.stable_config,
         paths.config_toml,
     ]
     missing = [str(path) for path in required_paths if not path.exists()]
@@ -8208,7 +8506,7 @@ def build_invariant_check_packet(
         ),
         "machine_error_code": "OK" if listener_ok else "LISTENER_DOWN",
         "changed_files": [],
-        "next_action": "none" if listener_ok else "operator_action",
+        "next_action": "none" if listener_ok else "retry",
         "liveness": "healthy" if listener_ok else "down",
         "desired_mode": desired_mode,
         "effective_mode": effective_mode,
@@ -8422,10 +8720,11 @@ def build_invariant_check_packet(
         machine_error_code="OK" if not failed_checks else "RUNTIME_INVARIANT_FAILED",
         liveness="healthy" if not failed_checks else "degraded",
         severity="recoverable" if not failed_checks else "fatal",
-        operator_action="none" if not failed_checks else "required_repair",
+        operator_action="none" if not failed_checks else "user_action",
         changed_files=[],
         effect=EFFECT_READ,
         extra={
+            "next_action": "none" if not failed_checks else "required_repair",
             "invariant_result": invariant_result,
             "recovery_hints": recovery_hints,
             "runtime_evidence": {
@@ -8452,7 +8751,7 @@ def build_invariant_check_packet(
         payload["exit_code"] = 1
         payload["machine_error_code"] = "RUNTIME_INVARIANT_FAILED"
         payload["next_action"] = "required_repair"
-        payload["operator_action"] = "required_repair"
+        payload["operator_action"] = "user_action"
         payload["recovery_hints"] = [build_recovery_hint("COMMAND_PACKET_MALFORMED")]
     return payload
 
@@ -8872,6 +9171,7 @@ def run_healthcheck(
     current_proxy_url = str(state.get("current_proxy_url", ""))
     proxy_reprobe: dict[str, Any] | None = None
     proxy_reprobe_adoption_result: dict[str, Any] | None = None
+    stable_proxyless_recovery_result: dict[str, Any] | None = None
 
     api_key = ""
     if listener_ok:
@@ -9027,8 +9327,63 @@ def run_healthcheck(
 
     if (
         not ok
+        and effect == EFFECT_REPAIR
+        and startup_runtime_followup_safe
+        and reported_effective_mode == "stable"
+        and machine_error_code in PROXY_PATH_FAILURE_CODES
+        and bool(configured_proxy_url)
+    ):
+        # Stable CLIProxyAPI can be pinned to a stale local proxy. The owner
+        # repair path may remove that proxy setting, restart only the process
+        # proven to own this stable config, and then accept the result solely
+        # through live attestation.
+        with serialized_lock(paths):
+            stable_proxyless_recovery_result, stable_proxyless_reproof_payload = (
+                attempt_stable_proxyless_recovery_under_lock(
+                    paths,
+                    model=model,
+                    configured_proxy_url=configured_proxy_url,
+                )
+            )
+        if stable_proxyless_reproof_payload is not None:
+            state = read_json(paths.state_file, required=False)
+            attestation = stable_proxyless_reproof_payload["attestation"]
+            listener_ok = bool(attestation["listener_ok"])
+            models_ok = bool(attestation["models_ok"])
+            responses_ok = bool(attestation["responses_ok"])
+            effective_mode_match = bool(attestation["effective_mode_match"])
+            base_url_match = bool(attestation["base_url_match"])
+            error_detail = str(stable_proxyless_reproof_payload.get("last_error", ""))
+            effective_mode = str(stable_proxyless_reproof_payload["effective_mode"])
+            reported_effective_mode = effective_mode
+            _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+            host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+            configured_base_url = read_toml_string(paths.config_toml, "base_url")
+            configured_proxy_url = get_configured_proxy_url(
+                paths, reported_effective_mode
+            )
+            current_proxy_truth_url = get_reported_current_proxy_url(
+                paths, state, reported_effective_mode
+            )
+            proxy_url_match = (
+                not configured_proxy_url
+                or not current_proxy_truth_url
+                or configured_proxy_url == current_proxy_truth_url
+            )
+            liveness = str(stable_proxyless_reproof_payload["liveness"])
+            severity = str(stable_proxyless_reproof_payload["severity"])
+            operator_action = str(stable_proxyless_reproof_payload["operator_action"])
+            machine_error_code = str(
+                stable_proxyless_reproof_payload["machine_error_code"]
+            )
+            human_message = str(stable_proxyless_reproof_payload["human_message"])
+            ok = True
+
+    if (
+        not ok
         and allow_current_proxy_auto_adoption
         and startup_runtime_followup_safe
+        and stable_proxyless_recovery_result is None
         and proxy_reprobe is not None
         and proxy_reprobe["found_candidate"]
     ):
@@ -9472,6 +9827,8 @@ def run_healthcheck(
         extra["proxy_reprobe"] = proxy_reprobe
     if proxy_reprobe_adoption_result is not None:
         extra["proxy_reprobe_adoption_result"] = proxy_reprobe_adoption_result
+    if stable_proxyless_recovery_result is not None:
+        extra["stable_proxyless_recovery_result"] = stable_proxyless_recovery_result
     extra["current_proxy_adoption_contract"] = current_proxy_adoption_contract
     extra["last_known_good_proxy_contract"] = build_last_known_good_proxy_contract(paths)
     extra["last_known_good_proxy"] = last_known_good_proxy_surface
@@ -9716,6 +10073,7 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, dict[str, Any]]:
         paths.registry_file,
         paths.state_file,
         paths.managed_config_file,
+        paths.stable_config,
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
