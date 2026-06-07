@@ -1126,9 +1126,16 @@ function renderCodexCustomLaunch(packet) {
     && packet?.existing_window_relaunch_attempted === true
     && packet?.existing_window_relaunch_termination?.status === "ok"
     && packet?.new_launch_started === true;
+  const orphanReplaceSucceeded = nativeProofOk
+    && launchPacketTruth
+    && packet?.existing_window_orphan_replace_admissible === true
+    && packet?.existing_window_orphan_replace_attempted === true
+    && packet?.existing_window_orphan_replace_termination?.status === "ok"
+    && packet?.new_launch_started === true;
   const existingWindowBlocked = packet?.status === "blocked"
     && (
       packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_RELAUNCH_STOP_FAILED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_ORPHAN_EXISTING_WINDOW_REPLACE_STOP_FAILED"
       || packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
       || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
       || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
@@ -1258,15 +1265,19 @@ function renderCodexCustomLaunch(packet) {
     relaunchSucceeded
       ? "перезапущен"
       : (
-        nativeProofOk
-          ? "запущен"
+        orphanReplaceSucceeded
+          ? "заменён"
           : (
-            reusedExistingWindow
-              ? "старое окно"
+            nativeProofOk
+              ? "запущен"
               : (
-                limitedWindowLaunch
-                  ? "окно открыто"
-                  : (existingWindowBlocked ? "blocked" : (packet?.machine_error_code || packet?.status || "ошибка"))
+                reusedExistingWindow
+                  ? "старое окно"
+                  : (
+                    limitedWindowLaunch
+                      ? "окно открыто"
+                      : (existingWindowBlocked ? "blocked" : (packet?.machine_error_code || packet?.status || "ошибка"))
+                  )
               )
           )
       )
@@ -1277,12 +1288,16 @@ function renderCodexCustomLaunch(packet) {
     relaunchSucceeded
       ? "relaunch ok"
       : (
-        nativeProofOk
-          ? "запуск ok"
+        orphanReplaceSucceeded
+          ? "replace ok"
           : (
-            reusedExistingWindow
-              ? "reuse ok"
-              : (limitedWindowLaunch ? "proof incomplete" : (existingWindowBlocked ? "blocked" : "проверь пакет"))
+            nativeProofOk
+              ? "запуск ok"
+              : (
+                reusedExistingWindow
+                  ? "reuse ok"
+                  : (limitedWindowLaunch ? "proof incomplete" : (existingWindowBlocked ? "blocked" : "проверь пакет"))
+              )
           )
       )
   );
@@ -1353,6 +1368,18 @@ function renderCodexCustomLaunch(packet) {
     bridge_alive: packet?.bridge_alive === true,
     stable_custom_codex_wbp_bridge_final_status:
       packet?.stable_custom_codex_wbp_bridge_final_status || "",
+    runtime_health_gate_blocks_launch_admission:
+      packet?.runtime_health_gate_blocks_launch_admission === true,
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
     window_status: packet?.window_status || "",
     config_status: packet?.config_status || "",
     selection_matches_last_launch:
@@ -1365,6 +1392,14 @@ function renderCodexCustomLaunch(packet) {
       packet?.existing_window_relaunch_attempted === true,
     existing_window_relaunch_termination:
       packet?.existing_window_relaunch_termination || {},
+    existing_window_orphan_replace_admissible:
+      packet?.existing_window_orphan_replace_admissible === true,
+    existing_window_orphan_replace_attempted:
+      packet?.existing_window_orphan_replace_attempted === true,
+    existing_window_orphan_replace_termination:
+      packet?.existing_window_orphan_replace_termination || {},
+    orphan_replacement_authority_scope:
+      packet?.orphan_replacement_authority_scope || "",
     custom_process_observed:
       packet?.custom_process_observed === true,
     custom_process_count:
@@ -1919,6 +1954,9 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "relaunch_custom_codex_with_new_selection") {
     return "relaunch ready";
   }
+  if (action === "replace_existing_custom_codex_without_launch_packet") {
+    return "replace ready";
+  }
   if (action.includes("launch_custom_codex") || action.includes("launch_or_reuse_custom_codex")) {
     return "ready to launch";
   }
@@ -2003,6 +2041,18 @@ function renderQuickStartConfigAdmission(packet) {
     silent_fallback_used: packet?.silent_fallback_used === true,
     launch_admission: packet?.launch_admission || "blocked",
     launch_admission_summary: packet?.launch_admission_summary || "",
+    runtime_health_gate_blocks_launch_admission:
+      packet?.runtime_health_gate_blocks_launch_admission === true,
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
     dry_server_truth_only: packet?.dry_server_truth_only === true,
     custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
     new_launch_started: packet?.new_launch_started === true,
@@ -3111,6 +3161,14 @@ function setQuickStartRouteResponse(packet) {
         packet?.existing_window_relaunch_attempted === true,
       existing_window_relaunch_termination:
         packet?.existing_window_relaunch_termination || {},
+      existing_window_orphan_replace_admissible:
+        packet?.existing_window_orphan_replace_admissible === true,
+      existing_window_orphan_replace_attempted:
+        packet?.existing_window_orphan_replace_attempted === true,
+      existing_window_orphan_replace_termination:
+        packet?.existing_window_orphan_replace_termination || {},
+      orphan_replacement_authority_scope:
+        packet?.orphan_replacement_authority_scope || "",
       custom_process_observed:
         packet?.custom_process_observed === true,
       custom_process_count: Number(packet?.custom_process_count || 0),
@@ -3177,6 +3235,7 @@ function renderQuickStartLaunchPreflight(packet) {
     || nextAction === "none"
     || nextAction === "show_existing_window"
     || nextAction === "relaunch_custom_codex_with_new_selection"
+    || nextAction === "replace_existing_custom_codex_without_launch_packet"
     || nextAction.includes("launch_custom_codex")
     || nextAction.includes("launch_or_reuse_custom_codex")
   );
@@ -3247,6 +3306,20 @@ function renderQuickStartLaunchPreflight(packet) {
       packet?.owner_authorization_phrase_present === true,
     existing_window_reuse_admissible: packet?.existing_window_reuse_admissible === true,
     existing_window_relaunch_admissible: packet?.existing_window_relaunch_admissible === true,
+    existing_window_orphan_replace_admissible:
+      packet?.existing_window_orphan_replace_admissible === true,
+    orphan_replacement_authority_scope:
+      packet?.orphan_replacement_authority_scope || "",
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
     new_launch_required: packet?.new_launch_required === true,
     custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
     new_launch_started: packet?.new_launch_started === true,

@@ -1791,6 +1791,99 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_quick_start_launch_preflight_renders_orphan_replace_as_ready_state(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.textContent = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async () => ({ ok: true, json: async () => ({ status: "ok" }) })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderQuickStartLaunchPreflight({
+  status: "ok",
+  machine_error_code: "OK",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-v4-pro-max",
+  owner_authorization_phrase_present: true,
+  bridge_required: true,
+  bridge_alive: true,
+  custom_process_observed: true,
+  config_status: "no_previous_launch",
+  existing_window_reuse_admissible: false,
+  existing_window_relaunch_admissible: false,
+  existing_window_orphan_replace_admissible: true,
+  orphan_replacement_authority_scope: "same_persistent_custom_profile_process_only",
+  new_launch_required: true,
+  launch_packet_is_truth_source: true,
+  visible_window_counts_as_model_truth: false,
+  bridge_alive_counts_as_model_truth: false,
+  response_text_counts_as_route_truth: false,
+  next_action: "replace_existing_custom_codex_without_launch_packet"
+});
+
+if (!node("quickStartNextActionState").className.includes("green")) {
+  throw new Error(`replace next action must be green, got ${node("quickStartNextActionState").className}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "replace ready") {
+  throw new Error(`wrong next action label: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "preflight ok") {
+  throw new Error(`wrong launch state: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+const packet = JSON.parse(node("quickStartRouteResponse").textContent);
+if (packet.existing_window_orphan_replace_admissible !== true) {
+  throw new Error(`orphan replace admissibility missing from packet: ${JSON.stringify(packet)}`);
+}
+if (packet.orphan_replacement_authority_scope !== "same_persistent_custom_profile_process_only") {
+  throw new Error(`orphan replace scope missing from packet: ${JSON.stringify(packet)}`);
+}
+if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive_counts_as_model_truth !== false || packet.response_text_counts_as_route_truth !== false) {
+  throw new Error(`false-green guard fields changed: ${JSON.stringify(packet)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_c7_agent_aliases_are_ui_metadata_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()

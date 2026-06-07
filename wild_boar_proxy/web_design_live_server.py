@@ -3421,12 +3421,19 @@ def _custom_native_last_launch_packet_allows_window_relaunch(
         return False
     if packet.get("status") == "ok":
         return True
+    owned_custom_process_proven = (
+        packet.get("expected_custom_identity_observed") is True
+        and packet.get("real_codex_app_launched") is True
+    )
+    usable_custom_window_proven = (
+        packet.get("native_window_observed") is True
+        and packet.get("native_app_usable") is True
+    )
     return bool(
         packet.get("mode_id") == "codex_custom"
         and packet.get("owner_authorization_phrase_present") is True
         and packet.get("process_started") is True
-        and packet.get("native_window_observed") is True
-        and packet.get("native_app_usable") is True
+        and (owned_custom_process_proven or usable_custom_window_proven)
         and packet.get("current_codex_touched") is not True
         and packet.get("original_codex_touched") is not True
         and packet.get("asar_touched") is not True
@@ -3667,7 +3674,14 @@ def _custom_native_launch_preflight_packet(
         runtime_health_result,
         execution_mode=str(current_fields.get("execution_mode") or ""),
     )
-    if runtime_health_gate.get("status") != "ok":
+    runtime_health_gate_blocked = runtime_health_gate.get("status") != "ok"
+    runtime_health_blocks_window_launch = (
+        runtime_health_gate_blocked
+        and _chatgpt_runtime_health_blocks_window_launch(
+            str(current_fields.get("execution_mode") or "")
+        )
+    )
+    if runtime_health_blocks_window_launch:
         return {
             "schema_version": 1,
             "packet_kind": "custom_native_launch_preflight",
@@ -3696,6 +3710,13 @@ def _custom_native_launch_preflight_packet(
             "selection_packet": execution_packet or {},
             "runtime_health_gate": runtime_health_gate,
             "runtime_health_required_for_chatgpt_lane": True,
+            "runtime_health_gate_blocks_window_launch": True,
+            "chatgpt_runtime_proof_status": "not_proven",
+            "chatgpt_runtime_proof_machine_error_code": str(
+                runtime_health_gate.get("runtime_health_machine_error_code")
+                or runtime_health_gate.get("machine_error_code")
+                or ""
+            ),
             "runtime_health_status": str(runtime_health_gate.get("runtime_health_status") or ""),
             "runtime_health_machine_error_code": str(
                 runtime_health_gate.get("runtime_health_machine_error_code") or ""
@@ -3743,6 +3764,11 @@ def _custom_native_launch_preflight_packet(
         and not selection_matches_last
         and config_status == "changed"
     )
+    orphan_replace_admissible = bool(
+        custom_process_observed
+        and config_status == "no_previous_launch"
+        and owner_authorized
+    )
     new_launch_required = not reuse_admissible
     next_action = (
         "show_existing_window"
@@ -3751,9 +3777,13 @@ def _custom_native_launch_preflight_packet(
             "relaunch_custom_codex_with_new_selection"
             if relaunch_admissible
             else (
-                "block_existing_window_without_matching_launch_packet"
-                if custom_process_observed and not selection_matches_last
-                else bridge_next_action
+                "replace_existing_custom_codex_without_launch_packet"
+                if orphan_replace_admissible
+                else (
+                    "block_existing_window_without_matching_launch_packet"
+                    if custom_process_observed and not selection_matches_last
+                    else bridge_next_action
+                )
             )
         )
     )
@@ -3775,6 +3805,34 @@ def _custom_native_launch_preflight_packet(
         "launch_model_id": selected_model,
         "route_model_id": route_model_id,
         "selection_packet": execution_packet or {},
+        "runtime_health_gate": runtime_health_gate,
+        "runtime_health_required_for_chatgpt_lane": (
+            runtime_health_gate.get("runtime_health_required_for_chatgpt_lane") is True
+        ),
+        "runtime_health_gate_blocks_window_launch": runtime_health_blocks_window_launch,
+        "chatgpt_runtime_proof_status": (
+            "proven"
+            if runtime_health_gate.get("status") == "ok"
+            else (
+                "not_required"
+                if runtime_health_gate.get("runtime_health_required_for_chatgpt_lane")
+                is not True
+                else "not_proven"
+            )
+        ),
+        "chatgpt_runtime_proof_machine_error_code": (
+            "OK"
+            if runtime_health_gate.get("status") == "ok"
+            else str(
+                runtime_health_gate.get("runtime_health_machine_error_code")
+                or runtime_health_gate.get("machine_error_code")
+                or ""
+            )
+        ),
+        "runtime_health_status": str(runtime_health_gate.get("runtime_health_status") or ""),
+        "runtime_health_machine_error_code": str(
+            runtime_health_gate.get("runtime_health_machine_error_code") or ""
+        ),
         "selection_digest": current_digest,
         "last_launch_packet_present": isinstance(last_launch_packet, dict),
         "last_launch_packet_status": str((last_launch_packet or {}).get("status") or ""),
@@ -3789,6 +3847,10 @@ def _custom_native_launch_preflight_packet(
         "window_inventory_status": str(window_inventory.get("window_inventory_status") or ""),
         "existing_window_reuse_admissible": reuse_admissible,
         "existing_window_relaunch_admissible": relaunch_admissible,
+        "existing_window_orphan_replace_admissible": orphan_replace_admissible,
+        "orphan_replacement_authority_scope": (
+            "same_persistent_custom_profile_process_only"
+        ),
         "new_launch_required": new_launch_required,
         "show_window_attempted": False,
         "new_launch_started": False,
@@ -4070,6 +4132,10 @@ def _payload_requires_chatgpt_runtime_health(payload: dict[str, Any]) -> bool:
     return execution_mode in {"chatgpt_only", "chatgpt_plus_api"}
 
 
+def _chatgpt_runtime_health_blocks_window_launch(execution_mode: str) -> bool:
+    return str(execution_mode or "").strip() == "chatgpt_only"
+
+
 def build_quick_start_config_admission_packet(
     payload: dict[str, Any],
     operator_status: dict[str, Any] | None,
@@ -4166,12 +4232,17 @@ def build_quick_start_config_admission_packet(
         runtime_health_result,
         execution_mode=execution_mode,
     )
-    if runtime_health_gate.get("status") != "ok":
+    runtime_health_gate_blocked = runtime_health_gate.get("status") != "ok"
+    runtime_health_blocks_launch = (
+        runtime_health_gate_blocked
+        and _chatgpt_runtime_health_blocks_window_launch(execution_mode)
+    )
+    if runtime_health_blocks_launch:
         admitted = False
     status = "ok" if admitted else "blocked"
     if admitted:
         machine_error_code = "OK"
-    elif runtime_health_gate.get("status") != "ok":
+    elif runtime_health_blocks_launch:
         machine_error_code = str(
             runtime_health_gate.get("runtime_health_machine_error_code")
             or "CUSTOM_CODEX_RUNTIME_HEALTH_BLOCKED"
@@ -4214,26 +4285,50 @@ def build_quick_start_config_admission_packet(
         "runtime_health_required_for_chatgpt_lane": (
             runtime_health_gate.get("runtime_health_required_for_chatgpt_lane") is True
         ),
+        "runtime_health_gate_blocks_launch_admission": runtime_health_blocks_launch,
+        "chatgpt_runtime_proof_status": (
+            "proven"
+            if runtime_health_gate.get("status") == "ok"
+            else (
+                "not_required"
+                if runtime_health_gate.get("runtime_health_required_for_chatgpt_lane")
+                is not True
+                else "not_proven"
+            )
+        ),
+        "chatgpt_runtime_proof_machine_error_code": (
+            "OK"
+            if runtime_health_gate.get("status") == "ok"
+            else str(
+                runtime_health_gate.get("runtime_health_machine_error_code")
+                or runtime_health_gate.get("machine_error_code")
+                or ""
+            )
+        ),
         "launch_admission": "admitted" if admitted else "blocked",
         "launch_admission_summary": (
-            "Config admission is ok; next contour may use existing launch preflight gate."
+            (
+                "Config admission is ok; ChatGPT runtime proof remains separate and is not claimed by this packet."
+                if runtime_health_gate_blocked
+                else "Config admission is ok; next contour may use existing launch preflight gate."
+            )
             if admitted
             else (
                 "ChatGPT lane blocked by healthcheck --json; launch must stay gated."
-                if runtime_health_gate.get("status") != "ok"
+                if runtime_health_blocks_launch
                 else "Config admission blocked; launch must stay gated."
             )
         ),
         "selector_packet": model_truth.get("selector_packet", {}),
         "next_action": (
-            "none"
-            if admitted
-            else (
-                str(runtime_health_gate.get("runtime_health_next_action") or "repair_runtime_proxy")
-                if runtime_health_gate.get("status") != "ok"
-                else "repair_quick_start_config_selection"
-            )
-        ),
+                "none"
+                if admitted
+                else (
+                    str(runtime_health_gate.get("runtime_health_next_action") or "repair_runtime_proxy")
+                    if runtime_health_blocks_launch
+                    else "repair_quick_start_config_selection"
+                )
+            ),
     }
 
 
@@ -4296,6 +4391,23 @@ def _custom_native_launch_stability_guard_packet(
             {},
         ),
         "selection_packet": preflight_packet.get("selection_packet", {}),
+        "runtime_health_gate": preflight_packet.get("runtime_health_gate", {}),
+        "runtime_health_required_for_chatgpt_lane": (
+            preflight_packet.get("runtime_health_required_for_chatgpt_lane") is True
+        ),
+        "runtime_health_gate_blocks_window_launch": (
+            preflight_packet.get("runtime_health_gate_blocks_window_launch") is True
+        ),
+        "chatgpt_runtime_proof_status": str(
+            preflight_packet.get("chatgpt_runtime_proof_status") or ""
+        ),
+        "chatgpt_runtime_proof_machine_error_code": str(
+            preflight_packet.get("chatgpt_runtime_proof_machine_error_code") or ""
+        ),
+        "runtime_health_status": str(preflight_packet.get("runtime_health_status") or ""),
+        "runtime_health_machine_error_code": str(
+            preflight_packet.get("runtime_health_machine_error_code") or ""
+        ),
         "selection_digest": str(preflight_packet.get("selection_digest") or ""),
         "last_launch_selection_digest": str(
             preflight_packet.get("last_launch_selection_digest") or ""
@@ -4312,6 +4424,12 @@ def _custom_native_launch_stability_guard_packet(
         "existing_window_relaunch_admissible": (
             preflight_packet.get("existing_window_relaunch_admissible") is True
         ),
+        "existing_window_orphan_replace_admissible": (
+            preflight_packet.get("existing_window_orphan_replace_admissible") is True
+        ),
+        "orphan_replacement_authority_scope": str(
+            preflight_packet.get("orphan_replacement_authority_scope") or ""
+        ),
         "existing_window_relaunch_attempted": (
             preflight_packet.get("existing_window_relaunch_attempted") is True
         ),
@@ -4327,6 +4445,25 @@ def _custom_native_launch_stability_guard_packet(
         ),
         "custom_process_count_after_relaunch_stop": int(
             preflight_packet.get("custom_process_count_after_relaunch_stop") or 0
+        ),
+        "existing_window_orphan_replace_attempted": (
+            preflight_packet.get("existing_window_orphan_replace_attempted") is True
+        ),
+        "existing_window_orphan_replace_termination": preflight_packet.get(
+            "existing_window_orphan_replace_termination",
+            {},
+        ),
+        "custom_process_observed_before_orphan_replace": (
+            preflight_packet.get("custom_process_observed_before_orphan_replace")
+            is True
+        ),
+        "custom_process_observed_after_orphan_replace_stop": (
+            preflight_packet.get("custom_process_observed_after_orphan_replace_stop")
+            is True
+        ),
+        "custom_process_count_after_orphan_replace_stop": int(
+            preflight_packet.get("custom_process_count_after_orphan_replace_stop")
+            or 0
         ),
         "reused_existing_window": bool(
             status == "ok" and preflight_packet.get("existing_window_reuse_admissible") is True
@@ -10733,6 +10870,48 @@ def build_handler(
                         self._send_json(packet)
                         return
                     existing_window_relaunch_cleared = True
+                elif (
+                    preflight_packet.get("existing_window_orphan_replace_admissible")
+                    is True
+                ):
+                    paths = default_persistent_custom_profile_paths(
+                        profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+                    )
+                    termination = terminate_custom_processes(
+                        str(paths.get("user_data_dir") or "")
+                    )
+                    termination_summary = _redacted_custom_process_termination_summary(
+                        termination
+                    )
+                    preflight_packet["existing_window_orphan_replace_attempted"] = True
+                    preflight_packet["existing_window_orphan_replace_termination"] = (
+                        termination_summary
+                    )
+                    preflight_packet[
+                        "custom_process_observed_before_orphan_replace"
+                    ] = True
+                    preflight_packet[
+                        "custom_process_observed_after_orphan_replace_stop"
+                    ] = not termination_summary["custom_processes_gone"]
+                    preflight_packet[
+                        "custom_process_count_after_orphan_replace_stop"
+                    ] = termination_summary["final_custom_process_count"]
+                    preflight_packet["raw_process_lines_exposed"] = False
+                    preflight_packet["raw_path_exposed"] = False
+                    if termination_summary["custom_processes_gone"] is not True:
+                        packet = _custom_native_launch_stability_guard_packet(
+                            preflight_packet,
+                            status="blocked",
+                            machine_error_code="CUSTOM_NATIVE_ORPHAN_EXISTING_WINDOW_REPLACE_STOP_FAILED",
+                            human_message="Existing same-profile Custom Codex process has no remembered launch packet, and bounded replace stop did not complete.",
+                        )
+                        packet["existing_window_orphan_replace_attempted"] = True
+                        packet["existing_window_orphan_replace_termination"] = (
+                            termination_summary
+                        )
+                        self._send_json(packet)
+                        return
+                    existing_window_relaunch_cleared = True
                 elif config_status == "changed":
                     machine_error_code = (
                         "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
@@ -10792,6 +10971,25 @@ def build_handler(
                     }
                 )
             packet["launch_preflight_packet"] = preflight_packet
+            packet["runtime_health_gate"] = preflight_packet.get("runtime_health_gate", {})
+            packet["runtime_health_required_for_chatgpt_lane"] = (
+                preflight_packet.get("runtime_health_required_for_chatgpt_lane") is True
+            )
+            packet["runtime_health_gate_blocks_window_launch"] = (
+                preflight_packet.get("runtime_health_gate_blocks_window_launch") is True
+            )
+            packet["chatgpt_runtime_proof_status"] = str(
+                preflight_packet.get("chatgpt_runtime_proof_status") or ""
+            )
+            packet["chatgpt_runtime_proof_machine_error_code"] = str(
+                preflight_packet.get("chatgpt_runtime_proof_machine_error_code") or ""
+            )
+            packet["runtime_health_status"] = str(
+                preflight_packet.get("runtime_health_status") or ""
+            )
+            packet["runtime_health_machine_error_code"] = str(
+                preflight_packet.get("runtime_health_machine_error_code") or ""
+            )
             packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
             packet["stable_bridge_preflight_required"] = (
                 stable_bridge_gate.get("bridge_preflight_required") is True
@@ -10819,7 +11017,16 @@ def build_handler(
                 preflight_packet.get("stable_bridge_prewarm_retry_status") or ""
             )
             packet["launch_stability_guard_checked"] = True
+            packet["launch_blocked"] = packet.get("status") != "ok"
+            packet["raw_process_lines_exposed"] = False
+            packet["raw_path_exposed"] = False
             packet["config_status"] = str(preflight_packet.get("config_status") or "")
+            packet["custom_process_observed"] = (
+                preflight_packet.get("custom_process_observed") is True
+            )
+            packet["custom_process_count"] = int(
+                preflight_packet.get("custom_process_count") or 0
+            )
             packet["selection_matches_last_launch"] = (
                 preflight_packet.get("selection_matches_last_launch") is True
             )
@@ -10828,6 +11035,13 @@ def build_handler(
             )
             packet["existing_window_relaunch_admissible"] = (
                 preflight_packet.get("existing_window_relaunch_admissible") is True
+            )
+            packet["existing_window_orphan_replace_admissible"] = (
+                preflight_packet.get("existing_window_orphan_replace_admissible")
+                is True
+            )
+            packet["orphan_replacement_authority_scope"] = str(
+                preflight_packet.get("orphan_replacement_authority_scope") or ""
             )
             packet["new_launch_required"] = (
                 preflight_packet.get("new_launch_required") is True
@@ -10846,6 +11060,41 @@ def build_handler(
                 )
                 packet["custom_process_count_after_relaunch_stop"] = int(
                     preflight_packet.get("custom_process_count_after_relaunch_stop")
+                    or 0
+                )
+            if (
+                preflight_packet.get("existing_window_orphan_replace_attempted")
+                is True
+            ):
+                packet["existing_window_orphan_replace_attempted"] = True
+                packet["existing_window_orphan_replace_admissible"] = (
+                    preflight_packet.get(
+                        "existing_window_orphan_replace_admissible"
+                    )
+                    is True
+                )
+                packet["existing_window_orphan_replace_termination"] = (
+                    preflight_packet.get(
+                        "existing_window_orphan_replace_termination",
+                        {},
+                    )
+                )
+                packet["custom_process_observed_before_orphan_replace"] = (
+                    preflight_packet.get(
+                        "custom_process_observed_before_orphan_replace"
+                    )
+                    is True
+                )
+                packet["custom_process_observed_after_orphan_replace_stop"] = (
+                    preflight_packet.get(
+                        "custom_process_observed_after_orphan_replace_stop"
+                    )
+                    is True
+                )
+                packet["custom_process_count_after_orphan_replace_stop"] = int(
+                    preflight_packet.get(
+                        "custom_process_count_after_orphan_replace_stop"
+                    )
                     or 0
                 )
             packet["reused_existing_window"] = (
