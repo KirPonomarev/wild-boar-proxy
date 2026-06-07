@@ -2575,10 +2575,16 @@ class _CustomNativeBridgeLease:
         self.signature = ""
 
 
+def _server_owned_api_route_id(runner: CommandRunner | None = None) -> str:
+    env = getattr(runner, "_env", None) if runner is not None else None
+    source = env if isinstance(env, dict) else os.environ
+    return str(source.get("WBP_SERVER_OWNED_API_ROUTE_ID") or "wbp-web-primary-openrouter")
+
+
 def _server_owned_api_route_spec(runner: CommandRunner) -> dict[str, Any]:
     env = getattr(runner, "_env", None)
     source = env if isinstance(env, dict) else os.environ
-    route_id = str(source.get("WBP_SERVER_OWNED_API_ROUTE_ID") or "wbp-web-primary-openrouter")
+    route_id = _server_owned_api_route_id(runner) or "wbp-web-primary-openrouter"
     provider = str(source.get("WBP_SERVER_OWNED_API_ROUTE_PROVIDER") or "openrouter")
     display_name = str(source.get("WBP_SERVER_OWNED_API_ROUTE_DISPLAY_NAME") or "OpenRouter primary")
     base_url = str(source.get("WBP_SERVER_OWNED_API_ROUTE_BASE_URL") or "https://openrouter.ai/api/v1")
@@ -2859,7 +2865,7 @@ def build_api_connections_readonly_snapshot(runner: CommandRunner) -> dict[str, 
             commands,
         )
 
-    rows = _api_connection_rows(external_models)
+    rows = _api_connection_rows(external_models, runner=runner)
     latest_check = max(
         (str(row["last_checked"]) for row in rows if str(row["last_checked"])),
         default="",
@@ -13800,7 +13806,11 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
     }
 
 
-def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
+def _api_connection_rows(
+    external_models: Any,
+    *,
+    runner: CommandRunner | None = None,
+) -> list[dict[str, Any]]:
     route_by_id = {
         route.route_id: route for route in external_models.routes if getattr(route, "route_id", "")
     }
@@ -13808,7 +13818,10 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
         route.route_id for route in external_models.routes if getattr(route, "enabled", False) is True
     ]
     primary_route_ids: set[str] = set()
-    if len(enabled_route_ids) == 1:
+    server_owned_route_id = _server_owned_api_route_id(runner)
+    if server_owned_route_id and server_owned_route_id in enabled_route_ids:
+        primary_route_ids.add(server_owned_route_id)
+    elif len(enabled_route_ids) == 1:
         primary_route_ids.add(enabled_route_ids[0])
     elif len(external_models.routes) == 1:
         primary_route_ids.add(external_models.routes[0].route_id)

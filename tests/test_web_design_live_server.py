@@ -865,6 +865,58 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["routes"][0]["last_checked"], "2026-05-21T09:45:00Z")
         self.assertIn("bounded packet", snapshot["routes"][0]["note"])
 
+    def test_api_connections_readonly_marks_server_owned_route_primary_among_enabled_candidates(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "status", "--json")]["data"]["routes_count"] = 2
+        model = dict(payloads[("external-models", "models", "--json")]["data"]["models"][0])
+        server_owned_model = {
+            **model,
+            "route_id": "wbp-web-primary-openrouter",
+            "display_name": "OpenRouter primary",
+        }
+        candidate_model = {**model, "route_id": "wbp-deepseek-v3", "display_name": "DeepSeek V3"}
+        payloads[("external-models", "models", "--json")]["data"]["count"] = 2
+        payloads[("external-models", "models", "--json")]["data"]["models"] = [
+            candidate_model,
+            server_owned_model,
+        ]
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={
+                "count": 2,
+                "routes": [
+                    external_route("wbp-deepseek-v3", enabled=True, display_name="DeepSeek V3"),
+                    external_route(
+                        "wbp-web-primary-openrouter",
+                        enabled=True,
+                        display_name="OpenRouter primary",
+                    ),
+                ],
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_api_connections_readonly_snapshot(runner)
+
+        rows_by_id = {row["route_id"]: row for row in snapshot["routes"]}
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["summary"]["routes_count"], 2)
+        self.assertEqual(snapshot["summary"]["enabled_count"], 2)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+        self.assertTrue(rows_by_id["wbp-web-primary-openrouter"]["primary"])
+        self.assertTrue(rows_by_id["wbp-web-primary-openrouter"]["is_primary"])
+        self.assertEqual(rows_by_id["wbp-web-primary-openrouter"]["role_label"], "main route")
+        self.assertFalse(rows_by_id["wbp-deepseek-v3"]["primary"])
+        self.assertFalse(rows_by_id["wbp-deepseek-v3"]["is_primary"])
+        self.assertEqual(rows_by_id["wbp-deepseek-v3"]["role_label"], "Кандидат")
+
     def test_api_connections_readonly_downgrades_route_when_provider_validation_failed(self) -> None:
         payloads = live_payloads()
         payloads[("external-models", "status", "--json")] = command_packet(
