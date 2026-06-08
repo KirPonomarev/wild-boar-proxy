@@ -3978,6 +3978,32 @@ def _quick_start_api_route_admission_component(
             "machine_error_code": "QUICK_START_CONFIG_API_SECRET_MISSING",
             "human_message": "API route найден, но credential не подтверждён bounded snapshot.",
         }
+    route_status_code = str(route.get("status_code") or "").strip()
+    validation_label = str(route.get("validation_label") or "").strip()
+    validation_visual_state = str(route.get("validation_visual_state") or "").strip()
+    route_blocker_codes = {
+        "validation_failed": "QUICK_START_CONFIG_API_ROUTE_VALIDATION_FAILED",
+        "check_attention": "QUICK_START_CONFIG_API_ROUTE_CHECK_ATTENTION",
+        "blocked": "QUICK_START_CONFIG_API_ROUTE_BLOCKED",
+    }
+    route_blocker_code = route_blocker_codes.get(route_status_code)
+    if route_blocker_code is None and validation_visual_state == "red":
+        route_blocker_code = "QUICK_START_CONFIG_API_ROUTE_VALIDATION_FAILED"
+    if route_blocker_code is None and validation_label in {"validate failed", "check failed", "blocked"}:
+        route_blocker_code = "QUICK_START_CONFIG_API_ROUTE_CHECK_ATTENTION"
+    if route_blocker_code:
+        return {
+            "status": "not_confirmed",
+            "route_reference": "server-owned-api-route",
+            "provider": str(route.get("provider") or route.get("provider_label") or ""),
+            "route_status_code": route_status_code,
+            "validation_label": validation_label,
+            "validation_visual_state": validation_visual_state,
+            "last_checked": str(route.get("last_checked") or ""),
+            "machine_error_code": route_blocker_code,
+            "human_message": "Выбранный API route найден, но bounded snapshot не подтверждает готовность.",
+            "next_action": "check_selected_api_route",
+        }
     return {
         "status": "admitted",
         "route_reference": "server-owned-api-route",
@@ -4142,6 +4168,20 @@ def _chatgpt_runtime_health_blocks_window_launch(execution_mode: str) -> bool:
     return str(execution_mode or "").strip() == "chatgpt_only"
 
 
+def _quick_start_component_blocker(
+    components: tuple[dict[str, Any], ...],
+) -> tuple[str, str]:
+    admitted_statuses = {"admitted", "accepted", "defaulted", "not_required"}
+    ignored_codes = {"", "OK", "NOT_REQUIRED"}
+    for component in components:
+        if component.get("status") in admitted_statuses:
+            continue
+        machine_error_code = str(component.get("machine_error_code") or "")
+        if machine_error_code not in ignored_codes:
+            return machine_error_code, str(component.get("next_action") or "")
+    return "", ""
+
+
 def build_quick_start_config_admission_packet(
     payload: dict[str, Any],
     operator_status: dict[str, Any] | None,
@@ -4234,6 +4274,7 @@ def build_quick_start_config_admission_packet(
         model_truth.get("status") == "ok"
         and all(component["status"] in {"admitted", "accepted", "defaulted", "not_required"} for component in components)
     )
+    component_machine_error_code, component_next_action = _quick_start_component_blocker(components)
     runtime_health_gate = _custom_native_chatgpt_runtime_health_gate_packet(
         runtime_health_result,
         execution_mode=execution_mode,
@@ -4255,7 +4296,9 @@ def build_quick_start_config_admission_packet(
         )
     else:
         machine_error_code = str(
-            model_truth.get("machine_error_code") or "QUICK_START_CONFIG_ADMISSION_BLOCKED"
+            component_machine_error_code
+            or model_truth.get("machine_error_code")
+            or "QUICK_START_CONFIG_ADMISSION_BLOCKED"
         )
     if machine_error_code == "OK" and not admitted:
         machine_error_code = "QUICK_START_CONFIG_ADMISSION_BLOCKED"
@@ -4332,7 +4375,7 @@ def build_quick_start_config_admission_packet(
                 else (
                     str(runtime_health_gate.get("runtime_health_next_action") or "repair_runtime_proxy")
                     if runtime_health_blocks_launch
-                    else "repair_quick_start_config_selection"
+                    else component_next_action or "repair_quick_start_config_selection"
                 )
             ),
     }

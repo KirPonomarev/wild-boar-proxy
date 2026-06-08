@@ -15667,6 +15667,109 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertNotIn(("healthcheck", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"), runner.calls)
 
+    def test_quick_start_config_admission_blocks_selected_api_route_validation_failure_without_main_fallback(self) -> None:
+        payloads = live_payloads()
+        status_data = payloads[("external-models", "status", "--json")]["data"]
+        status_data["routes_count"] = 2
+        status_data["observed_routes_count"] = 2
+        status_data["available_secret_refs"] = ["OPENROUTER_API_KEY"]
+        status_data["observed_routes"] = {
+            "wbp-deepseek-v3": {
+                "availability_state": "provider_auth_failed",
+                "last_check": "2026-05-21T09:45:00Z",
+                "last_verified_at": "2026-05-21T09:45:00Z",
+                "effective_model": "deepseek/deepseek-chat",
+            },
+            "wbp-web-primary-openrouter": {
+                "availability_state": "verified",
+                "last_check": "2026-05-21T09:46:00Z",
+                "last_verified_at": "2026-05-21T09:46:00Z",
+                "effective_model": "openai/gpt-5",
+            },
+        }
+        model = dict(payloads[("external-models", "models", "--json")]["data"]["models"][0])
+        selected_model = {
+            **model,
+            "route_id": "wbp-deepseek-v3",
+            "display_name": "DeepSeek V3",
+            "upstream_model": "deepseek/deepseek-chat",
+        }
+        main_model = {
+            **model,
+            "route_id": "wbp-web-primary-openrouter",
+            "display_name": "OpenRouter primary",
+            "upstream_model": "openai/gpt-5",
+        }
+        payloads[("external-models", "models", "--json")]["data"]["count"] = 2
+        payloads[("external-models", "models", "--json")]["data"]["models"] = [
+            selected_model,
+            main_model,
+        ]
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={
+                "count": 2,
+                "routes": [
+                    external_route("wbp-deepseek-v3", enabled=True, display_name="DeepSeek V3"),
+                    external_route(
+                        "wbp-web-primary-openrouter",
+                        enabled=True,
+                        display_name="OpenRouter primary",
+                        upstream_model="openai/gpt-5",
+                    ),
+                ],
+            },
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/quick-start/config-admission",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": "wbp-deepseek-v3",
+                            "api_reasoning_option_id": "catalog_default",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["launch_admission"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "QUICK_START_CONFIG_API_ROUTE_VALIDATION_FAILED",
+        )
+        self.assertEqual(packet["next_action"], "check_selected_api_route")
+        self.assertEqual(packet["api_model"]["status"], "admitted")
+        self.assertEqual(packet["api_model"]["model_id"], "wbp-deepseek-v3")
+        self.assertEqual(packet["api_route"]["status"], "not_confirmed")
+        self.assertEqual(packet["api_route"]["route_reference"], "server-owned-api-route")
+        self.assertEqual(packet["api_route"]["route_status_code"], "validation_failed")
+        self.assertEqual(packet["api_route"]["validation_label"], "validate failed")
+        self.assertEqual(packet["api_route"]["validation_visual_state"], "red")
+        self.assertEqual(packet["model_selection_truth"]["status"], "ok")
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["silent_fallback_used"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+        packet_json = json.dumps(packet, ensure_ascii=False)
+        self.assertNotIn("OPENROUTER_API_KEY", packet_json)
+        self.assertNotIn('"secret_ref"', packet_json)
+        self.assertNotIn('"base_url"', packet_json)
+        self.assertNotIn('"endpoint_path"', packet_json)
+        self.assertNotIn('"route_id"', packet_json)
+        self.assertNotIn(("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"), runner.calls)
+
     def test_quick_start_config_admission_rejects_forbidden_browser_fields(self) -> None:
         runner = MappingRunner(live_payloads())
         with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
