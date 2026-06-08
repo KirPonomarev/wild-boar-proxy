@@ -367,6 +367,63 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         )
         cg_probe.assert_not_called()
 
+    def test_window_usability_reports_cdp_startup_loader_as_specific_blocker(self) -> None:
+        cdp_result = json.dumps(
+            {
+                "cdp_port": 9223,
+                "cdp_port_owner_pids": "222",
+                "cdp_target_url": "app://-/index.html",
+                "cdp_target_type": "page",
+                "cdp_ready_state": "complete",
+                "cdp_input_candidate_count": 0,
+                "cdp_visible_input_candidate_count": 0,
+                "cdp_startup_loader_count": 1,
+                "cdp_visible_startup_loader_count": 1,
+                "cdp_text_value_captured": False,
+                "cdp_prompt_attempted": False,
+                "cdp_route_trace_bound": False,
+            },
+            sort_keys=True,
+        )
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable_by_name",
+                return_value=(False, "ax_guarded_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._ax_input_capable",
+                return_value=(False, "ax_fallback_unavailable"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_input_capable",
+                return_value=(False, cdp_result),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_input_capable",
+                return_value=(True, "[{'window_number': 1}]"),
+            ) as cg_probe,
+        ):
+            packet = native_probe._window_usability_from_observation(
+                {"window_observed": True, "observed_pid": 222}
+            )
+
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["native_window_usable"])
+        self.assertEqual(packet["blocked_reason_class"], "cdp_renderer_startup_loader_stuck")
+        self.assertEqual(
+            packet["renderer_surface_blocked_reason_class"],
+            "cdp_renderer_startup_loader_stuck",
+        )
+        self.assertEqual(
+            packet["native_app_usability_source"],
+            "cdp_renderer_startup_loader_without_editable_surface",
+        )
+        self.assertTrue(packet["renderer_startup_loader_observed"])
+        self.assertFalse(packet["renderer_mounted"])
+        self.assertFalse(packet["cdp_editable_surface_observed"])
+        self.assertIn("mechanism_cdp_pid_bound_dom_input", packet["ax_query_result"])
+        cg_probe.assert_not_called()
+
     def test_codex_desktop_auth_blocker_refines_cdp_surface_block_without_green(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             profile_dir = Path(temp_dir)
@@ -494,6 +551,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(input_capable)
         bounded = json.loads(result)
         self.assertEqual(bounded["cdp_target_url"], "app://-/index.html")
+        self.assertEqual(bounded["cdp_page_target_count"], 1)
         self.assertEqual(bounded["cdp_ready_state"], "complete")
         self.assertEqual(bounded["cdp_visible_input_candidate_count"], 0)
         self.assertFalse(bounded["cdp_text_value_captured"])
@@ -538,10 +596,81 @@ class NativeLaunchDispatchTests(unittest.TestCase):
 
         self.assertTrue(input_capable)
         bounded = json.loads(result)
+        self.assertEqual(bounded["cdp_page_target_count"], 1)
         self.assertEqual(bounded["cdp_visible_input_candidate_count"], 1)
         self.assertFalse(bounded["cdp_text_value_captured"])
         self.assertFalse(bounded["cdp_prompt_attempted"])
         self.assertFalse(bounded["cdp_route_trace_bound"])
+
+    def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.read.return_value = json.dumps(
+            [
+                {
+                    "type": "page",
+                    "url": "app://-/index.html?stale",
+                    "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                },
+                {
+                    "type": "page",
+                    "url": "app://-/index.html",
+                    "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/2",
+                },
+            ]
+        ).encode("utf-8")
+        startup_loader_packet = {
+            "id": 1,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html?stale",
+                        "title": "Codex",
+                        "inputCandidateCount": 0,
+                        "visibleInputCandidateCount": 0,
+                        "textValueCaptured": False,
+                        "startupLoaderCount": 1,
+                    }
+                }
+            },
+        }
+        input_surface_packet = {
+            "id": 1,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "textValueCaptured": False,
+                        "startupLoaderCount": 0,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch("wild_boar_proxy.native_window_probe.urllib.request.urlopen", return_value=response),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=[startup_loader_packet, input_surface_packet],
+            ),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(222, port=9223)
+
+        self.assertTrue(input_capable)
+        bounded = json.loads(result)
+        self.assertEqual(bounded["cdp_target_url"], "app://-/index.html")
+        self.assertEqual(bounded["cdp_page_target_count"], 2)
+        self.assertEqual(bounded["cdp_visible_input_candidate_count"], 1)
+        self.assertFalse(bounded["browser_cdp_authority_widened"])
 
     def test_show_custom_native_window_focuses_only_wbp_profile_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -676,6 +805,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
                 custom_user_data_dir=temp_root / "electron-user-data",
                 custom_home_dir=temp_root / "profile" / "home",
                 profile_dir=temp_root / "profile",
@@ -689,7 +819,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
-                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
                 mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
@@ -700,6 +833,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                         "isolated_default_keychain_verified": True,
                         "isolated_search_list_verified": True,
                     },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={"custom_processes_gone": True, "initial_custom_pids": []},
                 ),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.launch_native_candidate",
@@ -1028,7 +1165,287 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["real_codex_app_launched"])
         self.assertTrue(packet["process_started"])
         self.assertFalse(packet["process_still_observed_after_wait"])
-        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_WINDOW_NOT_PROVEN")
+        self.assertTrue(packet["process_exited_after_start"])
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START")
+        self.assertEqual(packet["next_action"], "relaunch_custom_codex_after_process_exit")
+
+    def test_live_custom_native_launch_reports_startup_loader_stuck_without_fake_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value={
+                        "custom_process_observed": True,
+                        "custom_process_still_observed_after_wait": True,
+                        "post_observation_wait_seconds": 2.0,
+                        "startup_inventory": {
+                            "root_app_pids": [222],
+                            "custom_process_lines": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                            "sample": [
+                                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                            ],
+                        },
+                        "launcher_pid": 222,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    return_value={
+                        "window_observed": True,
+                        "observed_pid": 222,
+                        "blocked_reason_class": "",
+                        "window_visible": True,
+                        "window_frontmost": True,
+                        "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": False,
+                        "input_capable_ui_observed": False,
+                        "blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                        "renderer_surface_blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                        "native_app_usability_source": "cdp_renderer_startup_loader_without_editable_surface",
+                        "renderer_startup_loader_observed": True,
+                        "renderer_mounted": False,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_reload_app_page_for_pid",
+                    return_value=native_probe._renderer_recovery_packet(
+                        status="blocked",
+                        machine_error_code="CDP_PAGE_RELOAD_FAILED",
+                        reason_class="cdp_page_reload_failed",
+                        reload_targets=[],
+                    ),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    keep_running_on_window_observed=True,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_RENDERER_STARTUP_LOADER_STUCK")
+        self.assertFalse(packet["real_codex_app_launched"])
+        self.assertTrue(packet["running_status"])
+        self.assertTrue(packet["native_window_process_kept_running"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertTrue(packet["renderer_startup_loader_observed"])
+        self.assertFalse(packet["renderer_mounted"])
+        self.assertTrue(packet["renderer_recovery_attempted"])
+        self.assertEqual(packet["renderer_recovery_status"], "blocked")
+        self.assertEqual(
+            packet["renderer_recovery_packet"]["machine_error_code"],
+            "CDP_PAGE_RELOAD_FAILED",
+        )
+        self.assertEqual(
+            packet["renderer_surface_blocked_reason_class"],
+            "cdp_renderer_startup_loader_stuck",
+        )
+        self.assertEqual(packet["next_action"], "stop_and_diagnose_custom_renderer_startup_loader")
+
+    def test_live_custom_native_launch_recovers_startup_loader_after_bounded_cdp_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            observed_window = {
+                "window_observed": True,
+                "observed_pid": 222,
+                "blocked_reason_class": "",
+                "window_visible": True,
+                "window_frontmost": True,
+                "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                "window_query": "Codex\ttrue\ttrue\tfalse\t1\t120,80\t1320,820",
+            }
+            startup_usability = {
+                "native_window_usable": False,
+                "input_capable_ui_observed": False,
+                "blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                "renderer_surface_blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                "native_app_usability_source": "cdp_renderer_startup_loader_without_editable_surface",
+                "renderer_startup_loader_observed": True,
+                "renderer_mounted": False,
+            }
+            recovered_usability = {
+                "native_window_usable": True,
+                "input_capable_ui_observed": True,
+                "blocked_reason_class": "",
+                "native_app_usability_source": "cdp_renderer_input_capable_ui",
+                "cdp_localhost_only": True,
+                "cdp_endpoint_redacted": True,
+                "cdp_target_bound_to_custom_launch": True,
+                "cdp_editable_surface_observed": True,
+                "raw_dom_exposed": False,
+                "raw_ax_tree_exposed": False,
+                "browser_cdp_authority_widened": False,
+                "renderer_startup_loader_observed": False,
+                "renderer_mounted": True,
+            }
+            launch_result = {
+                "custom_process_observed": True,
+                "custom_process_still_observed_after_wait": True,
+                "post_observation_wait_seconds": 2.0,
+                "startup_inventory": {
+                    "root_app_pids": [222],
+                    "custom_process_lines": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                    "sample": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                },
+                "launcher_pid": 222,
+                "launcher_stdout_path": str(layout.launcher_stdout),
+            }
+            reload_packet = native_probe._renderer_recovery_packet(
+                status="ok",
+                machine_error_code="OK",
+                reason_class="ok",
+                reload_targets=[
+                    {
+                        "target_url": "app://-/index.html",
+                        "target_type": "page",
+                        "reload_ok": True,
+                        "error_class": "",
+                    }
+                ],
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={"custom_processes_gone": True, "initial_custom_pids": []},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value=launch_result,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=launch_result["startup_inventory"],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    side_effect=[observed_window, observed_window],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    side_effect=[startup_usability, recovered_usability],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._apply_codex_desktop_auth_blocker",
+                    side_effect=lambda packet, **_: packet,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_reload_app_page_for_pid",
+                    return_value=reload_packet,
+                ) as reload_app_page,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._runtime_ready_from_launcher_stdout",
+                    return_value={
+                        "runtime_ready_observed": True,
+                        "runtime_ready_source": "test",
+                        "runtime_ready_stdout_paths_checked": [],
+                        "runtime_ready_markers": [],
+                        "runtime_ready_missing_markers": [],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.time.sleep") as sleep,
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.5",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    persistent_profile_base_dir=temp_root / "profiles",
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["real_codex_app_launched"])
+        self.assertTrue(packet["native_app_usable"])
+        self.assertTrue(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["renderer_startup_loader_observed"])
+        self.assertTrue(packet["renderer_mounted"])
+        self.assertTrue(packet["renderer_recovery_attempted"])
+        self.assertEqual(packet["renderer_recovery_status"], "ok")
+        self.assertEqual(packet["renderer_recovery_action"], "cdp_page_reload")
+        self.assertEqual(packet["native_app_usability_source"], "cdp_renderer_input_capable_ui")
+        self.assertEqual(packet["next_action"], "none")
+        reload_app_page.assert_called_once_with(222)
+        sleep.assert_called_once_with(native_probe.CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
 
     def test_live_custom_native_launch_blocks_if_existing_same_profile_process_survives(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

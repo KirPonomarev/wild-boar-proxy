@@ -57,6 +57,7 @@ from .token_command import emit_local_token
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
 WINDOW_OBSERVATION_WAIT_SECONDS = 12.0
 WINDOW_OBSERVATION_POLL_SECONDS = 0.5
+CODEX_RENDERER_RECOVERY_WAIT_SECONDS = 2.0
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
@@ -372,6 +373,14 @@ def show_custom_native_window_packet(
         usability_packet,
         profile_dir=Path(str(paths["persistent_profile_root"])),
     )
+    usability_packet, renderer_recovery_packet, recovered_after = _recover_startup_loader_if_needed(
+        usability_packet,
+        observed_pid=observed_pid,
+        profile_dir=Path(str(paths["persistent_profile_root"])),
+        custom_user_data_dir=user_data_dir,
+    )
+    if recovered_after is not None:
+        after = recovered_after
     visible = after.get("window_observed") is True and after.get("window_visible") is True
     frontmost = after.get("window_frontmost") is True
     native_app_usable = usability_packet.get("native_window_usable") is True
@@ -384,6 +393,13 @@ def show_custom_native_window_packet(
     status_ok = visible and window_focused and native_app_usable
     window_visible_but_unusable = visible and window_focused and not native_app_usable
     desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
+    usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+    renderer_surface_blocked_reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class") or usability_blocked_reason
+    )
+    renderer_startup_loader_stuck = (
+        renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+    )
     return {
         "schema_version": 1,
         "captured_at_utc": utc_now(),
@@ -393,6 +409,9 @@ def show_custom_native_window_packet(
             "OK"
             if status_ok
             else (
+                "CUSTOM_CODEX_RENDERER_STARTUP_LOADER_STUCK"
+                if window_visible_but_unusable and renderer_startup_loader_stuck
+                else
                 "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN"
                 if window_visible_but_unusable
                 else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN"
@@ -404,6 +423,8 @@ def show_custom_native_window_packet(
             else (
                 "Custom Codex window is visible and frontmost, but Codex Desktop sign-in is required before input-capable UI can be proven."
                 if window_visible_but_unusable and desktop_auth_blocker
+                else "Custom Codex window is visible and frontmost, but the renderer is still on the startup loader."
+                if window_visible_but_unusable and renderer_startup_loader_stuck
                 else "Custom Codex window is visible and frontmost, but input-capable UI was not proven."
                 if window_visible_but_unusable
                 else "Custom Codex window could not be proven visible and frontmost."
@@ -441,8 +462,16 @@ def show_custom_native_window_packet(
             usability_packet.get("codex_desktop_auth_error_class") or ""
         ),
         "renderer_surface_blocked_reason_class": str(
-            usability_packet.get("renderer_surface_blocked_reason_class") or ""
+            renderer_surface_blocked_reason if not native_app_usable else ""
         ),
+        "renderer_startup_loader_observed": (
+            usability_packet.get("renderer_startup_loader_observed") is True
+        ),
+        "renderer_mounted": usability_packet.get("renderer_mounted") is True,
+        "renderer_recovery_attempted": renderer_recovery_packet.get("attempted") is True,
+        "renderer_recovery_status": str(renderer_recovery_packet.get("status") or ""),
+        "renderer_recovery_action": str(renderer_recovery_packet.get("action") or ""),
+        "renderer_recovery_packet": renderer_recovery_packet,
         "native_window_usability_packet": usability_packet,
         "window_observation_before_focus": before,
         "window_observation_after_focus": after,
@@ -672,6 +701,30 @@ def _devtools_port_owned_by_pid(observed_pid: int, port: int) -> tuple[bool, str
     return str(observed_pid) in pids, ",".join(pids)
 
 
+def _cdp_app_page_targets(port: int) -> tuple[list[dict[str, Any]], str]:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/list",
+            timeout=1.5,
+        ) as response:
+            targets = json.loads(response.read().decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], f"cdp_target_list_failed:{type(exc).__name__}"
+    if not isinstance(targets, list):
+        return [], "cdp_target_list_not_array"
+    pages = [
+        target
+        for target in targets
+        if isinstance(target, dict)
+        and target.get("type") == "page"
+        and str(target.get("url") or "").startswith("app://-/")
+        and isinstance(target.get("webSocketDebuggerUrl"), str)
+    ]
+    if not pages:
+        return [], "cdp_app_page_target_not_found"
+    return pages, ""
+
+
 def _cdp_input_capable(
     observed_pid: int,
     *,
@@ -680,85 +733,242 @@ def _cdp_input_capable(
     port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
     if not port_owned:
         return False, f"cdp_port_owner_mismatch_or_absent:{owner_result}"
-    try:
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/json/list",
-            timeout=1.5,
-        ) as response:
-            targets = json.loads(response.read().decode("utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return False, f"cdp_target_list_failed:{type(exc).__name__}"
-    page = next(
-        (
-            target
-            for target in targets
-            if target.get("type") == "page"
-            and str(target.get("url") or "").startswith("app://-/")
-            and isinstance(target.get("webSocketDebuggerUrl"), str)
-        ),
-        None,
-    )
-    if not isinstance(page, dict):
-        return False, "cdp_app_page_target_not_found"
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return False, page_error
     expression = """
 (() => {
   const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
-  const nodes = Array.from(document.querySelectorAll(selector));
-  const visibleNodes = nodes.filter((node) => {
+  const visible = (node, minWidth = 1, minHeight = 1) => {
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
-    return rect.width >= 80 && rect.height >= 20 && style.display !== 'none' &&
-      style.visibility !== 'hidden' && node.getAttribute('aria-hidden') !== 'true' &&
-      node.disabled !== true;
-  });
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const visibleNodes = nodes.filter((node) => visible(node, 80, 20) && node.disabled !== true);
+  const root = document.getElementById('root');
+  const startupLoaders = Array.from(document.querySelectorAll('.startup-loader'));
+  const visibleStartupLoaders = startupLoaders.filter((node) => visible(node));
   return {
     readyState: document.readyState,
     url: location.href,
     title: document.title,
     inputCandidateCount: nodes.length,
     visibleInputCandidateCount: visibleNodes.length,
+    bodyTextLength: (document.body?.innerText || '').trim().length,
+    rootChildCount: root ? root.children.length : 0,
+    startupLoaderCount: startupLoaders.length,
+    visibleStartupLoaderCount: visibleStartupLoaders.length,
     textValueCaptured: false,
     selector
   };
 })()
 """.strip()
-    try:
-        cdp_result = _cdp_command(
-            str(page["webSocketDebuggerUrl"]),
-            {
-                "id": 1,
-                "method": "Runtime.evaluate",
-                "params": {"expression": expression, "returnByValue": True},
-            },
+    blocked_result: dict[str, Any] | None = None
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_runtime_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = (
+            (cdp_result.get("result") or {})
+            .get("result", {})
+            .get("value", {})
         )
-    except (OSError, json.JSONDecodeError) as exc:
-        return False, f"cdp_runtime_evaluate_failed:{type(exc).__name__}"
-    value = (
-        (cdp_result.get("result") or {})
-        .get("result", {})
-        .get("value", {})
-    )
-    if not isinstance(value, dict):
-        return False, "cdp_runtime_evaluate_missing_value"
-    input_capable = (
-        value.get("url") == "app://-/index.html"
-        and value.get("readyState") in {"interactive", "complete"}
-        and int(value.get("visibleInputCandidateCount") or 0) > 0
-        and value.get("textValueCaptured") is False
-    )
-    bounded = {
+        if not isinstance(value, dict):
+            last_error = "cdp_runtime_evaluate_missing_value"
+            continue
+        input_capable = (
+            value.get("url") == "app://-/index.html"
+            and value.get("readyState") in {"interactive", "complete"}
+            and int(value.get("visibleInputCandidateCount") or 0) > 0
+            and value.get("textValueCaptured") is False
+        )
+        bounded = {
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": page.get("url"),
+            "cdp_target_type": page.get("type"),
+            "cdp_ready_state": value.get("readyState"),
+            "cdp_input_candidate_count": value.get("inputCandidateCount"),
+            "cdp_visible_input_candidate_count": value.get("visibleInputCandidateCount"),
+            "cdp_body_text_length": value.get("bodyTextLength"),
+            "cdp_root_child_count": value.get("rootChildCount"),
+            "cdp_startup_loader_count": value.get("startupLoaderCount"),
+            "cdp_visible_startup_loader_count": value.get("visibleStartupLoaderCount"),
+            "cdp_text_value_captured": value.get("textValueCaptured") is True,
+            "cdp_prompt_attempted": False,
+            "cdp_route_trace_bound": False,
+            "browser_cdp_authority_widened": False,
+        }
+        if input_capable:
+            return True, json.dumps(bounded, sort_keys=True)
+        if blocked_result is None or value.get("url") == "app://-/index.html":
+            blocked_result = bounded
+    if blocked_result is not None:
+        return False, json.dumps(blocked_result, sort_keys=True)
+    return False, last_error or "cdp_runtime_evaluate_missing_value"
+
+
+def _renderer_recovery_packet(
+    *,
+    status: str,
+    machine_error_code: str,
+    reason_class: str = "",
+    attempted: bool = True,
+    action: str = "cdp_page_reload",
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    owner_pids: str = "",
+    reload_targets: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    targets = reload_targets or []
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_renderer_recovery",
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "reason_class": reason_class,
+        "attempted": attempted,
+        "action": action if attempted else "none",
         "cdp_port": port,
-        "cdp_port_owner_pids": owner_result,
-        "cdp_target_url": page.get("url"),
-        "cdp_target_type": page.get("type"),
-        "cdp_ready_state": value.get("readyState"),
-        "cdp_input_candidate_count": value.get("inputCandidateCount"),
-        "cdp_visible_input_candidate_count": value.get("visibleInputCandidateCount"),
-        "cdp_text_value_captured": value.get("textValueCaptured") is True,
-        "cdp_prompt_attempted": False,
-        "cdp_route_trace_bound": False,
+        "cdp_port_owner_pids": owner_pids,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": True,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "browser_route_injection": False,
+        "reload_attempt_count": len(targets),
+        "reload_targets": targets,
     }
-    return input_capable, json.dumps(bounded, sort_keys=True)
+
+
+def _renderer_recovery_not_required_packet() -> dict[str, Any]:
+    return _renderer_recovery_packet(
+        status="not_required",
+        machine_error_code="NOT_REQUIRED",
+        reason_class="",
+        attempted=False,
+    )
+
+
+def _renderer_startup_loader_stuck(usability_packet: dict[str, Any]) -> bool:
+    reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or usability_packet.get("blocked_reason_class")
+        or ""
+    )
+    return reason == "cdp_renderer_startup_loader_stuck"
+
+
+def _cdp_reload_app_page_for_pid(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> dict[str, Any]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    if not port_owned:
+        return _renderer_recovery_packet(
+            status="blocked",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            reason_class="cdp_port_owner_mismatch_or_absent",
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=[],
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _renderer_recovery_packet(
+            status="blocked",
+            machine_error_code=page_error.upper(),
+            reason_class=page_error,
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=[],
+        )
+    reload_targets: list[dict[str, Any]] = []
+    for index, page in enumerate(pages, start=1):
+        attempt = {
+            "target_url": str(page.get("url") or ""),
+            "target_type": str(page.get("type") or ""),
+            "reload_ok": False,
+            "error_class": "",
+        }
+        try:
+            reload_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 100 + index,
+                    "method": "Page.reload",
+                    "params": {"ignoreCache": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            attempt["error_class"] = f"cdp_page_reload_failed:{type(exc).__name__}"
+            reload_targets.append(attempt)
+            continue
+        if reload_result.get("status") == "blocked":
+            attempt["error_class"] = str(reload_result.get("error") or "cdp_page_reload_blocked")
+        elif "error" in reload_result:
+            attempt["error_class"] = "cdp_page_reload_protocol_error"
+        else:
+            attempt["reload_ok"] = True
+        reload_targets.append(attempt)
+    if any(target.get("reload_ok") is True for target in reload_targets):
+        return _renderer_recovery_packet(
+            status="ok",
+            machine_error_code="OK",
+            reason_class="",
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=reload_targets,
+        )
+    return _renderer_recovery_packet(
+        status="blocked",
+        machine_error_code="CDP_PAGE_RELOAD_FAILED",
+        reason_class="cdp_page_reload_failed",
+        port=port,
+        owner_pids=owner_result,
+        reload_targets=reload_targets,
+    )
+
+
+def _recover_startup_loader_if_needed(
+    usability_packet: dict[str, Any],
+    *,
+    observed_pid: int,
+    profile_dir: Path,
+    custom_user_data_dir: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    if not _renderer_startup_loader_stuck(usability_packet):
+        return usability_packet, _renderer_recovery_not_required_packet(), None
+    recovery_packet = _cdp_reload_app_page_for_pid(observed_pid)
+    if recovery_packet.get("status") != "ok":
+        return usability_packet, recovery_packet, None
+    time.sleep(CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
+    recovered_inventory = collect_codex_process_inventory(
+        custom_user_data_dir=custom_user_data_dir
+    )
+    recovered_observation = _window_observation_via_ax(recovered_inventory)
+    recovered_usability = _window_usability_from_observation(recovered_observation)
+    recovered_usability = _apply_codex_desktop_auth_blocker(
+        recovered_usability,
+        profile_dir=profile_dir,
+    )
+    return recovered_usability, recovery_packet, recovered_observation
 
 
 def _cdp_blocked_surface_details(result: str) -> dict[str, Any]:
@@ -774,14 +984,36 @@ def _cdp_blocked_surface_details(result: str) -> dict[str, Any]:
         visible_count = int(packet.get("cdp_visible_input_candidate_count") or 0)
     except (TypeError, ValueError):
         visible_count = -1
+    try:
+        startup_loader_count = int(packet.get("cdp_startup_loader_count") or 0)
+    except (TypeError, ValueError):
+        startup_loader_count = 0
+    try:
+        visible_startup_loader_count = int(packet.get("cdp_visible_startup_loader_count") or 0)
+    except (TypeError, ValueError):
+        visible_startup_loader_count = 0
     if target_url == "app://-/index.html" and ready_state in {"interactive", "complete"} and visible_count <= 0:
+        startup_loader_observed = startup_loader_count > 0 or visible_startup_loader_count > 0
+        reason_class = (
+            "cdp_renderer_startup_loader_stuck"
+            if startup_loader_observed
+            else "cdp_renderer_input_surface_not_observed"
+        )
+        usability_source = (
+            "cdp_renderer_startup_loader_without_editable_surface"
+            if startup_loader_observed
+            else "cdp_renderer_target_without_editable_surface"
+        )
         return {
-            "blocked_reason_class": "cdp_renderer_input_surface_not_observed",
-            "native_app_usability_source": "cdp_renderer_target_without_editable_surface",
+            "blocked_reason_class": reason_class,
+            "renderer_surface_blocked_reason_class": reason_class,
+            "native_app_usability_source": usability_source,
             "cdp_localhost_only": True,
             "cdp_endpoint_redacted": True,
             "cdp_target_bound_to_custom_launch": True,
             "cdp_editable_surface_observed": False,
+            "renderer_startup_loader_observed": startup_loader_observed,
+            "renderer_mounted": not startup_loader_observed,
             "raw_dom_exposed": False,
             "raw_ax_tree_exposed": False,
             "browser_cdp_authority_widened": False,
@@ -845,6 +1077,53 @@ def _apply_codex_desktop_auth_blocker(
     )
     packet["native_app_usability_source"] = "codex_desktop_auth_blocker"
     return packet
+
+
+def _custom_native_launch_blocked_machine_error(
+    *,
+    launcher_failed_before_process: bool,
+    process_started: bool,
+    process_still_alive: bool,
+    custom_window_visible: bool,
+    native_app_usable: bool,
+    renderer_surface_blocked_reason: str,
+) -> str:
+    if launcher_failed_before_process:
+        return "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
+    if process_started and not process_still_alive:
+        return "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START"
+    if custom_window_visible and not native_app_usable:
+        if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck":
+            return "CUSTOM_NATIVE_RENDERER_STARTUP_LOADER_STUCK"
+        return "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+    return "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
+
+
+def _custom_native_launch_blocked_human_message(
+    *,
+    launcher_failed_before_process: bool,
+    process_started: bool,
+    process_still_alive: bool,
+    custom_window_visible: bool,
+    native_app_usable: bool,
+    desktop_auth_blocker: bool,
+    renderer_surface_blocked_reason: str,
+) -> str:
+    if launcher_failed_before_process:
+        return "Custom Codex launcher exited before a Custom process was observed."
+    if process_started and not process_still_alive:
+        return "Custom Codex process was observed after launch, then exited before proof completed."
+    if custom_window_visible and not native_app_usable and desktop_auth_blocker:
+        return "Custom Codex native window was observed, but Codex Desktop sign-in is required before input-capable UI can be proven."
+    if (
+        custom_window_visible
+        and not native_app_usable
+        and renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+    ):
+        return "Custom Codex native window was observed, but the renderer is still on the startup loader."
+    if custom_window_visible and not native_app_usable:
+        return "Custom Codex native window was observed, but input-capable UI was not proven."
+    return "Custom Codex native launch did not satisfy process/window proof."
 
 
 def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
@@ -1307,6 +1586,19 @@ def launch_custom_native_app_packet(
                     "native_app_usability_blocked_reason_class": str(
                         show_packet.get("native_app_usability_blocked_reason_class") or ""
                     ),
+                    "renderer_recovery_attempted": (
+                        show_packet.get("renderer_recovery_attempted") is True
+                    ),
+                    "renderer_recovery_status": str(
+                        show_packet.get("renderer_recovery_status") or ""
+                    ),
+                    "renderer_recovery_action": str(
+                        show_packet.get("renderer_recovery_action") or ""
+                    ),
+                    "renderer_recovery_packet": show_packet.get(
+                        "renderer_recovery_packet",
+                        _renderer_recovery_not_required_packet(),
+                    ),
                     "cdp_localhost_only": show_packet.get("cdp_localhost_only") is True,
                     "cdp_endpoint_redacted": show_packet.get("cdp_endpoint_redacted") is True,
                     "cdp_target_bound_to_custom_launch": show_packet.get("cdp_target_bound_to_custom_launch") is True,
@@ -1408,6 +1700,28 @@ def launch_custom_native_app_packet(
             usability_packet,
             profile_dir=layout.profile_dir,
         )
+        renderer_recovery_packet = _renderer_recovery_not_required_packet()
+        observed_pid_for_recovery = window_packet.get("observed_pid")
+        if isinstance(observed_pid_for_recovery, int):
+            (
+                usability_packet,
+                renderer_recovery_packet,
+                recovered_window_packet,
+            ) = _recover_startup_loader_if_needed(
+                usability_packet,
+                observed_pid=observed_pid_for_recovery,
+                profile_dir=layout.profile_dir,
+                custom_user_data_dir=str(layout.custom_user_data_dir),
+            )
+            if recovered_window_packet is not None:
+                window_packet = recovered_window_packet
+        elif _renderer_startup_loader_stuck(usability_packet):
+            renderer_recovery_packet = _renderer_recovery_packet(
+                status="blocked",
+                machine_error_code="OBSERVED_PID_MISSING_FOR_RENDERER_RECOVERY",
+                reason_class="observed_pid_missing_for_renderer_recovery",
+                reload_targets=[],
+            )
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
@@ -1425,25 +1739,26 @@ def launch_custom_native_app_packet(
             else "not_proven"
         )
         desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
-        blocked_machine_error = (
-            "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
-            if launcher_failed_before_process
-            else (
-                "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
-                if custom_window_visible and not native_app_usable
-                else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
-            )
+        usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+        renderer_surface_blocked_reason = str(
+            usability_packet.get("renderer_surface_blocked_reason_class") or usability_blocked_reason
         )
-        blocked_human_message = (
-            "Custom Codex launcher exited before a Custom process was observed."
-            if launcher_failed_before_process
-            else (
-                "Custom Codex native window was observed, but Codex Desktop sign-in is required before input-capable UI can be proven."
-                if custom_window_visible and not native_app_usable and desktop_auth_blocker
-                else "Custom Codex native window was observed, but input-capable UI was not proven."
-                if custom_window_visible and not native_app_usable
-                else "Custom Codex native launch did not satisfy process/window proof."
-            )
+        blocked_machine_error = _custom_native_launch_blocked_machine_error(
+            launcher_failed_before_process=launcher_failed_before_process,
+            process_started=process_started,
+            process_still_alive=process_still_alive,
+            custom_window_visible=custom_window_visible,
+            native_app_usable=native_app_usable,
+            renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+        )
+        blocked_human_message = _custom_native_launch_blocked_human_message(
+            launcher_failed_before_process=launcher_failed_before_process,
+            process_started=process_started,
+            process_still_alive=process_still_alive,
+            custom_window_visible=custom_window_visible,
+            native_app_usable=native_app_usable,
+            desktop_auth_blocker=desktop_auth_blocker,
+            renderer_surface_blocked_reason=renderer_surface_blocked_reason,
         )
         success = (
             process_started
@@ -1482,6 +1797,7 @@ def launch_custom_native_app_packet(
             "custom_process_observed": process_started,
             "custom_process_pid": window_packet.get("observed_pid"),
             "process_still_observed_after_wait": process_still_alive,
+            "process_exited_after_start": process_started and not process_still_alive,
             "post_observation_wait_seconds": launch_result.get(
                 "post_observation_wait_seconds",
                 0,
@@ -1513,8 +1829,16 @@ def launch_custom_native_app_packet(
                 usability_packet.get("codex_desktop_auth_error_class") or ""
             ),
             "renderer_surface_blocked_reason_class": str(
-                usability_packet.get("renderer_surface_blocked_reason_class") or ""
+                renderer_surface_blocked_reason if not native_app_usable else ""
             ),
+            "renderer_startup_loader_observed": (
+                usability_packet.get("renderer_startup_loader_observed") is True
+            ),
+            "renderer_mounted": usability_packet.get("renderer_mounted") is True,
+            "renderer_recovery_attempted": renderer_recovery_packet.get("attempted") is True,
+            "renderer_recovery_status": str(renderer_recovery_packet.get("status") or ""),
+            "renderer_recovery_action": str(renderer_recovery_packet.get("action") or ""),
+            "renderer_recovery_packet": renderer_recovery_packet,
             **runtime_ready_packet,
             "real_codex_app_launched": success,
             "isolated_home": True,
@@ -1539,7 +1863,11 @@ def launch_custom_native_app_packet(
                     "stop_and_diagnose_custom_native_launcher"
                     if launcher_failed_before_process
                     else (
-                        "stop_and_diagnose_custom_window_usability"
+                        "relaunch_custom_codex_after_process_exit"
+                        if process_started and not process_still_alive
+                        else "stop_and_diagnose_custom_renderer_startup_loader"
+                        if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+                        else "stop_and_diagnose_custom_window_usability"
                         if custom_window_visible and not native_app_usable
                         else "stop_and_diagnose_native_launch"
                     )
