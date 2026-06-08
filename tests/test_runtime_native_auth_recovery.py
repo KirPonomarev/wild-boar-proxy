@@ -134,7 +134,7 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertEqual(hygiene["selected_backend_runtime_loaded_count"], 0)
         self.assertEqual(hygiene["selected_launch_capable_backend_count"], 2)
 
-    def test_native_auth_recovery_hint_requires_owner_action_after_selected_backend_observation(
+    def test_native_auth_recovery_hint_recommends_repair_for_unloaded_selected_backend(
         self,
     ) -> None:
         hint = runtime.build_native_auth_recovery_hint(
@@ -147,12 +147,16 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(hint["status"], "owner_action_required")
-        self.assertTrue(hint["owner_action_required"])
-        self.assertEqual(hint["next_action"], "accounts_login_start")
+        self.assertEqual(hint["status"], "runtime_auth_gap_repair_recommended")
+        self.assertFalse(hint["owner_action_required"])
+        self.assertEqual(hint["next_action"], "run_healthcheck_repair_if_authorized")
         self.assertEqual(
             hint["command_surface"],
-            "accounts login start --provider codex --mode device --json",
+            "healthcheck --repair --json",
+        )
+        self.assertEqual(
+            hint["reason"],
+            "auth_unavailable_with_selected_backend_not_loaded",
         )
         self.assertTrue(hint["selection_gap_detected"])
 

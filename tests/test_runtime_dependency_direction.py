@@ -2457,11 +2457,15 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
         )
 
         self.assertEqual(facade_payload, direct_payload)
-        self.assertEqual(facade_payload["status"], "owner_action_required")
-        self.assertEqual(facade_payload["next_action"], "accounts_login_start")
+        self.assertEqual(
+            facade_payload["status"], "runtime_auth_gap_repair_recommended"
+        )
+        self.assertEqual(
+            facade_payload["next_action"], "run_healthcheck_repair_if_authorized"
+        )
         self.assertEqual(
             facade_payload["command_surface"],
-            "accounts login start --provider codex --mode device --json",
+            "healthcheck --repair --json",
         )
         self.assertTrue(facade_payload["selection_gap_detected"])
 
@@ -2559,11 +2563,28 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                 "selection_gap_detected": False,
             },
             {
-                "case_name": "owner_action_required",
+                "case_name": "runtime_auth_gap_repair_recommended",
                 "machine_error_code": "AUTH_UNAVAILABLE",
                 "launch_capable_backend_count": 15,
                 "selected_backend_observed_count": 1,
                 "selected_backend_runtime_loaded_count": 0,
+                "selected_backend_observation_source": (
+                    "runtime_state.selected_backend_snapshot"
+                ),
+                "status": "runtime_auth_gap_repair_recommended",
+                "reported_code": "AUTH_UNAVAILABLE",
+                "next_action": "run_healthcheck_repair_if_authorized",
+                "command_surface": "healthcheck --repair --json",
+                "reason": "auth_unavailable_with_selected_backend_not_loaded",
+                "owner_action_required": False,
+                "selection_gap_detected": True,
+            },
+            {
+                "case_name": "owner_action_required_loaded_backend_failed",
+                "machine_error_code": "AUTH_UNAVAILABLE",
+                "launch_capable_backend_count": 15,
+                "selected_backend_observed_count": 1,
+                "selected_backend_runtime_loaded_count": 1,
                 "selected_backend_observation_source": (
                     "runtime_state.selected_backend_snapshot"
                 ),
@@ -2575,7 +2596,7 @@ class RuntimeDependencyDirectionTests(unittest.TestCase):
                 ),
                 "reason": "auth_unavailable_after_selected_backend_observation",
                 "owner_action_required": True,
-                "selection_gap_detected": True,
+                "selection_gap_detected": False,
             },
         )
 

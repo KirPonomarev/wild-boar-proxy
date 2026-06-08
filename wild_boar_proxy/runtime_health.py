@@ -111,6 +111,16 @@ def build_native_auth_recovery_hint_from_inputs(
             "reason": "launch_capable_available_without_selected_backend_observation",
             **base_packet,
         }
+    if selected_backend_runtime_loaded_count <= 0:
+        return {
+            "status": "runtime_auth_gap_repair_recommended",
+            "machine_error_code": machine_error_code,
+            "owner_action_required": False,
+            "next_action": "run_healthcheck_repair_if_authorized",
+            "command_surface": "healthcheck --repair --json",
+            "reason": "auth_unavailable_with_selected_backend_not_loaded",
+            **base_packet,
+        }
     return {
         "status": "owner_action_required",
         "machine_error_code": machine_error_code,
