@@ -2046,6 +2046,7 @@ function node(id) {
 for (const id of [
   "quickStartRouteChip",
   "quickStartExecutionModeState",
+  "quickStartLaunchState",
   "quickStartChatSlotState",
   "quickStartApiSlotState",
   "quickStartOwnerAuthState",
@@ -2298,6 +2299,9 @@ renderQuickStartMixedCoderTrace({
   status: "blocked",
   machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
   final_status: "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+  mixed_mode_product_decision: "UNSUPPORTED",
+  mixed_mode_launch_action: "blocked",
+  mixed_mode_launch_blocked_reason: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
   execution_mode: "chatgpt_plus_api",
   primary_model_id: "gpt-5.5",
   coding_agent_model_id: "wbp-deepseek-chat",
@@ -2348,6 +2352,9 @@ if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed blocked"
 if (node("quickStartExecutionModeState").lastElementChild.textContent !== "unsupported") {
   throw new Error(`mixed execution mode must show unsupported: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
 }
+if (node("quickStartLaunchState").lastElementChild.textContent !== "blocked") {
+  throw new Error(`mixed launch must be blocked: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
 if (node("quickStartChatSlotState").lastElementChild.textContent !== "primary не доказан") {
   throw new Error(`ChatGPT runtime proof blocker missing: ${node("quickStartChatSlotState").lastElementChild.textContent}`);
 }
@@ -2363,6 +2370,13 @@ if (rendered.machine_error_code !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED
 }
 if (rendered.mixed_route_blocked !== true || rendered.runtime_readiness_claimed !== false) {
   throw new Error(`mixed route truth flags wrong: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.mixed_mode_product_decision !== "UNSUPPORTED" ||
+  rendered.mixed_mode_launch_action !== "blocked" ||
+  rendered.mixed_mode_launch_blocked_reason !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+) {
+  throw new Error(`mixed product decision missing: ${JSON.stringify(rendered)}`);
 }
 if (rendered.prompt_seen !== false || rendered.coder_dispatch_proven !== true) {
   throw new Error(`lane proof split missing: ${JSON.stringify(rendered)}`);
@@ -2470,6 +2484,9 @@ renderQuickStartMixedCoderTrace({
   status: "blocked",
   machine_error_code: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
   final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  mixed_mode_product_decision: "UNSUPPORTED",
+  mixed_mode_launch_action: "blocked",
+  mixed_mode_launch_blocked_reason: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
   execution_mode: "chatgpt_plus_api",
   primary_model_id: "gpt-5.5",
   coding_agent_model_id: "wbp-deepseek-chat",
@@ -2524,6 +2541,9 @@ if (node("quickStartRouteChip").className.includes("green")) {
 if (node("quickStartNextActionState").lastElementChild.textContent !== "inspect slot") {
   throw new Error(`slot binding next action label missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
 }
+if (node("quickStartLaunchState").lastElementChild.textContent !== "blocked") {
+  throw new Error(`slot binding launch must be blocked: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
 if (node("quickStartChatSlotState").lastElementChild.textContent !== "not proven") {
   throw new Error(`ChatGPT slot label mismatch: ${node("quickStartChatSlotState").lastElementChild.textContent}`);
 }
@@ -2533,6 +2553,13 @@ if (node("quickStartApiSlotState").lastElementChild.textContent !== "not proven"
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (rendered.machine_error_code !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN") {
   throw new Error(`slot binding machine code not rendered: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.mixed_mode_product_decision !== "UNSUPPORTED" ||
+  rendered.mixed_mode_launch_action !== "blocked" ||
+  rendered.mixed_mode_launch_blocked_reason !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
+) {
+  throw new Error(`slot binding product decision missing: ${JSON.stringify(rendered)}`);
 }
 if (
   rendered.launch_proven !== false ||
@@ -2549,6 +2576,141 @@ if (JSON.stringify(rendered.slot_binding_blocking_reasons) !== JSON.stringify(["
 if (rendered.coder_trace_id_matches_launch !== true || rendered.unsupported_evidence?.coder_record_seen !== true) {
   throw new Error(`DeepSeek record evidence missing: ${JSON.stringify(rendered)}`);
 }
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_quick_start_mixed_blocked_button_refreshes_trace_without_live_launch(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.value = "";
+  this.attributes = {};
+  this.lastElementChild = { textContent: "" };
+  this.buttonLabel = { textContent: "" };
+  this.querySelector = (selector) => selector === "span" ? this.buttonLabel : null;
+  this.setAttribute = (name, value) => { this.attributes[name] = value; };
+  this.removeAttribute = (name) => { delete this.attributes[name]; };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartLaunchState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse",
+  "quickStartCustomLaunchAction",
+  "quickStartExecutionModeSelect",
+  "quickStartChatModelSelect",
+  "quickStartApiModelSelect",
+  "quickStartApiReasoningOptionSelect"
+]) {
+  node(id);
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "normal";
+
+const urls = [];
+const blockedPacket = {
+  status: "blocked",
+  machine_error_code: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  mixed_mode_product_decision: "UNSUPPORTED",
+  mixed_mode_launch_action: "blocked",
+  mixed_mode_launch_blocked_reason: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-chat",
+  primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
+  coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: false,
+  launch_status: "blocked",
+  launch_status_ok: false,
+  native_window_observed: true,
+  real_codex_app_launched: false,
+  slot_binding_blocking_reasons: ["launch_status_not_ok", "real_codex_app_not_launched"],
+  slot_binding_proven: false,
+  prompt_seen: false,
+  prompt_seen_blocking_reason: "chatgpt_primary_trace_record_missing",
+  coder_dispatch_proven: false,
+  coder_work_result_proven_with_limits: false,
+  native_mixed_primary_trace_supported: true,
+  fallback_used: false,
+  next_action: "inspect_slot_binding_launch_evidence"
+};
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} },
+    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    urls.push(url);
+    if (url === "api/codex/custom/chatgpt-plus-api-coder-trace") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(blockedPacket) });
+    }
+    return Promise.reject(new Error(`unexpected fetch url ${url}`));
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`renderQuickStartMixedCoderTrace(${JSON.stringify(blockedPacket)});`, sandbox);
+
+if (node("quickStartCustomLaunchAction").buttonLabel.textContent !== "Проверить blocker") {
+  throw new Error(`blocked mixed button label not applied: ${node("quickStartCustomLaunchAction").buttonLabel.textContent}`);
+}
+if (node("quickStartCustomLaunchAction").dataset.mixedModeLaunchBlocked !== "true") {
+  throw new Error(`blocked mixed launch guard missing: ${JSON.stringify(node("quickStartCustomLaunchAction").dataset)}`);
+}
+
+sandbox.runQuickStartCustomLaunchAction().then(() => {
+  if (JSON.stringify(urls) !== JSON.stringify(["api/codex/custom/chatgpt-plus-api-coder-trace"])) {
+    throw new Error(`blocked mixed click must only refresh trace: ${JSON.stringify(urls)}`);
+  }
+  if (urls.includes("api/codex/custom/native-launch")) {
+    throw new Error("blocked mixed click called live native launch");
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
 """
         result = subprocess.run(
             ["node", "-e", script],
@@ -3842,8 +4004,8 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   if (nodes.quickStartLaunchState.className.includes("green")) {
     throw new Error(`stale bridge binding must not leave launch state green: ${nodes.quickStartLaunchState.className}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "старое окно") {
-    throw new Error(`launch state did not render stale-window truth: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "blocked") {
+    throw new Error(`mixed blocker did not override stale-window launch state: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartBridgeState.lastElementChild.textContent !== "не привязан") {
     throw new Error(`bridge state did not render stale binding: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);

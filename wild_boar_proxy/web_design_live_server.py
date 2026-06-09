@@ -6786,6 +6786,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         machine_error_code = "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         next_action = "confirm_runtime_can_dispatch_coding_agent_model_slot"
+    mixed_mode_product_decision = "WORKS" if full_success else "UNSUPPORTED"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
@@ -6793,6 +6794,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "status": "ok" if full_success else "blocked",
         "machine_error_code": machine_error_code,
         "final_status": final_status,
+        "mixed_mode_product_decision": mixed_mode_product_decision,
+        "mixed_mode_launch_action": "available" if full_success else "blocked",
+        "mixed_mode_launch_blocked_reason": "" if full_success else machine_error_code,
         "stage_statuses": {
             "slot_binding": (
                 "CHATGPT_PLUS_API_SLOT_BINDING_PROVEN"

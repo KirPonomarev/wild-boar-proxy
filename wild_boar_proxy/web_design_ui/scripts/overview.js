@@ -85,6 +85,9 @@ const ACTION_STATUS_VISUAL_CLASS = {
 };
 
 const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
+const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = "Проверить blocker";
+let quickStartMixedModeProductBlocked = false;
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -3240,6 +3243,9 @@ function syncCodexRouteSelects(sourceId, options = {}) {
   const target = document.getElementById(targetId);
   if (source && target) {
     target.value = source.value;
+    if (sourceId === "codexCustomExecutionModeSelect" || sourceId === "quickStartExecutionModeSelect") {
+      setQuickStartMixedLaunchActionGuard(false);
+    }
     saveCodexRouteSelection(codexRouteSelectionFromUi(sourceId.startsWith("quickStart")), {
       ...options,
       sourceId
@@ -3382,6 +3388,12 @@ function setQuickStartRouteResponse(packet) {
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || packet?.final_status || "UNKNOWN",
       final_status: packet?.final_status || "",
+      mixed_mode_product_decision:
+        packet?.mixed_mode_product_decision || "",
+      mixed_mode_launch_action:
+        packet?.mixed_mode_launch_action || "",
+      mixed_mode_launch_blocked_reason:
+        packet?.mixed_mode_launch_blocked_reason || "",
       execution_mode: packet?.execution_mode || "",
       chatgpt_model_id: packet?.chatgpt_model_id || "",
       api_model_id: packet?.api_model_id || "",
@@ -3675,8 +3687,33 @@ async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
 }
 
 function quickStartMixedTraceUnsupported(packet) {
-  return packet?.machine_error_code === "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+  return packet?.mixed_mode_product_decision === "UNSUPPORTED"
+    || packet?.machine_error_code === "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
     || packet?.native_mixed_primary_trace_supported === false;
+}
+
+function setQuickStartMixedLaunchActionGuard(blocked) {
+  quickStartMixedModeProductBlocked = blocked === true;
+  const button = document.getElementById("quickStartCustomLaunchAction");
+  if (!button) {
+    return;
+  }
+  if (!button.dataset) {
+    button.dataset = {};
+  }
+  button.dataset.mixedModeLaunchBlocked = quickStartMixedModeProductBlocked ? "true" : "false";
+  button.setAttribute?.(
+    "title",
+    quickStartMixedModeProductBlocked
+      ? "ChatGPT + API сейчас заблокирован; кнопка обновляет blocker truth без live launch."
+      : QUICK_START_DEFAULT_LAUNCH_LABEL
+  );
+  const label = button.querySelector?.("span");
+  if (label) {
+    label.textContent = quickStartMixedModeProductBlocked
+      ? QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL
+      : QUICK_START_DEFAULT_LAUNCH_LABEL;
+  }
 }
 
 function quickStartMixedTraceReasonLabel(packet) {
@@ -3697,7 +3734,11 @@ function renderQuickStartMixedCoderTrace(packet) {
   const unsupported = quickStartMixedTraceUnsupported(packet);
   const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const blocked = packet?.status === "blocked" || unsupported;
-  const chatgptLabel = unsupported
+  setQuickStartMixedLaunchActionGuard(blocked && !traceOk);
+  const slotBindingBlocked = packet?.machine_error_code === "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN";
+  const chatgptLabel = slotBindingBlocked
+    ? "not proven"
+    : unsupported
     ? quickStartMixedTraceReasonLabel(packet)
     : (packet?.prompt_seen === true ? "runtime proven" : "not proven");
   setQuickStartChip(
@@ -3709,6 +3750,11 @@ function renderQuickStartMixedCoderTrace(packet) {
     "quickStartExecutionModeState",
     traceOk ? "green" : (blocked ? "amber" : "red"),
     traceOk ? "ChatGPT + API" : "unsupported"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    traceOk ? "green" : (blocked ? "amber" : "red"),
+    traceOk ? "запуск ok" : "blocked"
   );
   setQuickStartChip(
     "quickStartChatSlotState",
@@ -3729,6 +3775,12 @@ function renderQuickStartMixedCoderTrace(packet) {
     status: packet?.status || "unknown",
     machine_error_code: packet?.machine_error_code || "UNKNOWN",
     final_status: packet?.final_status || "",
+    mixed_mode_product_decision:
+      packet?.mixed_mode_product_decision || (traceOk ? "WORKS" : "UNSUPPORTED"),
+    mixed_mode_launch_action:
+      packet?.mixed_mode_launch_action || (traceOk ? "available" : "blocked"),
+    mixed_mode_launch_blocked_reason:
+      packet?.mixed_mode_launch_blocked_reason || (traceOk ? "" : (packet?.machine_error_code || "UNKNOWN")),
     execution_mode: packet?.execution_mode || "",
     chatgpt_model_id: packet?.primary_model_id || "",
     api_model_id: packet?.coding_agent_model_id || "",
@@ -3832,6 +3884,12 @@ async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
 }
 
 async function runQuickStartCustomLaunchAction() {
+  const payload = quickStartLaunchPayloadFromSelects();
+  if (quickStartMixedModeProductBlocked && payload?.execution_mode === "chatgpt_plus_api") {
+    await refreshQuickStartMixedCoderTraceTruth(payload);
+    return;
+  }
+  setQuickStartMixedLaunchActionGuard(false);
   const launchMetadata = metadataFor("launch_custom_client_native");
   if (launchMetadata?.available === true) {
     await runCodexCustomLaunch();

@@ -10460,6 +10460,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["mixed_mode_product_decision"], "UNSUPPORTED")
+        self.assertEqual(packet["mixed_mode_launch_action"], "blocked")
+        self.assertEqual(
+            packet["mixed_mode_launch_blocked_reason"],
+            "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+        )
         self.assertTrue(packet["launch_proven"])
         self.assertEqual(packet["launch_status"], "ok")
         self.assertTrue(packet["launch_status_ok"])
@@ -10547,6 +10553,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["mixed_mode_product_decision"], "WORKS")
+        self.assertEqual(packet["mixed_mode_launch_action"], "available")
+        self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
         self.assertEqual(
             packet["final_status"],
             "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS",
@@ -10650,6 +10659,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             packet["machine_error_code"],
             "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
         )
+        self.assertEqual(packet["mixed_mode_product_decision"], "UNSUPPORTED")
+        self.assertEqual(packet["mixed_mode_launch_action"], "blocked")
+        self.assertEqual(
+            packet["mixed_mode_launch_blocked_reason"],
+            "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+        )
         self.assertEqual(
             packet["final_status"],
             "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
@@ -10732,6 +10747,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
+            "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+        )
+        self.assertEqual(packet["mixed_mode_product_decision"], "UNSUPPORTED")
+        self.assertEqual(packet["mixed_mode_launch_action"], "blocked")
+        self.assertEqual(
+            packet["mixed_mode_launch_blocked_reason"],
             "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
         )
         self.assertFalse(packet["launch_proven"])
