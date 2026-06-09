@@ -6652,8 +6652,54 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         ),
         {},
     )
+    primary_replaced_by_api_record = next(
+        (
+            record
+            for record in reversed(records)
+            if record.get("request_seen_after_launch") is True
+            and record.get("path") == "/v1/responses"
+            and record_matches_launch(record)
+            and str(record.get("requested_model") or "") == primary_model_id
+            and str(record.get("effective_route_model") or "") == coding_model_id
+            and record.get("forced_route_used") is True
+            and record.get("provider_called") is True
+            and record.get("chatgpt_route_used") is False
+            and record.get("fallback_used") is False
+            and record.get("raw_prompt_recorded") is not True
+            and record.get("secret_value_recorded") is not True
+        ),
+        {},
+    )
     prompt_seen = bool(slot_binding_proven and prompt_record)
     coder_dispatch_proven = bool(slot_binding_proven and deepseek_record)
+    chatgpt_replaced_by_api = bool(
+        slot_binding_proven
+        and not prompt_seen
+        and primary_replaced_by_api_record
+        and coder_dispatch_proven
+    )
+    api_route_dispatched_without_primary = bool(
+        slot_binding_proven
+        and not prompt_seen
+        and coder_dispatch_proven
+        and deepseek_record
+        and str(deepseek_record.get("requested_model") or "") == coding_model_id
+        and str(
+            deepseek_record.get("effective_route_model")
+            or deepseek_record.get("requested_model")
+            or ""
+        )
+        == coding_model_id
+        and deepseek_record.get("provider_called") is True
+        and deepseek_record.get("chatgpt_route_used") is False
+        and deepseek_record.get("fallback_used") is False
+        and deepseek_record.get("raw_prompt_recorded") is not True
+        and deepseek_record.get("secret_value_recorded") is not True
+    )
+    native_mixed_prompt_trace_unsupported = bool(
+        chatgpt_replaced_by_api or api_route_dispatched_without_primary
+    )
+    native_mixed_primary_trace_supported = not native_mixed_prompt_trace_unsupported
     fallback_seen = any(record.get("fallback_used") is True for record in records)
     trace_launch_packet_matches = bool(
         prompt_record
@@ -6675,19 +6721,25 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and trace_launch_packet_matches
         and not fallback_seen
     )
+    if full_success:
+        machine_error_code = "OK"
+        final_status = "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
+        next_action = "none"
+    elif native_mixed_prompt_trace_unsupported:
+        machine_error_code = "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+        final_status = "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+        next_action = "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+    else:
+        machine_error_code = "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
+        final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
+        next_action = "confirm_runtime_can_dispatch_coding_agent_model_slot"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
         "captured_at_utc": utc_now(),
         "status": "ok" if full_success else "blocked",
-        "machine_error_code": (
-            "OK" if full_success else "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
-        ),
-        "final_status": (
-            "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
-            if full_success
-            else "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
-        ),
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
         "stage_statuses": {
             "slot_binding": (
                 "CHATGPT_PLUS_API_SLOT_BINDING_PROVEN"
@@ -6724,6 +6776,21 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "chatgpt_primary_route_observed": prompt_seen,
         "deepseek_route_observed": coder_dispatch_proven,
         "deepseek_coding_route_observed": coder_dispatch_proven,
+        "chatgpt_replaced_by_api": chatgpt_replaced_by_api,
+        "primary_replaced_by_api_route": chatgpt_replaced_by_api,
+        "primary_replacement_record_seen": bool(primary_replaced_by_api_record),
+        "api_route_dispatched_without_primary": api_route_dispatched_without_primary,
+        "direct_api_dispatch_without_primary_trace": api_route_dispatched_without_primary,
+        "native_mixed_primary_trace_supported": native_mixed_primary_trace_supported,
+        "prompt_seen_blocking_reason": (
+            "primary_chatgpt_request_forced_to_api_route"
+            if chatgpt_replaced_by_api
+            else "primary_chatgpt_request_absent_api_route_dispatched"
+            if api_route_dispatched_without_primary
+            else (
+                "none" if prompt_seen else "chatgpt_primary_trace_record_missing"
+            )
+        ),
         "coder_dispatch_proven": coder_dispatch_proven,
         "coder_work_result_proven_with_limits": coder_work_result_proven,
         "stable_bridge_preflight": stable_bridge_preflight_status,
@@ -6746,6 +6813,15 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "request_count": int(trace.get("request_count") or 0),
         "chatgpt_prompt_record_seen": bool(prompt_record),
         "chatgpt_requested_model": str(prompt_record.get("requested_model") or ""),
+        "primary_replaced_requested_model": str(
+            primary_replaced_by_api_record.get("requested_model") or ""
+        ),
+        "primary_replaced_effective_route_model": str(
+            primary_replaced_by_api_record.get("effective_route_model") or ""
+        ),
+        "primary_replaced_forced_route_used": (
+            primary_replaced_by_api_record.get("forced_route_used") is True
+        ),
         "deepseek_record_seen": bool(deepseek_record),
         "deepseek_requested_model": str(deepseek_record.get("requested_model") or ""),
         "deepseek_effective_route_model": str(deepseek_record.get("effective_route_model") or ""),
@@ -6758,7 +6834,6 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "api_only_mode": execution_mode == "api_only",
         "api_only_mode_used": execution_mode == "api_only",
         "chatgpt_only_mode_used": execution_mode == "chatgpt_only",
-        "chatgpt_replaced_by_api": False,
         "browser_trace_authority": False,
         "raw_prompt_recorded": False,
         "auth_header_recorded": False,
@@ -6771,11 +6846,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "model_self_report_counts_as_runtime_truth": False,
         "wbp_patch_applier_used": False,
         "live_file_mutation_claimed": False,
-        "next_action": (
-            "none"
-            if full_success
-            else "confirm_runtime_can_dispatch_coding_agent_model_slot"
-        ),
+        "next_action": next_action,
     }
 
 

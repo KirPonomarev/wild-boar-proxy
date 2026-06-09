@@ -10777,9 +10777,114 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
         self.assertFalse(packet["prompt_seen"])
         self.assertFalse(packet["chatgpt_route_observed"])
         self.assertTrue(packet["deepseek_route_observed"])
+        self.assertTrue(packet["api_route_dispatched_without_primary"])
+        self.assertTrue(packet["direct_api_dispatch_without_primary_trace"])
+        self.assertFalse(packet["native_mixed_primary_trace_supported"])
+        self.assertEqual(
+            packet["prompt_seen_blocking_reason"],
+            "primary_chatgpt_request_absent_api_route_dispatched",
+        )
+
+    def test_chatgpt_plus_api_coder_trace_reports_forced_primary_replacement(self) -> None:
+        launch = {
+            "status": "ok",
+            "launch_id": "launch-test",
+            "trace_id": "trace-test",
+            "execution_mode": "chatgpt_plus_api",
+            "native_window_observed": True,
+            "real_codex_app_launched": True,
+            "stable_bridge_preflight_required": True,
+            "stable_bridge_preflight_status": "ok",
+            "stable_bridge_launch_allowed": True,
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.4",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": "wbp-deepseek-v4-pro-max",
+                "server_issued": True,
+            },
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        packet = live_server.build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet={
+                "request_count": 1,
+                "records": [
+                    {
+                        "launch_packet_id": "launch-test",
+                        "trace_id": "trace-test",
+                        "path": "/v1/responses",
+                        "request_seen_after_launch": True,
+                        "requested_model": "gpt-5.4",
+                        "effective_route_model": "wbp-deepseek-v4-pro-max",
+                        "forced_route_used": True,
+                        "provider_called": True,
+                        "provider_id": "deepseek",
+                        "upstream_model": "deepseek-v4-pro",
+                        "upstream_status": 200,
+                        "response_seen": True,
+                        "known_smoke_phrase_matched": True,
+                        "chatgpt_route_used": False,
+                        "fallback_used": False,
+                        "raw_prompt_recorded": False,
+                        "secret_value_recorded": False,
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertTrue(packet["slot_binding_proven"])
+        self.assertFalse(packet["prompt_seen"])
+        self.assertTrue(packet["coder_dispatch_proven"])
+        self.assertTrue(packet["coder_work_result_proven_with_limits"])
+        self.assertTrue(packet["chatgpt_replaced_by_api"])
+        self.assertTrue(packet["primary_replaced_by_api_route"])
+        self.assertTrue(packet["primary_replacement_record_seen"])
+        self.assertFalse(packet["api_route_dispatched_without_primary"])
+        self.assertFalse(packet["direct_api_dispatch_without_primary_trace"])
+        self.assertFalse(packet["native_mixed_primary_trace_supported"])
+        self.assertEqual(
+            packet["prompt_seen_blocking_reason"],
+            "primary_chatgpt_request_forced_to_api_route",
+        )
+        self.assertEqual(packet["primary_replaced_requested_model"], "gpt-5.4")
+        self.assertEqual(
+            packet["primary_replaced_effective_route_model"],
+            "wbp-deepseek-v4-pro-max",
+        )
+        self.assertTrue(packet["primary_replaced_forced_route_used"])
+        self.assertFalse(packet["fallback_used"])
 
     def test_chatgpt_plus_deepseek_file_edit_packet_requires_mixed_route_and_exact_file(self) -> None:
         with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as profile_dir:
