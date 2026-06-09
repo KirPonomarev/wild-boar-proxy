@@ -10901,15 +10901,21 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["status"], "degraded")
         self.assertEqual(
             packet["machine_error_code"],
             "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
         )
         self.assertEqual(
             packet["final_status"],
-            "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+            "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
         )
+        self.assertEqual(packet["mixed_mode_product_decision"], "WORKS_WITH_LIMITS")
+        self.assertEqual(packet["mixed_mode_launch_action"], "available")
+        self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
+        self.assertEqual(packet["primary_trace_proof_status"], "not_proven")
+        self.assertTrue(packet["mixed_mode_launch_available_with_primary_trace_gap"])
+        self.assertFalse(packet["runtime_readiness_claimed"])
         self.assertFalse(packet["prompt_seen"])
         self.assertFalse(packet["chatgpt_route_observed"])
         self.assertTrue(packet["deepseek_route_observed"])
@@ -11013,6 +11019,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             packet["final_status"],
             "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
         )
+        self.assertEqual(packet["mixed_mode_product_decision"], "UNSUPPORTED")
+        self.assertEqual(packet["mixed_mode_launch_action"], "blocked")
+        self.assertEqual(
+            packet["mixed_mode_launch_blocked_reason"],
+            "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertEqual(packet["primary_trace_proof_status"], "not_proven")
+        self.assertFalse(packet["mixed_mode_launch_available_with_primary_trace_gap"])
+        self.assertFalse(packet["runtime_readiness_claimed"])
         self.assertTrue(packet["slot_binding_proven"])
         self.assertFalse(packet["prompt_seen"])
         self.assertFalse(packet["trace_id_matches_launch"])

@@ -2192,7 +2192,7 @@ if (rendered.runtime_readiness_claimed !== false) {
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
-    def test_quick_start_mixed_trace_blocker_overrides_launch_green(self) -> None:
+    def test_quick_start_mixed_trace_gap_preserves_launch_without_green_readiness(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -2295,18 +2295,33 @@ if (node("quickStartRouteChip").lastElementChild.textContent !== "запуск o
 }
 
 vm.runInContext(`
+if (quickStartMixedLaunchAvailableWithTraceGap({
+  mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_available_with_primary_trace_gap: true,
+  launch_proven: true,
+  api_route_dispatched_without_primary: true,
+  primary_replaced_by_api_route: true,
+  coder_dispatch_proven: true,
+  coder_work_result_proven_with_limits: true
+}) !== false) {
+  throw new Error("forced primary replacement must not render as launch trace gap");
+}
 renderQuickStartMixedCoderTrace({
-  status: "blocked",
+  status: "degraded",
   machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
-  final_status: "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
-  mixed_mode_product_decision: "UNSUPPORTED",
-  mixed_mode_launch_action: "blocked",
-  mixed_mode_launch_blocked_reason: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+  final_status: "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
+  mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_blocked_reason: "",
   execution_mode: "chatgpt_plus_api",
   primary_model_id: "gpt-5.5",
   coding_agent_model_id: "wbp-deepseek-chat",
   primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
   coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: true,
+  launch_status: "ok",
+  launch_status_ok: true,
   slot_binding_proven: true,
   prompt_seen: false,
   prompt_seen_blocking_reason: "primary_chatgpt_request_absent_api_route_dispatched",
@@ -2337,23 +2352,26 @@ renderQuickStartMixedCoderTrace({
     native_dual_lane_dispatcher_observed: false
   },
   fallback_used: false,
+  primary_trace_proof_status: "not_proven",
+  mixed_mode_launch_available_with_primary_trace_gap: true,
+  runtime_readiness_claimed: false,
   response_text_counts_as_model_truth: false,
   ui_label_counts_as_proof: false,
-  next_action: "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+  next_action: "continue_in_existing_custom_window"
 });
 `, sandbox);
 
 if (node("quickStartRouteChip").className.includes("green")) {
-  throw new Error(`mixed blocker must override launch green: ${node("quickStartRouteChip").className}`);
+  throw new Error(`trace gap must not claim full green readiness: ${node("quickStartRouteChip").className}`);
 }
-if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed blocked") {
-  throw new Error(`mixed route label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+if (node("quickStartRouteChip").lastElementChild.textContent !== "запуск ok") {
+  throw new Error(`mixed launch label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
-if (node("quickStartExecutionModeState").lastElementChild.textContent !== "unsupported") {
-  throw new Error(`mixed execution mode must show unsupported: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
+if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
+  throw new Error(`mixed execution mode must remain visible: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
 }
-if (node("quickStartLaunchState").lastElementChild.textContent !== "blocked") {
-  throw new Error(`mixed launch must be blocked: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+  throw new Error(`mixed launch must stay proven: ${node("quickStartLaunchState").lastElementChild.textContent}`);
 }
 if (node("quickStartChatSlotState").lastElementChild.textContent !== "primary не доказан") {
   throw new Error(`ChatGPT runtime proof blocker missing: ${node("quickStartChatSlotState").lastElementChild.textContent}`);
@@ -2361,20 +2379,22 @@ if (node("quickStartChatSlotState").lastElementChild.textContent !== "primary н
 if (node("quickStartApiSlotState").lastElementChild.textContent !== "proven") {
   throw new Error(`DeepSeek proof should remain visible: ${node("quickStartApiSlotState").lastElementChild.textContent}`);
 }
-if (node("quickStartNextActionState").lastElementChild.textContent !== "dual-lane unsupported") {
+if (node("quickStartNextActionState").lastElementChild.textContent !== "existing window") {
   throw new Error(`next action label missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
 }
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (rendered.machine_error_code !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED") {
   throw new Error(`mixed blocker packet not rendered: ${JSON.stringify(rendered)}`);
 }
-if (rendered.mixed_route_blocked !== true || rendered.runtime_readiness_claimed !== false) {
+if (rendered.mixed_route_blocked !== false || rendered.runtime_readiness_claimed !== false) {
   throw new Error(`mixed route truth flags wrong: ${JSON.stringify(rendered)}`);
 }
 if (
-  rendered.mixed_mode_product_decision !== "UNSUPPORTED" ||
-  rendered.mixed_mode_launch_action !== "blocked" ||
-  rendered.mixed_mode_launch_blocked_reason !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+  rendered.mixed_mode_product_decision !== "WORKS_WITH_LIMITS" ||
+  rendered.mixed_mode_launch_action !== "available" ||
+  rendered.mixed_mode_launch_blocked_reason !== "" ||
+  rendered.primary_trace_proof_status !== "not_proven" ||
+  rendered.mixed_mode_launch_available_with_primary_trace_gap !== true
 ) {
   throw new Error(`mixed product decision missing: ${JSON.stringify(rendered)}`);
 }
@@ -2557,7 +2577,8 @@ if (rendered.machine_error_code !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN") 
 if (
   rendered.mixed_mode_product_decision !== "UNSUPPORTED" ||
   rendered.mixed_mode_launch_action !== "blocked" ||
-  rendered.mixed_mode_launch_blocked_reason !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
+  rendered.mixed_mode_launch_blocked_reason !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN" ||
+  rendered.mixed_mode_launch_available_with_primary_trace_gap !== false
 ) {
   throw new Error(`slot binding product decision missing: ${JSON.stringify(rendered)}`);
 }

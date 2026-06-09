@@ -3410,6 +3410,10 @@ function setQuickStartRouteResponse(packet) {
         packet?.mixed_mode_launch_action || "",
       mixed_mode_launch_blocked_reason:
         packet?.mixed_mode_launch_blocked_reason || "",
+      primary_trace_proof_status:
+        packet?.primary_trace_proof_status || "",
+      mixed_mode_launch_available_with_primary_trace_gap:
+        packet?.mixed_mode_launch_available_with_primary_trace_gap === true,
       execution_mode: packet?.execution_mode || "",
       chatgpt_model_id: packet?.chatgpt_model_id || "",
       api_model_id: packet?.api_model_id || "",
@@ -3708,6 +3712,20 @@ function quickStartMixedTraceUnsupported(packet) {
     || packet?.native_mixed_primary_trace_supported === false;
 }
 
+function quickStartMixedLaunchAvailableWithTraceGap(packet) {
+  return Boolean(
+    packet?.mixed_mode_product_decision === "WORKS_WITH_LIMITS"
+    && packet?.mixed_mode_launch_action === "available"
+    && packet?.mixed_mode_launch_available_with_primary_trace_gap === true
+    && packet?.launch_proven === true
+    && packet?.api_route_dispatched_without_primary === true
+    && packet?.primary_replaced_by_api_route !== true
+    && packet?.chatgpt_replaced_by_api !== true
+    && packet?.coder_dispatch_proven === true
+    && packet?.coder_work_result_proven_with_limits === true
+  );
+}
+
 function setQuickStartMixedLaunchActionGuard(blocked) {
   quickStartMixedModeProductBlocked = blocked === true;
   const button = document.getElementById("quickStartCustomLaunchAction");
@@ -3747,30 +3765,31 @@ function quickStartMixedTraceReasonLabel(packet) {
 }
 
 function renderQuickStartMixedCoderTrace(packet) {
-  const unsupported = quickStartMixedTraceUnsupported(packet);
+  const launchWithTraceGap = quickStartMixedLaunchAvailableWithTraceGap(packet);
+  const unsupported = !launchWithTraceGap && quickStartMixedTraceUnsupported(packet);
   const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const blocked = packet?.status === "blocked" || unsupported;
   setQuickStartMixedLaunchActionGuard(blocked && !traceOk);
   const slotBindingBlocked = packet?.machine_error_code === "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN";
   const chatgptLabel = slotBindingBlocked
     ? "not proven"
-    : unsupported
+    : (unsupported || launchWithTraceGap)
     ? quickStartMixedTraceReasonLabel(packet)
     : (packet?.prompt_seen === true ? "runtime proven" : "not proven");
   setQuickStartChip(
     "quickStartRouteChip",
-    traceOk ? "green" : (blocked ? "amber" : "red"),
-    traceOk ? "mixed ok" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked"))
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk ? "mixed ok" : (launchWithTraceGap ? "запуск ok" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
-    traceOk ? "green" : (blocked ? "amber" : "red"),
-    traceOk ? "ChatGPT + API" : "unsupported"
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk || launchWithTraceGap ? "ChatGPT + API" : "unsupported"
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    traceOk ? "green" : (blocked ? "amber" : "red"),
-    traceOk ? "запуск ok" : "blocked"
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk || launchWithTraceGap ? "запуск ok" : "blocked"
   );
   setQuickStartChip(
     "quickStartChatSlotState",
@@ -3794,9 +3813,13 @@ function renderQuickStartMixedCoderTrace(packet) {
     mixed_mode_product_decision:
       packet?.mixed_mode_product_decision || (traceOk ? "WORKS" : "UNSUPPORTED"),
     mixed_mode_launch_action:
-      packet?.mixed_mode_launch_action || (traceOk ? "available" : "blocked"),
+      packet?.mixed_mode_launch_action || (traceOk || launchWithTraceGap ? "available" : "blocked"),
     mixed_mode_launch_blocked_reason:
-      packet?.mixed_mode_launch_blocked_reason || (traceOk ? "" : (packet?.machine_error_code || "UNKNOWN")),
+      packet?.mixed_mode_launch_blocked_reason || (traceOk || launchWithTraceGap ? "" : (packet?.machine_error_code || "UNKNOWN")),
+    primary_trace_proof_status:
+      packet?.primary_trace_proof_status || (packet?.prompt_seen === true ? "proven" : "not_proven"),
+    mixed_mode_launch_available_with_primary_trace_gap:
+      launchWithTraceGap,
     execution_mode: packet?.execution_mode || "",
     chatgpt_model_id: packet?.primary_model_id || "",
     api_model_id: packet?.coding_agent_model_id || "",

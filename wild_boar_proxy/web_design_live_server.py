@@ -6813,6 +6813,16 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and trace_launch_packet_matches
         and not fallback_seen
     )
+    launch_available_with_primary_trace_gap = bool(
+        api_route_dispatched_without_primary
+        and not chatgpt_replaced_by_api
+        and launch_proven
+        and slot_binding_proven
+        and coder_dispatch_proven
+        and coder_work_result_proven
+        and coder_trace_id_matches_launch
+        and not fallback_seen
+    )
     if full_success:
         machine_error_code = "OK"
         final_status = "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
@@ -6823,23 +6833,58 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         next_action = "inspect_slot_binding_launch_evidence"
     elif native_mixed_prompt_trace_unsupported:
         machine_error_code = "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
-        final_status = "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
-        next_action = "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+        final_status = (
+            "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS"
+            if launch_available_with_primary_trace_gap
+            else "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+        )
+        next_action = (
+            "continue_in_existing_custom_window"
+            if launch_available_with_primary_trace_gap
+            else "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+        )
     else:
         machine_error_code = "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         next_action = "confirm_runtime_can_dispatch_coding_agent_model_slot"
-    mixed_mode_product_decision = "WORKS" if full_success else "UNSUPPORTED"
+    mixed_mode_product_decision = (
+        "WORKS"
+        if full_success
+        else "WORKS_WITH_LIMITS"
+        if launch_available_with_primary_trace_gap
+        else "UNSUPPORTED"
+    )
+    packet_status = (
+        "ok"
+        if full_success
+        else "degraded"
+        if launch_available_with_primary_trace_gap
+        else "blocked"
+    )
+    mixed_mode_launch_action = (
+        "available"
+        if full_success or launch_available_with_primary_trace_gap
+        else "blocked"
+    )
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
         "captured_at_utc": utc_now(),
-        "status": "ok" if full_success else "blocked",
+        "status": packet_status,
         "machine_error_code": machine_error_code,
         "final_status": final_status,
         "mixed_mode_product_decision": mixed_mode_product_decision,
-        "mixed_mode_launch_action": "available" if full_success else "blocked",
-        "mixed_mode_launch_blocked_reason": "" if full_success else machine_error_code,
+        "mixed_mode_launch_action": mixed_mode_launch_action,
+        "mixed_mode_launch_blocked_reason": (
+            "" if mixed_mode_launch_action == "available" else machine_error_code
+        ),
+        "primary_trace_proof_status": (
+            "proven" if prompt_seen and primary_trace_id_matches_launch else "not_proven"
+        ),
+        "mixed_mode_launch_available_with_primary_trace_gap": (
+            launch_available_with_primary_trace_gap
+        ),
+        "runtime_readiness_claimed": full_success,
         "stage_statuses": {
             "slot_binding": (
                 "CHATGPT_PLUS_API_SLOT_BINDING_PROVEN"
