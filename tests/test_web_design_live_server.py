@@ -19291,13 +19291,30 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(packet["coding_runner_payload_slot_id"], "coding_agent_model_slot")
         self.assertEqual(packet["primary_configured_provider"], "cliproxy")
         self.assertEqual(packet["coding_configured_provider"], "external_route")
+        self.assertTrue(packet["primary_prompt_runner_called"])
+        self.assertTrue(packet["coding_prompt_runner_called"])
+        self.assertTrue(packet["prompt_runner_called"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["ui_label_counts_as_runtime_truth"])
         self.assertFalse(packet["model_self_report_counts_as_runtime_truth"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["live_file_mutation_claimed"])
-        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [
+                {
+                    "prompt": "Ответь одной строкой: WBP_MIXED_PRIMARY_SLOT_OK",
+                    "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Ответь одной строкой: WBP_MIXED_DEEPSEEK_CODER_OK",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
 
     def test_codex_custom_mixed_slot_dispatch_probe_endpoint_requires_owner_auth(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []

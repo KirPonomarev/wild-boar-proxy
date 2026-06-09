@@ -2102,6 +2102,12 @@ class CodexCustomSessionManager:
             is True,
             "coding_live_prompt_full_success": coding_packet.get("live_prompt_full_success")
             is True,
+            "primary_prompt_runner_called": primary_packet.get("prompt_runner_called") is True,
+            "coding_prompt_runner_called": coding_packet.get("prompt_runner_called") is True,
+            "prompt_runner_called": bool(
+                primary_packet.get("prompt_runner_called") is True
+                and coding_packet.get("prompt_runner_called") is True
+            ),
             "chatgpt_only_calls_api": False,
             "api_only_calls_chatgpt": False,
             "fallback_used": fallback_used,

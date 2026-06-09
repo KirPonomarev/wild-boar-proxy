@@ -2896,7 +2896,7 @@ class OperatorSurfaceSession:
         downstream_endpoint = self.config.endpoint
         runtime_model = selected_model
         route_provider_endpoint = ""
-        route_auth_material = local_api_key
+        route_provider_auth_material = local_api_key
         if route_record is not None:
             compatibility = str(route_record.get("compatibility") or "").strip()
             endpoint_path = str(route_record.get("endpoint_path") or "").strip()
@@ -2912,7 +2912,7 @@ class OperatorSurfaceSession:
                     "secret_value_recorded": False,
             }
             try:
-                route_auth_material = _resolve_external_route_secret_value(route_record)
+                route_provider_auth_material = _resolve_external_route_secret_value(route_record)
             except Exception as exc:
                 return {
                     "status": "failed",
@@ -3111,7 +3111,7 @@ class OperatorSurfaceSession:
                 route_adapter = ExternalRouteResponsesAdapter(
                     route=route_record,
                     expected_api_key=local_api_key,
-                    route_secret=route_auth_material,
+                    route_secret=route_provider_auth_material,
                 )
                 route_adapter.__enter__()
                 downstream_endpoint = route_adapter.listen_endpoint
@@ -3134,7 +3134,7 @@ class OperatorSurfaceSession:
                 {
                     "HOME": str(home),
                     "CODEX_HOME": str(codex_home),
-                    "OPENAI_API_KEY": route_auth_material,
+                    "OPENAI_API_KEY": local_api_key,
                 }
             )
             env_codex_home = Path(env["CODEX_HOME"]).resolve()
@@ -3194,7 +3194,10 @@ class OperatorSurfaceSession:
             if route_adapter:
                 route_adapter.__exit__(None, None, None)
         final_message = (
-            redact_text(last_message.read_text(encoding="utf-8", errors="replace"), [secret]).strip()
+            redact_text(
+                last_message.read_text(encoding="utf-8", errors="replace"),
+                [local_api_key, route_provider_auth_material],
+            ).strip()
             if last_message.exists()
             else ""
         )
