@@ -3684,7 +3684,8 @@ def _custom_native_launch_preflight_packet(
     runtime_health_blocks_window_launch = (
         runtime_health_gate_blocked
         and _chatgpt_runtime_health_blocks_window_launch(
-            str(current_fields.get("execution_mode") or "")
+            str(current_fields.get("execution_mode") or ""),
+            runtime_health_gate,
         )
     )
     if runtime_health_blocks_window_launch:
@@ -4164,8 +4165,42 @@ def _payload_requires_chatgpt_runtime_health(payload: dict[str, Any]) -> bool:
     return execution_mode in {"chatgpt_only", "chatgpt_plus_api"}
 
 
-def _chatgpt_runtime_health_blocks_window_launch(execution_mode: str) -> bool:
-    return str(execution_mode or "").strip() == "chatgpt_only"
+_CHATGPT_RUNTIME_HEALTH_NON_BLOCKING_WINDOW_CODES = frozenset(
+    {
+        "AUTH_UNAVAILABLE",
+    }
+)
+
+
+def _chatgpt_runtime_health_gate_machine_error_code(
+    runtime_health_gate: dict[str, Any] | None,
+) -> str:
+    if not isinstance(runtime_health_gate, dict):
+        return ""
+    return str(
+        runtime_health_gate.get("runtime_health_machine_error_code")
+        or runtime_health_gate.get("machine_error_code")
+        or ""
+    )
+
+
+def _chatgpt_runtime_health_blocks_window_launch(
+    execution_mode: str,
+    runtime_health_gate: dict[str, Any] | None = None,
+) -> bool:
+    if str(execution_mode or "").strip() != "chatgpt_only":
+        return False
+    if not isinstance(runtime_health_gate, dict):
+        return True
+    if runtime_health_gate.get("status") == "ok":
+        return False
+    machine_error_code = _chatgpt_runtime_health_gate_machine_error_code(
+        runtime_health_gate
+    )
+    return (
+        machine_error_code
+        not in _CHATGPT_RUNTIME_HEALTH_NON_BLOCKING_WINDOW_CODES
+    )
 
 
 def _quick_start_component_blocker(
@@ -4282,7 +4317,10 @@ def build_quick_start_config_admission_packet(
     runtime_health_gate_blocked = runtime_health_gate.get("status") != "ok"
     runtime_health_blocks_launch = (
         runtime_health_gate_blocked
-        and _chatgpt_runtime_health_blocks_window_launch(execution_mode)
+        and _chatgpt_runtime_health_blocks_window_launch(
+            execution_mode,
+            runtime_health_gate,
+        )
     )
     if runtime_health_blocks_launch:
         admitted = False

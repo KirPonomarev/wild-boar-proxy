@@ -12448,6 +12448,73 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "QUICK_START_LIVE_BRIDGE_AND_WINDOW_REUSE_GUARDED_WITH_LIMITS",
         )
 
+    def test_custom_native_launch_preflight_chatgpt_only_admits_when_runtime_auth_is_unproven(self) -> None:
+        with (
+            mock.patch.object(live_server, "_loopback_port_accepts_connection", return_value=False),
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+        ):
+            packet = live_server._custom_native_launch_preflight_packet(
+                {
+                    "execution_mode": "chatgpt_only",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": "",
+                    "api_reasoning_option_id": "",
+                },
+                owner_authorized=True,
+                operator_status={
+                    "status": {"configured_model": "gpt-5.5"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
+                },
+                api_snapshot={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [],
+                },
+                external_routes_packet=routes_list_packet("wbp-deepseek-v4-pro-max"),
+                native_bridge_lease=None,
+                last_launch_packet=None,
+                runtime_health_result={
+                    "status": "command_error",
+                    "machine_error_code": "AUTH_UNAVAILABLE",
+                    "human_message": "ChatGPT account authentication is unavailable.",
+                    "next_action": "reauthenticate_chatgpt_account",
+                    "packet": command_packet(
+                        status="error",
+                        exit_code=1,
+                        machine_error_code="AUTH_UNAVAILABLE",
+                        human_message="ChatGPT account authentication is unavailable.",
+                        next_action="reauthenticate_chatgpt_account",
+                    ),
+                },
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["execution_mode"], "chatgpt_only")
+        self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
+        self.assertEqual(packet["runtime_health_machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertFalse(packet["runtime_health_gate_blocks_window_launch"])
+        self.assertEqual(packet["chatgpt_runtime_proof_status"], "not_proven")
+        self.assertEqual(
+            packet["chatgpt_runtime_proof_machine_error_code"],
+            "AUTH_UNAVAILABLE",
+        )
+        self.assertEqual(packet["next_action"], "launch_custom_codex")
+        self.assertFalse(packet["new_launch_started"])
+        self.assertFalse(packet["show_window_attempted"])
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["fallback_used"])
+
     def test_custom_native_launch_preflight_routes_chatgpt_plus_api_bridge_from_coding_slot(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
         with (
@@ -15966,6 +16033,59 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["chatgpt_model"]["status"], "admitted")
         self.assertEqual(packet["api_model"]["status"], "admitted")
         self.assertEqual(packet["api_route"]["status"], "admitted")
+        self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
+        self.assertEqual(
+            packet["runtime_health_gate"]["runtime_health_machine_error_code"],
+            "AUTH_UNAVAILABLE",
+        )
+        self.assertFalse(packet["runtime_health_gate_blocks_launch_admission"])
+        self.assertEqual(packet["chatgpt_runtime_proof_status"], "not_proven")
+        self.assertEqual(
+            packet["chatgpt_runtime_proof_machine_error_code"],
+            "AUTH_UNAVAILABLE",
+        )
+        self.assertFalse(packet["custom_codex_launch_attempted"])
+        self.assertFalse(packet["live_call_attempted"])
+        self.assertFalse(packet["provider_called"])
+        self.assertIn(("healthcheck", "--json"), runner.calls)
+
+    def test_quick_start_config_admission_admits_chatgpt_when_runtime_auth_unproven(self) -> None:
+        payloads = live_payloads()
+        payloads[("healthcheck", "--json")] = command_packet(
+            status="error",
+            exit_code=1,
+            human_message="ChatGPT account authentication is unavailable.",
+            machine_error_code="AUTH_UNAVAILABLE",
+            next_action="reauthenticate_chatgpt_account",
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/quick-start/config-admission",
+                        {
+                            "execution_mode": "chatgpt_only",
+                            "chatgpt_model_id": "gpt-5.4",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["launch_admission"], "admitted")
+        self.assertEqual(packet["chatgpt_model"]["status"], "admitted")
+        self.assertEqual(packet["api_model"]["status"], "not_required")
+        self.assertEqual(packet["api_route"]["status"], "not_required")
+        self.assertEqual(packet["api_reasoning"]["status"], "not_required")
         self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
         self.assertEqual(
             packet["runtime_health_gate"]["runtime_health_machine_error_code"],

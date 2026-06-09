@@ -490,6 +490,8 @@ let reviewSurfacePacket = null;
 let reviewCommandsPacket = null;
 let reviewLastCommandPacket = null;
 let codexLaunchDryRunInFlight = false;
+const QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS = 30000;
+let quickStartManualCheckSnapshot = null;
 let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
 let codexCustomSessionActionInFlight = false;
@@ -1110,6 +1112,9 @@ function renderCodexCustomLaunch(packet) {
     && packet?.running_status === true
     && packet?.native_window_observed === true
     && packet?.native_app_usable !== true;
+  const nativeUsabilityBlocked = packet?.machine_error_code === "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+    || Boolean(packet?.native_app_usability_blocked_reason_class)
+    || Boolean(packet?.renderer_surface_blocked_reason_class);
   const launchPacketTruth = packet?.launch_packet_is_truth_source === true;
   const reusedExistingWindow = packet?.status === "ok"
     && launchPacketTruth
@@ -1155,10 +1160,22 @@ function renderCodexCustomLaunch(packet) {
         packet?.status === "ok"
           ? (
             limitedWindowLaunch
-              ? "window visible / proof incomplete"
+              ? (
+                nativeUsabilityBlocked
+                  ? "renderer blocked / input not proven"
+                  : "window visible / proof incomplete"
+              )
               : (workbenchOnly ? "workbench/session only" : "native proof pending")
           )
-          : (limitedWindowLaunch ? "window visible / proof incomplete" : (packet?.status || "failed"))
+          : (
+            limitedWindowLaunch
+              ? (
+                nativeUsabilityBlocked
+                  ? "renderer blocked / input not proven"
+                  : "window visible / proof incomplete"
+              )
+              : (packet?.status || "failed")
+          )
       )
   );
   codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${claimScope || "native_proof_required"}`);
@@ -1171,7 +1188,11 @@ function renderCodexCustomLaunch(packet) {
           ? "workbench/session only"
           : (
             limitedWindowLaunch
-              ? "window visible; native proof incomplete"
+              ? (
+                nativeUsabilityBlocked
+                  ? "window visible; input surface not proven"
+                  : "window visible; native proof incomplete"
+              )
               : (packet?.process_started === true
               ? "process only; native proof missing"
               : (packet?.next_action || "native proof missing"))
@@ -1275,7 +1296,7 @@ function renderCodexCustomLaunch(packet) {
                   ? "старое окно"
                   : (
                     limitedWindowLaunch
-                      ? "окно открыто"
+                      ? (nativeUsabilityBlocked ? "input не доказан" : "окно открыто")
                       : (existingWindowBlocked ? "blocked" : (packet?.machine_error_code || packet?.status || "ошибка"))
                   )
               )
@@ -1296,7 +1317,11 @@ function renderCodexCustomLaunch(packet) {
               : (
                 reusedExistingWindow
                   ? "reuse ok"
-                  : (limitedWindowLaunch ? "proof incomplete" : (existingWindowBlocked ? "blocked" : "проверь пакет"))
+                  : (
+                    limitedWindowLaunch
+                      ? (nativeUsabilityBlocked ? "renderer blocked" : "proof incomplete")
+                      : (existingWindowBlocked ? "blocked" : "проверь пакет")
+                  )
               )
           )
       )
@@ -1346,8 +1371,18 @@ function renderCodexCustomLaunch(packet) {
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    !packet?.next_action || packet?.next_action === "none" ? "green" : "amber",
-    quickStartNextActionLabel(packet?.next_action || "")
+    (!packet?.next_action || packet?.next_action === "none")
+      && !limitedWindowLaunch
+      && !nativeUsabilityBlocked
+      && !existingWindowBlocked
+      && packet?.status !== "blocked"
+      && packet?.status !== "rejected"
+      ? "green"
+      : "amber",
+    (!packet?.next_action || packet?.next_action === "none")
+      && (limitedWindowLaunch || nativeUsabilityBlocked || existingWindowBlocked)
+      ? "stop_and_diagnose"
+      : quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -1782,6 +1817,54 @@ async function buildCodexCustomLaunchSelectionPayload() {
   return payload;
 }
 
+function renderQuickStartNativeLaunchInFlight(payload, preflightPacket) {
+  setQuickStartChip("quickStartRouteChip", "neutral", "native launch");
+  setQuickStartChip("quickStartLaunchState", "neutral", "запускаю");
+  setQuickStartChip(
+    "quickStartBridgeState",
+    preflightPacket?.bridge_required === true
+      ? (preflightPacket?.bridge_alive === true ? "green" : "amber")
+      : "neutral",
+    preflightPacket?.bridge_required === true
+      ? (preflightPacket?.bridge_alive === true ? "жив" : "упал")
+      : "не нужен"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    preflightPacket?.custom_process_observed === true ? "green" : "neutral",
+    preflightPacket?.custom_process_observed === true ? "найдено" : "ожидаю"
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    preflightPacket?.status === "ok" ? "green" : "amber",
+    preflightPacket?.status === "ok" ? "preflight ok" : "preflight blocked"
+  );
+  setQuickStartChip("quickStartNextActionState", "neutral", "ожидание");
+  setQuickStartRouteResponse({
+    status: "running",
+    machine_error_code: "CUSTOM_NATIVE_LAUNCH_IN_FLIGHT",
+    final_status: "CUSTOM_NATIVE_LAUNCH_WAITING_FOR_PACKET",
+    execution_mode: payload?.execution_mode || preflightPacket?.execution_mode || "",
+    chatgpt_model_id: payload?.chatgpt_model_id || preflightPacket?.chatgpt_model_id || "",
+    api_model_id: payload?.api_model_id || preflightPacket?.api_model_id || "",
+    api_reasoning_option_id:
+      payload?.api_reasoning_option_id || preflightPacket?.api_reasoning_option_id || "",
+    bridge_status: preflightPacket?.bridge_status || "",
+    bridge_alive: preflightPacket?.bridge_alive === true,
+    window_status: preflightPacket?.window_status || "",
+    config_status: preflightPacket?.config_status || "",
+    custom_codex_launch_attempted: true,
+    new_launch_started: false,
+    live_call_attempted: true,
+    provider_called: false,
+    visible_window_counts_as_model_truth: false,
+    bridge_alive_counts_as_model_truth: false,
+    response_text_counts_as_route_truth: false,
+    launch_packet_is_truth_source: false,
+    next_action: "wait_for_native_launch_packet"
+  });
+}
+
 async function runCodexCustomLaunch() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -1842,6 +1925,7 @@ async function runCodexCustomLaunch() {
       });
       return;
     }
+    renderQuickStartNativeLaunchInFlight(payload, preflightPacket);
     const response = await fetch("api/codex/custom/native-launch", {
       method: "POST",
       cache: "no-store",
@@ -1969,9 +2053,39 @@ function quickStartNextActionLabel(nextAction) {
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
 
-function renderQuickStartConfigAdmission(packet) {
+function quickStartChatgptRuntimeProofPending(packet) {
+  return Boolean(
+    packet?.runtime_health_required_for_chatgpt_lane === true
+    && packet?.chatgpt_runtime_proof_status === "not_proven"
+    && (
+      packet?.chatgpt_runtime_proof_machine_error_code
+      || packet?.runtime_health_machine_error_code
+      || packet?.runtime_health_gate?.runtime_health_machine_error_code
+    )
+  );
+}
+
+function quickStartRuntimeProofPendingLabel(packet) {
+  const machineCode = packet?.chatgpt_runtime_proof_machine_error_code
+    || packet?.runtime_health_machine_error_code
+    || packet?.runtime_health_gate?.runtime_health_machine_error_code
+    || "";
+  return machineCode === "AUTH_UNAVAILABLE" ? "auth pending" : "runtime pending";
+}
+
+function renderQuickStartConfigAdmission(packet, options = {}) {
   const admitted = packet?.status === "ok" && packet?.launch_admission === "admitted";
   const blocked = packet?.status === "blocked" || packet?.status === "rejected";
+  const replayed = options.replayed === true;
+  const runtimeProofPending = quickStartChatgptRuntimeProofPending(packet);
+  const admittedVisual = admitted && !runtimeProofPending && !replayed ? "green" : (blocked || admitted ? "amber" : "red");
+  const admittedLabel = replayed
+    ? "manual cache"
+    : (
+      admitted
+        ? (runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : "допущен")
+        : (packet?.machine_error_code || packet?.status || "blocked")
+    );
   const modeLabel = quickStartExecutionModeLabel(packet?.execution_mode || "");
   const apiRoute = packet?.api_route || {};
   const apiReasoning = packet?.api_reasoning || {};
@@ -1980,12 +2094,12 @@ function renderQuickStartConfigAdmission(packet) {
   const nextAction = packet?.next_action || "";
   setQuickStartChip(
     "quickStartRouteChip",
-    admitted ? "green" : (blocked ? "amber" : "red"),
-    admitted ? "допущен" : (packet?.machine_error_code || packet?.status || "blocked")
+    admittedVisual,
+    admittedLabel
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
-    admitted ? "green" : (blocked ? "amber" : "red"),
+    admittedVisual,
     modeLabel
   );
   setQuickStartChip(
@@ -2005,18 +2119,20 @@ function renderQuickStartConfigAdmission(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    admitted ? "green" : (blocked ? "amber" : "red"),
-    admitted ? "admission ok" : "blocked"
+    admittedVisual,
+    admitted ? (runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : (replayed ? "manual cache" : "admission ok")) : "blocked"
   );
   setQuickStartChip(
     "quickStartConfigState",
-    admitted ? "green" : (blocked ? "amber" : "red"),
-    packet?.launch_admission === "admitted" ? "admitted" : "blocked"
+    admittedVisual,
+    packet?.launch_admission === "admitted"
+      ? (runtimeProofPending ? "runtime pending" : (replayed ? "manual cache" : "admitted"))
+      : "blocked"
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    !nextAction || nextAction === "none" ? "green" : "amber",
-    quickStartNextActionLabel(nextAction)
+    (!nextAction || nextAction === "none") && !runtimeProofPending && !replayed ? "green" : "amber",
+    runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : (replayed ? "manual cache" : quickStartNextActionLabel(nextAction))
   );
   setQuickStartChip(
     "quickStartApiRouteChip",
@@ -2064,8 +2180,15 @@ function renderQuickStartConfigAdmission(packet) {
     raw_path_exposed: packet?.raw_path_exposed === true,
     original_codex_touched: packet?.original_codex_touched === true,
     asar_touched: packet?.asar_touched === true,
+    manual_check_replay_active: replayed,
+    manual_check_replay_age_ms: Number.isFinite(options.replayAgeMs) ? options.replayAgeMs : null,
+    manual_check_replay_max_age_ms: replayed ? QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS : null,
+    runtime_readiness_claimed: false,
     next_action: packet?.next_action || ""
   });
+  if (options.remember === true && options.selectionPayload) {
+    rememberQuickStartConfigAdmissionSnapshot(options.selectionPayload, packet);
+  }
 }
 
 async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction") {
@@ -2095,14 +2218,17 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
       throw new Error(`quick start config admission http ${response.status}`);
     }
     const admissionPacket = await response.json();
-    renderQuickStartConfigAdmission(admissionPacket);
+    renderQuickStartConfigAdmission(admissionPacket, { remember: true, selectionPayload: payload });
     if (quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket)) {
       setQuickStartChip("quickStartRouteChip", "neutral", "route check");
       if (responseNode) {
-        responseNode.textContent = "admission ok; проверяю выбранный API route...";
+        const admissionOk = admissionPacket.status === "ok" && admissionPacket.machine_error_code === "OK";
+        responseNode.textContent = admissionOk
+          ? "admission ok; проверяю выбранный API route..."
+          : "selected route требует проверки; проверяю выбранный API route...";
       }
       const actionOutcome = await runUiAction("api_route_check", { route_id: payload.api_model_id });
-      renderQuickStartApiRouteCheckResult(payload, actionOutcome);
+      renderQuickStartApiRouteCheckResult(payload, actionOutcome, { remember: true });
     }
   } catch (error) {
     const timedOut = error?.name === "AbortError";
@@ -2137,7 +2263,7 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
       original_codex_touched: false,
       asar_touched: false,
       next_action: error.message
-    });
+    }, { remember: true, selectionPayload: payload });
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
@@ -2147,20 +2273,53 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
   }
 }
 
+const QUICK_START_SELECTED_API_ROUTE_CHECK_MACHINE_CODES = new Set([
+  "QUICK_START_CONFIG_API_ROUTE_BLOCKED",
+  "QUICK_START_CONFIG_API_ROUTE_CHECK_ATTENTION",
+  "QUICK_START_CONFIG_API_ROUTE_VALIDATION_FAILED"
+]);
+
+function quickStartAdmissionRequestsSelectedApiRouteCheck(payload, admissionPacket) {
+  const truthPacket = (
+    admissionPacket?.selection_packet?.next_action === "check_selected_api_route"
+      ? admissionPacket.selection_packet
+      : admissionPacket
+  );
+  if (!payload || !truthPacket || truthPacket.next_action !== "check_selected_api_route") {
+    return false;
+  }
+  const routePacket = truthPacket.api_route || {};
+  const apiModelPacket = truthPacket.api_model || {};
+  const routeMachineCode = routePacket.machine_error_code || truthPacket.machine_error_code || "";
+  return Boolean(
+    apiModelPacket.status === "admitted"
+    && (!apiModelPacket.model_id || apiModelPacket.model_id === payload.api_model_id)
+    && routePacket.status === "not_confirmed"
+    && QUICK_START_SELECTED_API_ROUTE_CHECK_MACHINE_CODES.has(routeMachineCode)
+    && truthPacket.fallback_used === false
+    && truthPacket.silent_fallback_used === false
+  );
+}
+
 function quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket) {
+  const launchAdmissionReady = Boolean(
+    admissionPacket
+    && admissionPacket.status === "ok"
+    && admissionPacket.machine_error_code === "OK"
+    && admissionPacket.launch_admission === "admitted"
+  );
+  const selectedRouteCheckRequested = quickStartAdmissionRequestsSelectedApiRouteCheck(payload, admissionPacket);
   return Boolean(
     payload
     && admissionPacket
     && payload.execution_mode !== "chatgpt_only"
     && typeof payload.api_model_id === "string"
     && payload.api_model_id
-    && admissionPacket.status === "ok"
-    && admissionPacket.machine_error_code === "OK"
-    && admissionPacket.launch_admission === "admitted"
+    && (launchAdmissionReady || selectedRouteCheckRequested)
   );
 }
 
-function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome) {
+function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome, options = {}) {
   const actionPacket = actionOutcome?.payload || actionOutcome || {};
   const result = actionPacket?.result || {};
   const status = result.status || actionPacket.status || "unknown";
@@ -2170,16 +2329,17 @@ function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome) {
   const routeId = selectionPayload?.api_model_id || actionPacket?.route_id || result?.data?.route_id || "";
   const routeOk = status === "ok" && machineCode === "OK";
   const refreshOk = !refreshRequired || refreshState === "complete";
+  const replayed = options.replayed === true;
   const blockedLabel = machineCode.length > 18 ? `${machineCode.slice(0, 18)}...` : machineCode;
   setQuickStartChip(
     "quickStartRouteChip",
-    routeOk && refreshOk ? "green" : "amber",
-    routeOk && refreshOk ? "OK" : blockedLabel
+    routeOk && refreshOk && !replayed ? "green" : "amber",
+    routeOk && refreshOk ? (replayed ? "cached OK" : "OK") : blockedLabel
   );
   setQuickStartRouteResponse({
     status,
     machine_error_code: machineCode,
-    final_status: "API_ROUTE_CHECK_ACTION_PACKET_RECEIVED",
+    final_status: replayed ? "API_ROUTE_CHECK_ACTION_PACKET_REPLAYED" : "API_ROUTE_CHECK_ACTION_PACKET_RECEIVED",
     execution_mode: selectionPayload?.execution_mode || "",
     api_model_id: routeId,
     selected_model: routeId,
@@ -2194,8 +2354,14 @@ function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome) {
     human_message: result.human_message || "",
     next_action: result.next_action || "",
     post_action_refresh_required: refreshRequired,
+    manual_check_replay_active: replayed,
+    manual_check_replay_age_ms: Number.isFinite(options.replayAgeMs) ? options.replayAgeMs : null,
+    manual_check_replay_max_age_ms: replayed ? QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS : null,
     runtime_readiness_claimed: false
   });
+  if (options.remember === true) {
+    rememberQuickStartApiRouteCheckSnapshot(selectionPayload, actionOutcome);
+  }
 }
 
 async function runQuickStartLaunchPreflight() {
@@ -2224,7 +2390,16 @@ async function runQuickStartLaunchPreflight() {
     if (!response.ok) {
       throw new Error(`custom launch preflight http ${response.status}`);
     }
-    renderQuickStartLaunchPreflight(await response.json());
+    const preflightPacket = await response.json();
+    renderQuickStartLaunchPreflight(preflightPacket);
+    if (quickStartShouldRunSelectedApiRouteCheck(payload, preflightPacket)) {
+      setQuickStartChip("quickStartRouteChip", "neutral", "route check");
+      if (responseNode) {
+        responseNode.textContent = "preflight требует selected route check; проверяю выбранный API route...";
+      }
+      const actionOutcome = await runUiAction("api_route_check", { route_id: payload.api_model_id });
+      renderQuickStartApiRouteCheckResult(payload, actionOutcome);
+    }
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderQuickStartLaunchPreflight({
@@ -3070,6 +3245,91 @@ function quickStartLaunchPayloadFromSelects() {
   };
 }
 
+function quickStartManualCheckSelectionKey(payload) {
+  return JSON.stringify({
+    execution_mode: payload?.execution_mode || "",
+    chatgpt_model_id: payload?.chatgpt_model_id || "",
+    api_model_id: payload?.api_model_id || "",
+    api_reasoning_option_id: payload?.api_reasoning_option_id || ""
+  });
+}
+
+function quickStartManualCheckCurrentKey() {
+  return quickStartManualCheckSelectionKey(quickStartLaunchPayloadFromSelects());
+}
+
+function quickStartManualCheckSnapshotMatches(snapshot) {
+  if (!snapshot || !snapshot.selectionKey || !snapshot.recordedAt) {
+    return false;
+  }
+  if (Date.now() - snapshot.recordedAt > QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS) {
+    return false;
+  }
+  return snapshot.selectionKey === quickStartManualCheckCurrentKey();
+}
+
+function rememberQuickStartConfigAdmissionSnapshot(selectionPayload, packet) {
+  if (!selectionPayload || !packet) {
+    return;
+  }
+  quickStartManualCheckSnapshot = {
+    selectionKey: quickStartManualCheckSelectionKey(selectionPayload),
+    selectionPayload: { ...selectionPayload },
+    admissionPacket: packet,
+    apiRouteCheckOutcome: null,
+    recordedAt: Date.now()
+  };
+}
+
+function rememberQuickStartApiRouteCheckSnapshot(selectionPayload, actionOutcome) {
+  if (!selectionPayload || !actionOutcome) {
+    return;
+  }
+  const selectionKey = quickStartManualCheckSelectionKey(selectionPayload);
+  if (!quickStartManualCheckSnapshot || quickStartManualCheckSnapshot.selectionKey !== selectionKey) {
+    quickStartManualCheckSnapshot = {
+      selectionKey,
+      selectionPayload: { ...selectionPayload },
+      admissionPacket: null,
+      apiRouteCheckOutcome: actionOutcome,
+      recordedAt: Date.now()
+    };
+    return;
+  }
+  quickStartManualCheckSnapshot = {
+    ...quickStartManualCheckSnapshot,
+    selectionPayload: { ...selectionPayload },
+    apiRouteCheckOutcome: actionOutcome,
+    recordedAt: Date.now()
+  };
+}
+
+function replayQuickStartManualCheckSnapshot() {
+  if (!quickStartManualCheckSnapshotMatches(quickStartManualCheckSnapshot)) {
+    return;
+  }
+  const snapshot = quickStartManualCheckSnapshot;
+  const replayAgeMs = Date.now() - snapshot.recordedAt;
+  if (snapshot.admissionPacket) {
+    renderQuickStartConfigAdmission(snapshot.admissionPacket, {
+      remember: false,
+      replayed: true,
+      replayAgeMs
+    });
+  }
+  if (snapshot.apiRouteCheckOutcome) {
+    renderQuickStartApiRouteCheckResult(
+      snapshot.selectionPayload,
+      snapshot.apiRouteCheckOutcome,
+      {
+        remember: false,
+        replayed: true,
+        replayAgeMs
+      }
+    );
+  }
+}
+
 function customLaunchPayloadRequiresModelRefresh(payload) {
   const executionMode = payload?.execution_mode || "";
   if (executionMode === "api_only") {
@@ -3133,6 +3393,23 @@ function setQuickStartRouteResponse(packet) {
       next_action: packet?.next_action || "",
       post_action_refresh_required: packet?.post_action_refresh_required === true,
       runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
+      runtime_health_gate_blocks_launch_admission:
+        packet?.runtime_health_gate_blocks_launch_admission === true,
+      runtime_health_gate_blocks_window_launch:
+        packet?.runtime_health_gate_blocks_window_launch === true,
+      runtime_health_required_for_chatgpt_lane:
+        packet?.runtime_health_required_for_chatgpt_lane === true,
+      runtime_health_machine_error_code:
+        packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+      chatgpt_runtime_proof_status:
+        packet?.chatgpt_runtime_proof_status || "",
+      chatgpt_runtime_proof_machine_error_code:
+        packet?.chatgpt_runtime_proof_machine_error_code || "",
+      manual_check_replay_active: packet?.manual_check_replay_active === true,
+      manual_check_replay_age_ms:
+        Number.isFinite(packet?.manual_check_replay_age_ms) ? packet.manual_check_replay_age_ms : null,
+      manual_check_replay_max_age_ms:
+        Number.isFinite(packet?.manual_check_replay_max_age_ms) ? packet.manual_check_replay_max_age_ms : null,
       fallback_used: packet?.fallback_used === true,
       silent_fallback_used: packet?.silent_fallback_used === true,
       launch_admission: packet?.launch_admission || "",
@@ -3192,6 +3469,10 @@ function setQuickStartRouteResponse(packet) {
       native_window_observed: packet?.native_window_observed === true,
       real_codex_app_launched: packet?.real_codex_app_launched === true,
       native_app_usable: packet?.native_app_usable === true,
+      native_app_usability_blocked_reason_class:
+        packet?.native_app_usability_blocked_reason_class || "",
+      renderer_surface_blocked_reason_class:
+        packet?.renderer_surface_blocked_reason_class || "",
       custom_codex_launch_attempted:
         packet?.custom_codex_launch_attempted === true,
       new_launch_started: packet?.new_launch_started === true,
@@ -3229,6 +3510,9 @@ async function runQuickStartCustomLaunchAction() {
 function renderQuickStartLaunchPreflight(packet) {
   const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const ownerBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
+  const runtimeProofPending = quickStartChatgptRuntimeProofPending(packet);
+  const okVisual = ok && !runtimeProofPending ? "green" : (ok ? "amber" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"));
+  const okLabel = runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : "preflight ok";
   const nextAction = packet?.next_action || "";
   const nextActionReady = ok && (
     !nextAction
@@ -3274,8 +3558,8 @@ function renderQuickStartLaunchPreflight(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "preflight ok" : (ownerBlocked ? "owner auth" : "blocked")
+    okVisual,
+    ok ? okLabel : (ownerBlocked ? "owner auth" : "blocked")
   );
   setQuickStartChip(
     "quickStartConfigState",
@@ -3284,13 +3568,13 @@ function renderQuickStartLaunchPreflight(packet) {
   );
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "preflight ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    okVisual,
+    ok ? okLabel : (packet?.machine_error_code || packet?.status || "ошибка")
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    nextActionReady ? "green" : "amber",
-    quickStartNextActionLabel(nextAction)
+    nextActionReady && !runtimeProofPending ? "green" : "amber",
+    runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : quickStartNextActionLabel(nextAction)
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -3326,6 +3610,7 @@ function renderQuickStartLaunchPreflight(packet) {
     network_calls_made: packet?.network_calls_made === true,
     live_call_attempted: packet?.live_call_attempted === true,
     provider_called: packet?.provider_called === true,
+    runtime_readiness_claimed: false,
     visible_window_counts_as_model_truth:
       packet?.visible_window_counts_as_model_truth === true,
     bridge_alive_counts_as_model_truth:
@@ -12121,6 +12406,8 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   setVisualClass(sidebarDot, "dot", bannerVisual);
   text("sidebarStatus", firstRun ? "Quick Start: first run" : "Quick Start: summary state");
   renderApiCredentialSetupLane(lastApiCredentialActionPayload, lastApiCredentialActionRefreshState);
+  applyActionAvailability();
+  replayQuickStartManualCheckSnapshot();
   applyActionAvailability();
 }
 
