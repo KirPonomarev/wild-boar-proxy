@@ -10951,6 +10951,105 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "primary_chatgpt_request_absent_api_route_dispatched",
         )
 
+    def test_chatgpt_plus_api_coder_trace_accepts_limited_native_launch_with_coder_trace(self) -> None:
+        launch = {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+            "launch_id": "launch-test",
+            "trace_id": "trace-test",
+            "execution_mode": "chatgpt_plus_api",
+            "running_status": True,
+            "process_started": True,
+            "custom_process_observed": True,
+            "process_still_observed_after_wait": True,
+            "expected_custom_identity_observed": True,
+            "native_window_observed": True,
+            "native_window_process_kept_running": True,
+            "real_codex_app_launched": False,
+            "stable_bridge_preflight_required": True,
+            "stable_bridge_preflight_status": "ok",
+            "stable_bridge_launch_allowed": True,
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.4",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": "wbp-deepseek-v4-pro-max",
+                "server_issued": True,
+            },
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "current_codex_touched": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        packet = live_server.build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet={
+                "request_count": 1,
+                "records": [
+                    {
+                        "launch_packet_id": "launch-test",
+                        "trace_id": "trace-test",
+                        "path": "/v1/responses",
+                        "request_seen_after_launch": True,
+                        "requested_model": "wbp-deepseek-v4-pro-max",
+                        "effective_route_model": "wbp-deepseek-v4-pro-max",
+                        "provider_called": True,
+                        "provider_id": "deepseek",
+                        "upstream_model": "deepseek-v4-pro",
+                        "upstream_status": 200,
+                        "response_seen": True,
+                        "known_smoke_phrase_matched": True,
+                        "chatgpt_route_used": False,
+                        "fallback_used": False,
+                        "raw_prompt_recorded": False,
+                        "secret_value_recorded": False,
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(packet["status"], "degraded")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["mixed_mode_product_decision"], "WORKS_WITH_LIMITS")
+        self.assertEqual(packet["mixed_mode_launch_action"], "available")
+        self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
+        self.assertFalse(packet["launch_proven"])
+        self.assertFalse(packet["launch_status_ok"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertFalse(packet["real_codex_app_launched"])
+        self.assertTrue(packet["native_limited_launch_proven_with_limits"])
+        self.assertTrue(packet["launch_evidence_proven_with_limits"])
+        self.assertTrue(packet["native_window_process_kept_running"])
+        self.assertTrue(packet["running_status"])
+        self.assertTrue(packet["native_process_started"])
+        self.assertTrue(packet["native_process_alive"])
+        self.assertTrue(packet["expected_custom_identity_observed"])
+        self.assertEqual(packet["slot_binding_blocking_reasons"], [])
+        self.assertTrue(packet["slot_binding_proven"])
+        self.assertFalse(packet["prompt_seen"])
+        self.assertTrue(packet["coder_dispatch_proven"])
+        self.assertTrue(packet["coder_work_result_proven_with_limits"])
+        self.assertTrue(packet["api_route_dispatched_without_primary"])
+        self.assertTrue(packet["coder_trace_id_matches_launch"])
+        self.assertTrue(packet["mixed_mode_launch_available_with_primary_trace_gap"])
+        self.assertFalse(packet["runtime_readiness_claimed"])
+
     def test_chatgpt_plus_api_coder_trace_reports_forced_primary_replacement(self) -> None:
         launch = {
             "status": "ok",

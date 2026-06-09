@@ -4076,6 +4076,7 @@ vm.runInContext(`
       availability_state: "enabled"
     }
   };
+  actionMetadataLoaded = true;
 `, sandbox);
 sandbox.runQuickStartCustomLaunchAction().then(() => {
   const expected = [
@@ -5656,6 +5657,7 @@ vm.runInContext(`
       availability_state: "enabled"
     }
   };
+  actionMetadataLoaded = true;
 `, sandbox);
 sandbox.runQuickStartCustomLaunchAction().then(() => {
   const expected = [
@@ -6262,6 +6264,7 @@ vm.runInContext(`
       availability_state: "enabled"
     }
   };
+  actionMetadataLoaded = true;
 `, sandbox);
 sandbox.runQuickStartCustomLaunchAction().then(() => {
   const expected = [

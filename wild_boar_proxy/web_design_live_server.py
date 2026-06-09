@@ -6647,19 +6647,49 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     launch_status_ok = launch.get("status") == "ok"
     native_window_observed = launch.get("native_window_observed") is True
     real_codex_app_launched = launch.get("real_codex_app_launched") is True
+    native_process_started = (
+        launch.get("process_started") is True
+        or launch.get("custom_process_observed") is True
+    )
+    native_process_alive = (
+        launch.get("process_still_observed_after_wait") is True
+        or launch.get("running_status") is True
+    )
+    expected_custom_identity_observed = (
+        launch.get("expected_custom_identity_observed") is True
+    )
+    native_window_process_kept_running = (
+        launch.get("native_window_process_kept_running") is True
+    )
     launch_proven = (
         launch_status_ok
         and native_window_observed
         and real_codex_app_launched
     )
+    native_limited_launch_proven_with_limits = bool(
+        not launch_status_ok
+        and native_window_process_kept_running
+        and launch.get("running_status") is True
+        and native_process_started
+        and native_process_alive
+        and expected_custom_identity_observed
+        and native_window_observed
+        and real_codex_app_launched is False
+        and launch.get("current_codex_touched") is not True
+        and launch.get("original_codex_touched") is not True
+        and launch.get("asar_touched") is not True
+    )
+    launch_evidence_proven_with_limits = bool(
+        launch_proven or native_limited_launch_proven_with_limits
+    )
     primary_slot_bound = primary_slot.get("status") == "bound"
     coding_slot_bound = coding_slot.get("status") == "bound"
     slot_binding_blocking_reasons: list[str] = []
-    if not launch_status_ok:
+    if not launch_status_ok and not native_limited_launch_proven_with_limits:
         slot_binding_blocking_reasons.append("launch_status_not_ok")
     if not native_window_observed:
         slot_binding_blocking_reasons.append("native_window_not_observed")
-    if not real_codex_app_launched:
+    if not real_codex_app_launched and not native_limited_launch_proven_with_limits:
         slot_binding_blocking_reasons.append("real_codex_app_not_launched")
     if not stable_bridge_preflight_ok:
         slot_binding_blocking_reasons.append("stable_bridge_preflight_not_ok")
@@ -6816,7 +6846,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     launch_available_with_primary_trace_gap = bool(
         api_route_dispatched_without_primary
         and not chatgpt_replaced_by_api
-        and launch_proven
+        and launch_evidence_proven_with_limits
         and slot_binding_proven
         and coder_dispatch_proven
         and coder_work_result_proven
@@ -6912,6 +6942,15 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "launch_status_ok": launch_status_ok,
         "native_window_observed": native_window_observed,
         "real_codex_app_launched": real_codex_app_launched,
+        "native_limited_launch_proven_with_limits": (
+            native_limited_launch_proven_with_limits
+        ),
+        "launch_evidence_proven_with_limits": launch_evidence_proven_with_limits,
+        "native_window_process_kept_running": native_window_process_kept_running,
+        "running_status": launch.get("running_status") is True,
+        "native_process_started": native_process_started,
+        "native_process_alive": native_process_alive,
+        "expected_custom_identity_observed": expected_custom_identity_observed,
         "slot_binding_blocking_reasons": slot_binding_blocking_reasons,
         "slot_binding_proven": slot_binding_proven,
         "primary_slot_bound": primary_slot_bound,
