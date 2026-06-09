@@ -2586,7 +2586,7 @@ if (rendered.coder_trace_id_matches_launch !== true || rendered.unsupported_evid
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
-    def test_quick_start_mixed_blocked_button_refreshes_trace_without_live_launch(self) -> None:
+    def test_quick_start_mixed_blocked_button_runs_launch_chain_then_refreshes_trace(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -2682,6 +2682,72 @@ const sandbox = {
   URLSearchParams,
   fetch(url) {
     urls.push(url);
+    if (url === "api/actions") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        action_phase: "full",
+        actions: {
+          launch_custom_client_native: {
+            available: true,
+            disabled_reason_code: "",
+            availability_state: "enabled"
+          }
+        }
+      }) });
+    }
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        status: "ok",
+        machine_error_code: "OK",
+        launch_admission: "admitted",
+        execution_mode: "chatgpt_plus_api",
+        next_action: "native_launch"
+      }) });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        status: "ok",
+        machine_error_code: "OK",
+        execution_mode: "chatgpt_plus_api",
+        owner_authorization_phrase_present: true,
+        bridge_required: true,
+        bridge_alive: true,
+        config_status: "admitted",
+        custom_process_observed: false,
+        next_action: "native_launch"
+      }) });
+    }
+    if (url === "api/codex/custom/native-launch") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        status: "blocked",
+        machine_error_code: "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+        execution_mode: "chatgpt_plus_api",
+        running_status: true,
+        process_started: true,
+        native_window_observed: true,
+        native_app_usable: false,
+        real_codex_app_launched: false,
+        fallback_used: false,
+        raw_backend_details_exposed: false,
+        secret_value_exposed: false,
+        next_action: "stop_and_diagnose_custom_window_usability"
+      }) });
+    }
+    if (url === "api/codex/custom/live-bridge-stability") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        status: "ok",
+        machine_error_code: "BRIDGE_READY",
+        bridge_status: "BRIDGE_READY",
+        execution_mode: "chatgpt_plus_api",
+        bridge_alive: true,
+        port_alive: true,
+        bridge_session_matches_active_window: true,
+        trace_id_matches_launch: true,
+        launch_id_matches_trace: true,
+        old_window_answered: false,
+        fallback_used: false,
+        next_action: "none"
+      }) });
+    }
     if (url === "api/codex/custom/chatgpt-plus-api-coder-trace") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(blockedPacket) });
     }
@@ -2691,9 +2757,18 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+  actionMetadata = {
+    launch_custom_client_native: {
+      available: true,
+      disabled_reason_code: "",
+      availability_state: "enabled"
+    }
+  };
+`, sandbox);
 vm.runInContext(`renderQuickStartMixedCoderTrace(${JSON.stringify(blockedPacket)});`, sandbox);
 
-if (node("quickStartCustomLaunchAction").buttonLabel.textContent !== "Проверить blocker") {
+if (node("quickStartCustomLaunchAction").buttonLabel.textContent !== "Проверить запуск") {
   throw new Error(`blocked mixed button label not applied: ${node("quickStartCustomLaunchAction").buttonLabel.textContent}`);
 }
 if (node("quickStartCustomLaunchAction").dataset.mixedModeLaunchBlocked !== "true") {
@@ -2701,11 +2776,16 @@ if (node("quickStartCustomLaunchAction").dataset.mixedModeLaunchBlocked !== "tru
 }
 
 sandbox.runQuickStartCustomLaunchAction().then(() => {
-  if (JSON.stringify(urls) !== JSON.stringify(["api/codex/custom/chatgpt-plus-api-coder-trace"])) {
-    throw new Error(`blocked mixed click must only refresh trace: ${JSON.stringify(urls)}`);
-  }
-  if (urls.includes("api/codex/custom/native-launch")) {
-    throw new Error("blocked mixed click called live native launch");
+  const expected = [
+    "api/actions",
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight",
+    "api/codex/custom/native-launch",
+    "api/codex/custom/live-bridge-stability",
+    "api/codex/custom/chatgpt-plus-api-coder-trace"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`blocked mixed click must run launch chain then refresh trace: ${JSON.stringify(urls)}`);
   }
 }).catch((error) => {
   console.error(error);

@@ -106,7 +106,7 @@ class StableProbeHandler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path == "/v1/responses":
+        if self.path in {"/v1/responses", "/v1/chat/completions"}:
             length = int(self.headers.get("Content-Length", "0"))
             _ = self.rfile.read(length)
             body = json.dumps({"output_text": "OK"}).encode("utf-8")
@@ -14795,6 +14795,199 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             packet["stable_custom_codex_wbp_bridge_final_status"],
             "KNOWN_BLOCKER_STABLE_WBP_BRIDGE_UNAVAILABLE",
         )
+
+    def test_custom_native_api_launch_preserves_preflight_trace_context_during_launch_request(self) -> None:
+        provider = ThreadingHTTPServer(("127.0.0.1", free_port()), StableProbeHandler)
+        provider_thread = threading.Thread(target=provider.serve_forever, daemon=True)
+        provider_thread.start()
+        stable_port = free_port()
+        route_id = "wbp-deepseek-v4-pro-max"
+        routes_packet = {
+            "data": {
+                "routes": [
+                    {
+                        "route_id": route_id,
+                        "enabled": True,
+                        "provider": "deepseek",
+                        "base_url": f"http://127.0.0.1:{provider.server_port}/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+                    }
+                ]
+            }
+        }
+        execution_packet = {
+            "status": "ok",
+            "execution_mode": "chatgpt_plus_api",
+            "api_model_id": route_id,
+            "api_reasoning_option_id": "provider_declared_max",
+            "chatgpt_model_id": "gpt-5.5",
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": route_id,
+                "server_issued": True,
+            },
+            "chatgpt_line_used_as_executor": True,
+            "api_line_used_as_executor": True,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "server_issued_catalog_used": True,
+        }
+
+        def fake_launch(**kwargs: object) -> dict[str, object]:
+            endpoint = str(kwargs["endpoint"])
+            request = urllib.request.Request(
+                f"{endpoint.rstrip('/')}/responses",
+                data=json.dumps(
+                    {
+                        "model": route_id,
+                        "input": f"Ответь одной строкой: {live_server.STABLE_BRIDGE_WINDOW_SMOKE_PHRASE}",
+                        "stream": False,
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer sk-local",
+                },
+                method="POST",
+            )
+            try:
+                with NO_PROXY_OPENER.open(request, timeout=10) as response:
+                    response.read()
+            except urllib.error.HTTPError as exc:
+                exc.read()
+            return {
+                "schema_version": 1,
+                "captured_at_utc": "2026-05-30T00:00:00Z",
+                "mode_id": "codex_custom",
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+                "owner_authorization_phrase_present": True,
+                "running_status": True,
+                "process_started": True,
+                "new_launch_started": True,
+                "expected_custom_identity_observed": True,
+                "native_window_observed": True,
+                "native_app_usable": False,
+                "real_codex_app_launched": False,
+                "temp_profile_used": False,
+                "current_codex_touched": False,
+                "original_codex_touched": False,
+                "asar_touched": False,
+                "browser_raw_backend_authority_widened": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+
+        try:
+            with (
+                mock.patch.object(live_server, "extract_local_api_key", return_value="sk-local"),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-deepseek",
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_launch_mode_selection_packet",
+                    return_value=execution_packet,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "build_custom_model_registry_packet",
+                    return_value={
+                        "endpoint": "http://127.0.0.1:8318/v1",
+                        "available_models": [
+                            {
+                                "lane": "codex_native",
+                                "model_id": "gpt-5.5",
+                                "selection_enabled": True,
+                            },
+                            {
+                                "lane": "wbp_api",
+                                "model_id": route_id,
+                                "selection_enabled": True,
+                            },
+                        ],
+                    },
+                ),
+                mock.patch.object(live_server, "launch_custom_native_app_packet", side_effect=fake_launch),
+            ):
+                lease = live_server._CustomNativeBridgeLease(bridge_port=stable_port)
+                try:
+                    packet = live_server._launch_custom_native_codex_packet(
+                        {
+                            "execution_mode": "chatgpt_plus_api",
+                            "chatgpt_model_id": "gpt-5.5",
+                            "api_model_id": route_id,
+                            "api_reasoning_option_id": "provider_declared_max",
+                        },
+                        owner_authorized=True,
+                        commands={},
+                        operator_status={},
+                        api_snapshot={},
+                        external_routes_packet=routes_packet,
+                        native_bridge_lease=lease,
+                        launch_trace_packet={
+                            "launch_id": "preflight-launch",
+                            "trace_id": "preflight-trace",
+                            "launch_trace_server_issued": True,
+                            "launch_route_digest": live_server._safe_route_digest(
+                                routes_packet["data"]["routes"][0]  # type: ignore[index]
+                            ),
+                        },
+                    )
+                    trace = lease.trace_snapshot()
+                finally:
+                    lease.close()
+        finally:
+            provider.shutdown()
+            provider_thread.join(timeout=2)
+            provider.server_close()
+
+        self.assertEqual(packet["launch_id"], "preflight-launch")
+        self.assertEqual(packet["trace_id"], "preflight-trace")
+        self.assertEqual(trace["trace_context"]["launch_id"], "preflight-launch")
+        self.assertEqual(trace["trace_context"]["trace_id"], "preflight-trace")
+        self.assertEqual(trace["last_record"]["launch_packet_id"], "preflight-launch")
+        self.assertEqual(trace["last_record"]["trace_id"], "preflight-trace")
+        self.assertFalse(packet["real_codex_app_launched"])
+
+    def test_custom_native_launch_stability_guard_carries_preflight_trace_identity(self) -> None:
+        packet = live_server._custom_native_launch_stability_guard_packet(
+            {
+                "owner_authorization_phrase_present": True,
+                "launch_id": "guard-launch",
+                "trace_id": "guard-trace",
+                "launch_route_digest": "route-digest",
+                "launch_trace_server_issued": True,
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-chat",
+                "api_reasoning_option_id": "provider_declared_disabled",
+            },
+            status="blocked",
+            machine_error_code="STABLE_BRIDGE_PREFLIGHT_BLOCKED",
+            human_message="blocked",
+        )
+
+        self.assertEqual(packet["launch_id"], "guard-launch")
+        self.assertEqual(packet["trace_id"], "guard-trace")
+        self.assertEqual(packet["launch_route_digest"], "route-digest")
+        self.assertTrue(packet["launch_trace_server_issued"])
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertTrue(packet["launch_blocked"])
 
     def test_app_copy_live_admission_and_bounded_helper_launch_use_server_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -4459,6 +4459,12 @@ def _custom_native_launch_stability_guard_packet(
         "owner_authorization_phrase_present": (
             preflight_packet.get("owner_authorization_phrase_present") is True
         ),
+        "launch_id": str(preflight_packet.get("launch_id") or ""),
+        "trace_id": str(preflight_packet.get("trace_id") or ""),
+        "launch_route_digest": str(preflight_packet.get("launch_route_digest") or ""),
+        "launch_trace_server_issued": (
+            preflight_packet.get("launch_trace_server_issued") is True
+        ),
         "execution_mode": str(preflight_packet.get("execution_mode") or ""),
         "chatgpt_model_id": str(preflight_packet.get("chatgpt_model_id") or ""),
         "api_model_id": str(preflight_packet.get("api_model_id") or ""),
@@ -4715,21 +4721,15 @@ def _custom_native_stable_bridge_prewarm_packet(
     hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
     preflight_packet["selected_model"] = str(preflight_packet.get("selected_model") or model_id)
     _add_custom_codex_window_launch_trace_context(preflight_packet, route_record=route_record)
-    native_bridge_lease.set_trace_context(
-        {
-            "launch_id": preflight_packet.get("launch_id"),
-            "trace_id": preflight_packet.get("trace_id"),
-            "selected_model": model_id,
-            "api_reasoning_option_id": preflight_packet.get("api_reasoning_option_id"),
-            "launch_route_digest": preflight_packet.get("launch_route_digest"),
-        }
-    )
     try:
         bridge_endpoint = native_bridge_lease.ensure(
             downstream_endpoint=downstream_endpoint,
             routes_packet=external_routes_packet,
             hidden_native_model_ids=hidden_native_model_ids,
             forced_route_model_id=model_id,
+        )
+        native_bridge_lease.set_trace_context(
+            _custom_codex_window_launch_trace_context(preflight_packet)
         )
     except OSError as exc:
         return {
@@ -5437,6 +5437,7 @@ def _launch_custom_native_codex_packet(
     api_snapshot: dict[str, Any] | None,
     external_routes_packet: dict[str, Any] | None = None,
     native_bridge_lease: _CustomNativeBridgeLease | None = None,
+    launch_trace_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     forbidden = _forbidden_custom_live_launch_fields(payload)
     if forbidden:
@@ -5592,6 +5593,24 @@ def _launch_custom_native_codex_packet(
             "next_action": "stop_and_diagnose_stable_wbp_bridge_port_conflict",
             **bridge_fields,
         }
+    prelaunch_trace_packet: dict[str, Any] = {}
+    if route_record:
+        prelaunch_trace_packet = (
+            dict(launch_trace_packet) if isinstance(launch_trace_packet, dict) else {}
+        )
+        prelaunch_trace_packet["selected_model"] = model_id
+        prelaunch_trace_packet["configured_bridge_endpoint"] = bridge_endpoint
+        prelaunch_trace_packet["api_reasoning_option_id"] = (
+            str((execution_packet or {}).get("api_reasoning_option_id") or "")
+        )
+        _add_custom_codex_window_launch_trace_context(
+            prelaunch_trace_packet,
+            route_record=route_record,
+        )
+        if native_bridge_lease is not None:
+            native_bridge_lease.set_trace_context(
+                _custom_codex_window_launch_trace_context(prelaunch_trace_packet)
+            )
     packet = launch_custom_native_app_packet(
         repo_root=ROOT,
         endpoint=bridge_endpoint,
@@ -5724,16 +5743,17 @@ def _launch_custom_native_codex_packet(
     packet["selected_model"] = model_id
     packet["launch_model_id"] = model_id
     packet["route_model_id"] = route_model_id
+    if prelaunch_trace_packet:
+        packet["launch_id"] = str(prelaunch_trace_packet.get("launch_id") or "")
+        packet["trace_id"] = str(prelaunch_trace_packet.get("trace_id") or "")
+        packet["launch_route_digest"] = str(
+            prelaunch_trace_packet.get("launch_route_digest") or ""
+        )
+        packet["launch_trace_server_issued"] = True
     _add_custom_codex_window_launch_trace_context(packet, route_record=route_record)
     if native_bridge_lease is not None:
         native_bridge_lease.set_trace_context(
-            {
-                "launch_id": packet.get("launch_id"),
-                "trace_id": packet.get("trace_id"),
-                "selected_model": packet.get("selected_model"),
-                "api_reasoning_option_id": packet.get("api_reasoning_option_id"),
-                "launch_route_digest": packet.get("launch_route_digest"),
-            }
+            _custom_codex_window_launch_trace_context(packet)
         )
     _add_custom_codex_window_deepseek_smoke_truth(packet)
     _add_quick_start_stable_custom_launch_profile_truth(packet)
@@ -5814,6 +5834,17 @@ def _add_custom_codex_window_launch_trace_context(
     captured_at = str(packet.get("captured_at_utc") or utc_now())
     bridge_endpoint = str(packet.get("configured_bridge_endpoint") or "")
     route_digest = _safe_route_digest(route_record) if route_record else ""
+    existing_launch_id = str(packet.get("launch_id") or "")
+    existing_trace_id = str(packet.get("trace_id") or "")
+    if (
+        existing_launch_id
+        and existing_trace_id
+        and packet.get("launch_trace_server_issued") is True
+    ):
+        packet["launch_route_digest"] = str(packet.get("launch_route_digest") or route_digest)
+        packet["browser_trace_authority"] = False
+        packet["prompt_route_trace_claimed"] = False
+        return
     launch_seed = {
         "captured_at_utc": captured_at,
         "selected_model": selected_model,
@@ -5830,6 +5861,18 @@ def _add_custom_codex_window_launch_trace_context(
     packet["launch_trace_server_issued"] = True
     packet["browser_trace_authority"] = False
     packet["prompt_route_trace_claimed"] = False
+
+
+def _custom_codex_window_launch_trace_context(
+    packet: dict[str, Any],
+) -> dict[str, str]:
+    return {
+        "launch_id": str(packet.get("launch_id") or ""),
+        "trace_id": str(packet.get("trace_id") or ""),
+        "selected_model": str(packet.get("selected_model") or ""),
+        "api_reasoning_option_id": str(packet.get("api_reasoning_option_id") or ""),
+        "launch_route_digest": str(packet.get("launch_route_digest") or ""),
+    }
 
 
 def _add_custom_codex_window_deepseek_smoke_truth(packet: dict[str, Any]) -> None:
@@ -10955,9 +10998,10 @@ def build_handler(
                     machine_error_code=str(
                         preflight_packet.get("machine_error_code")
                         or "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_BLOCKED"
-                    ),
+                        ),
                     human_message="Custom native launch stopped because preflight did not return an ok packet.",
                 )
+                record_custom_native_launch_packet(packet)
                 self._send_json(packet)
                 return
             api_route_launch_selected = (
@@ -11001,6 +11045,7 @@ def build_handler(
                         stable_bridge_prewarm.get("final_status")
                         or "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN"
                     )
+                    record_custom_native_launch_packet(packet)
                     self._send_json(packet)
                     return
             stable_bridge_gate = _custom_native_stable_bridge_launch_gate_packet(
@@ -11066,6 +11111,7 @@ def build_handler(
                 )
                 packet["stable_bridge_launch_gate_packet"] = stable_bridge_gate
                 packet["final_status"] = str(stable_bridge_gate.get("final_status") or "")
+                record_custom_native_launch_packet(packet)
                 self._send_json(packet)
                 return
             if (
@@ -11100,6 +11146,7 @@ def build_handler(
                     ),
                     show_window_packet=show_window_packet,
                 )
+                record_custom_native_launch_packet(packet)
                 self._send_json(packet)
                 return
             if (
@@ -11145,6 +11192,7 @@ def build_handler(
                         packet["existing_window_relaunch_termination"] = (
                             termination_summary
                         )
+                        record_custom_native_launch_packet(packet)
                         self._send_json(packet)
                         return
                     existing_window_relaunch_cleared = True
@@ -11187,6 +11235,7 @@ def build_handler(
                         packet["existing_window_orphan_replace_termination"] = (
                             termination_summary
                         )
+                        record_custom_native_launch_packet(packet)
                         self._send_json(packet)
                         return
                     existing_window_relaunch_cleared = True
@@ -11207,6 +11256,7 @@ def build_handler(
                         machine_error_code=machine_error_code,
                         human_message=human_message,
                     )
+                    record_custom_native_launch_packet(packet)
                     self._send_json(packet)
                     return
             account_commands = (
@@ -11226,6 +11276,7 @@ def build_handler(
                 api_snapshot=api_snapshot,
                 external_routes_packet=external_routes_packet,
                 native_bridge_lease=custom_native_bridge_lease,
+                launch_trace_packet=preflight_packet,
             )
             if (
                 api_route_launch_selected

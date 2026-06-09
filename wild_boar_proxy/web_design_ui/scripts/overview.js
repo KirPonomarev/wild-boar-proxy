@@ -86,7 +86,7 @@ const ACTION_STATUS_VISUAL_CLASS = {
 
 const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
-const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = "Проверить blocker";
+const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_DEFAULT_LAUNCH_LABEL;
 let quickStartMixedModeProductBlocked = false;
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
@@ -467,6 +467,8 @@ const CONSERVATIVE_CONFIRMATION_POLICY = {
 let actionMetadata = {};
 let actionPhase = "live_readonly";
 let sandboxActionPreflight = null;
+let actionMetadataLoaded = false;
+let actionMetadataLoadPromise = null;
 let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
@@ -779,7 +781,21 @@ async function loadActionMetadata() {
     actionMetadata = {};
     actionPhase = "live_readonly";
     sandboxActionPreflight = null;
+  } finally {
+    actionMetadataLoaded = true;
   }
+}
+
+async function ensureActionMetadataLoaded() {
+  if (actionMetadataLoaded) {
+    return;
+  }
+  if (!actionMetadataLoadPromise) {
+    actionMetadataLoadPromise = loadActionMetadata().finally(() => {
+      actionMetadataLoadPromise = null;
+    });
+  }
+  await actionMetadataLoadPromise;
 }
 
 async function fetchOperatorJson(path) {
@@ -3705,7 +3721,7 @@ function setQuickStartMixedLaunchActionGuard(blocked) {
   button.setAttribute?.(
     "title",
     quickStartMixedModeProductBlocked
-      ? "ChatGPT + API сейчас заблокирован; кнопка обновляет blocker truth без live launch."
+      ? "ChatGPT + API сейчас заблокирован; кнопка запускает проверку и затем обновляет blocker truth."
       : QUICK_START_DEFAULT_LAUNCH_LABEL
   );
   const label = button.querySelector?.("span");
@@ -3884,10 +3900,9 @@ async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
 }
 
 async function runQuickStartCustomLaunchAction() {
-  const payload = quickStartLaunchPayloadFromSelects();
-  if (quickStartMixedModeProductBlocked && payload?.execution_mode === "chatgpt_plus_api") {
-    await refreshQuickStartMixedCoderTraceTruth(payload);
-    return;
+  if (!actionMetadataLoaded) {
+    await ensureActionMetadataLoaded();
+    applyActionAvailability();
   }
   setQuickStartMixedLaunchActionGuard(false);
   const launchMetadata = metadataFor("launch_custom_client_native");
@@ -14387,7 +14402,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialState = stateFromLocation();
   const initialSource = sourceFromLocation();
   const initialScreen = screenFromLocation();
-  await loadActionMetadata();
+  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
+  await ensureActionMetadataLoaded();
   applyActionAvailability();
   setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
@@ -14482,7 +14498,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
   document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
-  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
   document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow());
   document.getElementById("quickStartVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());

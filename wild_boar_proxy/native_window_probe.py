@@ -58,6 +58,8 @@ OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые за
 WINDOW_OBSERVATION_WAIT_SECONDS = 12.0
 WINDOW_OBSERVATION_POLL_SECONDS = 0.5
 CODEX_RENDERER_RECOVERY_WAIT_SECONDS = 2.0
+POST_LAUNCH_USABILITY_RECHECK_SECONDS = 8.0
+POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS = 0.5
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
@@ -971,6 +973,119 @@ def _recover_startup_loader_if_needed(
     return recovered_usability, recovery_packet, recovered_observation
 
 
+def _post_launch_usability_recheck_packet(
+    *,
+    attempted: bool,
+    status: str,
+    machine_error_code: str,
+    attempt_count: int = 0,
+    timeout_seconds: float = 0.0,
+    reason_class: str = "",
+    usability_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    usability = usability_packet if isinstance(usability_packet, dict) else {}
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_post_launch_usability_recheck",
+        "captured_at_utc": utc_now(),
+        "attempted": attempted,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "attempt_count": attempt_count,
+        "timeout_seconds": timeout_seconds,
+        "reason_class": reason_class,
+        "native_app_usable": usability.get("native_window_usable") is True,
+        "input_capable_ui_observed": usability.get("input_capable_ui_observed") is True,
+        "native_app_usability_source": str(
+            usability.get("native_app_usability_source") or ""
+        ),
+        "native_app_usability_blocked_reason_class": str(
+            usability.get("blocked_reason_class") or ""
+        ),
+        "cdp_localhost_only": usability.get("cdp_localhost_only") is True,
+        "cdp_target_bound_to_custom_launch": (
+            usability.get("cdp_target_bound_to_custom_launch") is True
+        ),
+        "cdp_editable_surface_observed": (
+            usability.get("cdp_editable_surface_observed") is True
+        ),
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+    }
+
+
+def _post_launch_usability_recheck_candidate(
+    usability_packet: dict[str, Any],
+) -> bool:
+    blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+    renderer_reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or blocked_reason
+    )
+    return bool(
+        usability_packet.get("native_window_usable") is not True
+        and (
+            usability_packet.get("cdp_target_bound_to_custom_launch") is True
+            or renderer_reason.startswith("cdp_renderer_")
+            or blocked_reason.startswith("cdp_renderer_")
+        )
+    )
+
+
+def _wait_for_post_launch_window_usability(
+    *,
+    initial_window_packet: dict[str, Any],
+    profile_dir: Path,
+    custom_user_data_dir: str,
+    timeout_seconds: float = POST_LAUNCH_USABILITY_RECHECK_SECONDS,
+    poll_seconds: float = POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    deadline = time.time() + timeout_seconds
+    attempt_count = 0
+    window_packet = initial_window_packet
+    usability_packet: dict[str, Any] = {}
+    while True:
+        attempt_count += 1
+        inventory = collect_codex_process_inventory(
+            custom_user_data_dir=custom_user_data_dir
+        )
+        window_packet = _window_observation_via_ax(inventory)
+        usability_packet = _window_usability_from_observation(window_packet)
+        usability_packet = _apply_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=profile_dir,
+        )
+        if usability_packet.get("native_window_usable") is True:
+            return (
+                _post_launch_usability_recheck_packet(
+                    attempted=True,
+                    status="ok",
+                    machine_error_code="OK",
+                    attempt_count=attempt_count,
+                    timeout_seconds=timeout_seconds,
+                    usability_packet=usability_packet,
+                ),
+                window_packet,
+                usability_packet,
+            )
+        if time.time() >= deadline:
+            return (
+                _post_launch_usability_recheck_packet(
+                    attempted=True,
+                    status="blocked",
+                    machine_error_code="POST_LAUNCH_WINDOW_USABILITY_RECHECK_NOT_PROVEN",
+                    attempt_count=attempt_count,
+                    timeout_seconds=timeout_seconds,
+                    reason_class=str(usability_packet.get("blocked_reason_class") or ""),
+                    usability_packet=usability_packet,
+                ),
+                window_packet,
+                usability_packet,
+            )
+        time.sleep(poll_seconds)
+
+
 def _cdp_blocked_surface_details(result: str) -> dict[str, Any]:
     try:
         packet = json.loads(result)
@@ -1722,6 +1837,29 @@ def launch_custom_native_app_packet(
                 reason_class="observed_pid_missing_for_renderer_recovery",
                 reload_targets=[],
             )
+        post_launch_usability_recheck_packet = _post_launch_usability_recheck_packet(
+            attempted=False,
+            status="not_required",
+            machine_error_code="NOT_REQUIRED",
+        )
+        if (
+            process_started
+            and process_still_alive
+            and window_packet.get("window_observed") is True
+            and _post_launch_usability_recheck_candidate(usability_packet)
+        ):
+            (
+                post_launch_usability_recheck_packet,
+                rechecked_window_packet,
+                rechecked_usability_packet,
+            ) = _wait_for_post_launch_window_usability(
+                initial_window_packet=window_packet,
+                profile_dir=layout.profile_dir,
+                custom_user_data_dir=str(layout.custom_user_data_dir),
+            )
+            if post_launch_usability_recheck_packet.get("status") == "ok":
+                window_packet = rechecked_window_packet
+                usability_packet = rechecked_usability_packet
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
@@ -1839,6 +1977,21 @@ def launch_custom_native_app_packet(
             "renderer_recovery_status": str(renderer_recovery_packet.get("status") or ""),
             "renderer_recovery_action": str(renderer_recovery_packet.get("action") or ""),
             "renderer_recovery_packet": renderer_recovery_packet,
+            "post_launch_usability_recheck_attempted": (
+                post_launch_usability_recheck_packet.get("attempted") is True
+            ),
+            "post_launch_usability_recheck_status": str(
+                post_launch_usability_recheck_packet.get("status") or ""
+            ),
+            "post_launch_usability_recheck_machine_error_code": str(
+                post_launch_usability_recheck_packet.get("machine_error_code") or ""
+            ),
+            "post_launch_usability_recheck_attempt_count": int(
+                post_launch_usability_recheck_packet.get("attempt_count") or 0
+            ),
+            "post_launch_usability_recheck_packet": (
+                post_launch_usability_recheck_packet
+            ),
             **runtime_ready_packet,
             "real_codex_app_launched": success,
             "isolated_home": True,
