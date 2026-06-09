@@ -2066,6 +2066,9 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher") {
     return "dual-lane unsupported";
   }
+  if (action === "inspect_slot_binding_launch_evidence") {
+    return "inspect slot";
+  }
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
 
@@ -3408,6 +3411,9 @@ function setQuickStartRouteResponse(packet) {
       human_message: packet?.human_message || "",
       next_action: packet?.next_action || "",
       post_action_refresh_required: packet?.post_action_refresh_required === true,
+      launch_proven: packet?.launch_proven === true,
+      launch_status: packet?.launch_status || "",
+      launch_status_ok: packet?.launch_status_ok === true,
       runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
       runtime_health_gate_blocks_launch_admission:
         packet?.runtime_health_gate_blocks_launch_admission === true,
@@ -3508,6 +3514,10 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_app_usability_blocked_reason_class || "",
       renderer_surface_blocked_reason_class:
         packet?.renderer_surface_blocked_reason_class || "",
+      slot_binding_blocking_reasons:
+        Array.isArray(packet?.slot_binding_blocking_reasons)
+          ? packet.slot_binding_blocking_reasons
+          : [],
       custom_codex_launch_attempted:
         packet?.custom_codex_launch_attempted === true,
       new_launch_started: packet?.new_launch_started === true,
@@ -3540,6 +3550,26 @@ function setQuickStartRouteResponse(packet) {
         packet?.direct_api_dispatch_without_primary_trace === true,
       ui_label_counts_as_proof:
         packet?.ui_label_counts_as_proof === true,
+      primary_trace_id_matches_launch:
+        packet?.primary_trace_id_matches_launch === true,
+      coder_trace_id_matches_launch:
+        packet?.coder_trace_id_matches_launch === true,
+      primary_replacement_trace_id_matches_launch:
+        packet?.primary_replacement_trace_id_matches_launch === true,
+      native_dual_lane_prompt_trace_missing:
+        packet?.native_dual_lane_prompt_trace_missing === true,
+      native_current_launch_single_executor_observed:
+        packet?.native_current_launch_single_executor_observed === true,
+      runtime_executor_lane:
+        packet?.runtime_executor_lane || "",
+      runtime_executor_truth_source:
+        packet?.runtime_executor_truth_source || "",
+      mixed_mode_actual_primary_executor_is_api_route:
+        packet?.mixed_mode_actual_primary_executor_is_api_route === true,
+      capability_proof_scope:
+        packet?.capability_proof_scope || "",
+      unsupported_evidence:
+        packet?.unsupported_evidence || {},
       launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
       profile_persistence_proven: packet?.profile_persistence_proven === true,
       persistent_profile_reused: packet?.persistent_profile_reused === true,
@@ -3718,6 +3748,40 @@ function renderQuickStartMixedCoderTrace(packet) {
       packet?.api_route_dispatched_without_primary === true,
     direct_api_dispatch_without_primary_trace:
       packet?.direct_api_dispatch_without_primary_trace === true,
+    launch_proven:
+      packet?.launch_proven === true,
+    launch_status:
+      packet?.launch_status || "",
+    launch_status_ok:
+      packet?.launch_status_ok === true,
+    native_window_observed:
+      packet?.native_window_observed === true,
+    real_codex_app_launched:
+      packet?.real_codex_app_launched === true,
+    slot_binding_blocking_reasons:
+      Array.isArray(packet?.slot_binding_blocking_reasons)
+        ? packet.slot_binding_blocking_reasons
+        : [],
+    primary_trace_id_matches_launch:
+      packet?.primary_trace_id_matches_launch === true,
+    coder_trace_id_matches_launch:
+      packet?.coder_trace_id_matches_launch === true,
+    primary_replacement_trace_id_matches_launch:
+      packet?.primary_replacement_trace_id_matches_launch === true,
+    native_dual_lane_prompt_trace_missing:
+      packet?.native_dual_lane_prompt_trace_missing === true,
+    native_current_launch_single_executor_observed:
+      packet?.native_current_launch_single_executor_observed === true,
+    runtime_executor_lane:
+      packet?.runtime_executor_lane || "",
+    runtime_executor_truth_source:
+      packet?.runtime_executor_truth_source || "",
+    mixed_mode_actual_primary_executor_is_api_route:
+      packet?.mixed_mode_actual_primary_executor_is_api_route === true,
+    capability_proof_scope:
+      packet?.capability_proof_scope || "",
+    unsupported_evidence:
+      packet?.unsupported_evidence || {},
     fallback_used: packet?.fallback_used === true,
     response_text_counts_as_model_truth:
       packet?.response_text_counts_as_model_truth === true,

@@ -2312,6 +2312,26 @@ renderQuickStartMixedCoderTrace({
   api_route_dispatched_without_primary: true,
   direct_api_dispatch_without_primary_trace: true,
   native_mixed_primary_trace_supported: false,
+  primary_trace_id_matches_launch: false,
+  coder_trace_id_matches_launch: true,
+  primary_replacement_trace_id_matches_launch: false,
+  native_dual_lane_prompt_trace_missing: true,
+  native_current_launch_single_executor_observed: true,
+  runtime_executor_lane: "api_route_lane",
+  runtime_executor_truth_source: "launch_packet",
+  mixed_mode_actual_primary_executor_is_api_route: true,
+  capability_proof_scope: "native_window_bridge_trace_current_launch",
+  unsupported_evidence: {
+    primary_prompt_record_seen: false,
+    primary_trace_id_matches_launch: false,
+    coder_record_seen: true,
+    coder_trace_id_matches_launch: true,
+    api_route_dispatched_without_primary: true,
+    primary_replaced_by_api_route: false,
+    native_current_launch_single_executor_observed: true,
+    session_dispatch_probe_boundary_available: true,
+    native_dual_lane_dispatcher_observed: false
+  },
   fallback_used: false,
   response_text_counts_as_model_truth: false,
   ui_label_counts_as_proof: false,
@@ -2346,6 +2366,188 @@ if (rendered.mixed_route_blocked !== true || rendered.runtime_readiness_claimed 
 }
 if (rendered.prompt_seen !== false || rendered.coder_dispatch_proven !== true) {
   throw new Error(`lane proof split missing: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.primary_trace_id_matches_launch !== false ||
+  rendered.coder_trace_id_matches_launch !== true ||
+  rendered.primary_replacement_trace_id_matches_launch !== false
+) {
+  throw new Error(`trace identity split missing: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.native_dual_lane_prompt_trace_missing !== true ||
+  rendered.native_current_launch_single_executor_observed !== true
+) {
+  throw new Error(`native unsupported evidence missing: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.runtime_executor_lane !== "api_route_lane" ||
+  rendered.runtime_executor_truth_source !== "launch_packet" ||
+  rendered.mixed_mode_actual_primary_executor_is_api_route !== true ||
+  rendered.capability_proof_scope !== "native_window_bridge_trace_current_launch"
+) {
+  throw new Error(`runtime executor evidence missing: ${JSON.stringify(rendered)}`);
+}
+const expectedUnsupportedEvidence = {
+  primary_prompt_record_seen: false,
+  primary_trace_id_matches_launch: false,
+  coder_record_seen: true,
+  coder_trace_id_matches_launch: true,
+  api_route_dispatched_without_primary: true,
+  primary_replaced_by_api_route: false,
+  native_current_launch_single_executor_observed: true,
+  session_dispatch_probe_boundary_available: true,
+  native_dual_lane_dispatcher_observed: false
+};
+if (JSON.stringify(rendered.unsupported_evidence) !== JSON.stringify(expectedUnsupportedEvidence)) {
+  throw new Error(`unsupported evidence packet missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_quick_start_mixed_trace_slot_binding_blocker_renders_diagnostic_json(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse"
+]) {
+  node(id);
+}
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartMixedCoderTrace({
+  status: "blocked",
+  machine_error_code: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-chat",
+  primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
+  coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: false,
+  launch_status: "blocked",
+  launch_status_ok: false,
+  native_window_observed: true,
+  real_codex_app_launched: true,
+  slot_binding_blocking_reasons: ["launch_status_not_ok"],
+  slot_binding_proven: false,
+  prompt_seen: false,
+  prompt_seen_blocking_reason: "chatgpt_primary_trace_record_missing",
+  coder_dispatch_proven: false,
+  coder_work_result_proven_with_limits: false,
+  deepseek_route_observed: false,
+  deepseek_record_seen: true,
+  api_route_dispatched_without_primary: false,
+  direct_api_dispatch_without_primary_trace: false,
+  native_mixed_primary_trace_supported: true,
+  primary_trace_id_matches_launch: false,
+  coder_trace_id_matches_launch: true,
+  primary_replacement_trace_id_matches_launch: false,
+  native_dual_lane_prompt_trace_missing: false,
+  native_current_launch_single_executor_observed: false,
+  runtime_executor_lane: "api_route_lane",
+  runtime_executor_truth_source: "forced_bridge_route",
+  mixed_mode_actual_primary_executor_is_api_route: true,
+  capability_proof_scope: "native_window_bridge_trace_current_launch",
+  unsupported_evidence: {
+    primary_prompt_record_seen: false,
+    primary_trace_id_matches_launch: false,
+    coder_record_seen: true,
+    coder_trace_id_matches_launch: true,
+    api_route_dispatched_without_primary: false,
+    primary_replaced_by_api_route: false,
+    native_current_launch_single_executor_observed: false,
+    session_dispatch_probe_boundary_available: true,
+    native_dual_lane_dispatcher_observed: false
+  },
+  fallback_used: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  next_action: "inspect_slot_binding_launch_evidence"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").className.includes("green")) {
+  throw new Error(`slot binding blocker must not be green: ${node("quickStartRouteChip").className}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "inspect slot") {
+  throw new Error(`slot binding next action label missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+if (node("quickStartChatSlotState").lastElementChild.textContent !== "not proven") {
+  throw new Error(`ChatGPT slot label mismatch: ${node("quickStartChatSlotState").lastElementChild.textContent}`);
+}
+if (node("quickStartApiSlotState").lastElementChild.textContent !== "not proven") {
+  throw new Error(`API slot label mismatch: ${node("quickStartApiSlotState").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (rendered.machine_error_code !== "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN") {
+  throw new Error(`slot binding machine code not rendered: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.launch_proven !== false ||
+  rendered.launch_status !== "blocked" ||
+  rendered.launch_status_ok !== false ||
+  rendered.native_window_observed !== true ||
+  rendered.real_codex_app_launched !== true
+) {
+  throw new Error(`launch proof split missing: ${JSON.stringify(rendered)}`);
+}
+if (JSON.stringify(rendered.slot_binding_blocking_reasons) !== JSON.stringify(["launch_status_not_ok"])) {
+  throw new Error(`slot binding reasons missing: ${JSON.stringify(rendered)}`);
+}
+if (rendered.coder_trace_id_matches_launch !== true || rendered.unsupported_evidence?.coder_record_seen !== true) {
+  throw new Error(`DeepSeek record evidence missing: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(
@@ -3572,6 +3774,26 @@ const sandbox = {
           api_route_dispatched_without_primary: true,
           direct_api_dispatch_without_primary_trace: true,
           native_mixed_primary_trace_supported: false,
+          primary_trace_id_matches_launch: false,
+          coder_trace_id_matches_launch: true,
+          primary_replacement_trace_id_matches_launch: false,
+          native_dual_lane_prompt_trace_missing: true,
+          native_current_launch_single_executor_observed: true,
+          runtime_executor_lane: "api_route_lane",
+          runtime_executor_truth_source: "launch_packet",
+          mixed_mode_actual_primary_executor_is_api_route: true,
+          capability_proof_scope: "native_window_bridge_trace_current_launch",
+          unsupported_evidence: {
+            primary_prompt_record_seen: false,
+            primary_trace_id_matches_launch: false,
+            coder_record_seen: true,
+            coder_trace_id_matches_launch: true,
+            api_route_dispatched_without_primary: true,
+            primary_replaced_by_api_route: false,
+            native_current_launch_single_executor_observed: true,
+            session_dispatch_probe_boundary_available: true,
+            native_dual_lane_dispatcher_observed: false
+          },
           fallback_used: false,
           next_action: "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
         })
@@ -3638,6 +3860,32 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   }
   if (rendered.mixed_route_blocked !== true || rendered.coder_dispatch_proven !== true || rendered.prompt_seen !== false) {
     throw new Error(`mixed lane split not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  if (
+    rendered.primary_trace_id_matches_launch !== false ||
+    rendered.coder_trace_id_matches_launch !== true ||
+    rendered.native_dual_lane_prompt_trace_missing !== true ||
+    rendered.native_current_launch_single_executor_observed !== true
+  ) {
+    throw new Error(`mixed unsupported evidence not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  const expectedUnsupportedEvidence = {
+    primary_prompt_record_seen: false,
+    primary_trace_id_matches_launch: false,
+    coder_record_seen: true,
+    coder_trace_id_matches_launch: true,
+    api_route_dispatched_without_primary: true,
+    primary_replaced_by_api_route: false,
+    native_current_launch_single_executor_observed: true,
+    session_dispatch_probe_boundary_available: true,
+    native_dual_lane_dispatcher_observed: false
+  };
+  if (
+    rendered.runtime_executor_lane !== "api_route_lane" ||
+    rendered.capability_proof_scope !== "native_window_bridge_trace_current_launch" ||
+    JSON.stringify(rendered.unsupported_evidence) !== JSON.stringify(expectedUnsupportedEvidence)
+  ) {
+    throw new Error(`mixed capability scope not rendered: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);

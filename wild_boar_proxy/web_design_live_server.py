@@ -6601,26 +6601,51 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         record_trace_id = str(record.get("trace_id") or "")
         return bool(launch_id and trace_id and record_launch_id == launch_id and record_trace_id == trace_id)
 
+    launch_status_ok = launch.get("status") == "ok"
+    native_window_observed = launch.get("native_window_observed") is True
+    real_codex_app_launched = launch.get("real_codex_app_launched") is True
     launch_proven = (
-        launch.get("status") == "ok"
-        and launch.get("native_window_observed") is True
-        and launch.get("real_codex_app_launched") is True
+        launch_status_ok
+        and native_window_observed
+        and real_codex_app_launched
     )
+    primary_slot_bound = primary_slot.get("status") == "bound"
+    coding_slot_bound = coding_slot.get("status") == "bound"
+    slot_binding_blocking_reasons: list[str] = []
+    if not launch_status_ok:
+        slot_binding_blocking_reasons.append("launch_status_not_ok")
+    if not native_window_observed:
+        slot_binding_blocking_reasons.append("native_window_not_observed")
+    if not real_codex_app_launched:
+        slot_binding_blocking_reasons.append("real_codex_app_not_launched")
+    if not stable_bridge_preflight_ok:
+        slot_binding_blocking_reasons.append("stable_bridge_preflight_not_ok")
+    if execution_mode != "chatgpt_plus_api":
+        slot_binding_blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
+    if not primary_slot_bound:
+        slot_binding_blocking_reasons.append("primary_slot_not_bound")
+    if primary_slot.get("lane") != CODEX_ACCOUNT_MODEL_LANE:
+        slot_binding_blocking_reasons.append("primary_slot_lane_mismatch")
+    if not coding_slot_bound:
+        slot_binding_blocking_reasons.append("coding_slot_not_bound")
+    if coding_slot.get("lane") != API_ROUTE_MODEL_LANE:
+        slot_binding_blocking_reasons.append("coding_slot_lane_mismatch")
+    if str(coding_slot.get("provider") or "") != "deepseek":
+        slot_binding_blocking_reasons.append("coding_provider_not_deepseek")
+    if not coding_model_id:
+        slot_binding_blocking_reasons.append("coding_model_missing")
+    if coding_slot.get("server_issued") is not True:
+        slot_binding_blocking_reasons.append("coding_slot_not_server_issued")
+    if launch.get("raw_backend_details_exposed") is True:
+        slot_binding_blocking_reasons.append("raw_backend_details_exposed")
+    if launch.get("secret_value_exposed") is True:
+        slot_binding_blocking_reasons.append("secret_value_exposed")
+    if launch.get("original_codex_touched") is True:
+        slot_binding_blocking_reasons.append("original_codex_touched")
+    if launch.get("asar_touched") is True:
+        slot_binding_blocking_reasons.append("asar_touched")
     slot_binding_proven = bool(
-        launch_proven
-        and stable_bridge_preflight_ok
-        and execution_mode == "chatgpt_plus_api"
-        and primary_slot.get("status") == "bound"
-        and primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
-        and coding_slot.get("status") == "bound"
-        and coding_slot.get("lane") == API_ROUTE_MODEL_LANE
-        and str(coding_slot.get("provider") or "") == "deepseek"
-        and coding_model_id
-        and coding_slot.get("server_issued") is True
-        and launch.get("raw_backend_details_exposed") is not True
-        and launch.get("secret_value_exposed") is not True
-        and launch.get("original_codex_touched") is not True
-        and launch.get("asar_touched") is not True
+        not slot_binding_blocking_reasons
     )
     prompt_record = next(
         (
@@ -6701,13 +6726,37 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     native_mixed_primary_trace_supported = not native_mixed_prompt_trace_unsupported
     fallback_seen = any(record.get("fallback_used") is True for record in records)
+    primary_trace_id_matches_launch = bool(
+        prompt_record and record_matches_launch(prompt_record)
+    )
+    coder_trace_id_matches_launch = bool(
+        deepseek_record and record_matches_launch(deepseek_record)
+    )
+    primary_replacement_trace_id_matches_launch = bool(
+        primary_replaced_by_api_record
+        and record_matches_launch(primary_replaced_by_api_record)
+    )
     trace_launch_packet_matches = bool(
         prompt_record
         and deepseek_record
-        and record_matches_launch(prompt_record)
-        and record_matches_launch(deepseek_record)
+        and primary_trace_id_matches_launch
+        and coder_trace_id_matches_launch
     )
     trace_id_matches_launch = trace_launch_packet_matches
+    native_dual_lane_prompt_trace_missing = bool(
+        slot_binding_proven and not prompt_seen
+    )
+    native_current_launch_single_executor_observed = bool(
+        execution_mode == "chatgpt_plus_api"
+        and slot_binding_proven
+        and not prompt_seen
+        and (
+            chatgpt_replaced_by_api
+            or api_route_dispatched_without_primary
+            or launch.get("mixed_mode_actual_primary_executor_is_api_route") is True
+            or str(launch.get("runtime_executor_lane") or "") == API_ROUTE_MODEL_LANE
+        )
+    )
     coder_work_result_proven = bool(
         coder_dispatch_proven
         and deepseek_record.get("response_seen") is True
@@ -6725,6 +6774,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         machine_error_code = "OK"
         final_status = "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
         next_action = "none"
+    elif not slot_binding_proven:
+        machine_error_code = "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
+        final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
+        next_action = "inspect_slot_binding_launch_evidence"
     elif native_mixed_prompt_trace_unsupported:
         machine_error_code = "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
         final_status = "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
@@ -6762,9 +6815,15 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
                 else "KNOWN_BLOCKER_DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
             ),
         },
+        "launch_proven": launch_proven,
+        "launch_status": str(launch.get("status") or ""),
+        "launch_status_ok": launch_status_ok,
+        "native_window_observed": native_window_observed,
+        "real_codex_app_launched": real_codex_app_launched,
+        "slot_binding_blocking_reasons": slot_binding_blocking_reasons,
         "slot_binding_proven": slot_binding_proven,
-        "primary_slot_bound": primary_slot.get("status") == "bound",
-        "coding_slot_bound": coding_slot.get("status") == "bound",
+        "primary_slot_bound": primary_slot_bound,
+        "coding_slot_bound": coding_slot_bound,
         "dual_lane_slots_preserved": bool(
             primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
             and coding_slot.get("lane") == API_ROUTE_MODEL_LANE
@@ -6802,6 +6861,36 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "trace_server_issued": bool(launch_id and trace_id),
         "trace_launch_packet_matches": trace_launch_packet_matches,
         "trace_id_matches_launch": trace_id_matches_launch,
+        "primary_trace_id_matches_launch": primary_trace_id_matches_launch,
+        "coder_trace_id_matches_launch": coder_trace_id_matches_launch,
+        "primary_replacement_trace_id_matches_launch": (
+            primary_replacement_trace_id_matches_launch
+        ),
+        "native_dual_lane_prompt_trace_missing": native_dual_lane_prompt_trace_missing,
+        "native_current_launch_single_executor_observed": (
+            native_current_launch_single_executor_observed
+        ),
+        "runtime_executor_lane": str(launch.get("runtime_executor_lane") or ""),
+        "runtime_executor_truth_source": str(
+            launch.get("runtime_executor_truth_source") or ""
+        ),
+        "mixed_mode_actual_primary_executor_is_api_route": (
+            launch.get("mixed_mode_actual_primary_executor_is_api_route") is True
+        ),
+        "capability_proof_scope": "native_window_bridge_trace_current_launch",
+        "unsupported_evidence": {
+            "primary_prompt_record_seen": bool(prompt_record),
+            "primary_trace_id_matches_launch": primary_trace_id_matches_launch,
+            "coder_record_seen": bool(deepseek_record),
+            "coder_trace_id_matches_launch": coder_trace_id_matches_launch,
+            "api_route_dispatched_without_primary": api_route_dispatched_without_primary,
+            "primary_replaced_by_api_route": chatgpt_replaced_by_api,
+            "native_current_launch_single_executor_observed": (
+                native_current_launch_single_executor_observed
+            ),
+            "session_dispatch_probe_boundary_available": True,
+            "native_dual_lane_dispatcher_observed": trace_launch_packet_matches,
+        },
         "execution_mode": execution_mode,
         "primary_model_slot": primary_slot,
         "coding_agent_model_slot": coding_slot,
