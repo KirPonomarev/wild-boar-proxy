@@ -3520,6 +3520,35 @@ const sandbox = {
         })
       });
     }
+    if (url === "api/codex/custom/live-bridge-stability") {
+      if (options?.method === "POST" || options?.body) {
+        throw new Error("live bridge stability fetch must be a bounded GET");
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "blocked",
+          machine_error_code: "BRIDGE_WINDOW_NOT_BOUND",
+          bridge_status: "BRIDGE_WINDOW_NOT_BOUND",
+          failure_machine_error_code: "WINDOW_BOUND_TO_OLD_BRIDGE",
+          execution_mode: "chatgpt_plus_api",
+          bridge_alive: true,
+          port_alive: true,
+          responses_endpoint_available: true,
+          bridge_session_matches_active_window: false,
+          trace_id_matches_launch: false,
+          launch_id_matches_trace: false,
+          old_window_answered: true,
+          recovery_required: true,
+          recommended_recovery_action: "relaunch_custom",
+          fallback_used: false,
+          silent_fallback_used: false,
+          raw_backend_details_exposed: false,
+          secret_value_exposed: false,
+          next_action: "inspect_bridge_stability_packet"
+        })
+      });
+    }
     if (url === "api/codex/custom/chatgpt-plus-api-coder-trace") {
       if (options?.method === "POST" || options?.body) {
         throw new Error("mixed coder trace fetch must be a bounded GET");
@@ -3568,6 +3597,7 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
     "api/codex/custom/quick-start/config-admission",
     "api/codex/custom/native-launch-preflight",
     "api/codex/custom/native-launch",
+    "api/codex/custom/live-bridge-stability",
     "api/codex/custom/chatgpt-plus-api-coder-trace"
   ];
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
@@ -3587,8 +3617,17 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
       throw new Error(`wrong API model in payload: ${JSON.stringify(packet)}`);
     }
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "запущен") {
-    throw new Error(`launch state not rendered as launched: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  if (nodes.quickStartLaunchState.className.includes("green")) {
+    throw new Error(`stale bridge binding must not leave launch state green: ${nodes.quickStartLaunchState.className}`);
+  }
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "старое окно") {
+    throw new Error(`launch state did not render stale-window truth: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartBridgeState.lastElementChild.textContent !== "не привязан") {
+    throw new Error(`bridge state did not render stale binding: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "старое окно") {
+    throw new Error(`window state did not render stale binding: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartRouteChip.lastElementChild.textContent !== "mixed blocked") {
     throw new Error(`mixed trace blocker did not override launch route chip: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);

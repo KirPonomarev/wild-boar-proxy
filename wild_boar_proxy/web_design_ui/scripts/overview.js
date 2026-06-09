@@ -1940,6 +1940,7 @@ async function runCodexCustomLaunch() {
     }
     const packet = await response.json();
     renderCodexCustomLaunch(packet);
+    await refreshQuickStartLiveBridgeStabilityTruth(packet);
     await refreshQuickStartMixedCoderTraceTruth(packet);
   } catch (error) {
     const timedOut = error?.name === "AbortError";
@@ -2052,6 +2053,15 @@ function quickStartNextActionLabel(nextAction) {
   }
   if (action === "continue_in_existing_custom_window") {
     return "existing window";
+  }
+  if (action === "relaunch_custom") {
+    return "relaunch custom";
+  }
+  if (action === "inspect_bridge_stability_packet") {
+    return "inspect bridge";
+  }
+  if (action === "retry_live_bridge_stability") {
+    return "retry bridge";
   }
   if (action === "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher") {
     return "dual-lane unsupported";
@@ -3429,9 +3439,28 @@ function setQuickStartRouteResponse(packet) {
       profile_final_status: packet?.profile_final_status || "",
       session_storage_final_status: packet?.session_storage_final_status || "",
       bridge_alive: packet?.bridge_alive === true,
+      port_alive: packet?.port_alive === true,
+      responses_endpoint_available:
+        packet?.responses_endpoint_available === true,
       stable_custom_codex_wbp_bridge_final_status:
         packet?.stable_custom_codex_wbp_bridge_final_status || "",
       bridge_status: packet?.bridge_status || "",
+      live_bridge_stability_truth_packet:
+        packet?.live_bridge_stability_truth_packet === true,
+      bridge_session_matches_active_window:
+        packet?.bridge_session_matches_active_window === true,
+      trace_id_matches_launch:
+        packet?.trace_id_matches_launch === true,
+      launch_id_matches_trace:
+        packet?.launch_id_matches_trace === true,
+      old_window_answered:
+        packet?.old_window_answered === true,
+      failure_machine_error_code:
+        packet?.failure_machine_error_code || "",
+      recommended_recovery_action:
+        packet?.recommended_recovery_action || "",
+      recovery_required:
+        packet?.recovery_required === true,
       window_status: packet?.window_status || "",
       config_status: packet?.config_status || "",
       selection_matches_last_launch:
@@ -3523,6 +3552,95 @@ function setQuickStartRouteResponse(packet) {
       provider_called: packet?.provider_called === true,
       next_action: packet?.next_action || ""
     }, null, 2);
+  }
+}
+
+function quickStartLaunchRequiresBridgeStability(packet) {
+  const mode = packet?.execution_mode || packet?.selection_packet?.execution_mode || "";
+  return mode === "chatgpt_plus_api";
+}
+
+function quickStartLiveBridgeStabilityWindowNotBound(packet) {
+  return packet?.machine_error_code === "BRIDGE_WINDOW_NOT_BOUND"
+    || packet?.bridge_status === "BRIDGE_WINDOW_NOT_BOUND"
+    || packet?.failure_machine_error_code === "WINDOW_BOUND_TO_OLD_BRIDGE"
+    || packet?.old_window_answered === true
+    || packet?.bridge_session_matches_active_window === false;
+}
+
+function renderQuickStartLiveBridgeStability(packet) {
+  const ready = packet?.status === "ok" && packet?.bridge_status === "BRIDGE_READY";
+  const rejected = packet?.status === "rejected" || packet?.status === "failed";
+  const windowNotBound = quickStartLiveBridgeStabilityWindowNotBound(packet);
+  const bridgeAlive = packet?.bridge_alive === true || packet?.port_alive === true;
+  const nextAction = packet?.recommended_recovery_action || packet?.next_action || "";
+  const blockedVisual = rejected ? "red" : "amber";
+  setQuickStartChip(
+    "quickStartLaunchState",
+    ready ? "green" : blockedVisual,
+    ready ? "запуск ok" : (windowNotBound ? "старое окно" : (packet?.machine_error_code || "bridge blocked"))
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    ready ? "green" : (bridgeAlive ? "amber" : blockedVisual),
+    ready ? "жив" : (windowNotBound ? "не привязан" : (bridgeAlive ? "жив, blocked" : "не готов"))
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    ready ? "green" : (windowNotBound ? "amber" : "neutral"),
+    ready ? "найдено" : (windowNotBound ? "старое окно" : "не доказано")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    ready ? "green" : (windowNotBound ? "amber" : "neutral"),
+    ready ? "совпадает" : (windowNotBound ? "trace mismatch" : "не доказан")
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ready ? "green" : blockedVisual,
+    ready ? "запуск ok" : (windowNotBound ? "old window" : (packet?.bridge_status || packet?.machine_error_code || "bridge blocked"))
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    ready ? "green" : "amber",
+    ready ? "none" : quickStartNextActionLabel(nextAction || "inspect_bridge_stability_packet")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    live_bridge_stability_truth_packet: true,
+    runtime_readiness_claimed: ready,
+    next_action: nextAction || packet?.next_action || ""
+  });
+}
+
+async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
+  if (!quickStartLaunchRequiresBridgeStability(launchPacket)) {
+    return;
+  }
+  try {
+    const response = await fetch("api/codex/custom/live-bridge-stability", {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`live bridge stability http ${response.status}`);
+    }
+    renderQuickStartLiveBridgeStability(await response.json());
+  } catch (error) {
+    renderQuickStartLiveBridgeStability({
+      status: "failed",
+      machine_error_code: "LIVE_BRIDGE_STABILITY_FETCH_FAILED",
+      bridge_status: "BRIDGE_STABILITY_PACKET_UNAVAILABLE",
+      human_message: error.message,
+      execution_mode: launchPacket?.execution_mode || "",
+      chatgpt_model_id: launchPacket?.chatgpt_model_id || "",
+      api_model_id: launchPacket?.api_model_id || "",
+      fallback_used: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      live_bridge_stability_truth_packet: true,
+      runtime_readiness_claimed: false,
+      next_action: "retry_live_bridge_stability"
+    });
   }
 }
 
