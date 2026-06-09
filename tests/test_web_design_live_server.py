@@ -8312,7 +8312,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             endpoint_packet["coding_agent_model_slot"]["model_id"],
             "wbp-deepseek-v4-pro-max",
         )
-        self.assertTrue(endpoint_packet["chatgpt_line_used_as_executor"])
+        self.assertTrue(endpoint_packet["chatgpt_line_selected_as_executor"])
+        self.assertFalse(endpoint_packet["chatgpt_line_used_as_executor"])
+        self.assertTrue(endpoint_packet["mixed_mode_actual_primary_executor_is_api_route"])
+        self.assertEqual(endpoint_packet["runtime_executor_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(endpoint_packet["runtime_executor_truth_source"], "forced_bridge_route")
         self.assertTrue(endpoint_packet["api_line_used_as_executor"])
         self.assertTrue(endpoint_packet["execution_mode_packet"]["dual_lane_slots_preserved"])
         self.assertFalse(endpoint_packet["execution_mode_packet"]["runtime_execution_proven"])

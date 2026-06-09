@@ -5610,8 +5610,14 @@ def _launch_custom_native_codex_packet(
     )
     packet["selection_packet"] = execution_packet or legacy_selection
     if execution_packet:
+        execution_mode = str(execution_packet.get("execution_mode") or "")
+        api_route_executor_used = bool(route_record and route_model_id)
+        chatgpt_executor_selected = (
+            execution_packet.get("chatgpt_line_used_as_executor") is True
+        )
+        api_executor_selected = execution_packet.get("api_line_used_as_executor") is True
         packet["execution_mode_packet"] = execution_packet
-        packet["execution_mode"] = str(execution_packet.get("execution_mode") or "")
+        packet["execution_mode"] = execution_mode
         packet["api_model_id"] = str(execution_packet.get("api_model_id") or "")
         packet["api_reasoning_option_id"] = str(
             execution_packet.get("api_reasoning_option_id") or ""
@@ -5626,11 +5632,32 @@ def _launch_custom_native_codex_packet(
         packet["chatgpt_model_id"] = str(execution_packet.get("chatgpt_model_id") or "")
         packet["primary_model_slot"] = execution_packet.get("primary_model_slot", {})
         packet["coding_agent_model_slot"] = execution_packet.get("coding_agent_model_slot", {})
-        packet["chatgpt_line_used_as_executor"] = (
-            execution_packet.get("chatgpt_line_used_as_executor") is True
+        packet["chatgpt_line_selected_as_executor"] = chatgpt_executor_selected
+        packet["api_line_selected_as_executor"] = api_executor_selected
+        packet["chatgpt_line_used_as_executor"] = bool(
+            chatgpt_executor_selected and not api_route_executor_used
         )
-        packet["api_line_used_as_executor"] = (
-            execution_packet.get("api_line_used_as_executor") is True
+        packet["api_line_used_as_executor"] = bool(
+            api_executor_selected or api_route_executor_used
+        )
+        packet["runtime_executor_model_id"] = (
+            route_model_id if api_route_executor_used else model_id
+        )
+        packet["runtime_executor_lane"] = (
+            "api_route_lane" if api_route_executor_used else "codex_account_lane"
+        )
+        packet["runtime_executor_provider"] = (
+            str(route_record.get("provider") or "") if route_record else "chatgpt"
+        )
+        packet["runtime_executor_truth_source"] = (
+            "forced_bridge_route" if api_route_executor_used else "native_chatgpt_model"
+        )
+        packet["chatgpt_primary_runtime_execution_proven"] = bool(
+            chatgpt_executor_selected and not api_route_executor_used
+        )
+        packet["api_route_runtime_execution_expected"] = api_route_executor_used
+        packet["mixed_mode_actual_primary_executor_is_api_route"] = bool(
+            execution_mode == "chatgpt_plus_api" and api_route_executor_used
         )
         packet["api_only_calls_chatgpt"] = execution_packet.get("api_only_calls_chatgpt") is True
         packet["chatgpt_only_calls_api"] = execution_packet.get("chatgpt_only_calls_api") is True

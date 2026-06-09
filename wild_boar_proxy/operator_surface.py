@@ -936,7 +936,7 @@ def _responses_tools_to_chat_tools(tools: Any) -> tuple[list[dict[str, Any]], li
     chat_tools: list[dict[str, Any]] = []
     dropped_tool_types: list[str] = []
     unsupported_tool_types: list[str] = []
-    text_only_droppable_tool_types = {"namespace", "web_search"}
+    text_only_droppable_tool_types = {"custom", "namespace", "tool_search", "web_search"}
     for tool in tools:
         if not isinstance(tool, dict):
             continue
@@ -2896,7 +2896,7 @@ class OperatorSurfaceSession:
         downstream_endpoint = self.config.endpoint
         runtime_model = selected_model
         route_provider_endpoint = ""
-        route_secret = ""
+        route_auth_material = local_api_key
         if route_record is not None:
             compatibility = str(route_record.get("compatibility") or "").strip()
             endpoint_path = str(route_record.get("endpoint_path") or "").strip()
@@ -2910,9 +2910,9 @@ class OperatorSurfaceSession:
                     "human_message": "Selected external route is not compatible with bounded Codex operator wire API.",
                     "refresh_packet": self.status_payload(),
                     "secret_value_recorded": False,
-                }
+            }
             try:
-                secret = _resolve_external_route_secret_value(route_record)
+                route_auth_material = _resolve_external_route_secret_value(route_record)
             except Exception as exc:
                 return {
                     "status": "failed",
@@ -2924,11 +2924,9 @@ class OperatorSurfaceSession:
                 }
             runtime_model = selected_model
             route_provider_endpoint = str(route_record.get("base_url") or "").rstrip("/")
-            route_secret = secret
             configured_provider = "external_route"
             configured_wire_api = "responses"
             configured_label = "Server-owned external route via bounded responses adapter"
-        secret = local_api_key
         if not self.config.codex_bin.exists():
             return {
                 "status": "failed",
@@ -3113,7 +3111,7 @@ class OperatorSurfaceSession:
                 route_adapter = ExternalRouteResponsesAdapter(
                     route=route_record,
                     expected_api_key=local_api_key,
-                    route_secret=route_secret,
+                    route_secret=route_auth_material,
                 )
                 route_adapter.__enter__()
                 downstream_endpoint = route_adapter.listen_endpoint
@@ -3136,7 +3134,7 @@ class OperatorSurfaceSession:
                 {
                     "HOME": str(home),
                     "CODEX_HOME": str(codex_home),
-                    "OPENAI_API_KEY": secret,
+                    "OPENAI_API_KEY": route_auth_material,
                 }
             )
             env_codex_home = Path(env["CODEX_HOME"]).resolve()

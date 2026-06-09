@@ -18,6 +18,8 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "wbp_responses_compatibility"
+FIXTURE_API_KEY = "local-runtime-fixture"
+FIXTURE_AUTHORIZATION = "Bearer " + FIXTURE_API_KEY
 
 
 def load_json(name: str) -> dict[str, object]:
@@ -86,7 +88,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=route if route is not None else fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json),
@@ -100,7 +102,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(effective_payload).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                     "Accept": accept,
                 },
@@ -226,7 +228,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=timeout_request_json),
@@ -235,7 +237,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -259,7 +261,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=disconnect_request_json),
@@ -268,7 +270,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -357,7 +359,9 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
             request_payload={
                 "model": "wbp-fixture-route",
                 "tools": [
+                    {"type": "custom", "name": "apply_patch"},
                     {"type": "namespace", "name": "shell"},
+                    {"type": "tool_search", "name": "tool_search"},
                     {"type": "web_search", "name": "web_search"},
                 ],
                 "input": "Reply directly.",
@@ -372,7 +376,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["dropped_responses_tool_types"],
-            ["namespace", "web_search"],
+            ["custom", "namespace", "tool_search", "web_search"],
         )
         self.assertNotIn("tools", captured["payload"])  # type: ignore[operator]
 
@@ -553,7 +557,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=json.dumps(fixture).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer local-runtime-fixture",
+                        "Authorization": FIXTURE_AUTHORIZATION,
                         "Content-Type": "application/json",
                     },
                     method="POST",

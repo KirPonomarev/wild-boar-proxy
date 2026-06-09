@@ -1488,11 +1488,13 @@ function renderCodexCustomLaunch(packet) {
     coding_agent_model_slot:
       packet?.coding_agent_model_slot || selectionPacket?.coding_agent_model_slot || {},
     chatgpt_line_used_as_executor:
-      packet?.chatgpt_line_used_as_executor === true
-      || selectionPacket?.chatgpt_line_used_as_executor === true,
+      Object.prototype.hasOwnProperty.call(packet || {}, "chatgpt_line_used_as_executor")
+        ? packet?.chatgpt_line_used_as_executor === true
+        : selectionPacket?.chatgpt_line_used_as_executor === true,
     api_line_used_as_executor:
-      packet?.api_line_used_as_executor === true
-      || selectionPacket?.api_line_used_as_executor === true,
+      Object.prototype.hasOwnProperty.call(packet || {}, "api_line_used_as_executor")
+        ? packet?.api_line_used_as_executor === true
+        : selectionPacket?.api_line_used_as_executor === true,
     api_only_calls_chatgpt:
       packet?.api_only_calls_chatgpt === true
       || selectionPacket?.api_only_calls_chatgpt === true,
