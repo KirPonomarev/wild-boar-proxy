@@ -1940,6 +1940,7 @@ async function runCodexCustomLaunch() {
     }
     const packet = await response.json();
     renderCodexCustomLaunch(packet);
+    await refreshQuickStartMixedCoderTraceTruth(packet);
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderCodexCustomLaunch({
@@ -2051,6 +2052,9 @@ function quickStartNextActionLabel(nextAction) {
   }
   if (action === "continue_in_existing_custom_window") {
     return "existing window";
+  }
+  if (action === "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher") {
+    return "dual-lane unsupported";
   }
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
@@ -3485,6 +3489,28 @@ function setQuickStartRouteResponse(packet) {
         packet?.bridge_alive_counts_as_model_truth === true,
       response_text_counts_as_route_truth:
         packet?.response_text_counts_as_route_truth === true,
+      mixed_route_truth_packet:
+        packet?.mixed_route_truth_packet === true,
+      mixed_route_blocked:
+        packet?.mixed_route_blocked === true,
+      native_mixed_primary_trace_supported:
+        packet?.native_mixed_primary_trace_supported === true,
+      prompt_seen:
+        packet?.prompt_seen === true,
+      prompt_seen_blocking_reason:
+        packet?.prompt_seen_blocking_reason || "",
+      coder_dispatch_proven:
+        packet?.coder_dispatch_proven === true,
+      coder_work_result_proven_with_limits:
+        packet?.coder_work_result_proven_with_limits === true,
+      deepseek_route_observed:
+        packet?.deepseek_route_observed === true,
+      api_route_dispatched_without_primary:
+        packet?.api_route_dispatched_without_primary === true,
+      direct_api_dispatch_without_primary_trace:
+        packet?.direct_api_dispatch_without_primary_trace === true,
+      ui_label_counts_as_proof:
+        packet?.ui_label_counts_as_proof === true,
       launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
       profile_persistence_proven: packet?.profile_persistence_proven === true,
       persistent_profile_reused: packet?.persistent_profile_reused === true,
@@ -3497,6 +3523,129 @@ function setQuickStartRouteResponse(packet) {
       provider_called: packet?.provider_called === true,
       next_action: packet?.next_action || ""
     }, null, 2);
+  }
+}
+
+function quickStartMixedTraceUnsupported(packet) {
+  return packet?.machine_error_code === "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+    || packet?.native_mixed_primary_trace_supported === false;
+}
+
+function quickStartMixedTraceReasonLabel(packet) {
+  const reason = packet?.prompt_seen_blocking_reason || "";
+  if (reason === "primary_chatgpt_request_absent_api_route_dispatched") {
+    return "primary не доказан";
+  }
+  if (reason === "primary_chatgpt_request_forced_to_api_route") {
+    return "primary заменён API";
+  }
+  if (reason === "chatgpt_primary_trace_record_missing") {
+    return "primary trace missing";
+  }
+  return "primary не доказан";
+}
+
+function renderQuickStartMixedCoderTrace(packet) {
+  const unsupported = quickStartMixedTraceUnsupported(packet);
+  const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
+  const blocked = packet?.status === "blocked" || unsupported;
+  const chatgptLabel = unsupported
+    ? quickStartMixedTraceReasonLabel(packet)
+    : (packet?.prompt_seen === true ? "runtime proven" : "not proven");
+  setQuickStartChip(
+    "quickStartRouteChip",
+    traceOk ? "green" : (blocked ? "amber" : "red"),
+    traceOk ? "mixed ok" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked"))
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    traceOk ? "green" : (blocked ? "amber" : "red"),
+    traceOk ? "ChatGPT + API" : "unsupported"
+  );
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.prompt_seen === true ? "green" : "amber",
+    chatgptLabel
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coder_dispatch_proven === true ? "green" : "amber",
+    packet?.coder_dispatch_proven === true ? "proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    (!packet?.next_action || packet?.next_action === "none") && traceOk ? "green" : "amber",
+    quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: packet?.execution_mode || "",
+    chatgpt_model_id: packet?.primary_model_id || "",
+    api_model_id: packet?.coding_agent_model_id || "",
+    primary_model_slot: packet?.primary_model_slot || {},
+    coding_agent_model_slot: packet?.coding_agent_model_slot || {},
+    mixed_route_truth_packet: true,
+    mixed_route_blocked: blocked,
+    native_mixed_primary_trace_supported:
+      packet?.native_mixed_primary_trace_supported === true,
+    prompt_seen: packet?.prompt_seen === true,
+    prompt_seen_blocking_reason: packet?.prompt_seen_blocking_reason || "",
+    coder_dispatch_proven: packet?.coder_dispatch_proven === true,
+    coder_work_result_proven_with_limits:
+      packet?.coder_work_result_proven_with_limits === true,
+    deepseek_route_observed: packet?.deepseek_route_observed === true,
+    api_route_dispatched_without_primary:
+      packet?.api_route_dispatched_without_primary === true,
+    direct_api_dispatch_without_primary_trace:
+      packet?.direct_api_dispatch_without_primary_trace === true,
+    fallback_used: packet?.fallback_used === true,
+    response_text_counts_as_model_truth:
+      packet?.response_text_counts_as_model_truth === true,
+    ui_label_counts_as_proof: packet?.ui_label_counts_as_proof === true,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
+  const executionMode = launchPacket?.execution_mode
+    || launchPacket?.selection_packet?.execution_mode
+    || "";
+  if (executionMode !== "chatgpt_plus_api") {
+    return null;
+  }
+  try {
+    const response = await fetch("api/codex/custom/chatgpt-plus-api-coder-trace", {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`mixed coder trace http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } catch (error) {
+    setQuickStartChip("quickStartRouteChip", "amber", "trace failed");
+    setQuickStartChip("quickStartExecutionModeState", "amber", "trace missing");
+    setQuickStartChip("quickStartNextActionState", "amber", "refresh trace");
+    setQuickStartRouteResponse({
+      status: "blocked",
+      machine_error_code: "MIXED_CODER_TRACE_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_MIXED_CODER_TRACE_NOT_LOADED",
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id:
+        launchPacket?.chatgpt_model_id || launchPacket?.selection_packet?.chatgpt_model_id || "",
+      api_model_id:
+        launchPacket?.api_model_id || launchPacket?.selection_packet?.api_model_id || "",
+      mixed_route_truth_packet: false,
+      mixed_route_blocked: true,
+      runtime_readiness_claimed: false,
+      next_action: "refresh_mixed_coder_trace",
+      human_message: error?.message || "mixed coder trace fetch failed"
+    });
+    return null;
   }
 }
 
