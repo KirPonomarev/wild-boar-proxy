@@ -2073,6 +2073,12 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "continue_in_existing_custom_window") {
     return "existing window";
   }
+  if (action === "run_fresh_chatgpt_plus_api_launch") {
+    return "fresh launch";
+  }
+  if (action === "refresh_chatgpt_plus_api_trace_snapshot") {
+    return "refresh trace";
+  }
   if (action === "relaunch_custom") {
     return "relaunch custom";
   }
@@ -3446,6 +3452,20 @@ function setQuickStartRouteResponse(packet) {
       launch_proven: packet?.launch_proven === true,
       launch_status: packet?.launch_status || "",
       launch_status_ok: packet?.launch_status_ok === true,
+      launch_packet_age_seconds:
+        Number.isFinite(packet?.launch_packet_age_seconds) ? packet.launch_packet_age_seconds : null,
+      launch_packet_stale: packet?.launch_packet_stale === true,
+      launch_packet_stale_overridden_by_current_bridge_trace:
+        packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
+      current_bridge_trace_matches_launch:
+        packet?.current_bridge_trace_matches_launch === true,
+      trace_snapshot_age_seconds:
+        Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
+      trace_snapshot_stale: packet?.trace_snapshot_stale === true,
+      current_launch_evidence_proven_with_limits:
+        packet?.current_launch_evidence_proven_with_limits === true,
+      current_mixed_trace_evidence_fresh:
+        packet?.current_mixed_trace_evidence_fresh === true,
       runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
       runtime_health_gate_blocks_launch_admission:
         packet?.runtime_health_gate_blocks_launch_admission === true,
@@ -3769,6 +3789,22 @@ function renderQuickStartMixedCoderTrace(packet) {
   const unsupported = !launchWithTraceGap && quickStartMixedTraceUnsupported(packet);
   const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const blocked = packet?.status === "blocked" || unsupported;
+  const launchPacketStaleOverridden =
+    packet?.launch_packet_stale_overridden_by_current_bridge_trace === true
+    && packet?.current_bridge_trace_matches_launch === true
+    && packet?.current_launch_evidence_proven_with_limits === true
+    && packet?.current_mixed_trace_evidence_fresh === true;
+  const launchPacketStaleBlocks =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
+    || (
+      packet?.launch_packet_stale === true
+      && !launchPacketStaleOverridden
+    );
+  const traceSnapshotStaleBlocks =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_TRACE_SNAPSHOT_STALE"
+    || packet?.trace_snapshot_stale === true;
+  const staleMixedEvidence =
+    launchPacketStaleBlocks || traceSnapshotStaleBlocks;
   setQuickStartMixedLaunchActionGuard(blocked && !traceOk);
   const slotBindingBlocked = packet?.machine_error_code === "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN";
   const chatgptLabel = slotBindingBlocked
@@ -3779,17 +3815,17 @@ function renderQuickStartMixedCoderTrace(packet) {
   setQuickStartChip(
     "quickStartRouteChip",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))
+    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (staleMixedEvidence ? "mixed stale" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked"))))
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk || launchWithTraceGap ? "ChatGPT + API" : "unsupported"
+    traceOk || launchWithTraceGap || staleMixedEvidence ? "ChatGPT + API" : "unsupported"
   );
   setQuickStartChip(
     "quickStartLaunchState",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk || launchWithTraceGap ? "запуск ok" : "blocked"
+    traceOk || launchWithTraceGap ? "запуск ok" : (staleMixedEvidence ? "stale" : "blocked")
   );
   setQuickStartChip(
     "quickStartChatSlotState",
@@ -3845,6 +3881,22 @@ function renderQuickStartMixedCoderTrace(packet) {
       packet?.launch_status || "",
     launch_status_ok:
       packet?.launch_status_ok === true,
+    launch_packet_age_seconds:
+      Number.isFinite(packet?.launch_packet_age_seconds) ? packet.launch_packet_age_seconds : null,
+    launch_packet_stale:
+      packet?.launch_packet_stale === true,
+    launch_packet_stale_overridden_by_current_bridge_trace:
+      packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
+    current_bridge_trace_matches_launch:
+      packet?.current_bridge_trace_matches_launch === true,
+    trace_snapshot_age_seconds:
+      Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
+    trace_snapshot_stale:
+      packet?.trace_snapshot_stale === true,
+    current_launch_evidence_proven_with_limits:
+      packet?.current_launch_evidence_proven_with_limits === true,
+    current_mixed_trace_evidence_fresh:
+      packet?.current_mixed_trace_evidence_fresh === true,
     native_window_observed:
       packet?.native_window_observed === true,
     real_codex_app_launched:

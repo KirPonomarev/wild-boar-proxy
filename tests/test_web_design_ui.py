@@ -2607,6 +2607,271 @@ if (rendered.coder_trace_id_matches_launch !== true || rendered.unsupported_evid
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_quick_start_mixed_trace_stale_launch_requests_fresh_launch(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartLaunchState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse"
+]) {
+  node(id);
+}
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartMixedCoderTrace({
+  status: "blocked",
+  machine_error_code: "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE",
+  final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_PACKET_STALE",
+  mixed_mode_product_decision: "UNSUPPORTED",
+  mixed_mode_launch_action: "blocked",
+  mixed_mode_launch_blocked_reason: "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-chat",
+  primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
+  coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: true,
+  launch_status: "ok",
+  launch_status_ok: true,
+  launch_packet_age_seconds: 6200,
+  launch_packet_stale: true,
+  trace_snapshot_age_seconds: 0,
+  trace_snapshot_stale: false,
+  current_launch_evidence_proven_with_limits: false,
+  current_mixed_trace_evidence_fresh: false,
+  native_window_observed: true,
+  real_codex_app_launched: true,
+  slot_binding_blocking_reasons: ["launch_packet_stale"],
+  slot_binding_proven: false,
+  prompt_seen: false,
+  coder_dispatch_proven: false,
+  coder_work_result_proven_with_limits: false,
+  native_mixed_primary_trace_supported: true,
+  fallback_used: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  next_action: "run_fresh_chatgpt_plus_api_launch"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed stale") {
+  throw new Error(`stale route label mismatch: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
+  throw new Error(`stale mixed mode should stay visible: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").className.includes("green")) {
+  throw new Error(`stale launch must not be green: ${node("quickStartLaunchState").className}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "stale") {
+  throw new Error(`stale launch label missing: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "fresh launch") {
+  throw new Error(`fresh launch next action missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.machine_error_code !== "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE" ||
+  rendered.launch_packet_stale !== true ||
+  rendered.launch_packet_age_seconds !== 6200 ||
+  rendered.current_launch_evidence_proven_with_limits !== false ||
+  rendered.current_mixed_trace_evidence_fresh !== false
+) {
+  throw new Error(`stale launch diagnostics missing: ${JSON.stringify(rendered)}`);
+}
+if (rendered.launch_proven !== true || rendered.launch_status_ok !== true) {
+  throw new Error(`raw launch proof should remain auditable: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_quick_start_mixed_trace_stale_launch_override_keeps_launch_available(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartLaunchState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse"
+]) {
+  node(id);
+}
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartMixedCoderTrace({
+  status: "degraded",
+  machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+  final_status: "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
+  mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_blocked_reason: "",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-chat",
+  primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
+  coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: true,
+  launch_status: "ok",
+  launch_status_ok: true,
+  launch_packet_age_seconds: 6200,
+  launch_packet_stale: true,
+  launch_packet_stale_overridden_by_current_bridge_trace: true,
+  current_bridge_trace_matches_launch: true,
+  trace_snapshot_age_seconds: 0,
+  trace_snapshot_stale: false,
+  current_launch_evidence_proven_with_limits: true,
+  current_mixed_trace_evidence_fresh: true,
+  native_window_observed: true,
+  real_codex_app_launched: true,
+  slot_binding_blocking_reasons: [],
+  slot_binding_proven: true,
+  prompt_seen: false,
+  prompt_seen_blocking_reason: "primary_chatgpt_request_absent_api_route_dispatched",
+  coder_dispatch_proven: true,
+  coder_work_result_proven_with_limits: true,
+  deepseek_route_observed: true,
+  api_route_dispatched_without_primary: true,
+  direct_api_dispatch_without_primary_trace: true,
+  native_mixed_primary_trace_supported: false,
+  primary_trace_id_matches_launch: false,
+  coder_trace_id_matches_launch: true,
+  fallback_used: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  mixed_mode_launch_available_with_primary_trace_gap: true,
+  runtime_readiness_claimed: false,
+  next_action: "continue_in_existing_custom_window"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed limited") {
+  throw new Error(`override route label must not be stale: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+  throw new Error(`override launch label must stay proven: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
+  throw new Error(`override mixed mode should stay visible: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "existing window") {
+  throw new Error(`override next action label mismatch: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.launch_packet_stale !== true ||
+  rendered.launch_packet_stale_overridden_by_current_bridge_trace !== true ||
+  rendered.current_bridge_trace_matches_launch !== true ||
+  rendered.current_launch_evidence_proven_with_limits !== true ||
+  rendered.current_mixed_trace_evidence_fresh !== true
+) {
+  throw new Error(`override diagnostics missing: ${JSON.stringify(rendered)}`);
+}
+if (rendered.mixed_route_blocked !== false || rendered.mixed_mode_launch_action !== "available") {
+  throw new Error(`override launch availability missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_mixed_blocked_button_runs_launch_chain_then_refreshes_trace(self) -> None:
         script = r"""
 const fs = require("fs");

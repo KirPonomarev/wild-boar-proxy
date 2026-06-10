@@ -1368,7 +1368,6 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "set_mode_managed",
         "launch_smoke",
         "launch_client_dispatch",
-        "launch_custom_client_native",
         "export_diagnostics",
     }
 )
@@ -6729,6 +6728,22 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             and record_is_current(record)
         )
 
+    trace_snapshot_current = bool(
+        trace_snapshot_age_seconds is not None and not trace_snapshot_stale
+    )
+    current_bridge_trace_matches_launch = bool(
+        trace_snapshot_current
+        and any(
+            record.get("request_seen_after_launch") is True
+            and record.get("response_seen") is True
+            and record_matches_launch(record)
+            for record in records
+        )
+    )
+    launch_packet_stale_overridden_by_current_bridge_trace = bool(
+        launch_packet_stale and current_bridge_trace_matches_launch
+    )
+
     launch_status_ok = launch.get("status") == "ok"
     show_window_packet = _packet_dict_value(launch, "show_window_packet")
     native_window_observed = (
@@ -6815,7 +6830,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and not existing_window_reuse_proven_with_limits
     ):
         slot_binding_blocking_reasons.append("real_codex_app_not_launched")
-    if launch_packet_stale:
+    if launch_packet_stale and not launch_packet_stale_overridden_by_current_bridge_trace:
         slot_binding_blocking_reasons.append("launch_packet_stale")
     if trace_snapshot_stale:
         slot_binding_blocking_reasons.append("trace_snapshot_stale")
@@ -6981,10 +6996,24 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and coder_trace_id_matches_launch
         and not fallback_seen
     )
+    stale_slot_binding_reasons = {"launch_packet_stale", "trace_snapshot_stale"}
+    slot_binding_stale_only = bool(
+        not slot_binding_proven
+        and slot_binding_blocking_reasons
+        and set(slot_binding_blocking_reasons).issubset(stale_slot_binding_reasons)
+    )
     if full_success:
         machine_error_code = "OK"
         final_status = "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
         next_action = "none"
+    elif slot_binding_stale_only and launch_packet_stale:
+        machine_error_code = "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
+        final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
+        next_action = "run_fresh_chatgpt_plus_api_launch"
+    elif slot_binding_stale_only and trace_snapshot_stale:
+        machine_error_code = "CHATGPT_PLUS_API_TRACE_SNAPSHOT_STALE"
+        final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_TRACE_SNAPSHOT_STALE"
+        next_action = "refresh_chatgpt_plus_api_trace_snapshot"
     elif not slot_binding_proven:
         machine_error_code = "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
@@ -7023,6 +7052,19 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "available"
         if full_success or launch_available_with_primary_trace_gap
         else "blocked"
+    )
+    current_launch_evidence_proven_with_limits = bool(
+        launch_evidence_proven_with_limits
+        and (
+            not launch_packet_stale
+            or launch_packet_stale_overridden_by_current_bridge_trace
+        )
+    )
+    current_mixed_trace_evidence_fresh = bool(
+        current_launch_evidence_proven_with_limits
+        and trace_id
+        and trace_snapshot_age_seconds is not None
+        and not trace_snapshot_stale
     )
     return {
         "schema_version": 1,
@@ -7077,6 +7119,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             existing_window_reuse_proven_with_limits
         ),
         "launch_evidence_proven_with_limits": launch_evidence_proven_with_limits,
+        "current_launch_evidence_proven_with_limits": (
+            current_launch_evidence_proven_with_limits
+        ),
+        "current_mixed_trace_evidence_fresh": current_mixed_trace_evidence_fresh,
         "native_window_process_kept_running": native_window_process_kept_running,
         "running_status": launch.get("running_status") is True or native_process_alive,
         "native_process_started": native_process_started,
@@ -7085,6 +7131,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "freshness_window_seconds": CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS,
         "launch_packet_age_seconds": launch_packet_age_seconds,
         "launch_packet_stale": launch_packet_stale,
+        "launch_packet_stale_overridden_by_current_bridge_trace": (
+            launch_packet_stale_overridden_by_current_bridge_trace
+        ),
+        "current_bridge_trace_matches_launch": current_bridge_trace_matches_launch,
         "trace_snapshot_age_seconds": trace_snapshot_age_seconds,
         "trace_snapshot_stale": trace_snapshot_stale,
         "slot_binding_blocking_reasons": slot_binding_blocking_reasons,
