@@ -3697,7 +3697,7 @@ function renderQuickStartLiveBridgeStability(packet) {
 
 async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
   if (!quickStartLaunchRequiresBridgeStability(launchPacket)) {
-    return;
+    return null;
   }
   try {
     const response = await fetch("api/codex/custom/live-bridge-stability", {
@@ -3706,9 +3706,11 @@ async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
     if (!response.ok) {
       throw new Error(`live bridge stability http ${response.status}`);
     }
-    renderQuickStartLiveBridgeStability(await response.json());
+    const packet = await response.json();
+    renderQuickStartLiveBridgeStability(packet);
+    return packet;
   } catch (error) {
-    renderQuickStartLiveBridgeStability({
+    const packet = {
       status: "failed",
       machine_error_code: "LIVE_BRIDGE_STABILITY_FETCH_FAILED",
       bridge_status: "BRIDGE_STABILITY_PACKET_UNAVAILABLE",
@@ -3722,7 +3724,9 @@ async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
       live_bridge_stability_truth_packet: true,
       runtime_readiness_claimed: false,
       next_action: "retry_live_bridge_stability"
-    });
+    };
+    renderQuickStartLiveBridgeStability(packet);
+    return packet;
   }
 }
 
@@ -3971,6 +3975,44 @@ async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
       human_message: error?.message || "mixed coder trace fetch failed"
     });
     return null;
+  }
+}
+
+async function refreshQuickStartRouteStatus() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  const buttons = [
+    document.getElementById("quickStartRouteRefreshAction"),
+    document.getElementById("refreshFixture")
+  ].filter(Boolean);
+  for (const button of buttons) {
+    button.setAttribute("disabled", "disabled");
+  }
+  setQuickStartChip("quickStartRouteChip", "neutral", "обновляю");
+  setQuickStartChip("quickStartNextActionState", "neutral", "refreshing");
+  try {
+    await refreshCodexCustomModelsPanel();
+    const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+    const refreshPacket = {
+      ...payload,
+      selection_packet: { ...payload },
+      status: "checking",
+      machine_error_code: "QUICK_START_ROUTE_STATUS_REFRESH"
+    };
+    if (quickStartLaunchRequiresBridgeStability(refreshPacket)) {
+      await refreshQuickStartLiveBridgeStabilityTruth(refreshPacket);
+      await refreshQuickStartMixedCoderTraceTruth(refreshPacket);
+      return;
+    }
+    setQuickStartChip("quickStartRouteChip", "neutral", "модели загружены");
+    setQuickStartChip("quickStartNextActionState", "neutral", "проверить запуск");
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    for (const button of buttons) {
+      button.removeAttribute("disabled");
+    }
   }
 }
 
@@ -14457,6 +14499,9 @@ async function refreshCurrentSource() {
     const result = source === "live"
       ? await setLiveReadonly(false)
       : await setFixtureState(document.getElementById("statePicker").value, false);
+    if (source === "live" && currentScreen() === "quick-start") {
+      await refreshQuickStartRouteStatus();
+    }
     const remainingBusyMs = Math.max(0, 250 - (Date.now() - startedAt));
     if (remainingBusyMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, remainingBusyMs));
@@ -14568,7 +14613,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));
   document.getElementById("quickStartExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartExecutionModeSelect"));
-  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus());
   document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runQuickStartConfigAdmission("quickStartExecutionModeDryRunAction"));
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());

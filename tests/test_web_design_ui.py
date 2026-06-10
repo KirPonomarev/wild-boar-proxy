@@ -2192,6 +2192,208 @@ if (rendered.runtime_readiness_claimed !== false) {
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_quick_start_refresh_button_updates_live_bridge_and_mixed_trace(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.disabled = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+  this.value = "";
+}
+Node.prototype.setAttribute = function(name, value) {
+  if (name === "disabled") {
+    this.disabled = true;
+  }
+  this[name] = value;
+};
+Node.prototype.removeAttribute = function(name) {
+  if (name === "disabled") {
+    this.disabled = false;
+    return;
+  }
+  delete this[name];
+};
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "refreshFixture",
+  "sourcePicker",
+  "statePicker",
+  "quickStartRouteRefreshAction",
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse",
+  "quickStartExecutionModeSelect",
+  "quickStartChatModelSelect",
+  "quickStartApiModelSelect",
+  "quickStartApiReasoningOptionSelect"
+]) {
+  node(id);
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+node("sourcePicker").value = "live";
+node("statePicker").value = "summary";
+
+const calls = [];
+const responses = {
+  "api/codex/custom/live-bridge-stability": {
+    status: "ok",
+    machine_error_code: "BRIDGE_READY",
+    bridge_status: "BRIDGE_READY",
+    execution_mode: "chatgpt_plus_api",
+    bridge_alive: true,
+    port_alive: true,
+    responses_endpoint_available: true,
+    launch_id_matches_trace: true,
+    response_seen: true,
+    next_action: "none"
+  },
+  "api/codex/custom/chatgpt-plus-api-coder-trace": {
+    status: "blocked",
+    machine_error_code: "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE",
+    mixed_mode_product_decision: "UNSUPPORTED",
+    mixed_mode_launch_action: "blocked",
+    execution_mode: "chatgpt_plus_api",
+    prompt_seen: false,
+    coder_dispatch_proven: true,
+    launch_proven: true,
+    launch_status: "ok",
+    launch_packet_stale: true,
+    next_action: "run_fresh_chatgpt_plus_api_launch"
+  }
+};
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem() { return null; },
+      setItem() {}
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout(callback) {
+    if (typeof callback === "function") {
+      callback();
+    }
+    return 1;
+  },
+  clearTimeout() {},
+  fetch: async (url) => {
+    calls.push(url);
+    return {
+      ok: true,
+      json: async () => responses[url] || { status: "ok" }
+    };
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.refreshCodexCustomModelsPanel = async () => {
+  calls.push("models");
+};
+
+sandbox.refreshQuickStartRouteStatus().then(() => {
+  const expected = [
+    "models",
+    "api/codex/custom/live-bridge-stability",
+    "api/codex/custom/chatgpt-plus-api-coder-trace"
+  ];
+  if (JSON.stringify(calls) !== JSON.stringify(expected)) {
+    throw new Error(`refresh did not read live route truth in order: ${JSON.stringify(calls)}`);
+  }
+  if (node("quickStartRouteRefreshAction").disabled !== false) {
+    throw new Error("refresh button stayed disabled");
+  }
+  if (node("refreshFixture").disabled !== false) {
+    throw new Error("visible refresh button stayed disabled");
+  }
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed stale") {
+    throw new Error(`mixed trace did not override bridge-only status: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+  if (rendered.machine_error_code !== "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE") {
+    throw new Error(`mixed trace packet not rendered: ${node("quickStartRouteResponse").textContent}`);
+  }
+  if (rendered.bridge_status === "BRIDGE_READY" && rendered.mixed_route_truth_packet !== true) {
+    throw new Error(`refresh ended on bridge-only truth: ${node("quickStartRouteResponse").textContent}`);
+  }
+  calls.length = 0;
+  sandbox.setLiveReadonly = async () => {
+    calls.push("live");
+    return { status: "ok" };
+  };
+  sandbox.setFixtureState = async () => {
+    calls.push("fixture");
+    return { status: "ok" };
+  };
+  return sandbox.refreshCurrentSource();
+}).then(() => {
+  const expected = [
+    "live",
+    "models",
+    "api/codex/custom/live-bridge-stability",
+    "api/codex/custom/chatgpt-plus-api-coder-trace"
+  ];
+  if (JSON.stringify(calls) !== JSON.stringify(expected)) {
+    throw new Error(`visible refresh did not read quick-start route truth: ${JSON.stringify(calls)}`);
+  }
+  if (node("refreshFixture").disabled !== false) {
+    throw new Error("visible refresh button stayed disabled after source refresh");
+  }
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed stale") {
+    throw new Error(`visible refresh ended on wrong route status: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_mixed_trace_gap_preserves_launch_without_green_readiness(self) -> None:
         script = r"""
 const fs = require("fs");
