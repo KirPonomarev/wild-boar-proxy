@@ -6593,34 +6593,69 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         }
     launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
     trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
-    records = [
-        record
-        for record in trace.get("records") or []
-        if isinstance(record, dict)
-    ]
-    last_record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
-    if last_record and last_record not in records:
-        records.append(last_record)
+    launch_preflight_packet = (
+        launch.get("preflight_packet")
+        if isinstance(launch.get("preflight_packet"), dict)
+        else {}
+    )
     execution_packet = (
         launch.get("execution_mode_packet")
         if isinstance(launch.get("execution_mode_packet"), dict)
         else {}
     )
-    primary_slot = (
-        launch.get("primary_model_slot")
-        if isinstance(launch.get("primary_model_slot"), dict)
-        else execution_packet.get("primary_model_slot")
-        if isinstance(execution_packet.get("primary_model_slot"), dict)
+    selection_packet = (
+        launch.get("selection_packet")
+        if isinstance(launch.get("selection_packet"), dict)
+        else launch_preflight_packet.get("selection_packet")
+        if isinstance(launch_preflight_packet.get("selection_packet"), dict)
         else {}
+    )
+    stable_bridge_prewarm_packet = (
+        launch.get("stable_bridge_prewarm_packet")
+        if isinstance(launch.get("stable_bridge_prewarm_packet"), dict)
+        else launch_preflight_packet.get("stable_bridge_prewarm_packet")
+        if isinstance(launch_preflight_packet.get("stable_bridge_prewarm_packet"), dict)
+        else {}
+    )
+
+    def _packet_dict_value(packet: dict[str, Any], key: str) -> dict[str, Any]:
+        value = packet.get(key) if isinstance(packet, dict) else {}
+        return value if isinstance(value, dict) else {}
+
+    records: list[dict[str, Any]] = []
+
+    def _append_trace_records(packet: dict[str, Any]) -> None:
+        for record in packet.get("records") or []:
+            if isinstance(record, dict) and record not in records:
+                records.append(record)
+        last_trace_record = (
+            packet.get("last_record")
+            if isinstance(packet.get("last_record"), dict)
+            else {}
+        )
+        if last_trace_record and last_trace_record not in records:
+            records.append(last_trace_record)
+
+    _append_trace_records(trace)
+    _append_trace_records(
+        _packet_dict_value(stable_bridge_prewarm_packet, "bridge_trace_packet")
+    )
+    primary_slot = (
+        _packet_dict_value(launch, "primary_model_slot")
+        or _packet_dict_value(execution_packet, "primary_model_slot")
+        or _packet_dict_value(selection_packet, "primary_model_slot")
     )
     coding_slot = (
-        launch.get("coding_agent_model_slot")
-        if isinstance(launch.get("coding_agent_model_slot"), dict)
-        else execution_packet.get("coding_agent_model_slot")
-        if isinstance(execution_packet.get("coding_agent_model_slot"), dict)
-        else {}
+        _packet_dict_value(launch, "coding_agent_model_slot")
+        or _packet_dict_value(execution_packet, "coding_agent_model_slot")
+        or _packet_dict_value(selection_packet, "coding_agent_model_slot")
     )
-    execution_mode = str(launch.get("execution_mode") or execution_packet.get("execution_mode") or "")
+    execution_mode = str(
+        launch.get("execution_mode")
+        or execution_packet.get("execution_mode")
+        or selection_packet.get("execution_mode")
+        or ""
+    )
     primary_model_id = str(primary_slot.get("model_id") or "")
     coding_model_id = str(coding_slot.get("model_id") or "")
     launch_id = str(launch.get("launch_id") or "")
@@ -6654,6 +6689,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     stable_bridge_preflight_status = str(
         launch.get("stable_bridge_preflight_status")
+        or launch_preflight_packet.get("stable_bridge_preflight_status")
         or (
             launch.get("stable_bridge_preflight_packet", {})
             if isinstance(launch.get("stable_bridge_preflight_packet"), dict)
@@ -6661,9 +6697,17 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         ).get("status")
         or ""
     )
-    stable_bridge_preflight_ok = bool(
+    stable_bridge_preflight_required = bool(
         launch.get("stable_bridge_preflight_required") is True
-        and launch.get("stable_bridge_launch_allowed") is True
+        or launch_preflight_packet.get("stable_bridge_preflight_required") is True
+    )
+    stable_bridge_launch_allowed = bool(
+        launch.get("stable_bridge_launch_allowed") is True
+        or launch_preflight_packet.get("stable_bridge_launch_allowed") is True
+    )
+    stable_bridge_preflight_ok = bool(
+        stable_bridge_preflight_required
+        and stable_bridge_launch_allowed
         and stable_bridge_preflight_status == "ok"
     )
 
@@ -6686,18 +6730,40 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         )
 
     launch_status_ok = launch.get("status") == "ok"
-    native_window_observed = launch.get("native_window_observed") is True
+    show_window_packet = _packet_dict_value(launch, "show_window_packet")
+    native_window_observed = (
+        launch.get("native_window_observed") is True
+        or launch.get("custom_window_visible") is True
+        or show_window_packet.get("native_window_observed") is True
+        or show_window_packet.get("custom_window_visible") is True
+    )
     real_codex_app_launched = launch.get("real_codex_app_launched") is True
     native_process_started = (
         launch.get("process_started") is True
         or launch.get("custom_process_observed") is True
+        or launch_preflight_packet.get("custom_process_observed") is True
+        or show_window_packet.get("custom_process_observed") is True
     )
     native_process_alive = (
         launch.get("process_still_observed_after_wait") is True
         or launch.get("running_status") is True
+        or launch.get("custom_process_observed") is True
+        or show_window_packet.get("custom_process_observed") is True
     )
     expected_custom_identity_observed = (
         launch.get("expected_custom_identity_observed") is True
+        or launch_preflight_packet.get("expected_custom_identity_observed") is True
+        or (
+            launch.get("reused_existing_window") is True
+            and (
+                launch.get("launch_trace_server_issued") is True
+                or launch_preflight_packet.get("launch_trace_server_issued") is True
+            )
+            and (
+                launch.get("selection_matches_last_launch") is True
+                or launch_preflight_packet.get("selection_matches_last_launch") is True
+            )
+        )
     )
     native_window_process_kept_running = (
         launch.get("native_window_process_kept_running") is True
@@ -6720,8 +6786,21 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and launch.get("original_codex_touched") is not True
         and launch.get("asar_touched") is not True
     )
+    existing_window_reuse_proven_with_limits = bool(
+        launch_status_ok
+        and launch.get("reused_existing_window") is True
+        and native_window_observed
+        and native_process_started
+        and native_process_alive
+        and expected_custom_identity_observed
+        and launch.get("current_codex_touched") is not True
+        and launch.get("original_codex_touched") is not True
+        and launch.get("asar_touched") is not True
+    )
     launch_evidence_proven_with_limits = bool(
-        launch_proven or native_limited_launch_proven_with_limits
+        launch_proven
+        or native_limited_launch_proven_with_limits
+        or existing_window_reuse_proven_with_limits
     )
     primary_slot_bound = primary_slot.get("status") == "bound"
     coding_slot_bound = coding_slot.get("status") == "bound"
@@ -6730,7 +6809,11 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         slot_binding_blocking_reasons.append("launch_status_not_ok")
     if not native_window_observed:
         slot_binding_blocking_reasons.append("native_window_not_observed")
-    if not real_codex_app_launched and not native_limited_launch_proven_with_limits:
+    if (
+        not real_codex_app_launched
+        and not native_limited_launch_proven_with_limits
+        and not existing_window_reuse_proven_with_limits
+    ):
         slot_binding_blocking_reasons.append("real_codex_app_not_launched")
     if launch_packet_stale:
         slot_binding_blocking_reasons.append("launch_packet_stale")
@@ -6990,9 +7073,12 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "native_limited_launch_proven_with_limits": (
             native_limited_launch_proven_with_limits
         ),
+        "existing_window_reuse_proven_with_limits": (
+            existing_window_reuse_proven_with_limits
+        ),
         "launch_evidence_proven_with_limits": launch_evidence_proven_with_limits,
         "native_window_process_kept_running": native_window_process_kept_running,
-        "running_status": launch.get("running_status") is True,
+        "running_status": launch.get("running_status") is True or native_process_alive,
         "native_process_started": native_process_started,
         "native_process_alive": native_process_alive,
         "expected_custom_identity_observed": expected_custom_identity_observed,
@@ -7035,8 +7121,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "coder_work_result_proven_with_limits": coder_work_result_proven,
         "stable_bridge_preflight": stable_bridge_preflight_status,
         "stable_bridge_preflight_ok": stable_bridge_preflight_ok,
-        "stable_bridge_preflight_required": launch.get("stable_bridge_preflight_required") is True,
-        "stable_bridge_launch_allowed": launch.get("stable_bridge_launch_allowed") is True,
+        "stable_bridge_preflight_required": stable_bridge_preflight_required,
+        "stable_bridge_launch_allowed": stable_bridge_launch_allowed,
         "launch_id": launch_id,
         "trace_id": trace_id,
         "trace_server_issued": bool(launch_id and trace_id),
@@ -7080,7 +7166,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "primary_provider": "chatgpt",
         "coding_slot_provider": str(coding_slot.get("provider") or ""),
         "coding_slot_model": coding_model_id,
-        "request_count": int(trace.get("request_count") or 0),
+        "request_count": max(int(trace.get("request_count") or 0), len(records)),
         "chatgpt_prompt_record_seen": bool(prompt_record),
         "chatgpt_requested_model": str(prompt_record.get("requested_model") or ""),
         "primary_replaced_requested_model": str(

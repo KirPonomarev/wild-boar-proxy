@@ -3327,6 +3327,17 @@ def restore_current_proxy_owner_path_runtime_surfaces(
     )
 
 
+def _changed_files_from_named_snapshots(
+    snapshots: dict[str, dict[str, Any]],
+    named_paths: tuple[tuple[str, Path], ...],
+) -> list[str]:
+    changed: list[str] = []
+    for key, path in named_paths:
+        if snapshot_path_state(path) != snapshots.get(key, {"state": "missing"}):
+            changed.append(str(path))
+    return changed
+
+
 def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
     return pid_command_line_contains_path(pid_text, paths.managed_config_file)
 
@@ -9593,6 +9604,26 @@ def run_healthcheck(
                         "live_runtime_observation_confirmed"
                     ] = True
                 else:
+                    proxy_reprobe_adoption_result[
+                        "changed_files_before_rollback"
+                    ] = _merge_changed_files(
+                        _changed_files_from_named_snapshots(
+                            activation_attempt.rollback_surface_snapshots,
+                            (
+                                ("state_file", paths.state_file),
+                                ("config_toml", paths.config_toml),
+                                (
+                                    "runtime_effective_mode_file",
+                                    paths.runtime_effective_mode_file,
+                                ),
+                            ),
+                        ),
+                        [
+                            str(paths.state_file),
+                            str(paths.config_toml),
+                            str(paths.runtime_effective_mode_file),
+                        ],
+                    )
                     restore_current_proxy_owner_path_runtime_surfaces(
                         paths, activation_attempt.rollback_surface_snapshots
                     )
@@ -9973,6 +10004,19 @@ def run_healthcheck(
         extra["startup_contract_repair_result"] = startup_contract_repair_result
 
     changed_files = detect_changed_files(before, runtime_write_surface_candidates(paths))
+    if proxy_reprobe_adoption_result is not None:
+        changed_files_before_rollback = proxy_reprobe_adoption_result.get(
+            "changed_files_before_rollback"
+        )
+        if isinstance(changed_files_before_rollback, list):
+            changed_files = _merge_changed_files(
+                changed_files,
+                [
+                    str(path)
+                    for path in changed_files_before_rollback
+                    if isinstance(path, str)
+                ],
+            )
     if startup_contract_owner_result is not None:
         changed_files = _merge_changed_files(
             changed_files, startup_contract_owner_result.changed_files
@@ -14852,6 +14896,16 @@ def attempt_sync_current_proxy_recovery_under_lock(
     )
     result["sync_result_exit_code"] = sync_payload["exit_code"]
     if sync_payload["status"] != "ok":
+        result["changed_files_before_rollback"] = _changed_files_from_named_snapshots(
+            rollback_surface_snapshots,
+            (
+                ("state_file", paths.state_file),
+                ("managed_config_file", paths.managed_config_file),
+                ("config_toml", paths.config_toml),
+                ("runtime_effective_mode_file", paths.runtime_effective_mode_file),
+                ("managed_pid_file", managed_pid_path(paths)),
+            ),
+        )
         restore_sync_current_proxy_recovery_runtime_surfaces(
             paths, rollback_surface_snapshots
         )
@@ -14890,6 +14944,24 @@ def attempt_sync_current_proxy_recovery_under_lock(
         )
         result["live_runtime_observation_confirmed"] = True
         return result, reproof_payload
+    result["changed_files_before_rollback"] = _merge_changed_files(
+        _changed_files_from_named_snapshots(
+            rollback_surface_snapshots,
+            (
+                ("state_file", paths.state_file),
+                ("managed_config_file", paths.managed_config_file),
+                ("config_toml", paths.config_toml),
+                ("runtime_effective_mode_file", paths.runtime_effective_mode_file),
+                ("managed_pid_file", managed_pid_path(paths)),
+            ),
+        ),
+        [
+            str(paths.state_file),
+            str(paths.managed_config_file),
+            str(paths.config_toml),
+            str(paths.runtime_effective_mode_file),
+        ],
+    )
     restore_sync_current_proxy_recovery_runtime_surfaces(
         paths, rollback_surface_snapshots
     )
