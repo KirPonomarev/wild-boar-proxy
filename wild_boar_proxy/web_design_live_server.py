@@ -334,6 +334,7 @@ CUSTOM_CODEX_OPERATOR_STATUS_READONLY_TIMEOUT_SECONDS = 0.75
 CUSTOM_CODEX_READONLY_TIMEOUT_CODE = "CUSTOM_CODEX_READONLY_TIMEOUT"
 CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE = "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY"
 VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
+CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS = 10 * 60
 VISIBLE_HISTORY_CONFIRMED_STATUS = "VISIBLE_THREAD_HISTORY_RESTORE_OWNER_CONFIRMED_WITH_LIMITS"
 VISIBLE_HISTORY_NOT_PROVEN_STATUS = "VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY"
 VISIBLE_HISTORY_RELAUNCH_CONFIRMED_STATUS = (
@@ -6624,6 +6625,33 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     coding_model_id = str(coding_slot.get("model_id") or "")
     launch_id = str(launch.get("launch_id") or "")
     trace_id = str(launch.get("trace_id") or "")
+    current_time = datetime.now(timezone.utc)
+    launch_packet_time = _parse_utc_timestamp(launch.get("captured_at_utc"))
+    trace_snapshot_time = _parse_utc_timestamp(trace.get("captured_at_utc"))
+    launch_packet_age_seconds = (
+        int((current_time - launch_packet_time).total_seconds())
+        if launch_packet_time is not None
+        else None
+    )
+    trace_snapshot_age_seconds = (
+        int((current_time - trace_snapshot_time).total_seconds())
+        if trace_snapshot_time is not None
+        else None
+    )
+    launch_packet_stale = bool(
+        launch_packet_age_seconds is not None
+        and (
+            launch_packet_age_seconds < 0
+            or launch_packet_age_seconds > CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS
+        )
+    )
+    trace_snapshot_stale = bool(
+        trace_snapshot_age_seconds is not None
+        and (
+            trace_snapshot_age_seconds < 0
+            or trace_snapshot_age_seconds > CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS
+        )
+    )
     stable_bridge_preflight_status = str(
         launch.get("stable_bridge_preflight_status")
         or (
@@ -6639,10 +6667,23 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and stable_bridge_preflight_status == "ok"
     )
 
+    def record_is_current(record: dict[str, Any]) -> bool:
+        record_time = _parse_utc_timestamp(record.get("captured_at_utc"))
+        if record_time is None:
+            return True
+        record_age_seconds = int((current_time - record_time).total_seconds())
+        return 0 <= record_age_seconds <= CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS
+
     def record_matches_launch(record: dict[str, Any]) -> bool:
         record_launch_id = str(record.get("launch_packet_id") or record.get("launch_id") or "")
         record_trace_id = str(record.get("trace_id") or "")
-        return bool(launch_id and trace_id and record_launch_id == launch_id and record_trace_id == trace_id)
+        return bool(
+            launch_id
+            and trace_id
+            and record_launch_id == launch_id
+            and record_trace_id == trace_id
+            and record_is_current(record)
+        )
 
     launch_status_ok = launch.get("status") == "ok"
     native_window_observed = launch.get("native_window_observed") is True
@@ -6691,6 +6732,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         slot_binding_blocking_reasons.append("native_window_not_observed")
     if not real_codex_app_launched and not native_limited_launch_proven_with_limits:
         slot_binding_blocking_reasons.append("real_codex_app_not_launched")
+    if launch_packet_stale:
+        slot_binding_blocking_reasons.append("launch_packet_stale")
+    if trace_snapshot_stale:
+        slot_binding_blocking_reasons.append("trace_snapshot_stale")
     if not stable_bridge_preflight_ok:
         slot_binding_blocking_reasons.append("stable_bridge_preflight_not_ok")
     if execution_mode != "chatgpt_plus_api":
@@ -6951,6 +6996,11 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "native_process_started": native_process_started,
         "native_process_alive": native_process_alive,
         "expected_custom_identity_observed": expected_custom_identity_observed,
+        "freshness_window_seconds": CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS,
+        "launch_packet_age_seconds": launch_packet_age_seconds,
+        "launch_packet_stale": launch_packet_stale,
+        "trace_snapshot_age_seconds": trace_snapshot_age_seconds,
+        "trace_snapshot_stale": trace_snapshot_stale,
         "slot_binding_blocking_reasons": slot_binding_blocking_reasons,
         "slot_binding_proven": slot_binding_proven,
         "primary_slot_bound": primary_slot_bound,
