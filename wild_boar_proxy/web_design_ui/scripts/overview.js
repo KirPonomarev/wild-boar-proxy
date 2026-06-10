@@ -1138,6 +1138,7 @@ function renderCodexCustomLaunch(packet) {
   const reusedExistingWindow = packet?.status === "ok"
     && launchPacketTruth
     && packet?.reused_existing_window === true
+    && packet?.launch_origin === "existing_window"
     && packet?.existing_window_reuse_admissible === true
     && packet?.selection_matches_last_launch === true
     && packet?.show_window_attempted === true
@@ -1308,11 +1309,11 @@ function renderCodexCustomLaunch(packet) {
         orphanReplaceSucceeded
           ? "заменён"
           : (
-            nativeProofOk
-              ? "запущен"
+            reusedExistingWindow
+              ? "старое окно"
               : (
-                reusedExistingWindow
-                  ? "старое окно"
+                nativeProofOk
+                  ? "запущен"
                   : (
                     limitedWindowLaunch
                       ? (nativeUsabilityBlocked ? "input не доказан" : "окно открыто")
@@ -1331,11 +1332,11 @@ function renderCodexCustomLaunch(packet) {
         orphanReplaceSucceeded
           ? "replace ok"
           : (
-            nativeProofOk
-              ? "запуск ok"
+            reusedExistingWindow
+              ? "reuse ok"
               : (
-                reusedExistingWindow
-                  ? "reuse ok"
+                nativeProofOk
+                  ? "запуск ok"
                   : (
                     limitedWindowLaunch
                       ? (nativeUsabilityBlocked ? "renderer blocked" : "proof incomplete")
@@ -1466,6 +1467,10 @@ function renderCodexCustomLaunch(packet) {
       Number(packet?.custom_process_count_after_relaunch_stop || 0),
     reused_existing_window:
       packet?.reused_existing_window === true,
+    launch_origin:
+      packet?.launch_origin || "",
+    fresh_launch_started:
+      packet?.fresh_launch_started === true,
     launch_blocked:
       packet?.launch_blocked === true,
     show_window_attempted:
@@ -3550,6 +3555,12 @@ function setQuickStartRouteResponse(packet) {
         Number(packet?.custom_process_count_after_relaunch_stop || 0),
       reused_existing_window:
         packet?.reused_existing_window === true,
+      existing_window_reuse_proven_with_limits:
+        packet?.existing_window_reuse_proven_with_limits === true,
+      launch_origin:
+        packet?.launch_origin || "",
+      fresh_launch_started:
+        packet?.fresh_launch_started === true,
       launch_blocked:
         packet?.launch_blocked === true,
       show_window_attempted:
@@ -3790,6 +3801,12 @@ function quickStartMixedTraceReasonLabel(packet) {
 
 function renderQuickStartMixedCoderTrace(packet) {
   const launchWithTraceGap = quickStartMixedLaunchAvailableWithTraceGap(packet);
+  const existingWindowWithTraceGap = Boolean(
+    launchWithTraceGap
+    && packet?.next_action === "continue_in_existing_custom_window"
+    && packet?.existing_window_reuse_proven_with_limits === true
+    && packet?.launch_origin === "existing_window"
+  );
   const unsupported = !launchWithTraceGap && quickStartMixedTraceUnsupported(packet);
   const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const blocked = packet?.status === "blocked" || unsupported;
@@ -3829,7 +3846,13 @@ function renderQuickStartMixedCoderTrace(packet) {
   setQuickStartChip(
     "quickStartLaunchState",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk || launchWithTraceGap ? "запуск ok" : (staleMixedEvidence ? "stale" : "blocked")
+    traceOk
+      ? "запуск ok"
+      : (
+        launchWithTraceGap
+          ? (existingWindowWithTraceGap ? "старое окно" : "запуск ok")
+          : (staleMixedEvidence ? "stale" : "blocked")
+      )
   );
   setQuickStartChip(
     "quickStartChatSlotState",
@@ -3885,6 +3908,12 @@ function renderQuickStartMixedCoderTrace(packet) {
       packet?.launch_status || "",
     launch_status_ok:
       packet?.launch_status_ok === true,
+    existing_window_reuse_proven_with_limits:
+      packet?.existing_window_reuse_proven_with_limits === true,
+    launch_origin:
+      packet?.launch_origin || "",
+    fresh_launch_started:
+      packet?.fresh_launch_started === true,
     launch_packet_age_seconds:
       Number.isFinite(packet?.launch_packet_age_seconds) ? packet.launch_packet_age_seconds : null,
     launch_packet_stale:

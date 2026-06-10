@@ -1542,7 +1542,10 @@ def launch_custom_native_app_packet(
         "reuse_existing_window_if_present": reuse_existing_window_if_present,
         "existing_custom_window_detected": False,
         "existing_custom_window_reused": False,
+        "reused_existing_window": False,
         "new_launch_started": False,
+        "fresh_launch_started": False,
+        "launch_origin": "not_started",
         "launcher_exit_code_early": None,
         "launcher_failed_before_custom_process": False,
     }
@@ -1736,7 +1739,14 @@ def launch_custom_native_app_packet(
                     "keep_running_on_window_observed": keep_running_on_window_observed,
                     "existing_custom_window_detected": True,
                     "existing_custom_window_reused": existing_window_usable,
+                    "reused_existing_window": existing_window_usable,
                     "new_launch_started": False,
+                    "fresh_launch_started": False,
+                    "launch_origin": (
+                        "existing_window"
+                        if existing_window_usable
+                        else "existing_window_unproven"
+                    ),
                     "show_existing_window_packet": show_packet,
                     "cleanup_result": {
                         "attempted": False,

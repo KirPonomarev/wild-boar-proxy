@@ -2559,6 +2559,9 @@ renderQuickStartMixedCoderTrace({
   runtime_readiness_claimed: false,
   response_text_counts_as_model_truth: false,
   ui_label_counts_as_proof: false,
+  existing_window_reuse_proven_with_limits: true,
+  launch_origin: "existing_window",
+  fresh_launch_started: false,
   next_action: "continue_in_existing_custom_window"
 });
 `, sandbox);
@@ -2572,7 +2575,7 @@ if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed limited"
 if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
   throw new Error(`mixed execution mode must remain visible: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
 }
-if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+if (node("quickStartLaunchState").lastElementChild.textContent !== "старое окно") {
   throw new Error(`mixed launch must stay proven: ${node("quickStartLaunchState").lastElementChild.textContent}`);
 }
 if (node("quickStartChatSlotState").lastElementChild.textContent !== "primary не доказан") {
@@ -2587,6 +2590,9 @@ if (node("quickStartNextActionState").lastElementChild.textContent !== "existing
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (rendered.machine_error_code !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED") {
   throw new Error(`mixed blocker packet not rendered: ${JSON.stringify(rendered)}`);
+}
+if (rendered.launch_origin !== "existing_window" || rendered.fresh_launch_started !== false) {
+  throw new Error(`existing-window launch origin missing: ${JSON.stringify(rendered)}`);
 }
 if (rendered.mixed_route_blocked !== false || rendered.runtime_readiness_claimed !== false) {
   throw new Error(`mixed route truth flags wrong: ${JSON.stringify(rendered)}`);
@@ -2637,6 +2643,126 @@ const expectedUnsupportedEvidence = {
 };
 if (JSON.stringify(rendered.unsupported_evidence) !== JSON.stringify(expectedUnsupportedEvidence)) {
   throw new Error(`unsupported evidence packet missing: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_quick_start_mixed_trace_gap_does_not_treat_launch_origin_as_reuse_proof(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartLaunchState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse"
+]) {
+  node(id);
+}
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartMixedCoderTrace({
+  status: "degraded",
+  machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+  final_status: "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
+  mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_blocked_reason: "",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-chat",
+  primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
+  coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+  launch_proven: true,
+  launch_status: "ok",
+  launch_status_ok: true,
+  prompt_seen: false,
+  prompt_seen_blocking_reason: "primary_chatgpt_request_absent_api_route_dispatched",
+  coder_dispatch_proven: true,
+  coder_work_result_proven_with_limits: true,
+  api_route_dispatched_without_primary: true,
+  primary_replaced_by_api_route: false,
+  primary_trace_proof_status: "not_proven",
+  mixed_mode_launch_available_with_primary_trace_gap: true,
+  runtime_readiness_claimed: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  existing_window_reuse_proven_with_limits: false,
+  launch_origin: "existing_window",
+  fresh_launch_started: false,
+  next_action: "continue_in_existing_custom_window"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed limited") {
+  throw new Error(`mixed route label changed: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+  throw new Error(`launch_origin alone must not render old-window reuse: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "existing window") {
+  throw new Error(`next action label missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (rendered.launch_origin !== "existing_window") {
+  throw new Error(`launch_origin should still be serialized: ${JSON.stringify(rendered)}`);
+}
+if (rendered.existing_window_reuse_proven_with_limits !== false) {
+  throw new Error(`existing-window reuse proof should stay false: ${JSON.stringify(rendered)}`);
+}
+if (rendered.fresh_launch_started !== false) {
+  throw new Error(`fresh launch flag should stay false: ${JSON.stringify(rendered)}`);
+}
+if (rendered.mixed_mode_launch_available_with_primary_trace_gap !== true) {
+  throw new Error(`trace-gap availability should remain true: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(
@@ -3035,6 +3161,9 @@ renderQuickStartMixedCoderTrace({
   ui_label_counts_as_proof: false,
   mixed_mode_launch_available_with_primary_trace_gap: true,
   runtime_readiness_claimed: false,
+  existing_window_reuse_proven_with_limits: true,
+  launch_origin: "existing_window",
+  fresh_launch_started: false,
   next_action: "continue_in_existing_custom_window"
 });
 `, sandbox);
@@ -3042,7 +3171,7 @@ renderQuickStartMixedCoderTrace({
 if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed limited") {
   throw new Error(`override route label must not be stale: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
-if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+if (node("quickStartLaunchState").lastElementChild.textContent !== "старое окно") {
   throw new Error(`override launch label must stay proven: ${node("quickStartLaunchState").lastElementChild.textContent}`);
 }
 if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
@@ -6252,18 +6381,29 @@ renderCodexCustomLaunch({
   selected_model: "wbp-deepseek-chat",
   api_model_id: "wbp-deepseek-chat",
   owner_authorization_phrase_present: true,
-  running_status: false,
-  process_started: false,
+  running_status: true,
+  process_started: true,
   new_launch_started: false,
   native_window_observed: true,
   native_app_usable: true,
-  real_codex_app_launched: false,
+  real_codex_app_launched: true,
+  expected_custom_identity_observed: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_profile_dir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
   launch_claim_scope: "custom_codex_launch_stability_and_recovery",
   config_status: "matches_last_launch",
   selection_matches_last_launch: true,
   existing_window_reuse_admissible: true,
   existing_window_relaunch_admissible: false,
   reused_existing_window: true,
+  launch_origin: "existing_window",
+  fresh_launch_started: false,
   launch_blocked: false,
   launch_packet_is_truth_source: true,
   show_window_attempted: true,
@@ -6283,7 +6423,13 @@ if (nodes.quickStartRouteChip.lastElementChild.textContent !== "reuse ok") {
   throw new Error(`route chip did not show reuse truth: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
 }
 const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
-if (rendered.reused_existing_window !== true || rendered.new_launch_started !== false || rendered.existing_window_reuse_admissible !== true) {
+if (
+  rendered.reused_existing_window !== true ||
+  rendered.new_launch_started !== false ||
+  rendered.launch_origin !== "existing_window" ||
+  rendered.fresh_launch_started !== false ||
+  rendered.existing_window_reuse_admissible !== true
+) {
   throw new Error(`existing-window reuse truth missing: ${JSON.stringify(rendered)}`);
 }
 """

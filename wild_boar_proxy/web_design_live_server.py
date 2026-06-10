@@ -3794,6 +3794,21 @@ def _custom_native_launch_preflight_packet(
             )
         )
     )
+    last_launch_trace_server_issued = (
+        isinstance(last_launch_packet, dict)
+        and last_launch_packet.get("launch_trace_server_issued") is True
+    )
+    last_launch_id = str((last_launch_packet or {}).get("launch_id") or "")
+    last_trace_id = str((last_launch_packet or {}).get("trace_id") or "")
+    last_launch_route_digest = str(
+        (last_launch_packet or {}).get("launch_route_digest") or ""
+    )
+    launch_trace_server_issued = bool(
+        selection_matches_last
+        and last_launch_trace_server_issued
+        and last_launch_id
+        and last_trace_id
+    )
     return {
         "schema_version": 1,
         "packet_kind": "custom_native_launch_preflight",
@@ -3804,6 +3819,12 @@ def _custom_native_launch_preflight_packet(
         "human_message": "Custom native launch preflight classified current bridge, window, and launch selection without live mutation.",
         "preflight_claim_scope": "quick_start_launch_guard_no_live_mutation",
         "owner_authorization_phrase_present": owner_authorized,
+        "launch_id": last_launch_id if launch_trace_server_issued else "",
+        "trace_id": last_trace_id if launch_trace_server_issued else "",
+        "launch_route_digest": (
+            last_launch_route_digest if launch_trace_server_issued else ""
+        ),
+        "launch_trace_server_issued": launch_trace_server_issued,
         "execution_mode": current_fields["execution_mode"],
         "chatgpt_model_id": current_fields["chatgpt_model_id"],
         "api_model_id": current_fields["api_model_id"],
@@ -4446,6 +4467,26 @@ def _custom_native_launch_stability_guard_packet(
     window_response_timeout = bool(
         window_unresponsive and "TIMEOUT" in show_window_machine_error.upper()
     )
+    launch_id = str(preflight_packet.get("launch_id") or "")
+    trace_id = str(preflight_packet.get("trace_id") or "")
+    launch_trace_server_issued = preflight_packet.get("launch_trace_server_issued") is True
+    selection_matches_last_launch = (
+        preflight_packet.get("selection_matches_last_launch") is True
+    )
+    existing_window_reuse_admissible = (
+        preflight_packet.get("existing_window_reuse_admissible") is True
+    )
+    existing_window_identity_proven = bool(
+        status == "ok"
+        and existing_window_reuse_admissible
+        and selection_matches_last_launch
+        and launch_trace_server_issued
+        and launch_id
+        and trace_id
+    )
+    reused_existing_window = bool(
+        existing_window_identity_proven and window_visible and window_usable
+    )
     return {
         "schema_version": 1,
         "packet_kind": "custom_native_launch_stability_guard",
@@ -4459,12 +4500,10 @@ def _custom_native_launch_stability_guard_packet(
         "owner_authorization_phrase_present": (
             preflight_packet.get("owner_authorization_phrase_present") is True
         ),
-        "launch_id": str(preflight_packet.get("launch_id") or ""),
-        "trace_id": str(preflight_packet.get("trace_id") or ""),
+        "launch_id": launch_id,
+        "trace_id": trace_id,
         "launch_route_digest": str(preflight_packet.get("launch_route_digest") or ""),
-        "launch_trace_server_issued": (
-            preflight_packet.get("launch_trace_server_issued") is True
-        ),
+        "launch_trace_server_issued": launch_trace_server_issued,
         "execution_mode": str(preflight_packet.get("execution_mode") or ""),
         "chatgpt_model_id": str(preflight_packet.get("chatgpt_model_id") or ""),
         "api_model_id": str(preflight_packet.get("api_model_id") or ""),
@@ -4505,15 +4544,11 @@ def _custom_native_launch_stability_guard_packet(
         "last_launch_selection_digest": str(
             preflight_packet.get("last_launch_selection_digest") or ""
         ),
-        "selection_matches_last_launch": (
-            preflight_packet.get("selection_matches_last_launch") is True
-        ),
+        "selection_matches_last_launch": selection_matches_last_launch,
         "config_status": str(preflight_packet.get("config_status") or ""),
         "custom_process_observed": preflight_packet.get("custom_process_observed") is True,
         "custom_process_count": int(preflight_packet.get("custom_process_count") or 0),
-        "existing_window_reuse_admissible": (
-            preflight_packet.get("existing_window_reuse_admissible") is True
-        ),
+        "existing_window_reuse_admissible": existing_window_reuse_admissible,
         "existing_window_relaunch_admissible": (
             preflight_packet.get("existing_window_relaunch_admissible") is True
         ),
@@ -4558,9 +4593,18 @@ def _custom_native_launch_stability_guard_packet(
             preflight_packet.get("custom_process_count_after_orphan_replace_stop")
             or 0
         ),
-        "reused_existing_window": bool(
-            status == "ok" and preflight_packet.get("existing_window_reuse_admissible") is True
+        "reused_existing_window": reused_existing_window,
+        "existing_window_launch_identity_proven": existing_window_identity_proven,
+        "launch_origin": (
+            "existing_window"
+            if reused_existing_window
+            else (
+                "existing_window_unproven"
+                if existing_window_reuse_admissible
+                else "stability_guard"
+            )
         ),
+        "fresh_launch_started": False,
         "new_launch_required": preflight_packet.get("new_launch_required") is True,
         "launch_blocked": status != "ok",
         "show_window_attempted": show_window_attempted,
@@ -4610,7 +4654,7 @@ def _custom_native_launch_stability_guard_packet(
         "final_status": "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS",
         "next_action": (
             "continue_in_existing_custom_window"
-            if status == "ok"
+            if reused_existing_window
             else "stop_and_diagnose_custom_launch_stability_guard"
         ),
     }
@@ -7066,6 +7110,19 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         and trace_snapshot_age_seconds is not None
         and not trace_snapshot_stale
     )
+    reused_existing_window = bool(
+        launch.get("reused_existing_window") is True
+        or launch.get("existing_custom_window_reused") is True
+    )
+    fresh_launch_started = bool(
+        launch.get("fresh_launch_started") is True
+        or (launch.get("new_launch_started") is True and not reused_existing_window)
+    )
+    launch_origin = str(launch.get("launch_origin") or "")
+    if reused_existing_window and not launch_origin:
+        launch_origin = "existing_window"
+    elif fresh_launch_started and not launch_origin:
+        launch_origin = "fresh_launch"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
@@ -7118,6 +7175,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "existing_window_reuse_proven_with_limits": (
             existing_window_reuse_proven_with_limits
         ),
+        "reused_existing_window": reused_existing_window,
+        "launch_origin": launch_origin,
+        "fresh_launch_started": fresh_launch_started,
         "launch_evidence_proven_with_limits": launch_evidence_proven_with_limits,
         "current_launch_evidence_proven_with_limits": (
             current_launch_evidence_proven_with_limits
@@ -11696,10 +11756,28 @@ def build_handler(
                     )
                     or 0
                 )
-            packet["reused_existing_window"] = (
+            reused_existing_window = (
                 packet.get("reused_existing_window") is True
                 or packet.get("existing_custom_window_reused") is True
             )
+            packet["reused_existing_window"] = reused_existing_window
+            packet["fresh_launch_started"] = bool(
+                packet.get("new_launch_started") is True and not reused_existing_window
+            )
+            if reused_existing_window:
+                packet["launch_origin"] = "existing_window"
+            elif packet["fresh_launch_started"] is True:
+                packet["launch_origin"] = (
+                    "orphan_replace"
+                    if packet.get("existing_window_orphan_replace_attempted") is True
+                    else (
+                        "relaunch"
+                        if packet.get("existing_window_relaunch_attempted") is True
+                        else "fresh_launch"
+                    )
+                )
+            else:
+                packet["launch_origin"] = "launch_attempt"
             packet["launch_packet_is_truth_source"] = True
             packet["visible_window_counts_as_model_truth"] = False
             packet["response_text_counts_as_route_truth"] = False

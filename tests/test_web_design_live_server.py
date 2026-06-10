@@ -11158,6 +11158,8 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "launch_trace_server_issued": True,
             "execution_mode": "chatgpt_plus_api",
             "reused_existing_window": True,
+            "launch_origin": "existing_window",
+            "fresh_launch_started": False,
             "new_launch_started": False,
             "custom_process_observed": True,
             "custom_window_visible": True,
@@ -11216,6 +11218,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["mixed_mode_launch_action"], "available")
         self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
         self.assertTrue(packet["existing_window_reuse_proven_with_limits"])
+        self.assertTrue(packet["reused_existing_window"])
+        self.assertEqual(packet["launch_origin"], "existing_window")
+        self.assertFalse(packet["fresh_launch_started"])
         self.assertTrue(packet["launch_evidence_proven_with_limits"])
         self.assertEqual(packet["slot_binding_blocking_reasons"], [])
         self.assertTrue(packet["slot_binding_proven"])
@@ -13624,6 +13629,97 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_process_lines_exposed"])
         self.assertFalse(packet["raw_path_exposed"])
 
+    def test_custom_native_launch_preflight_does_not_carry_trace_when_selection_mismatches(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        with mock.patch.object(
+            live_server,
+            "collect_codex_process_inventory",
+            return_value={
+                "custom_process_count": 1,
+                "default_process_count": 0,
+                "custom_process_lines": ["redacted"],
+            },
+        ), mock.patch.object(
+            live_server,
+            "_custom_native_launch_mode_selection_packet",
+            return_value={
+                "status": "ok",
+                "execution_mode": "api_only",
+                "api_model_id": route_id,
+                "api_reasoning_option_id": "provider_declared_max",
+                "chatgpt_model_id": "",
+                "primary_model_slot": {
+                    "slot_id": "primary_model_slot",
+                    "model_id": route_id,
+                },
+                "coding_agent_model_slot": {
+                    "slot_id": "coding_agent_model_slot",
+                    "model_id": route_id,
+                },
+                "chatgpt_line_used_as_executor": False,
+                "api_line_used_as_executor": True,
+                "api_only_calls_chatgpt": False,
+                "chatgpt_only_calls_api": False,
+                "server_issued_catalog_used": True,
+            },
+        ):
+            packet = live_server._custom_native_launch_preflight_packet(
+                {
+                    "execution_mode": "api_only",
+                    "api_model_id": route_id,
+                    "api_reasoning_option_id": "provider_declared_max",
+                },
+                owner_authorized=True,
+                operator_status={
+                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                },
+                api_snapshot={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": route_id,
+                            "display_name": "DeepSeek V4 Pro · Максимум",
+                            "provider": "deepseek",
+                            "upstream_model": "deepseek-v4-pro",
+                            "enabled": True,
+                            "selection_enabled": True,
+                            "secret_ref": "DEEPSEEK_API_KEY",
+                        }
+                    ],
+                },
+                external_routes_packet=routes_list_packet(route_id),
+                native_bridge_lease=None,
+                last_launch_packet={
+                    "status": "ok",
+                    "execution_mode": "api_only",
+                    "chatgpt_model_id": "",
+                    "api_model_id": route_id,
+                    "api_reasoning_option_id": "provider_declared_high",
+                    "selected_model": route_id,
+                    "launch_id": "previous-launch",
+                    "trace_id": "previous-trace",
+                    "launch_route_digest": "previous-route",
+                    "launch_trace_server_issued": True,
+                },
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["config_status"], "changed")
+        self.assertFalse(packet["selection_matches_last_launch"])
+        self.assertFalse(packet["existing_window_reuse_admissible"])
+        self.assertTrue(packet["existing_window_relaunch_admissible"])
+        self.assertFalse(packet["launch_trace_server_issued"])
+        self.assertEqual(packet["launch_id"], "")
+        self.assertEqual(packet["trace_id"], "")
+        self.assertEqual(packet["launch_route_digest"], "")
+        self.assertEqual(packet["next_action"], "relaunch_custom_codex_with_new_selection")
+        self.assertFalse(packet["visible_window_counts_as_model_truth"])
+        self.assertFalse(packet["response_text_counts_as_route_truth"])
+
     def test_custom_native_launch_preflight_marks_owner_authorized_relaunch_when_config_changes(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
         with mock.patch.object(
@@ -13849,14 +13945,20 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "mode_id": "codex_custom",
                 "status": "ok",
                 "machine_error_code": "OK",
+                "launch_id": "launch-reuse",
+                "trace_id": "trace-reuse",
+                "launch_trace_server_issued": True,
                 "owner_authorization_phrase_present": True,
                 "running_status": True,
                 "process_started": True,
                 "new_launch_started": True,
+                "fresh_launch_started": True,
+                "launch_origin": "fresh_launch",
                 "expected_custom_identity_observed": True,
                 "native_window_observed": True,
                 "native_app_usable": True,
                 "real_codex_app_launched": True,
+                "selection_matches_last_launch": True,
                 "temp_profile_used": False,
                 "current_codex_touched": False,
                 "original_codex_touched": False,
@@ -13955,6 +14057,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(second["status"], "ok")
         self.assertTrue(second["existing_window_reuse_admissible"])
         self.assertTrue(second["reused_existing_window"])
+        self.assertTrue(second["existing_window_launch_identity_proven"])
+        self.assertEqual(second["launch_origin"], "existing_window")
+        self.assertFalse(second["fresh_launch_started"])
+        self.assertEqual(second["next_action"], "continue_in_existing_custom_window")
         self.assertFalse(second["new_launch_started"])
         self.assertFalse(second["launch_blocked"])
         self.assertFalse(second["visible_window_counts_as_model_truth"])
@@ -14007,6 +14113,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["input_capable_ui_observed"])
         self.assertTrue(packet["launch_blocked"])
         self.assertFalse(packet["reused_existing_window"])
+        self.assertFalse(packet["existing_window_launch_identity_proven"])
+        self.assertEqual(packet["launch_origin"], "existing_window_unproven")
+        self.assertFalse(packet["fresh_launch_started"])
+        self.assertEqual(
+            packet["next_action"],
+            "stop_and_diagnose_custom_launch_stability_guard",
+        )
         self.assertEqual(
             packet["native_app_usability_blocked_reason_class"],
             "input_capable_ui_not_proven_for_pid_window_present",
