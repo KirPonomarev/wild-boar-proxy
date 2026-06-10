@@ -3779,7 +3779,7 @@ function renderQuickStartMixedCoderTrace(packet) {
   setQuickStartChip(
     "quickStartRouteChip",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk ? "mixed ok" : (launchWithTraceGap ? "запуск ok" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))
+    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))
   );
   setQuickStartChip(
     "quickStartExecutionModeState",

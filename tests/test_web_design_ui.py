@@ -2364,7 +2364,7 @@ renderQuickStartMixedCoderTrace({
 if (node("quickStartRouteChip").className.includes("green")) {
   throw new Error(`trace gap must not claim full green readiness: ${node("quickStartRouteChip").className}`);
 }
-if (node("quickStartRouteChip").lastElementChild.textContent !== "запуск ok") {
+if (node("quickStartRouteChip").lastElementChild.textContent !== "mixed limited") {
   throw new Error(`mixed launch label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
 if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
@@ -3739,6 +3739,7 @@ vm.runInContext(`
 `, sandbox);
 sandbox.runQuickStartCustomLaunchAction().then(() => {
   const expected = [
+    "api/actions",
     "api/codex/custom/quick-start/config-admission",
     "api/codex/custom/native-launch-preflight"
   ];
