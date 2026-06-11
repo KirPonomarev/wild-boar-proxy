@@ -72,6 +72,46 @@ def _run(env: dict[str, str], *args: str) -> tuple[subprocess.CompletedProcess[s
     return result, payload
 
 
+def _build_summary(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    failed_commands: list[dict[str, Any]] = []
+    command_summaries: dict[str, dict[str, Any]] = {}
+    for name, packet in packets.items():
+        status = str(packet["status"])
+        exit_code = int(packet["exit_code"])
+        machine_error_code = str(packet["machine_error_code"])
+        command_summaries[name] = {
+            "status": status,
+            "exit_code": exit_code,
+            "effect": packet.get("effect"),
+            "machine_error_code": machine_error_code,
+        }
+        if status != "ok" or exit_code != 0:
+            failed_commands.append(
+                {
+                    "command": name,
+                    "status": status,
+                    "exit_code": exit_code,
+                    "machine_error_code": machine_error_code,
+                }
+            )
+
+    if failed_commands:
+        return {
+            "status": "error",
+            "exit_code": 1,
+            "machine_error_code": failed_commands[0]["machine_error_code"],
+            "failed_commands": failed_commands,
+            "commands": command_summaries,
+        }
+    return {
+        "status": "ok",
+        "exit_code": 0,
+        "machine_error_code": "OK",
+        "failed_commands": [],
+        "commands": command_summaries,
+    }
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="wbp-smoke-") as raw_root:
         root = Path(raw_root)
@@ -221,20 +261,9 @@ def main() -> int:
         if leaked:
             raise AssertionError(f"smoke output leaked user paths: {leaked}")
 
-        summary = {
-            "status": "ok",
-            "commands": {
-                name: {
-                    "status": packet["status"],
-                    "exit_code": packet["exit_code"],
-                    "effect": packet.get("effect"),
-                    "machine_error_code": packet["machine_error_code"],
-                }
-                for name, packet in packets.items()
-            },
-        }
+        summary = _build_summary(packets)
         sys.stdout.write(json.dumps(summary, ensure_ascii=True, sort_keys=True) + "\n")
-    return 0
+    return int(summary["exit_code"])
 
 
 if __name__ == "__main__":
