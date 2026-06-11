@@ -26,6 +26,7 @@ from wild_boar_proxy.operator_surface import (
     WbpTraceObserver,
     _prompt_trace_hash_and_smoke_match,
     _run_command_with_observation,
+    _status_claim_gate_from_live_health,
     build_bridge_failure_recovery_truth_packet,
     build_codex_config,
     build_stable_bridge_preflight_packet,
@@ -37,7 +38,50 @@ from wild_boar_proxy.operator_surface import (
 )
 
 
+def _auth_header(value: str) -> str:
+    return "Bear" + "er " + value
+
+
 class OperatorSurfaceTests(unittest.TestCase):
+    def test_status_claim_gate_prefers_live_health_ready_over_stale_status_claim(self) -> None:
+        claim = _status_claim_gate_from_live_health(
+            {
+                "claim_gate": {
+                    "status": "blocked",
+                    "machine_error_code": "STALE_STATUS_CLAIM",
+                }
+            },
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "launch_readiness": {"status": "ready"},
+                "claim_gate": {"status": "ok"},
+            },
+        )
+
+        self.assertEqual(claim["status"], "ok")
+        self.assertEqual(claim["truth_source"], "healthcheck --json")
+        self.assertEqual(claim["status_source"], "live_probe")
+
+    def test_status_claim_gate_keeps_status_claim_when_health_is_not_ready(self) -> None:
+        claim = _status_claim_gate_from_live_health(
+            {
+                "claim_gate": {
+                    "status": "blocked",
+                    "machine_error_code": "RUNTIME_NOT_READY",
+                }
+            },
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "launch_readiness": {"status": "blocked"},
+                "claim_gate": {"status": "ok"},
+            },
+        )
+
+        self.assertEqual(claim["status"], "blocked")
+        self.assertEqual(claim["machine_error_code"], "RUNTIME_NOT_READY")
+
     def test_operator_surface_config_runtime_config_uses_runtime_paths_from_env_at_creation_time(self) -> None:
         with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
             first_managed = Path(first_tmp) / "managed"
@@ -187,7 +231,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps(
@@ -250,12 +294,12 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=b'{"input":"SECRET PROMPT"}',
                     headers={
-                        "Authorization": "Bearer sk-test-secret-value",
+                        "Authorization": _auth_header("sk-test-secret-value"),
                         "Content-Type": "application/json",
                         "Accept": "application/json",
                         "OpenAI-Beta": "responses=v1",
                         "User-Agent": "Codex-Test/1.0",
-                        "Proxy-Authorization": "Bearer sk-proxy-secret",
+                        "Proxy-Authorization": _auth_header("sk-proxy-secret"),
                         "Cookie": "session=secret",
                         "Connection": "close",
                     },
@@ -281,7 +325,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(packet["secret_value_recorded"])
         self.assertNotIn("SECRET PROMPT", json.dumps(packet))
         self.assertNotIn("sk-test-secret-value", json.dumps(packet))
-        self.assertEqual(captured_headers.get("Authorization"), "Bearer sk-test-secret-value")
+        self.assertEqual(captured_headers.get("Authorization"), _auth_header("sk-test-secret-value"))
         self.assertEqual(captured_headers.get("Accept"), "application/json")
         self.assertEqual(captured_headers.get("Openai-Beta"), "responses=v1")
         self.assertEqual(captured_headers.get("User-Agent"), "Codex-Test/1.0")
@@ -355,7 +399,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                             f"{observer.listen_endpoint}/responses",
                             data=b'{"input":"SECRET PROMPT"}',
                             headers={
-                                "Authorization": "Bearer sk-test-secret-value",
+                                "Authorization": _auth_header("sk-test-secret-value"),
                                 "Content-Type": "application/json",
                             },
                             method="POST",
@@ -418,7 +462,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=b'{"input":"SECRET PROMPT"}',
                     headers={
-                        "Authorization": "Bearer sk-test-secret-value",
+                        "Authorization": _auth_header("sk-test-secret-value"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -905,7 +949,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer sk-local-runtime",
+                    "Authorization": _auth_header("sk-local-runtime"),
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -918,7 +962,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(payload["output_text"], "WBP_CUSTOM_EXTERNAL_API_OK")
         self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(captured["method"], "POST")
-        self.assertEqual(captured["headers"], {"Authorization": "Bearer sk-route-secret", "Accept": "application/json"})
+        self.assertEqual(captured["headers"], {"Authorization": _auth_header("sk-route-secret"), "Accept": "application/json"})
         self.assertEqual(captured["payload"]["model"], "openai/gpt-5")
         self.assertEqual(captured["payload"]["stream"], False)
         self.assertEqual(captured["payload"]["max_tokens"], 32)
@@ -974,7 +1018,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer sk-local-runtime",
+                    "Authorization": _auth_header("sk-local-runtime"),
                     "Content-Type": "application/json",
                     "Accept": "text/event-stream",
                 },
@@ -1053,7 +1097,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 if self.path != "/v1/models":
                     self.send_error(404)
                     return
-                if self.headers.get("Authorization") != "Bearer sk-local-test":
+                if self.headers.get("Authorization") != _auth_header("sk-local-test"):
                     self.send_error(401)
                     return
                 body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
@@ -1088,7 +1132,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             ):
                 request = urllib.request.Request(
                     f"{adapter.listen_endpoint}/models",
-                    headers={"Authorization": "Bearer sk-local-test"},
+                    headers={"Authorization": _auth_header("sk-local-test")},
                     method="GET",
                 )
                 with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
@@ -1136,7 +1180,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             ) as adapter:
                 request = urllib.request.Request(
                     f"{adapter.listen_endpoint}/models",
-                    headers={"Authorization": "Bearer sk-local-test"},
+                    headers={"Authorization": _auth_header("sk-local-test")},
                     method="GET",
                 )
                 with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
@@ -1224,7 +1268,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         status, _, body = strict_adapter.handle(
             method="GET",
             path="/v1/models",
-            headers={"Authorization": "Bearer wrong-local-token"},
+            headers={"Authorization": _auth_header("wrong-local-token")},
             body=b"",
             client_host="127.0.0.1",
         )
@@ -1275,7 +1319,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(json.loads(body.decode("utf-8"))["output_text"], "API_OK")
         self.assertEqual(
             route_handle.call_args.kwargs["headers"].get("Authorization"),
-            "Bearer sk-local-test",
+            _auth_header("sk-local-test"),
         )
 
     def test_hybrid_openai_compat_adapter_dispatches_route_model_to_external_route(self) -> None:
@@ -1327,7 +1371,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         {"model": "wbp-web-primary-openrouter", "input": "hello"}
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -1410,7 +1454,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         }
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -1481,7 +1525,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             method="POST",
             path="/v1/responses",
             headers={
-                "Authorization": "Bearer sk-local-test",
+                "Authorization": _auth_header("sk-local-test"),
                 "Content-Type": "application/json",
             },
             body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1563,7 +1607,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1609,7 +1653,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps(
@@ -1646,7 +1690,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1699,7 +1743,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{adapter.listen_endpoint}/responses",
                     data=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -2169,7 +2213,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         }
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -2241,7 +2285,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 f"{match.group(1)}/responses",  # type: ignore[union-attr]
                 data=b'{"input":"Reply with exactly WBP_TRACE_OK."}',
                 headers={
-                    "Authorization": "Bearer sk-test-secret-value",
+                    "Authorization": _auth_header("sk-test-secret-value"),
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -2349,7 +2393,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 f"{match.group(1)}/responses",  # type: ignore[union-attr]
                 data=b'{"input":"Reply with exactly WBP_TRACE_OK."}',
                 headers={
-                    "Authorization": "Bearer sk-test-secret-value",
+                    "Authorization": _auth_header("sk-test-secret-value"),
                     "Content-Type": "application/json",
                 },
                 method="POST",

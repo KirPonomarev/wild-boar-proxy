@@ -5352,29 +5352,6 @@ def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
                 "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
             },
         )
-    if paths.repair_target_inventory_dir.is_dir() and any(
-        paths.repair_target_inventory_dir.glob("codex-*.json")
-    ):
-        return build_command_payload(
-            ok=False,
-            human_message="Target switch apply blocked because the approved target inventory already contains auth files.",
-            machine_error_code="TARGET_SWITCH_DIR_NOT_EMPTY",
-            liveness="unknown",
-            severity="recoverable",
-            operator_action="user_action",
-            changed_files=[],
-            extra={
-                "next_action": "inspect_target_switch_contract",
-                "command_mode": "apply",
-                "target_surface": build_target_switch_surface_context(paths),
-                "write_surface_declared": True,
-                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
-                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
-                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
-                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
-            },
-        )
-
     expected_reference = build_approved_repair_target_file_payload(paths)
     expected_transaction = build_target_switch_transaction_file_payload(paths)
     already_aligned = (
@@ -5401,6 +5378,51 @@ def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
                 "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
             },
         )
+    if paths.repair_target_inventory_dir.is_dir() and any(
+        paths.repair_target_inventory_dir.glob("codex-*.json")
+    ):
+        registry = read_json_if_file(paths.registry_file)
+        target_switch_plan: dict[str, Any] = {
+            "blocked_reasons": ["registry_missing"],
+            "target_reconciliation_plan": {},
+        }
+        if registry:
+            policy_drift = get_stable_policy_drift(paths, registry)
+            target_switch_plan = build_stable_repair_transaction_plan(
+                paths,
+                registry,
+                policy_drift,
+                lock_preflight,
+                mode="dry_run",
+            )
+        target_reconciliation = target_switch_plan.get("target_reconciliation_plan", {})
+        target_is_exact_approved_inventory = (
+            not target_switch_plan.get("blocked_reasons")
+            and not target_reconciliation.get("target_would_add")
+            and not target_reconciliation.get("target_would_prune")
+        )
+        if not target_is_exact_approved_inventory:
+            return build_command_payload(
+                ok=False,
+                human_message="Target switch apply blocked because the approved target inventory already contains unapproved auth files.",
+                machine_error_code="TARGET_SWITCH_DIR_NOT_EMPTY",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+                extra={
+                    "next_action": "inspect_target_switch_contract",
+                    "command_mode": "apply",
+                    "target_surface": build_target_switch_surface_context(paths),
+                    "write_surface_declared": True,
+                    "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                    "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                    "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                    "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+                    "target_reconciliation_plan": target_reconciliation,
+                    "blocked_reasons": target_switch_plan.get("blocked_reasons", []),
+                },
+            )
 
     guard_before = snapshot_target_switch_guard_surfaces(paths)
     before = snapshot_candidate_paths(

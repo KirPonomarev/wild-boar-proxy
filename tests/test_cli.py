@@ -8003,6 +8003,48 @@ class CliTests(unittest.TestCase):
         self.assertFalse((self.managed_dir / "approved-repair-target.json").exists())
         self.assertFalse((self.managed_dir / "target-switch-transaction.json").exists())
 
+    def test_stable_target_switch_apply_accepts_reconciled_target_inventory(self) -> None:
+        source_auth = self.profile_dir / "codex-approved.json"
+        source_auth.write_text('{"token":"approved"}', encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        registry_path.write_text(
+            json.dumps(registry, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        target_dir = self.managed_dir / "stable-repair-target"
+        target_dir.mkdir()
+        shutil.copy2(source_auth, target_dir / source_auth.name)
+
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotEqual(before, after)
+        self.assertEqual(payload["machine_error_code"], "TARGET_SWITCH_APPLIED")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            sorted(path.name for path in target_dir.glob("codex-*.json")),
+            [source_auth.name],
+        )
+        self.assertEqual(
+            sorted(payload["changed_files"]),
+            sorted(
+                [
+                    str(self.managed_dir / "approved-repair-target.json"),
+                    str(self.managed_dir / "stable-repair-target"),
+                    str(self.managed_dir / "target-switch-transaction.json"),
+                ]
+            ),
+        )
+        approved_target = payload["target_surface"]["approved_repair_target_reference"]
+        self.assertEqual(approved_target["status"], "materialized_aligned")
+        self.assertFalse(payload["target_surface"]["mode_set_is_target_switch"])
+        self.assertEqual(payload["next_action"], "none")
+
     def test_stable_target_switch_contract_ignores_override_alias_attempts(self) -> None:
         result = self.run_cli_with_env(
             {

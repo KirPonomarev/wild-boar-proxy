@@ -128,7 +128,7 @@ def load_dashboard_state(
     external_action: ExternalActionResult | None = None,
 ) -> DashboardState:
     try:
-        runtime = load_runtime_snapshot(runner)
+        runtime = load_runtime_snapshot(runner, live_probe=True)
         accounts = load_account_pool_snapshot(runner)
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(

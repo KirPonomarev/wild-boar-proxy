@@ -283,6 +283,28 @@ class FakeRunner:
                 payload={"desired_mode": "managed", "effective_mode": "managed"},
                 stderr="",
             )
+        if args == ("healthcheck", "--json"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "Runtime healthcheck passed.",
+                    "machine_error_code": "OK",
+                    "next_action": "none",
+                    "liveness": "healthy",
+                    "severity": "info",
+                    "operator_action": "none",
+                    "desired_mode": "managed",
+                    "effective_mode": "managed",
+                    "endpoint": "http://127.0.0.1:8320/v1",
+                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "attestation": {
+                        "attestation_source": "healthcheck --json",
+                        "observed_at_utc": "2026-05-08T00:00:00+00:00",
+                    },
+                },
+                stderr="",
+            )
         if args == ("accounts", "list", "--json"):
             return CommandResult(
                 payload={

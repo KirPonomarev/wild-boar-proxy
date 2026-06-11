@@ -2703,6 +2703,32 @@ class OperatorSurfaceConfig:
     timeout_seconds: int = 180
 
 
+def _status_claim_gate_from_live_health(
+    status_packet: dict[str, Any],
+    health_packet: dict[str, Any],
+) -> dict[str, Any]:
+    status_claim = status_packet.get("claim_gate")
+    fallback = (
+        dict(status_claim)
+        if isinstance(status_claim, dict)
+        else {"status": "not_reported"}
+    )
+    launch_readiness = health_packet.get("launch_readiness")
+    if (
+        health_packet.get("status") == "ok"
+        and health_packet.get("machine_error_code") == "OK"
+        and isinstance(launch_readiness, dict)
+        and launch_readiness.get("status") == "ready"
+    ):
+        health_claim = health_packet.get("claim_gate")
+        claim = dict(health_claim) if isinstance(health_claim, dict) else {"status": "ok"}
+        claim.setdefault("status", "ok")
+        claim.setdefault("truth_source", "healthcheck --json")
+        claim.setdefault("status_source", "live_probe")
+        return claim
+    return fallback
+
+
 @dataclass
 class OperatorSurfaceSession:
     config: OperatorSurfaceConfig = field(default_factory=OperatorSurfaceConfig)
@@ -2798,7 +2824,7 @@ class OperatorSurfaceSession:
                 "machine_error_code": health_packet.get("machine_error_code"),
                 "liveness": health_packet.get("liveness"),
             },
-            "claim_gate": status_packet.get("claim_gate", {"status": "not_reported"}),
+            "claim_gate": _status_claim_gate_from_live_health(status_packet, health_packet),
             "models": models,
             "control_surface": {
                 "localhost_only": True,
