@@ -5068,9 +5068,18 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
 
     dispatch_payload = {
         "model": primary_model_id,
-        "input": f"Попроси API-кодера ответить одной строкой: {MIXED_DEEPSEEK_CODER_SMOKE_PHRASE}",
+        "instructions": (
+            "You are an exact echo smoke-test endpoint. Your entire response "
+            "must be the exact requested token only."
+        ),
+        "input": (
+            "Print this literal token exactly, with no quotes, no markdown, "
+            "no explanation, no acknowledgement:\n"
+            f"{MIXED_DEEPSEEK_CODER_SMOKE_PHRASE}"
+        ),
         "stream": False,
         "max_output_tokens": 64,
+        "temperature": 0,
     }
     request = urllib.request.Request(
         f"{bridge_endpoint.rstrip('/')}/responses",
@@ -7386,6 +7395,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             if launch_available_with_primary_trace_gap
             else "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
         )
+    elif prompt_seen and coder_dispatch_proven and not coder_work_result_proven:
+        machine_error_code = "DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
+        final_status = "KNOWN_BLOCKER_DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
+        next_action = "rerun_native_dispatch_proof_or_inspect_deepseek_response_contract"
     else:
         machine_error_code = "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"

@@ -745,6 +745,46 @@ def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bo
     return prompt_hash, any(phrase in prompt_text for phrase in WINDOW_SMOKE_PHRASES)
 
 
+def _response_payload_text_fragments(value: Any) -> list[str]:
+    fragments: list[str] = []
+    if isinstance(value, str):
+        if value.strip():
+            fragments.append(value)
+        return fragments
+    if isinstance(value, list):
+        for item in value:
+            fragments.extend(_response_payload_text_fragments(item))
+        return fragments
+    if not isinstance(value, dict):
+        return fragments
+
+    for key in ("output_text", "text", "content"):
+        item = value.get(key)
+        if isinstance(item, str) and item.strip():
+            fragments.append(item)
+        elif isinstance(item, (dict, list)):
+            fragments.extend(_response_payload_text_fragments(item))
+    for key in ("output", "choices", "message", "delta"):
+        item = value.get(key)
+        if isinstance(item, (dict, list)):
+            fragments.extend(_response_payload_text_fragments(item))
+    return fragments
+
+
+def _response_body_smoke_match(response_body: bytes) -> bool:
+    if not response_body:
+        return False
+    payload = _json_loads_object(response_body)
+    if payload:
+        response_text = "\n".join(_response_payload_text_fragments(payload))
+    else:
+        try:
+            response_text = response_body.decode("utf-8", errors="ignore")
+        except Exception:
+            response_text = ""
+    return any(phrase in response_text for phrase in WINDOW_SMOKE_PHRASES)
+
+
 def _json_loads_object(raw: bytes) -> dict[str, Any]:
     try:
         payload = json.loads(raw.decode("utf-8"))
@@ -2467,6 +2507,7 @@ class HybridOpenAICompatAdapter:
     ) -> None:
         route_digest = _safe_route_digest(route) if route else ""
         response_payload = _json_loads_object(response_body)
+        response_smoke_match = _response_body_smoke_match(response_body)
         response_seen = 200 <= status < 500 and bool(response_body)
         record = {
             **self._trace_context,
@@ -2492,7 +2533,8 @@ class HybridOpenAICompatAdapter:
             "response_seen": response_seen,
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
-            "known_smoke_phrase_matched": smoke_match,
+            "known_smoke_phrase_requested": smoke_match,
+            "known_smoke_phrase_matched": response_smoke_match,
             "stream_requested": stream_requested,
             "stream_started": bool(stream_requested and 200 <= status < 300 and response_body),
             "stream_completed": bool(stream_requested and 200 <= status < 300 and response_body),

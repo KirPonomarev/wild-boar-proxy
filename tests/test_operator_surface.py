@@ -1426,7 +1426,12 @@ class OperatorSurfaceTests(unittest.TestCase):
                     return_value=(
                         200,
                         {"Content-Type": "application/json"},
-                        json.dumps({"requested_model": "wbp-deepseek-v4-pro-max"}).encode("utf-8"),
+                        json.dumps(
+                            {
+                                "requested_model": "wbp-deepseek-v4-pro-max",
+                                "output_text": "WBP_DEEPSEEK_WINDOW_SMOKE_OK",
+                            }
+                        ).encode("utf-8"),
                     ),
                 ) as route_handle,
                 HybridOpenAICompatAdapter(
@@ -1499,6 +1504,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(last_record["provider_id"], "deepseek")
         self.assertEqual(last_record["upstream_model"], "deepseek-v4-pro")
         self.assertEqual(last_record["api_reasoning_option_id"], "provider_declared_max")
+        self.assertTrue(last_record["known_smoke_phrase_requested"])
         self.assertTrue(last_record["known_smoke_phrase_matched"])
         self.assertTrue(last_record["response_seen"])
         self.assertFalse(last_record["route_digest_matches_launch"])
@@ -1614,6 +1620,8 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(coder_record["effective_route_model"], "wbp-deepseek-v4-pro-max")
         self.assertTrue(coder_record["dual_lane_shadow_dispatch"])
         self.assertEqual(coder_record["dual_lane_primary_requested_model"], "gpt-5.5")
+        self.assertTrue(coder_record["known_smoke_phrase_requested"])
+        self.assertFalse(coder_record["known_smoke_phrase_matched"])
         self.assertFalse(trace["fallback_used"])
         self.assertFalse(primary_record["raw_prompt_recorded"])
         self.assertFalse(coder_record["secret_value_recorded"])
