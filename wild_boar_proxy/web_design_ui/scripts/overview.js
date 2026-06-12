@@ -86,7 +86,8 @@ const ACTION_STATUS_VISUAL_CLASS = {
 
 const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
-const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_DEFAULT_LAUNCH_LABEL;
+const QUICK_START_SESSION_DUAL_LANE_LABEL = "Проверить GPT+API";
+const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_SESSION_DUAL_LANE_LABEL;
 let quickStartMixedModeProductBlocked = false;
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
@@ -1965,7 +1966,8 @@ async function runCodexCustomLaunch() {
     const packet = await response.json();
     renderCodexCustomLaunch(packet);
     await refreshQuickStartLiveBridgeStabilityTruth(packet);
-    await refreshQuickStartMixedCoderTraceTruth(packet);
+    const tracePacket = await refreshQuickStartMixedCoderTraceTruth(packet);
+    await runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket);
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderCodexCustomLaunch({
@@ -2098,6 +2100,9 @@ function quickStartNextActionLabel(nextAction) {
   }
   if (action === "inspect_slot_binding_launch_evidence") {
     return "inspect slot";
+  }
+  if (action === "confirm_runtime_can_dispatch_coding_agent_model_slot") {
+    return "dispatch proof";
   }
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
@@ -3423,6 +3428,32 @@ function setQuickStartRouteResponse(packet) {
         packet?.mixed_mode_launch_blocked_reason || "",
       primary_trace_proof_status:
         packet?.primary_trace_proof_status || "",
+      session_dual_lane_execution_packet:
+        packet?.session_dual_lane_execution_packet === true,
+      session_probe_only:
+        packet?.session_probe_only === true,
+      launch_attempted:
+        packet?.launch_attempted === true,
+      native_launch_attempted:
+        packet?.native_launch_attempted === true,
+      window_launch_attempted:
+        packet?.window_launch_attempted === true,
+      session_id:
+        packet?.session_id || "",
+      same_session_dispatch_proven:
+        packet?.same_session_dispatch_proven === true,
+      primary_dispatch_proven:
+        packet?.primary_dispatch_proven === true,
+      coding_dispatch_proven:
+        packet?.coding_dispatch_proven === true,
+      session_dual_lane_dispatch:
+        packet?.session_dual_lane_dispatch || {},
+      session_dual_lane_dispatch_proven_with_limits:
+        packet?.session_dual_lane_dispatch_proven_with_limits === true,
+      session_dual_lane_does_not_prove_native_launch:
+        packet?.session_dual_lane_does_not_prove_native_launch === true,
+      session_dual_lane_does_not_claim_product_readiness:
+        packet?.session_dual_lane_does_not_claim_product_readiness === true,
       mixed_mode_launch_available_with_primary_trace_gap:
         packet?.mixed_mode_launch_available_with_primary_trace_gap === true,
       execution_mode: packet?.execution_mode || "",
@@ -3455,6 +3486,13 @@ function setQuickStartRouteResponse(packet) {
       next_action: packet?.next_action || "",
       post_action_refresh_required: packet?.post_action_refresh_required === true,
       launch_proven: packet?.launch_proven === true,
+      launch_context_present: packet?.launch_context_present === true,
+      launch_context_missing: packet?.launch_context_missing === true,
+      launch_context_missing_reason: packet?.launch_context_missing_reason || "",
+      persisted_config_counts_as_launch_context:
+        packet?.persisted_config_counts_as_launch_context === true,
+      window_visibility_counts_as_launch_context:
+        packet?.window_visibility_counts_as_launch_context === true,
       launch_status: packet?.launch_status || "",
       launch_status_ok: packet?.launch_status_ok === true,
       launch_packet_age_seconds:
@@ -3464,6 +3502,14 @@ function setQuickStartRouteResponse(packet) {
         packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
       current_bridge_trace_matches_launch:
         packet?.current_bridge_trace_matches_launch === true,
+      current_provider_record_matches_launch:
+        packet?.current_provider_record_matches_launch === true,
+      current_bridge_identity_bound_rebind_proven:
+        packet?.current_bridge_identity_bound_rebind_proven === true,
+      bridge_identity_matches_launch:
+        packet?.bridge_identity_matches_launch === true,
+      bridge_rebind_counts_as_provider_proof:
+        packet?.bridge_rebind_counts_as_provider_proof === true,
       trace_snapshot_age_seconds:
         Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
       trace_snapshot_stale: packet?.trace_snapshot_stale === true,
@@ -3471,6 +3517,18 @@ function setQuickStartRouteResponse(packet) {
         packet?.current_launch_evidence_proven_with_limits === true,
       current_mixed_trace_evidence_fresh:
         packet?.current_mixed_trace_evidence_fresh === true,
+      native_dispatch_proof_attempted:
+        packet?.native_dispatch_proof_attempted === true,
+      native_dispatch_proof_scope:
+        packet?.native_dispatch_proof_scope || "",
+      native_dispatch_http_status:
+        Number.isFinite(packet?.native_dispatch_http_status)
+          ? packet.native_dispatch_http_status
+          : null,
+      native_dispatch_error_class:
+        packet?.native_dispatch_error_class || "",
+      native_ui_input_claimed:
+        packet?.native_ui_input_claimed === true,
       runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
       runtime_health_gate_blocks_launch_admission:
         packet?.runtime_health_gate_blocks_launch_admission === true,
@@ -3770,18 +3828,26 @@ function setQuickStartMixedLaunchActionGuard(blocked) {
   if (!button.dataset) {
     button.dataset = {};
   }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  const isSessionDualLaneMode = payload?.execution_mode === "chatgpt_plus_api";
+  const readyLabel = isSessionDualLaneMode
+    ? QUICK_START_SESSION_DUAL_LANE_LABEL
+    : QUICK_START_DEFAULT_LAUNCH_LABEL;
+  const readyTitle = isSessionDualLaneMode
+    ? "Проверяет GPT+API session dispatch; native окно этим действием не запускается."
+    : QUICK_START_DEFAULT_LAUNCH_LABEL;
   button.dataset.mixedModeLaunchBlocked = quickStartMixedModeProductBlocked ? "true" : "false";
   button.setAttribute?.(
     "title",
     quickStartMixedModeProductBlocked
       ? "ChatGPT + API сейчас заблокирован; кнопка запускает проверку и затем обновляет blocker truth."
-      : QUICK_START_DEFAULT_LAUNCH_LABEL
+      : readyTitle
   );
   const label = button.querySelector?.("span");
   if (label) {
     label.textContent = quickStartMixedModeProductBlocked
       ? QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL
-      : QUICK_START_DEFAULT_LAUNCH_LABEL;
+      : readyLabel;
   }
 }
 
@@ -3827,21 +3893,45 @@ function renderQuickStartMixedCoderTrace(packet) {
   const staleMixedEvidence =
     launchPacketStaleBlocks || traceSnapshotStaleBlocks;
   setQuickStartMixedLaunchActionGuard(blocked && !traceOk);
+  const launchContextMissing =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING"
+    || packet?.launch_context_missing === true;
   const slotBindingBlocked = packet?.machine_error_code === "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN";
   const chatgptLabel = slotBindingBlocked
     ? "not proven"
     : (unsupported || launchWithTraceGap)
     ? quickStartMixedTraceReasonLabel(packet)
     : (packet?.prompt_seen === true ? "runtime proven" : "not proven");
+  const bridgeProven = traceOk && (
+    packet?.current_bridge_identity_bound_rebind_proven === true
+    || (
+      packet?.current_bridge_trace_matches_launch === true
+      && packet?.stable_bridge_preflight_ok === true
+    )
+    || packet?.native_mixed_primary_trace_supported === true
+    || packet?.stable_bridge_preflight_ok === true
+  );
+  const windowProven = traceOk
+    && packet?.native_window_observed === true
+    && packet?.real_codex_app_launched === true;
+  const configProven = traceOk && (
+    packet?.trace_launch_packet_matches === true
+    || (
+      packet?.launch_status_ok === true
+      && packet?.launch_context_missing !== true
+      && packet?.launch_packet_stale !== true
+      && packet?.trace_snapshot_stale !== true
+    )
+  );
   setQuickStartChip(
     "quickStartRouteChip",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (staleMixedEvidence ? "mixed stale" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked"))))
+    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (launchContextMissing ? "launch context missing" : (staleMixedEvidence ? "mixed stale" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))))
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
     traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
-    traceOk || launchWithTraceGap || staleMixedEvidence ? "ChatGPT + API" : "unsupported"
+    traceOk || launchWithTraceGap || staleMixedEvidence || launchContextMissing ? "ChatGPT + API" : "unsupported"
   );
   setQuickStartChip(
     "quickStartLaunchState",
@@ -3851,7 +3941,7 @@ function renderQuickStartMixedCoderTrace(packet) {
       : (
         launchWithTraceGap
           ? (existingWindowWithTraceGap ? "старое окно" : "запуск ok")
-          : (staleMixedEvidence ? "stale" : "blocked")
+          : (launchContextMissing ? "context missing" : (staleMixedEvidence ? "stale" : "blocked"))
       )
   );
   setQuickStartChip(
@@ -3868,6 +3958,26 @@ function renderQuickStartMixedCoderTrace(packet) {
     "quickStartNextActionState",
     (!packet?.next_action || packet?.next_action === "none") && traceOk ? "green" : "amber",
     quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    traceOk && packet?.launch_proven === true ? "green" : "neutral",
+    traceOk && packet?.launch_proven === true ? "confirmed" : "preflight"
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    bridgeProven ? "green" : (packet?.stable_bridge_preflight_ok === true ? "amber" : "neutral"),
+    bridgeProven ? "жив" : (packet?.stable_bridge_preflight_ok === true ? "preflight" : "не проверен")
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    windowProven ? "green" : (packet?.launch_proven === true ? "amber" : "neutral"),
+    windowProven ? "найдено" : (packet?.launch_proven === true ? "не доказано" : "не проверено")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    configProven ? "green" : (packet?.launch_status_ok === true ? "amber" : "neutral"),
+    configProven ? "совпадает" : (packet?.launch_status_ok === true ? "не доказан" : "не проверен")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -3904,6 +4014,16 @@ function renderQuickStartMixedCoderTrace(packet) {
       packet?.direct_api_dispatch_without_primary_trace === true,
     launch_proven:
       packet?.launch_proven === true,
+    launch_context_present:
+      packet?.launch_context_present === true,
+    launch_context_missing:
+      packet?.launch_context_missing === true,
+    launch_context_missing_reason:
+      packet?.launch_context_missing_reason || "",
+    persisted_config_counts_as_launch_context:
+      packet?.persisted_config_counts_as_launch_context === true,
+    window_visibility_counts_as_launch_context:
+      packet?.window_visibility_counts_as_launch_context === true,
     launch_status:
       packet?.launch_status || "",
     launch_status_ok:
@@ -3922,6 +4042,14 @@ function renderQuickStartMixedCoderTrace(packet) {
       packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
     current_bridge_trace_matches_launch:
       packet?.current_bridge_trace_matches_launch === true,
+    current_provider_record_matches_launch:
+      packet?.current_provider_record_matches_launch === true,
+    current_bridge_identity_bound_rebind_proven:
+      packet?.current_bridge_identity_bound_rebind_proven === true,
+    bridge_identity_matches_launch:
+      packet?.bridge_identity_matches_launch === true,
+    bridge_rebind_counts_as_provider_proof:
+      packet?.bridge_rebind_counts_as_provider_proof === true,
     trace_snapshot_age_seconds:
       Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
     trace_snapshot_stale:
@@ -3962,7 +4090,19 @@ function renderQuickStartMixedCoderTrace(packet) {
     response_text_counts_as_model_truth:
       packet?.response_text_counts_as_model_truth === true,
     ui_label_counts_as_proof: packet?.ui_label_counts_as_proof === true,
-    runtime_readiness_claimed: false,
+    native_dispatch_proof_attempted:
+      packet?.native_dispatch_proof_attempted === true,
+    native_dispatch_proof_scope:
+      packet?.native_dispatch_proof_scope || "",
+    native_dispatch_http_status:
+      Number.isFinite(packet?.native_dispatch_http_status)
+        ? packet.native_dispatch_http_status
+        : null,
+    native_dispatch_error_class:
+      packet?.native_dispatch_error_class || "",
+    native_ui_input_claimed:
+      packet?.native_ui_input_claimed === true,
+    runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
     next_action: packet?.next_action || ""
   });
 }
@@ -4007,6 +4147,59 @@ async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
   }
 }
 
+async function runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket) {
+  if (
+    tracePacket?.execution_mode !== "chatgpt_plus_api"
+    || tracePacket?.status === "ok"
+    || tracePacket?.next_action !== "confirm_runtime_can_dispatch_coding_agent_model_slot"
+  ) {
+    return tracePacket || null;
+  }
+  setQuickStartChip("quickStartRouteChip", "neutral", "dispatch proof");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 95000) : null;
+  try {
+    const response = await fetch("api/codex/custom/native-dispatch-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({}),
+      signal: controller?.signal
+    });
+    if (!response.ok) {
+      throw new Error(`native dispatch proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    const packet = {
+      ...tracePacket,
+      status: "blocked",
+      machine_error_code: timedOut ? "NATIVE_DISPATCH_PROOF_TIMEOUT" : "NATIVE_DISPATCH_PROOF_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_FETCH_FAILED",
+      native_dispatch_proof_attempted: true,
+      native_ui_input_claimed: false,
+      browser_trace_authority: false,
+      raw_prompt_recorded: false,
+      auth_header_recorded: false,
+      secret_value_recorded: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      runtime_readiness_claimed: false,
+      next_action: "stop_and_diagnose_native_dispatch_proof"
+    };
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
 async function refreshQuickStartRouteStatus() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -4036,12 +4229,158 @@ async function refreshQuickStartRouteStatus() {
       return;
     }
     setQuickStartChip("quickStartRouteChip", "neutral", "модели загружены");
-    setQuickStartChip("quickStartNextActionState", "neutral", "проверить запуск");
+    setQuickStartChip(
+      "quickStartNextActionState",
+      "neutral",
+      payload.execution_mode === "chatgpt_plus_api" ? "проверить GPT+API" : "проверить запуск"
+    );
   } finally {
     codexLaunchDryRunInFlight = false;
     for (const button of buttons) {
       button.removeAttribute("disabled");
     }
+  }
+}
+
+function renderQuickStartSessionDualLaneExecution(packet) {
+  const dispatch = packet?.session_dual_lane_dispatch || {};
+  const proven = packet?.status === "ok"
+    && packet?.same_session_dispatch_proven === true
+    && packet?.primary_dispatch_proven === true
+    && packet?.coding_dispatch_proven === true
+    && packet?.fallback_used !== true
+    && dispatch?.does_not_prove_native_launch === true
+    && dispatch?.does_not_claim_product_readiness === true;
+  setQuickStartChip(
+    "quickStartRouteChip",
+    "amber",
+    proven ? "session proof" : "session blocked"
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_dispatch_proven === true ? "green" : "amber",
+    packet?.primary_dispatch_proven === true ? "proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_dispatch_proven === true ? "green" : "amber",
+    packet?.coding_dispatch_proven === true ? "proven" : "not proven"
+  );
+  setQuickStartChip("quickStartOwnerAuthState", "green", "confirmed");
+  setQuickStartChip("quickStartLaunchState", "amber", proven ? "session only" : "blocked");
+  setQuickStartChip("quickStartBridgeState", "neutral", "not needed");
+  setQuickStartChip("quickStartWindowState", "neutral", "not launched");
+  setQuickStartChip("quickStartConfigState", proven ? "green" : "amber", proven ? "session proof" : "session blocked");
+  setQuickStartChip("quickStartNextActionState", "amber", proven ? "bounded" : quickStartNextActionLabel(packet?.next_action || ""));
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_model_id || "",
+    api_model_id: packet?.coding_agent_model_id || "",
+    session_dual_lane_execution_packet: true,
+    session_probe_only: true,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    session_id: packet?.session_id || "",
+    same_session_dispatch_proven: packet?.same_session_dispatch_proven === true,
+    primary_dispatch_proven: packet?.primary_dispatch_proven === true,
+    coding_dispatch_proven: packet?.coding_dispatch_proven === true,
+    session_dual_lane_dispatch: dispatch,
+    session_dual_lane_dispatch_proven_with_limits: proven,
+    session_dual_lane_does_not_prove_native_launch:
+      dispatch?.does_not_prove_native_launch === true,
+    session_dual_lane_does_not_claim_product_readiness:
+      dispatch?.does_not_claim_product_readiness === true,
+    fallback_used: packet?.fallback_used === true,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartSessionDualLaneExecution() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    await runCodexCustomLaunch();
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "session check");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  try {
+    const createResponse = await fetch("api/codex/custom/sessions", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || ""
+      })
+    });
+    if (!createResponse.ok) {
+      throw new Error(`custom session create http ${createResponse.status}`);
+    }
+    const createPacket = await createResponse.json();
+    renderCodexCustomSessionPacket(createPacket);
+    const sessionId = createPacket?.session?.session_id || createPacket?.session_id || "";
+    if (createPacket?.status !== "ok" || !sessionId) {
+      renderQuickStartSessionDualLaneExecution({
+        ...createPacket,
+        status: createPacket?.status || "blocked",
+        machine_error_code: createPacket?.machine_error_code || "CUSTOM_SESSION_CREATE_BLOCKED",
+        execution_mode: "chatgpt_plus_api",
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || "",
+        session_dual_lane_dispatch: {
+          does_not_prove_native_launch: true,
+          does_not_claim_product_readiness: true,
+          runtime_readiness_claimed: false
+        },
+        next_action: createPacket?.next_action || "repair_session_create"
+      });
+      return;
+    }
+    codexCustomSelectedSessionId = sessionId;
+    const probeResponse = await fetch(`api/codex/custom/sessions/${encodeURIComponent(sessionId)}/mixed-slot-dispatch-probe`, {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({})
+    });
+    if (!probeResponse.ok) {
+      throw new Error(`mixed slot dispatch probe http ${probeResponse.status}`);
+    }
+    const probePacket = await probeResponse.json();
+    renderCodexCustomSessionPacket(probePacket);
+    renderQuickStartSessionDualLaneExecution(probePacket);
+  } catch (error) {
+    renderQuickStartSessionDualLaneExecution({
+      status: "failed",
+      machine_error_code: "QUICK_START_SESSION_DUAL_LANE_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_SESSION_DUAL_LANE_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      session_dual_lane_dispatch: {
+        does_not_prove_native_launch: true,
+        does_not_claim_product_readiness: true,
+        runtime_readiness_claimed: false
+      },
+      next_action: "stop_and_diagnose_session_dual_lane_execution"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
   }
 }
 
@@ -5275,6 +5614,14 @@ function renderCodexCustomSessionPacket(packet) {
   const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true;
   const liveSelection = session?.live_selection_proven === true || packet?.live_selection_proven === true;
   const slotCatalogRevalidated = session?.slot_catalog_revalidated === true || packet?.role_slot_binding_packet?.slot_catalog_revalidated === true;
+  const sessionDualLaneDispatch = session?.session_dual_lane_dispatch
+    || packet?.session_dual_lane_dispatch
+    || packet?.role_slot_binding_packet?.session_dual_lane_dispatch
+    || {};
+  const sessionDualLaneProven = sessionDualLaneDispatch?.status === "ok"
+    && sessionDualLaneDispatch?.final_status === "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS"
+    && sessionDualLaneDispatch?.does_not_prove_native_launch === true
+    && sessionDualLaneDispatch?.does_not_claim_product_readiness === true;
   const packetStatus = packet?.status || session?.status || "unknown";
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
   codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packetStatus || "unknown");
@@ -5291,7 +5638,10 @@ function renderCodexCustomSessionPacket(packet) {
       : "not proven"
   );
   codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
-  codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
+  codexCustomSessionsSetText(
+    "codexCustomSessionInference",
+    `${inference ? "response proof" : "not claimed"}${sessionDualLaneProven ? " · session dual-lane proven" : ""}`
+  );
   codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
   let chipVisual = "neutral";
   let chipLabel = packetStatus;
@@ -5330,6 +5680,12 @@ function renderCodexCustomSessionPacket(packet) {
       role_slot_binding_count: session?.role_slot_binding_count ?? packet?.role_slot_binding_packet?.role_slot_binding_count ?? 0,
       slot_catalog_revalidated: slotCatalogRevalidated,
       role_slots: roleSlots,
+      session_dual_lane_dispatch: sessionDualLaneDispatch,
+      session_dual_lane_dispatch_proven_with_limits: sessionDualLaneProven,
+      session_dual_lane_does_not_prove_native_launch:
+        sessionDualLaneDispatch?.does_not_prove_native_launch === true,
+      session_dual_lane_does_not_claim_product_readiness:
+        sessionDualLaneDispatch?.does_not_claim_product_readiness === true,
       selection_dry_run_proven: selectionDryRun,
       live_selection_proven: liveSelection,
       selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
@@ -5387,9 +5743,12 @@ function renderCodexCustomSessionPacket(packet) {
 }
 
 function renderCodexCustomSessionList(packet) {
-  const sessions = Array.isArray(packet?.sessions) ? packet.sessions : [];
+  const sessions = (Array.isArray(packet?.sessions) ? packet.sessions : [])
+    .slice()
+    .sort((left, right) => String(right?.updated_at_utc || right?.created_at_utc || "")
+      .localeCompare(String(left?.updated_at_utc || left?.created_at_utc || "")));
   codexCustomSessionsSetText("codexCustomSessionCount", String(packet?.session_count ?? sessions.length));
-  if (!codexCustomSelectedSessionId && sessions.length) {
+  if (sessions.length) {
     codexCustomSelectedSessionId = sessions[0].session_id || "";
   }
   const selected = sessions.find((session) => session.session_id === codexCustomSelectedSessionId) || sessions[0] || null;

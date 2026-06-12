@@ -180,6 +180,7 @@ from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
     DEFAULT_CODEX_BIN,
     HybridOpenAICompatAdapter,
+    MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
     OperatorSurfaceSession,
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     _safe_route_digest,
@@ -1252,6 +1253,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     _post_route("/api/codex/custom/launch", EFFECT_MUTATE),
     _post_route("/api/codex/custom/native-launch-preflight", EFFECT_PROBE),
     _post_route("/api/codex/custom/native-launch", EFFECT_MUTATE),
+    _post_route(
+        "/api/codex/custom/native-dispatch-proof",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
     _post_route("/api/codex/custom/show-window", EFFECT_REPAIR, body_kind=BODY_KIND_OPTIONAL_JSON),
     _post_route("/api/codex/custom/visible-history/owner-confirmation", EFFECT_PROBE),
     _post_route("/api/codex/custom/visible-history/relaunch-owner-confirmation", EFFECT_PROBE),
@@ -2486,6 +2492,7 @@ class _CustomNativeBridgeLease:
         routes_packet: dict[str, Any] | None,
         hidden_native_model_ids: list[str] | None = None,
         forced_route_model_id: str = "",
+        dual_lane_route_model_id: str = "",
     ) -> str:
         route_records = _enabled_external_route_records(routes_packet)
         if not route_records:
@@ -2525,6 +2532,7 @@ class _CustomNativeBridgeLease:
                 if str(model_id).strip()
             ),
             "forced_route_model_id": str(forced_route_model_id or "").strip(),
+            "dual_lane_route_model_id": str(dual_lane_route_model_id or "").strip(),
         }
         signature = hashlib.sha256(
             json.dumps(signature_source, ensure_ascii=True, sort_keys=True).encode("utf-8")
@@ -2538,6 +2546,7 @@ class _CustomNativeBridgeLease:
             routes=route_records,
             hidden_downstream_model_ids=hidden_native_model_ids,
             forced_route_model_id=str(forced_route_model_id or "").strip(),
+            dual_lane_route_model_id=str(dual_lane_route_model_id or "").strip(),
             listen_port=self.bridge_port,
             allow_missing_auth_from_loopback=True,
         )
@@ -4893,6 +4902,214 @@ def _custom_native_stable_bridge_prewarm_packet(
     }
 
 
+def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
+    *,
+    last_launch_packet: dict[str, Any] | None,
+    native_bridge_lease: _CustomNativeBridgeLease,
+    owner_authorized: bool,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    if payload:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_REJECTED",
+            "forbidden_fields": sorted(str(key) for key in payload),
+            "native_dispatch_proof_attempted": False,
+            "native_dispatch_proof_scope": "control_plane_bridge_request_current_native_launch",
+            "native_ui_input_claimed": False,
+            "browser_trace_authority": False,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not owner_authorized:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+            "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_NOT_AUTHORIZED",
+            "native_dispatch_proof_attempted": False,
+            "native_dispatch_proof_scope": "control_plane_bridge_request_current_native_launch",
+            "native_ui_input_claimed": False,
+            "browser_trace_authority": False,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "authorize_owner_before_native_dispatch_proof",
+        }
+
+    before_packet = build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=native_bridge_lease.trace_snapshot(),
+        browser_payload=None,
+    )
+
+    def with_dispatch_fields(
+        packet: dict[str, Any],
+        *,
+        attempted: bool,
+        skipped_reason: str = "",
+        http_status: int = 0,
+        error_class: str = "",
+        response_body: bytes = b"",
+    ) -> dict[str, Any]:
+        return {
+            **packet,
+            "native_dispatch_proof_attempted": attempted,
+            "native_dispatch_proof_scope": "control_plane_bridge_request_current_native_launch",
+            "native_dispatch_proof_skipped_reason": skipped_reason,
+            "native_dispatch_http_status": http_status,
+            "native_dispatch_error_class": error_class,
+            "native_dispatch_response_body_sha256": (
+                hashlib.sha256(response_body).hexdigest() if response_body else ""
+            ),
+            "native_dispatch_prompt_sha256": hashlib.sha256(
+                MIXED_DEEPSEEK_CODER_SMOKE_PHRASE.encode("utf-8")
+            ).hexdigest(),
+            "native_ui_input_claimed": False,
+            "browser_trace_authority": False,
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    if before_packet.get("execution_mode") != "chatgpt_plus_api":
+        return with_dispatch_fields(
+            before_packet,
+            attempted=False,
+            skipped_reason="execution_mode_not_chatgpt_plus_api",
+        )
+    if (
+        before_packet.get("status") == "ok"
+        and before_packet.get("machine_error_code") == "OK"
+        and before_packet.get("runtime_readiness_claimed") is True
+    ):
+        return with_dispatch_fields(
+            before_packet,
+            attempted=False,
+            skipped_reason="already_proven",
+        )
+    if before_packet.get("slot_binding_proven") is not True:
+        return with_dispatch_fields(
+            before_packet,
+            attempted=False,
+            skipped_reason="slot_binding_not_proven",
+        )
+    primary_model_id = str(before_packet.get("primary_model_id") or "").strip()
+    coding_model_id = str(before_packet.get("coding_agent_model_id") or "").strip()
+    if not primary_model_id or not coding_model_id:
+        return with_dispatch_fields(
+            {
+                **before_packet,
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_DISPATCH_MODEL_SLOT_MISSING",
+                "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_NOT_RUN",
+                "next_action": "inspect_slot_binding_launch_evidence",
+            },
+            attempted=False,
+            skipped_reason="model_slot_missing",
+        )
+    if native_bridge_lease.bridge is None:
+        return with_dispatch_fields(
+            {
+                **before_packet,
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_DISPATCH_BRIDGE_NOT_OWNED",
+                "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_NOT_RUN",
+                "next_action": "repair_bridge_before_native_dispatch_proof",
+            },
+            attempted=False,
+            skipped_reason="bridge_not_owned",
+        )
+
+    bridge_endpoint = native_bridge_lease.stable_endpoint
+    if not _loopback_port_accepts_connection(native_bridge_lease.bridge_port):
+        return with_dispatch_fields(
+            {
+                **before_packet,
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_DISPATCH_BRIDGE_NOT_ALIVE",
+                "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_NOT_RUN",
+                "next_action": "repair_bridge_before_native_dispatch_proof",
+            },
+            attempted=False,
+            skipped_reason="bridge_not_alive",
+        )
+
+    try:
+        local_api_key = extract_local_api_key(default_runtime_config_path())
+    except RuntimeError as exc:
+        return with_dispatch_fields(
+            {
+                **before_packet,
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_DISPATCH_AUTH_UNAVAILABLE",
+                "final_status": "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_NOT_RUN",
+                "auth_exception_class": type(exc).__name__,
+                "next_action": "repair_local_bridge_auth_before_native_dispatch_proof",
+            },
+            attempted=False,
+            skipped_reason="auth_unavailable",
+        )
+
+    dispatch_payload = {
+        "model": primary_model_id,
+        "input": f"Попроси API-кодера ответить одной строкой: {MIXED_DEEPSEEK_CODER_SMOKE_PHRASE}",
+        "stream": False,
+        "max_output_tokens": 64,
+    }
+    request = urllib.request.Request(
+        f"{bridge_endpoint.rstrip('/')}/responses",
+        data=json.dumps(dispatch_payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {local_api_key}",
+        },
+        method="POST",
+    )
+    response_body = b""
+    http_status = 0
+    error_class = ""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=90) as response:
+            http_status = int(getattr(response, "status", 0) or 0)
+            response_body = response.read(65536)
+    except urllib.error.HTTPError as exc:
+        http_status = int(exc.code or 0)
+        error_class = type(exc).__name__
+        response_body = exc.read(65536)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        error_class = type(exc).__name__
+
+    after_packet = build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+        last_launch_packet=last_launch_packet,
+        bridge_trace_packet=native_bridge_lease.trace_snapshot(),
+        browser_payload=None,
+    )
+    return with_dispatch_fields(
+        after_packet,
+        attempted=True,
+        http_status=http_status,
+        error_class=error_class,
+        response_body=response_body,
+    )
+
+
 def _quick_start_deepseek_safe_worktree_check_packet(
     payload: dict[str, Any],
     *,
@@ -5583,6 +5800,11 @@ def _launch_custom_native_codex_packet(
         execution_packet=execution_packet or {},
         selected_model=model_id,
     )
+    execution_mode = str((execution_packet or {}).get("execution_mode") or "")
+    dual_lane_route_model_id = (
+        route_model_id if execution_mode == "chatgpt_plus_api" else ""
+    )
+    forced_route_model_id = "" if dual_lane_route_model_id else route_model_id
     route_record = _external_route_record_for_model(external_routes_packet, route_model_id)
     try:
         bridge_endpoint = (
@@ -5590,7 +5812,8 @@ def _launch_custom_native_codex_packet(
                 downstream_endpoint=endpoint,
                 routes_packet=external_routes_packet,
                 hidden_native_model_ids=hidden_native_model_ids,
-                forced_route_model_id=route_model_id,
+                forced_route_model_id=forced_route_model_id,
+                dual_lane_route_model_id=dual_lane_route_model_id,
             )
             if native_bridge_lease is not None and route_record
             else endpoint
@@ -5673,8 +5896,12 @@ def _launch_custom_native_codex_packet(
     )
     packet["selection_packet"] = execution_packet or legacy_selection
     if execution_packet:
-        execution_mode = str(execution_packet.get("execution_mode") or "")
-        api_route_executor_used = bool(route_record and route_model_id)
+        api_route_executor_used = bool(
+            route_record and route_model_id and execution_mode != "chatgpt_plus_api"
+        )
+        native_dual_lane_bridge_used = bool(
+            route_record and route_model_id and execution_mode == "chatgpt_plus_api"
+        )
         chatgpt_executor_selected = (
             execution_packet.get("chatgpt_line_used_as_executor") is True
         )
@@ -5701,19 +5928,35 @@ def _launch_custom_native_codex_packet(
             chatgpt_executor_selected and not api_route_executor_used
         )
         packet["api_line_used_as_executor"] = bool(
-            api_executor_selected or api_route_executor_used
+            api_executor_selected or api_route_executor_used or native_dual_lane_bridge_used
         )
         packet["runtime_executor_model_id"] = (
-            route_model_id if api_route_executor_used else model_id
+            "dual_lane"
+            if native_dual_lane_bridge_used
+            else route_model_id
+            if api_route_executor_used
+            else model_id
         )
         packet["runtime_executor_lane"] = (
-            "api_route_lane" if api_route_executor_used else "codex_account_lane"
+            "dual_lane"
+            if native_dual_lane_bridge_used
+            else "api_route_lane"
+            if api_route_executor_used
+            else "codex_account_lane"
         )
         packet["runtime_executor_provider"] = (
-            str(route_record.get("provider") or "") if route_record else "chatgpt"
+            "chatgpt+api"
+            if native_dual_lane_bridge_used
+            else str(route_record.get("provider") or "")
+            if route_record
+            else "chatgpt"
         )
         packet["runtime_executor_truth_source"] = (
-            "forced_bridge_route" if api_route_executor_used else "native_chatgpt_model"
+            "native_dual_lane_bridge"
+            if native_dual_lane_bridge_used
+            else "forced_bridge_route"
+            if api_route_executor_used
+            else "native_chatgpt_model"
         )
         packet["chatgpt_primary_runtime_execution_proven"] = bool(
             chatgpt_executor_selected and not api_route_executor_used
@@ -5722,6 +5965,8 @@ def _launch_custom_native_codex_packet(
         packet["mixed_mode_actual_primary_executor_is_api_route"] = bool(
             execution_mode == "chatgpt_plus_api" and api_route_executor_used
         )
+        packet["native_dual_lane_bridge_used"] = native_dual_lane_bridge_used
+        packet["dual_lane_route_model_id"] = dual_lane_route_model_id
         packet["api_only_calls_chatgpt"] = execution_packet.get("api_only_calls_chatgpt") is True
         packet["chatgpt_only_calls_api"] = execution_packet.get("chatgpt_only_calls_api") is True
         packet["server_issued_catalog_used"] = execution_packet.get("server_issued_catalog_used") is True
@@ -5988,7 +6233,8 @@ def build_custom_codex_window_prompt_trace_packet(
             "raw_prompt_recorded": False,
             "next_action": "remove_browser_payload_fields",
         }
-    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    launch_context_present = isinstance(last_launch_packet, dict) and bool(last_launch_packet)
+    launch = last_launch_packet if launch_context_present else {}
     trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
     record = trace.get("last_record") if isinstance(trace.get("last_record"), dict) else {}
     launch_proven = (
@@ -6038,16 +6284,29 @@ def build_custom_codex_window_prompt_trace_packet(
         and launch.get("original_codex_touched") is False
         and launch.get("asar_touched") is False
     )
+    launch_context_missing = not launch_context_present
+    machine_error_code = "OK" if prompt_trace_proven else "WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
+    final_status = (
+        "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
+        if prompt_trace_proven
+        else "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
+    )
+    next_action = "none" if prompt_trace_proven else "send_window_smoke_prompt_and_refresh_trace_packet"
+    if launch_context_missing:
+        machine_error_code = "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
+        final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
+        next_action = "run_fresh_custom_codex_launch"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_window_deepseek_prompt_trace",
         "captured_at_utc": utc_now(),
         "status": "ok" if prompt_trace_proven else "blocked",
-        "machine_error_code": "OK" if prompt_trace_proven else "WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN",
-        "final_status": (
-            "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
-            if prompt_trace_proven
-            else "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
+        "launch_context_present": launch_context_present,
+        "launch_context_missing": launch_context_missing,
+        "launch_context_missing_reason": (
+            "last_launch_packet_missing_or_empty" if launch_context_missing else ""
         ),
         "window_launch_proven_with_limits": launch_proven,
         "native_app_usable": launch.get("native_app_usable") is True,
@@ -6102,11 +6361,7 @@ def build_custom_codex_window_prompt_trace_packet(
         "asar_touched": launch.get("asar_touched") is True,
         "history_persistence_claimed": False,
         "live_coding_claimed": False,
-        "next_action": (
-            "none"
-            if prompt_trace_proven
-            else "send_window_smoke_prompt_and_refresh_trace_packet"
-        ),
+        "next_action": next_action,
     }
 
 
@@ -6158,26 +6413,39 @@ def build_custom_codex_window_input_route_trace_packet(
         == "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
     )
     full_success = input_proven and route_trace_proven
-    if not input_proven:
+    launch_context_missing = route_packet.get("launch_context_missing") is True
+    if launch_context_missing:
+        next_action = str(route_packet.get("next_action") or "run_fresh_custom_codex_launch")
+    elif not input_proven:
         next_action = "send_window_prompt_and_refresh_trace_packet"
     elif not route_trace_proven:
         next_action = "repair_route_trace_or_refresh_deepseek_trace_packet"
     else:
         next_action = "none"
+    machine_error_code = "OK" if full_success else "CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN"
+    final_status = (
+        "CUSTOM_CODEX_INPUT_AND_DEEPSEEK_ROUTE_PROVEN_WITH_LIMITS"
+        if full_success
+        else "KNOWN_BLOCKER_CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN"
+    )
+    if launch_context_missing:
+        machine_error_code = "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
+        final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_window_input_route_trace",
         "captured_at_utc": utc_now(),
         "status": "ok" if full_success else "blocked",
-        "machine_error_code": "OK" if full_success else "CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN",
-        "final_status": (
-            "CUSTOM_CODEX_INPUT_AND_DEEPSEEK_ROUTE_PROVEN_WITH_LIMITS"
-            if full_success
-            else "KNOWN_BLOCKER_CUSTOM_CODEX_INPUT_OR_ROUTE_NOT_PROVEN"
-        ),
+        "machine_error_code": machine_error_code,
+        "final_status": final_status,
         "launch_id": str(route_packet.get("launch_id") or ""),
         "trace_id": str(route_packet.get("trace_id") or ""),
         "trace_server_issued": route_packet.get("trace_server_issued") is True,
+        "launch_context_present": route_packet.get("launch_context_present") is True,
+        "launch_context_missing": launch_context_missing,
+        "launch_context_missing_reason": str(
+            route_packet.get("launch_context_missing_reason") or ""
+        ),
         "browser_trace_authority": False,
         "input_surface_observed": input_surface_observed,
         "input_surface_method": (
@@ -6634,7 +6902,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             "raw_prompt_recorded": False,
             "next_action": "remove_browser_payload_fields",
         }
-    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    launch_context_present = isinstance(last_launch_packet, dict) and bool(last_launch_packet)
+    launch_context_missing = not launch_context_present
+    launch = last_launch_packet if launch_context_present else {}
     trace = bridge_trace_packet if isinstance(bridge_trace_packet, dict) else {}
     launch_preflight_packet = (
         launch.get("preflight_packet")
@@ -6665,6 +6935,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         value = packet.get(key) if isinstance(packet, dict) else {}
         return value if isinstance(value, dict) else {}
 
+    trace_context = _packet_dict_value(trace, "trace_context")
+    health = _packet_dict_value(trace, "bridge_health_packet")
+    request_trace = _packet_dict_value(trace, "bridge_request_trace_packet")
     records: list[dict[str, Any]] = []
 
     def _append_trace_records(packet: dict[str, Any]) -> None:
@@ -6775,7 +7048,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     trace_snapshot_current = bool(
         trace_snapshot_age_seconds is not None and not trace_snapshot_stale
     )
-    current_bridge_trace_matches_launch = bool(
+    current_provider_record_matches_launch = bool(
         trace_snapshot_current
         and any(
             record.get("request_seen_after_launch") is True
@@ -6783,6 +7056,38 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             and record_matches_launch(record)
             for record in records
         )
+    )
+    trace_context_launch_id = str(
+        trace_context.get("launch_packet_id") or trace_context.get("launch_id") or ""
+    )
+    trace_context_trace_id = str(trace_context.get("trace_id") or "")
+    bridge_trace_launch_id = str(trace.get("launch_packet_id") or "")
+    bridge_trace_id = str(trace.get("trace_id") or "")
+    health_launch_id = str(health.get("launch_packet_id") or "")
+    health_trace_id = str(health.get("trace_id") or "")
+    request_trace_launch_id = str(request_trace.get("launch_packet_id") or "")
+    request_trace_id = str(request_trace.get("trace_id") or "")
+    bridge_identity_matches_launch = bool(
+        launch_id
+        and trace_id
+        and trace_context_launch_id == launch_id
+        and trace_context_trace_id == trace_id
+        and bridge_trace_launch_id == launch_id
+        and bridge_trace_id == trace_id
+        and health_launch_id == launch_id
+        and health_trace_id == trace_id
+        and request_trace_launch_id == launch_id
+        and request_trace_id == trace_id
+    )
+    current_bridge_identity_bound_rebind_proven = bool(
+        trace_snapshot_current
+        and stable_bridge_preflight_ok
+        and bridge_identity_matches_launch
+        and trace.get("stale_launch_packet") is not True
+    )
+    current_bridge_trace_matches_launch = bool(
+        current_provider_record_matches_launch
+        or current_bridge_identity_bound_rebind_proven
     )
     launch_packet_stale_overridden_by_current_bridge_trace = bool(
         launch_packet_stale and current_bridge_trace_matches_launch
@@ -6864,46 +7169,49 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     primary_slot_bound = primary_slot.get("status") == "bound"
     coding_slot_bound = coding_slot.get("status") == "bound"
     slot_binding_blocking_reasons: list[str] = []
-    if not launch_status_ok and not native_limited_launch_proven_with_limits:
-        slot_binding_blocking_reasons.append("launch_status_not_ok")
-    if not native_window_observed:
-        slot_binding_blocking_reasons.append("native_window_not_observed")
-    if (
-        not real_codex_app_launched
-        and not native_limited_launch_proven_with_limits
-        and not existing_window_reuse_proven_with_limits
-    ):
-        slot_binding_blocking_reasons.append("real_codex_app_not_launched")
-    if launch_packet_stale and not launch_packet_stale_overridden_by_current_bridge_trace:
-        slot_binding_blocking_reasons.append("launch_packet_stale")
-    if trace_snapshot_stale:
-        slot_binding_blocking_reasons.append("trace_snapshot_stale")
-    if not stable_bridge_preflight_ok:
-        slot_binding_blocking_reasons.append("stable_bridge_preflight_not_ok")
-    if execution_mode != "chatgpt_plus_api":
-        slot_binding_blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
-    if not primary_slot_bound:
-        slot_binding_blocking_reasons.append("primary_slot_not_bound")
-    if primary_slot.get("lane") != CODEX_ACCOUNT_MODEL_LANE:
-        slot_binding_blocking_reasons.append("primary_slot_lane_mismatch")
-    if not coding_slot_bound:
-        slot_binding_blocking_reasons.append("coding_slot_not_bound")
-    if coding_slot.get("lane") != API_ROUTE_MODEL_LANE:
-        slot_binding_blocking_reasons.append("coding_slot_lane_mismatch")
-    if str(coding_slot.get("provider") or "") != "deepseek":
-        slot_binding_blocking_reasons.append("coding_provider_not_deepseek")
-    if not coding_model_id:
-        slot_binding_blocking_reasons.append("coding_model_missing")
-    if coding_slot.get("server_issued") is not True:
-        slot_binding_blocking_reasons.append("coding_slot_not_server_issued")
-    if launch.get("raw_backend_details_exposed") is True:
-        slot_binding_blocking_reasons.append("raw_backend_details_exposed")
-    if launch.get("secret_value_exposed") is True:
-        slot_binding_blocking_reasons.append("secret_value_exposed")
-    if launch.get("original_codex_touched") is True:
-        slot_binding_blocking_reasons.append("original_codex_touched")
-    if launch.get("asar_touched") is True:
-        slot_binding_blocking_reasons.append("asar_touched")
+    if launch_context_missing:
+        slot_binding_blocking_reasons.append("launch_context_missing")
+    else:
+        if not launch_status_ok and not native_limited_launch_proven_with_limits:
+            slot_binding_blocking_reasons.append("launch_status_not_ok")
+        if not native_window_observed:
+            slot_binding_blocking_reasons.append("native_window_not_observed")
+        if (
+            not real_codex_app_launched
+            and not native_limited_launch_proven_with_limits
+            and not existing_window_reuse_proven_with_limits
+        ):
+            slot_binding_blocking_reasons.append("real_codex_app_not_launched")
+        if launch_packet_stale and not launch_packet_stale_overridden_by_current_bridge_trace:
+            slot_binding_blocking_reasons.append("launch_packet_stale")
+        if trace_snapshot_stale:
+            slot_binding_blocking_reasons.append("trace_snapshot_stale")
+        if not stable_bridge_preflight_ok:
+            slot_binding_blocking_reasons.append("stable_bridge_preflight_not_ok")
+        if execution_mode != "chatgpt_plus_api":
+            slot_binding_blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
+        if not primary_slot_bound:
+            slot_binding_blocking_reasons.append("primary_slot_not_bound")
+        if primary_slot.get("lane") != CODEX_ACCOUNT_MODEL_LANE:
+            slot_binding_blocking_reasons.append("primary_slot_lane_mismatch")
+        if not coding_slot_bound:
+            slot_binding_blocking_reasons.append("coding_slot_not_bound")
+        if coding_slot.get("lane") != API_ROUTE_MODEL_LANE:
+            slot_binding_blocking_reasons.append("coding_slot_lane_mismatch")
+        if str(coding_slot.get("provider") or "") != "deepseek":
+            slot_binding_blocking_reasons.append("coding_provider_not_deepseek")
+        if not coding_model_id:
+            slot_binding_blocking_reasons.append("coding_model_missing")
+        if coding_slot.get("server_issued") is not True:
+            slot_binding_blocking_reasons.append("coding_slot_not_server_issued")
+        if launch.get("raw_backend_details_exposed") is True:
+            slot_binding_blocking_reasons.append("raw_backend_details_exposed")
+        if launch.get("secret_value_exposed") is True:
+            slot_binding_blocking_reasons.append("secret_value_exposed")
+        if launch.get("original_codex_touched") is True:
+            slot_binding_blocking_reasons.append("original_codex_touched")
+        if launch.get("asar_touched") is True:
+            slot_binding_blocking_reasons.append("asar_touched")
     slot_binding_proven = bool(
         not slot_binding_blocking_reasons
     )
@@ -7050,6 +7358,10 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         machine_error_code = "OK"
         final_status = "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS"
         next_action = "none"
+    elif launch_context_missing:
+        machine_error_code = "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING"
+        final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING"
+        next_action = "run_fresh_chatgpt_plus_api_launch"
     elif slot_binding_stale_only and launch_packet_stale:
         machine_error_code = "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
@@ -7123,6 +7435,28 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         launch_origin = "existing_window"
     elif fresh_launch_started and not launch_origin:
         launch_origin = "fresh_launch"
+    primary_trace_proven = bool(prompt_seen and primary_trace_id_matches_launch)
+    prompt_seen_blocking_reason = (
+        "primary_chatgpt_request_forced_to_api_route"
+        if chatgpt_replaced_by_api
+        else "primary_chatgpt_request_absent_api_route_dispatched"
+        if api_route_dispatched_without_primary
+        else ("none" if prompt_seen else "chatgpt_primary_trace_record_missing")
+    )
+    if primary_trace_proven:
+        chatgpt_primary_lane_machine_error_code = "OK"
+        chatgpt_primary_lane_status = "ok"
+        chatgpt_primary_lane_next_action = "none"
+    elif native_mixed_prompt_trace_unsupported:
+        chatgpt_primary_lane_machine_error_code = "CHATGPT_PRIMARY_TRACE_UNSUPPORTED"
+        chatgpt_primary_lane_status = "blocked"
+        chatgpt_primary_lane_next_action = (
+            "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+        )
+    else:
+        chatgpt_primary_lane_machine_error_code = "CHATGPT_PRIMARY_TRACE_NOT_PROVEN"
+        chatgpt_primary_lane_status = "blocked"
+        chatgpt_primary_lane_next_action = "inspect_chatgpt_primary_trace"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_chatgpt_plus_api_coder_trace",
@@ -7136,8 +7470,23 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             "" if mixed_mode_launch_action == "available" else machine_error_code
         ),
         "primary_trace_proof_status": (
-            "proven" if prompt_seen and primary_trace_id_matches_launch else "not_proven"
+            "proven" if primary_trace_proven else "not_proven"
         ),
+        "chatgpt_primary_lane_proof": {
+            "status": chatgpt_primary_lane_status,
+            "machine_error_code": chatgpt_primary_lane_machine_error_code,
+            "proof_status": "proven" if primary_trace_proven else "not_proven",
+            "proof_scope": "native_window_bridge_trace_current_launch",
+            "selected_model_id": primary_model_id,
+            "selected_model_bound": primary_slot_bound,
+            "prompt_record_seen": bool(prompt_record),
+            "trace_id_matches_launch": primary_trace_id_matches_launch,
+            "native_trace_required_for_product_pass": True,
+            "session_dispatch_probe_counts_as_native_primary_trace": False,
+            "runtime_readiness_claimed": full_success,
+            "blocking_reason": prompt_seen_blocking_reason,
+            "next_action": chatgpt_primary_lane_next_action,
+        },
         "mixed_mode_launch_available_with_primary_trace_gap": (
             launch_available_with_primary_trace_gap
         ),
@@ -7146,6 +7495,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             "slot_binding": (
                 "CHATGPT_PLUS_API_SLOT_BINDING_PROVEN"
                 if slot_binding_proven
+                else "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING"
+                if launch_context_missing
                 else "KNOWN_BLOCKER_CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN"
             ),
             "prompt_seen": (
@@ -7165,6 +7516,13 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             ),
         },
         "launch_proven": launch_proven,
+        "launch_context_present": launch_context_present,
+        "launch_context_missing": launch_context_missing,
+        "launch_context_missing_reason": (
+            "last_launch_packet_missing_or_empty" if launch_context_missing else ""
+        ),
+        "persisted_config_counts_as_launch_context": False,
+        "window_visibility_counts_as_launch_context": False,
         "launch_status": str(launch.get("status") or ""),
         "launch_status_ok": launch_status_ok,
         "native_window_observed": native_window_observed,
@@ -7195,6 +7553,12 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             launch_packet_stale_overridden_by_current_bridge_trace
         ),
         "current_bridge_trace_matches_launch": current_bridge_trace_matches_launch,
+        "current_provider_record_matches_launch": current_provider_record_matches_launch,
+        "current_bridge_identity_bound_rebind_proven": (
+            current_bridge_identity_bound_rebind_proven
+        ),
+        "bridge_identity_matches_launch": bridge_identity_matches_launch,
+        "bridge_rebind_counts_as_provider_proof": False,
         "trace_snapshot_age_seconds": trace_snapshot_age_seconds,
         "trace_snapshot_stale": trace_snapshot_stale,
         "slot_binding_blocking_reasons": slot_binding_blocking_reasons,
@@ -7218,15 +7582,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "api_route_dispatched_without_primary": api_route_dispatched_without_primary,
         "direct_api_dispatch_without_primary_trace": api_route_dispatched_without_primary,
         "native_mixed_primary_trace_supported": native_mixed_primary_trace_supported,
-        "prompt_seen_blocking_reason": (
-            "primary_chatgpt_request_forced_to_api_route"
-            if chatgpt_replaced_by_api
-            else "primary_chatgpt_request_absent_api_route_dispatched"
-            if api_route_dispatched_without_primary
-            else (
-                "none" if prompt_seen else "chatgpt_primary_trace_record_missing"
-            )
-        ),
+        "prompt_seen_blocking_reason": prompt_seen_blocking_reason,
         "coder_dispatch_proven": coder_dispatch_proven,
         "coder_work_result_proven_with_limits": coder_work_result_proven,
         "stable_bridge_preflight": stable_bridge_preflight_status,
@@ -7254,7 +7610,11 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "mixed_mode_actual_primary_executor_is_api_route": (
             launch.get("mixed_mode_actual_primary_executor_is_api_route") is True
         ),
-        "capability_proof_scope": "native_window_bridge_trace_current_launch",
+        "capability_proof_scope": (
+            "missing_launch_context"
+            if launch_context_missing
+            else "native_window_bridge_trace_current_launch"
+        ),
         "unsupported_evidence": {
             "primary_prompt_record_seen": bool(prompt_record),
             "primary_trace_id_matches_launch": primary_trace_id_matches_launch,
@@ -11784,6 +12144,17 @@ def build_handler(
             packet["final_status"] = "CUSTOM_CODEX_LAUNCH_STABILITY_AND_RECOVERY_WITH_LIMITS"
             record_custom_native_launch_packet(packet)
             self._send_json(packet)
+            return
+
+        def _handle_post_api_codex_custom_native_dispatch_proof(self, actual_path: str) -> None:
+            self._send_json(
+                _custom_native_chatgpt_plus_api_dispatch_proof_packet(
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    native_bridge_lease=custom_native_bridge_lease,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    browser_payload=self._read_optional_json_body(),
+                )
+            )
             return
 
         def _handle_post_api_codex_custom_show_window(self, actual_path: str) -> None:

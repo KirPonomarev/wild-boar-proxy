@@ -999,6 +999,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 runner,
                 owner_authorized=True,
             )
+            detail = manager.get_packet(created["session"]["session_id"])
+            reloaded = CodexCustomSessionManager(Path(temp_dir))
+            reloaded_detail = reloaded.get_packet(created["session"]["session_id"])
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(
@@ -1033,6 +1036,38 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertFalse(packet["model_self_report_counts_as_runtime_truth"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
+        bounded = packet["session_dual_lane_dispatch"]
+        self.assertEqual(bounded["status"], "ok")
+        self.assertEqual(bounded["machine_error_code"], "OK")
+        self.assertEqual(
+            bounded["final_status"],
+            "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(bounded["proof_status"], "proven_with_limits")
+        self.assertTrue(bounded["same_session_dispatch_proven"])
+        self.assertTrue(bounded["primary_dispatch_proven"])
+        self.assertTrue(bounded["coding_dispatch_proven"])
+        self.assertFalse(bounded["fallback_used"])
+        self.assertEqual(bounded["primary_provider"], "cliproxy")
+        self.assertEqual(bounded["coding_provider"], "external_route")
+        self.assertTrue(bounded["does_not_prove_native_launch"])
+        self.assertTrue(bounded["does_not_claim_product_readiness"])
+        self.assertTrue(bounded["native_primary_trace_still_required_for_native_pass"])
+        self.assertFalse(bounded["runtime_readiness_claimed"])
+        self.assertFalse(bounded["ui_label_counts_as_proof"])
+        self.assertFalse(bounded["model_self_report_counts_as_runtime_truth"])
+        self.assertEqual(
+            detail["session"]["session_dual_lane_dispatch"],
+            bounded,
+        )
+        self.assertEqual(
+            detail["role_slot_binding_packet"]["session_dual_lane_dispatch"],
+            bounded,
+        )
+        self.assertEqual(
+            reloaded_detail["session"]["session_dual_lane_dispatch"],
+            bounded,
+        )
         self.assertEqual(
             calls,
             [
@@ -1169,6 +1204,18 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertFalse(packet["coding_dispatch_proven"])
         self.assertFalse(packet["same_session_dispatch_proven"])
+        bounded = packet["session_dual_lane_dispatch"]
+        self.assertEqual(bounded["status"], "blocked")
+        self.assertEqual(bounded["machine_error_code"], "MIXED_SLOT_DISPATCH_NOT_PROVEN")
+        self.assertEqual(
+            bounded["final_status"],
+            "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN",
+        )
+        self.assertEqual(bounded["proof_status"], "not_proven")
+        self.assertFalse(bounded["same_session_dispatch_proven"])
+        self.assertTrue(bounded["does_not_prove_native_launch"])
+        self.assertTrue(bounded["does_not_claim_product_readiness"])
+        self.assertFalse(bounded["runtime_readiness_claimed"])
         self.assertEqual(
             packet["coding_packet_summary"]["machine_error_code"],
             "RUNTIME_MODEL_ID_MISMATCH",

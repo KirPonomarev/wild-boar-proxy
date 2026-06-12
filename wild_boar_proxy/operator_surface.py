@@ -2042,6 +2042,7 @@ class HybridOpenAICompatAdapter:
         routes: list[dict[str, Any]],
         hidden_downstream_model_ids: list[str] | None = None,
         forced_route_model_id: str = "",
+        dual_lane_route_model_id: str = "",
         listen_port: int | None = None,
         timeout_seconds: float = 120.0,
         allow_missing_auth_from_loopback: bool = False,
@@ -2065,6 +2066,7 @@ class HybridOpenAICompatAdapter:
             if str(model_id).strip()
         }
         self._forced_route_model_id = str(forced_route_model_id or "").strip()
+        self._dual_lane_route_model_id = str(dual_lane_route_model_id or "").strip()
         for route in routes:
             if not isinstance(route, dict):
                 continue
@@ -2342,6 +2344,62 @@ class HybridOpenAICompatAdapter:
                     response_body=response_body,
                 )
                 return status, response_headers, response_body
+            dual_lane_route_adapter = (
+                self._route_adapters.get(self._dual_lane_route_model_id)
+                if self._dual_lane_route_model_id
+                else None
+            )
+            if dual_lane_route_adapter is not None and requested_model != self._dual_lane_route_model_id:
+                status, response_headers, response_body = self._forward_downstream(
+                    method=method,
+                    path=path,
+                    headers=headers,
+                    body=body,
+                )
+                self._record_downstream_trace(
+                    status=status,
+                    path=normalized_path,
+                    requested_model=original_requested_model,
+                    prompt_hash=prompt_hash,
+                    smoke_match=smoke_match,
+                    stream_requested=wants_stream,
+                    response_body=response_body,
+                    extra_fields={
+                        "dual_lane_primary_trace": True,
+                        "dual_lane_route_model_id": self._dual_lane_route_model_id,
+                    },
+                )
+                if 200 <= status < 500:
+                    route_payload = dict(request_payload)
+                    route_payload["model"] = self._dual_lane_route_model_id
+                    route_body = json.dumps(route_payload, ensure_ascii=True).encode("utf-8")
+                    route_record = self._route_records.get(self._dual_lane_route_model_id, {})
+                    route_status, _route_response_headers, route_response_body = (
+                        dual_lane_route_adapter.handle(
+                            method=method,
+                            path=normalized_path,
+                            headers=headers,
+                            body=route_body,
+                        )
+                    )
+                    self._record_prompt_trace(
+                        status=route_status,
+                        path=normalized_path,
+                        requested_model=self._dual_lane_route_model_id,
+                        effective_route_model=self._dual_lane_route_model_id,
+                        forced_route_used=False,
+                        route=route_record,
+                        prompt_hash=prompt_hash,
+                        smoke_match=smoke_match,
+                        stream_requested=wants_stream,
+                        response_body=route_response_body,
+                        extra_fields={
+                            "dual_lane_shadow_dispatch": True,
+                            "dual_lane_primary_requested_model": original_requested_model,
+                            "dual_lane_primary_response_returned": True,
+                        },
+                    )
+                return status, response_headers, response_body
             status, response_headers, response_body = self._forward_downstream(
                 method=method,
                 path=path,
@@ -2405,6 +2463,7 @@ class HybridOpenAICompatAdapter:
         smoke_match: bool,
         stream_requested: bool,
         response_body: bytes,
+        extra_fields: dict[str, Any] | None = None,
     ) -> None:
         route_digest = _safe_route_digest(route) if route else ""
         response_payload = _json_loads_object(response_body)
@@ -2451,6 +2510,8 @@ class HybridOpenAICompatAdapter:
             "response_text_counts_as_model_truth": False,
             "model_self_report_counts_as_runtime_truth": False,
         }
+        if extra_fields:
+            record.update(extra_fields)
         if isinstance(response_payload.get("error"), dict):
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")
@@ -2477,6 +2538,7 @@ class HybridOpenAICompatAdapter:
         smoke_match: bool,
         stream_requested: bool,
         response_body: bytes,
+        extra_fields: dict[str, Any] | None = None,
     ) -> None:
         response_payload = _json_loads_object(response_body)
         response_seen = 200 <= status < 500 and bool(response_body)
@@ -2520,6 +2582,8 @@ class HybridOpenAICompatAdapter:
             "response_text_counts_as_model_truth": False,
             "model_self_report_counts_as_runtime_truth": False,
         }
+        if extra_fields:
+            record.update(extra_fields)
         if isinstance(response_payload.get("error"), dict):
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")

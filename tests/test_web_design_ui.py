@@ -625,6 +625,181 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("postCodexCustomSessionAction(\"prompt\", { prompt: promptNode ? promptNode.value : \"\", model_id", js)
         self.assertNotIn("postCodexCustomSessionAction(\"cleanup\", { path", js)
 
+    def test_codex_custom_session_render_shows_bounded_dual_lane_without_green_readiness(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async () => ({ ok: true, json: async () => ({ status: "ok" }) })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomSessionPacket({
+  status: "loaded",
+  machine_error_code: "SESSION_LOADED_FROM_LIST",
+  session: {
+    session_id: "ccs-proof",
+    status: "prompt_completed_e2e",
+    model_id: "gpt-5.5",
+    current_execution_slot_id: "coding_agent_model_slot",
+    role_slot_binding_count: 2,
+    role_slots: {
+      primary_model_slot: { binding_status: "bound", model_id: "gpt-5.5" },
+      coding_agent_model_slot: { binding_status: "bound", model_id: "wbp-deepseek-chat" }
+    },
+    inference_proven: true,
+    model_response_present: true,
+    session_dual_lane_dispatch: {
+      status: "ok",
+      machine_error_code: "OK",
+      final_status: "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS",
+      proof_status: "proven_with_limits",
+      same_session_dispatch_proven: true,
+      primary_dispatch_proven: true,
+      coding_dispatch_proven: true,
+      fallback_used: false,
+      does_not_prove_native_launch: true,
+      does_not_claim_product_readiness: true,
+      runtime_readiness_claimed: false
+    }
+  }
+});
+`, sandbox);
+
+if (node("codexCustomSessionInference").textContent !== "response proof · session dual-lane proven") {
+  throw new Error(`session dual-lane mirror missing: ${node("codexCustomSessionInference").textContent}`);
+}
+if (node("codexCustomSessionsChip").className.includes("green")) {
+  throw new Error(`session bounded proof must not make chip green: ${node("codexCustomSessionsChip").className}`);
+}
+const rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
+if (rendered.session_dual_lane_dispatch_proven_with_limits !== true) {
+  throw new Error(`bounded proof flag missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (
+  rendered.session_dual_lane_does_not_prove_native_launch !== true ||
+  rendered.session_dual_lane_does_not_claim_product_readiness !== true ||
+  rendered.session_dual_lane_dispatch.runtime_readiness_claimed !== false
+) {
+  throw new Error(`bounded proof safety flags missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+vm.runInContext(`
+renderCodexCustomSessionList({
+  status: "ok",
+  machine_error_code: "OK",
+  session_count: 2,
+  sessions: [
+    {
+      session_id: "ccs-old",
+      status: "prompt_completed_e2e",
+      updated_at_utc: "2026-06-11T22:28:48.476911Z",
+      inference_proven: true,
+      model_response_present: true,
+      session_dual_lane_dispatch: {
+        status: "blocked",
+        machine_error_code: "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN",
+        final_status: "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN",
+        proof_status: "not_proven",
+        does_not_prove_native_launch: true,
+        does_not_claim_product_readiness: true,
+        runtime_readiness_claimed: false
+      }
+    },
+    {
+      session_id: "ccs-new",
+      status: "prompt_completed_e2e",
+      updated_at_utc: "2026-06-11T22:45:47.170740Z",
+      inference_proven: true,
+      model_response_present: true,
+      session_dual_lane_dispatch: {
+        status: "ok",
+        machine_error_code: "OK",
+        final_status: "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS",
+        proof_status: "proven_with_limits",
+        same_session_dispatch_proven: true,
+        primary_dispatch_proven: true,
+        coding_dispatch_proven: true,
+        fallback_used: false,
+        does_not_prove_native_launch: true,
+        does_not_claim_product_readiness: true,
+        runtime_readiness_claimed: false
+      }
+    }
+  ]
+});
+`, sandbox);
+if (node("codexCustomSelectedSession").textContent !== "ccs-new") {
+  throw new Error(`latest session was not selected: ${node("codexCustomSelectedSession").textContent}`);
+}
+if (node("codexCustomSessionInference").textContent !== "response proof · session dual-lane proven") {
+  throw new Error(`latest bounded proof not mirrored: ${node("codexCustomSessionInference").textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_codex_custom_recovery_surface_is_bounded_and_readonly(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -1402,7 +1577,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartDeepSeekCodeEditProofAction"', section)
         self.assertIn("Проверить DeepSeek-правку", section)
         self.assertIn('id="quickStartCustomLaunchAction"', section)
-        self.assertIn("Проверить запуск", section)
+        self.assertIn("Проверить GPT+API", section)
         self.assertIn('id="quickStartLaunchPreflightAction"', section)
         self.assertIn("Предзапусковая проверка", section)
         self.assertIn('id="quickStartChatSlotState"', section)
@@ -1417,8 +1592,11 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
             js,
         )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
+        self.assertIn("async function runQuickStartSessionDualLaneExecution()", js)
         self.assertIn('metadataFor("launch_custom_client_native")', js)
         self.assertIn("await runCodexCustomLaunch()", js)
+        self.assertIn('fetch("api/codex/custom/sessions"', js)
+        self.assertIn("mixed-slot-dispatch-probe", js)
         self.assertIn('document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight())', js)
         self.assertIn('fetch("api/codex/custom/native-launch-preflight"', js)
         self.assertIn("runQuickStartLaunchAdmissionProjection", js)
@@ -1442,6 +1620,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("syncCodexRouteSelects", js)
         self.assertIn("quickStartAdmissionComponentVisual", js)
         self.assertIn("quickStartNextActionLabel", js)
+        self.assertIn('return "dispatch proof"', js)
         self.assertIn("apiReasoningOptionForModelEntry", js)
         self.assertIn("provider_declared_max", js)
         self.assertIn("api_reasoning_option_id: apiReasoningOptionId", js)
@@ -2935,6 +3114,139 @@ if (rendered.coder_trace_id_matches_launch !== true || rendered.unsupported_evid
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_quick_start_mixed_trace_missing_launch_context_requests_fresh_launch(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartLaunchState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse"
+]) {
+  node(id);
+}
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartMixedCoderTrace({
+  status: "blocked",
+  machine_error_code: "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
+  final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
+  mixed_mode_product_decision: "UNSUPPORTED",
+  mixed_mode_launch_action: "blocked",
+  mixed_mode_launch_blocked_reason: "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
+  execution_mode: "chatgpt_plus_api",
+  primary_model_id: "",
+  coding_agent_model_id: "",
+  launch_context_present: false,
+  launch_context_missing: true,
+  launch_context_missing_reason: "last_launch_packet_missing_or_empty",
+  persisted_config_counts_as_launch_context: false,
+  window_visibility_counts_as_launch_context: false,
+  launch_proven: false,
+  launch_status: "",
+  launch_status_ok: false,
+  slot_binding_blocking_reasons: ["launch_context_missing"],
+  slot_binding_proven: false,
+  prompt_seen: false,
+  coder_dispatch_proven: false,
+  coder_work_result_proven_with_limits: false,
+  runtime_readiness_claimed: false,
+  fallback_used: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  next_action: "run_fresh_chatgpt_plus_api_launch"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").className.includes("green")) {
+  throw new Error(`missing context must not be green: ${node("quickStartRouteChip").className}`);
+}
+if (node("quickStartRouteChip").lastElementChild.textContent !== "launch context missing") {
+  throw new Error(`missing context label mismatch: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+if (node("quickStartExecutionModeState").lastElementChild.textContent !== "ChatGPT + API") {
+  throw new Error(`mixed mode label should remain visible: ${node("quickStartExecutionModeState").lastElementChild.textContent}`);
+}
+if (node("quickStartLaunchState").className.includes("green")) {
+  throw new Error(`missing launch context must not render launch green: ${node("quickStartLaunchState").className}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "context missing") {
+  throw new Error(`missing launch context state missing: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartNextActionState").lastElementChild.textContent !== "fresh launch") {
+  throw new Error(`fresh launch next action missing: ${node("quickStartNextActionState").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.machine_error_code !== "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING" ||
+  rendered.launch_context_present !== false ||
+  rendered.launch_context_missing !== true ||
+  rendered.launch_context_missing_reason !== "last_launch_packet_missing_or_empty"
+) {
+  throw new Error(`missing context diagnostics absent: ${JSON.stringify(rendered)}`);
+}
+if (
+  rendered.persisted_config_counts_as_launch_context !== false ||
+  rendered.window_visibility_counts_as_launch_context !== false ||
+  rendered.runtime_readiness_claimed !== false
+) {
+  throw new Error(`missing context greenwash guard absent: ${JSON.stringify(rendered)}`);
+}
+if (JSON.stringify(rendered.slot_binding_blocking_reasons) !== JSON.stringify(["launch_context_missing"])) {
+  throw new Error(`missing context reason absent: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_mixed_trace_stale_launch_requests_fresh_launch(self) -> None:
         script = r"""
 const fs = require("fs");
@@ -3138,6 +3450,10 @@ renderQuickStartMixedCoderTrace({
   launch_packet_stale: true,
   launch_packet_stale_overridden_by_current_bridge_trace: true,
   current_bridge_trace_matches_launch: true,
+  current_provider_record_matches_launch: true,
+  current_bridge_identity_bound_rebind_proven: false,
+  bridge_identity_matches_launch: true,
+  bridge_rebind_counts_as_provider_proof: false,
   trace_snapshot_age_seconds: 0,
   trace_snapshot_stale: false,
   current_launch_evidence_proven_with_limits: true,
@@ -3185,6 +3501,10 @@ if (
   rendered.launch_packet_stale !== true ||
   rendered.launch_packet_stale_overridden_by_current_bridge_trace !== true ||
   rendered.current_bridge_trace_matches_launch !== true ||
+  rendered.current_provider_record_matches_launch !== true ||
+  rendered.current_bridge_identity_bound_rebind_proven !== false ||
+  rendered.bridge_identity_matches_launch !== true ||
+  rendered.bridge_rebind_counts_as_provider_proof !== false ||
   rendered.current_launch_evidence_proven_with_limits !== true ||
   rendered.current_mixed_trace_evidence_fresh !== true
 ) {
@@ -3203,7 +3523,7 @@ if (rendered.mixed_route_blocked !== false || rendered.mixed_mode_launch_action 
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
-    def test_quick_start_mixed_blocked_button_runs_launch_chain_then_refreshes_trace(self) -> None:
+    def test_quick_start_mixed_blocked_button_runs_native_launch_chain(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -3219,6 +3539,20 @@ function Node() {
   this.lastElementChild = { textContent: "" };
   this.buttonLabel = { textContent: "" };
   this.querySelector = (selector) => selector === "span" ? this.buttonLabel : null;
+  this.append = (...nodes) => {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  };
+  this.replaceChildren = (...nodes) => {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  };
   this.setAttribute = (name, value) => { this.attributes[name] = value; };
   this.removeAttribute = (name) => { delete this.attributes[name]; };
 }
@@ -3238,6 +3572,10 @@ for (const id of [
   "quickStartLaunchState",
   "quickStartChatSlotState",
   "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
   "quickStartNextActionState",
   "quickStartRouteResponse",
   "quickStartCustomLaunchAction",
@@ -3254,6 +3592,7 @@ node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
 node("quickStartApiReasoningOptionSelect").value = "normal";
 
 const urls = [];
+let traceFetchCount = 0;
 const blockedPacket = {
   status: "blocked",
   machine_error_code: "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
@@ -3281,6 +3620,55 @@ const blockedPacket = {
   fallback_used: false,
   next_action: "inspect_slot_binding_launch_evidence"
 };
+const dispatchNeededPacket = {
+  ...blockedPacket,
+  machine_error_code: "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+  final_status: "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+  mixed_mode_launch_blocked_reason: "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+  launch_proven: true,
+  launch_status: "ok",
+  launch_status_ok: true,
+  real_codex_app_launched: true,
+  slot_binding_blocking_reasons: [],
+  slot_binding_proven: true,
+  native_window_observed: true,
+  runtime_readiness_claimed: false,
+  next_action: "confirm_runtime_can_dispatch_coding_agent_model_slot"
+};
+const proofPacket = {
+  ...dispatchNeededPacket,
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "CHATGPT_PLUS_API_ROUTE_PROVEN_WITH_LIMITS",
+  mixed_mode_product_decision: "WORKS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_blocked_reason: "",
+  prompt_seen: true,
+  primary_trace_proof_status: "proven",
+  coder_dispatch_proven: true,
+  coder_work_result_proven_with_limits: true,
+  deepseek_route_observed: true,
+  primary_trace_id_matches_launch: true,
+  coder_trace_id_matches_launch: true,
+  trace_launch_packet_matches: true,
+  trace_id_matches_launch: true,
+  runtime_executor_lane: "api_route_lane",
+  runtime_executor_truth_source: "native_dual_lane_bridge",
+  mixed_mode_actual_primary_executor_is_api_route: false,
+  fallback_used: false,
+  response_text_counts_as_model_truth: false,
+  ui_label_counts_as_proof: false,
+  native_dispatch_proof_attempted: true,
+  native_ui_input_claimed: false,
+  browser_trace_authority: false,
+  raw_prompt_recorded: false,
+  auth_header_recorded: false,
+  secret_value_recorded: false,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false,
+  runtime_readiness_claimed: true,
+  next_action: "none"
+};
 
 const sandbox = {
   console,
@@ -3288,7 +3676,8 @@ const sandbox = {
     addEventListener() {},
     querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
     querySelectorAll() { return []; },
-    getElementById(id) { return node(id); }
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); }
   },
   window: {
     location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
@@ -3297,8 +3686,9 @@ const sandbox = {
   },
   URL,
   URLSearchParams,
-  fetch(url) {
+  fetch(url, options = {}) {
     urls.push(url);
+    const body = options.body ? JSON.parse(options.body) : {};
     if (url === "api/actions") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
         action_phase: "full",
@@ -3315,46 +3705,120 @@ const sandbox = {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
         status: "ok",
         machine_error_code: "OK",
-        launch_admission: "admitted",
+        final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
         execution_mode: "chatgpt_plus_api",
-        next_action: "native_launch"
+        chatgpt_model: { status: "admitted", model_id: "gpt-5.5" },
+        api_model: { status: "admitted", model_id: "wbp-deepseek-chat" },
+        api_reasoning: { status: "accepted", option_id: "normal" },
+        api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+        launch_admission: "admitted",
+        dry_server_truth_only: true,
+        custom_codex_launch_attempted: false,
+        new_launch_started: false,
+        network_calls_made: false,
+        live_call_attempted: false,
+        provider_called: false,
+        fallback_used: false,
+        silent_fallback_used: false,
+        raw_backend_details_exposed: false,
+        secret_value_exposed: false,
+        raw_path_exposed: false,
+        original_codex_touched: false,
+        asar_touched: false,
+        next_action: "native_launch_preflight"
       }) });
     }
     if (url === "api/codex/custom/native-launch-preflight") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
         status: "ok",
         machine_error_code: "OK",
+        final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
         execution_mode: "chatgpt_plus_api",
+        selected_model: "gpt-5.5",
+        route_model_id: "wbp-deepseek-chat",
+        chatgpt_model_id: "gpt-5.5",
+        api_model_id: "wbp-deepseek-chat",
         owner_authorization_phrase_present: true,
         bridge_required: true,
         bridge_alive: true,
-        config_status: "admitted",
+        bridge_status: "running",
         custom_process_observed: false,
+        window_status: "not_found",
+        config_status: "admitted",
+        new_launch_started: false,
+        custom_codex_launch_attempted: false,
+        live_call_attempted: false,
+        provider_called: false,
         next_action: "native_launch"
       }) });
     }
     if (url === "api/codex/custom/native-launch") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
-        status: "blocked",
-        machine_error_code: "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+        status: "ok",
+        machine_error_code: "OK",
+        final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
         execution_mode: "chatgpt_plus_api",
+        selected_model: "gpt-5.5",
+        launch_model_id: "gpt-5.5",
+        route_model_id: "wbp-deepseek-chat",
+        chatgpt_model_id: "gpt-5.5",
+        api_model_id: "wbp-deepseek-chat",
         running_status: true,
+        isolated_home: true,
+        isolated_codex_home: true,
+        isolated_profile_dir: true,
+        server_issued_model_list: true,
+        wbp_endpoint_configured: true,
+        browser_route_injection: false,
+        browser_backend_injection: false,
+        current_codex_touched: false,
         process_started: true,
+        expected_custom_identity_observed: true,
         native_window_observed: true,
-        native_app_usable: false,
-        real_codex_app_launched: false,
+        native_app_usable: true,
+        real_codex_app_launched: true,
+        bridge_alive: true,
+        stable_custom_codex_wbp_bridge_final_status: "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS",
+        launch_claim_scope: "custom_native_app_window_launch_only",
+        selection_packet: {
+          execution_mode: "chatgpt_plus_api",
+          chatgpt_model_id: "gpt-5.5",
+          api_model_id: "wbp-deepseek-chat",
+          api_reasoning_option_id: "normal",
+          primary_model_slot: { lane: "codex_account_lane", model_id: "gpt-5.5" },
+          coding_agent_model_slot: { lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+          dual_lane_slots_preserved: true,
+          chatgpt_line_used_as_executor: false,
+          api_line_used_as_executor: true,
+          api_only_calls_chatgpt: false,
+          chatgpt_only_calls_api: false
+        },
+        route_packet_matches_selection_packet: true,
+        quick_start_launch_route_truth_proven_with_limits: true,
+        config_status: "matches_last_launch",
+        launch_packet_is_truth_source: true,
+        new_launch_started: true,
+        custom_codex_launch_attempted: true,
+        live_call_attempted: true,
+        provider_called: false,
         fallback_used: false,
+        silent_fallback_used: false,
         raw_backend_details_exposed: false,
         secret_value_exposed: false,
-        next_action: "stop_and_diagnose_custom_window_usability"
+        raw_path_exposed: false,
+        original_codex_touched: false,
+        asar_touched: false,
+        next_action: "none"
       }) });
     }
     if (url === "api/codex/custom/live-bridge-stability") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
         status: "ok",
-        machine_error_code: "BRIDGE_READY",
+        machine_error_code: "OK",
         bridge_status: "BRIDGE_READY",
         execution_mode: "chatgpt_plus_api",
+        chatgpt_model_id: "gpt-5.5",
+        api_model_id: "wbp-deepseek-chat",
         bridge_alive: true,
         port_alive: true,
         bridge_session_matches_active_window: true,
@@ -3362,11 +3826,19 @@ const sandbox = {
         launch_id_matches_trace: true,
         old_window_answered: false,
         fallback_used: false,
+        runtime_readiness_claimed: false,
         next_action: "none"
       }) });
     }
     if (url === "api/codex/custom/chatgpt-plus-api-coder-trace") {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(blockedPacket) });
+      traceFetchCount += 1;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(traceFetchCount === 1 ? dispatchNeededPacket : proofPacket)
+      });
+    }
+    if (url === "api/codex/custom/native-dispatch-proof") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(proofPacket) });
     }
     return Promise.reject(new Error(`unexpected fetch url ${url}`));
   }
@@ -3385,7 +3857,7 @@ vm.runInContext(`
 `, sandbox);
 vm.runInContext(`renderQuickStartMixedCoderTrace(${JSON.stringify(blockedPacket)});`, sandbox);
 
-if (node("quickStartCustomLaunchAction").buttonLabel.textContent !== "Проверить запуск") {
+if (node("quickStartCustomLaunchAction").buttonLabel.textContent !== "Проверить GPT+API") {
   throw new Error(`blocked mixed button label not applied: ${node("quickStartCustomLaunchAction").buttonLabel.textContent}`);
 }
 if (node("quickStartCustomLaunchAction").dataset.mixedModeLaunchBlocked !== "true") {
@@ -3399,10 +3871,35 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
     "api/codex/custom/native-launch-preflight",
     "api/codex/custom/native-launch",
     "api/codex/custom/live-bridge-stability",
-    "api/codex/custom/chatgpt-plus-api-coder-trace"
+    "api/codex/custom/chatgpt-plus-api-coder-trace",
+    "api/codex/custom/native-dispatch-proof"
   ];
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
-    throw new Error(`blocked mixed click must run launch chain then refresh trace: ${JSON.stringify(urls)}`);
+    throw new Error(`blocked mixed click must run product native launch path: ${JSON.stringify(urls)}`);
+  }
+  const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+  if (
+    rendered.execution_mode !== "chatgpt_plus_api" ||
+    rendered.chatgpt_model_id !== "gpt-5.5" ||
+    rendered.api_model_id !== "wbp-deepseek-chat" ||
+    rendered.mixed_route_truth_packet !== true ||
+    rendered.launch_proven !== true ||
+    rendered.prompt_seen !== true ||
+    rendered.coder_dispatch_proven !== true ||
+    rendered.coder_work_result_proven_with_limits !== true ||
+    rendered.native_window_observed !== true ||
+    rendered.real_codex_app_launched !== true ||
+    rendered.native_dispatch_proof_attempted !== true ||
+    rendered.native_ui_input_claimed !== false ||
+    rendered.runtime_readiness_claimed !== true
+  ) {
+    throw new Error(`native mixed trace truth missing: ${node("quickStartRouteResponse").textContent}`);
+  }
+  if (node("quickStartLaunchState").lastElementChild.textContent !== "запуск ok") {
+    throw new Error(`native launch state not rendered: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+  }
+  if (node("quickStartWindowState").lastElementChild.textContent !== "найдено") {
+    throw new Error(`native window state not rendered: ${node("quickStartWindowState").lastElementChild.textContent}`);
   }
 }).catch((error) => {
   console.error(error);
@@ -4221,7 +4718,7 @@ function node(id) {
   }
   return nodes[id];
 }
-node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartExecutionModeSelect").value = "api_only";
 node("quickStartChatModelSelect").value = "gpt-5.3-codex";
 node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
 node("quickStartApiReasoningOptionSelect").value = "catalog_default";
@@ -4260,8 +4757,8 @@ const sandbox = {
           status: "ok",
           machine_error_code: "OK",
           final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
-          execution_mode: "chatgpt_plus_api",
-          chatgpt_model: { status: "admitted", model_id: "gpt-5.3-codex" },
+          execution_mode: "api_only",
+          chatgpt_model: { status: "not_required", model_id: "" },
           api_model: { status: "admitted", model_id: "wbp-deepseek-v3" },
           api_reasoning: { status: "defaulted", option_id: "catalog_default" },
           api_route: { status: "admitted", route_reference: "server-owned-api-route" },
@@ -4292,8 +4789,8 @@ const sandbox = {
           machine_error_code: "OWNER_AUTHORIZATION_REQUIRED",
           human_message: "Owner authorization required.",
           final_status: "KNOWN_BLOCKER_QUICK_START_LIVE_BRIDGE_OR_WINDOW_REUSE_NOT_PROVEN",
-          execution_mode: "chatgpt_plus_api",
-          selected_model: "gpt-5.3-codex",
+          execution_mode: "api_only",
+          selected_model: "wbp-deepseek-v3",
           owner_authorization_phrase_present: false,
           preflight_claim_scope: "quick_start_launch_guard_no_live_mutation",
           bridge_required: true,
@@ -4345,7 +4842,7 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   if (urls.some((url) => url === "api/codex/custom/native-launch")) {
     throw new Error("quick-start projection called live native launch");
   }
-  if (nodes.quickStartChatSlotState.lastElementChild.textContent !== "admitted") {
+  if (nodes.quickStartChatSlotState.lastElementChild.textContent !== "not required") {
     throw new Error(`chat slot not projected: ${nodes.quickStartChatSlotState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartApiSlotState.lastElementChild.textContent !== "admitted") {
@@ -4384,7 +4881,7 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
         if result.returncode != 0:
             self.fail(result.stderr or result.stdout)
 
-    def test_quick_start_primary_launch_action_calls_native_launch_when_admitted(self) -> None:
+    def test_quick_start_mixed_launch_action_runs_native_chain_when_admitted(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -4451,9 +4948,9 @@ function node(id) {
   return nodes[id];
 }
 node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
-node("quickStartChatModelSelect").value = "gpt-5.3-codex";
-node("quickStartApiModelSelect").value = "wbp-deepseek-v3";
-node("quickStartApiReasoningOptionSelect").value = "catalog_default";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "normal";
 
 const urls = [];
 const packets = [];
@@ -4477,16 +4974,14 @@ const sandbox = {
   AbortController,
   fetch(url, options) {
     urls.push(url);
-    if (options?.body) {
-      const body = JSON.parse(options.body);
+    const body = JSON.parse(options.body || "{}");
+    if (url === "api/codex/custom/quick-start/config-admission") {
       packets.push(body);
       for (const forbidden of ["route_id", "secret_ref", "api_key", "base_url", "path", "CODEX_HOME"]) {
         if (JSON.stringify(body).includes(forbidden)) {
           throw new Error(`forbidden browser field leaked into launch body: ${forbidden}`);
         }
       }
-    }
-    if (url === "api/codex/custom/quick-start/config-admission") {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
@@ -4494,12 +4989,11 @@ const sandbox = {
           machine_error_code: "OK",
           final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
           execution_mode: "chatgpt_plus_api",
-          chatgpt_model: { status: "admitted", model_id: "gpt-5.3-codex" },
-          api_model: { status: "admitted", model_id: "wbp-deepseek-v3" },
-          api_reasoning: { status: "defaulted", option_id: "catalog_default" },
+          chatgpt_model: { status: "admitted", model_id: "gpt-5.5" },
+          api_model: { status: "admitted", model_id: "wbp-deepseek-chat" },
+          api_reasoning: { status: "accepted", option_id: "normal" },
           api_route: { status: "admitted", route_reference: "server-owned-api-route" },
           launch_admission: "admitted",
-          launch_admission_summary: "Config admission ok.",
           dry_server_truth_only: true,
           custom_codex_launch_attempted: false,
           new_launch_started: false,
@@ -4518,6 +5012,7 @@ const sandbox = {
       });
     }
     if (url === "api/codex/custom/native-launch-preflight") {
+      packets.push(body);
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
@@ -4525,6 +5020,10 @@ const sandbox = {
           machine_error_code: "OK",
           final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
           execution_mode: "chatgpt_plus_api",
+          selected_model: "gpt-5.5",
+          route_model_id: "wbp-deepseek-chat",
+          chatgpt_model_id: "gpt-5.5",
+          api_model_id: "wbp-deepseek-chat",
           owner_authorization_phrase_present: true,
           bridge_required: true,
           bridge_alive: true,
@@ -4541,6 +5040,7 @@ const sandbox = {
       });
     }
     if (url === "api/codex/custom/native-launch") {
+      packets.push(body);
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
@@ -4548,6 +5048,11 @@ const sandbox = {
           machine_error_code: "OK",
           final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
           execution_mode: "chatgpt_plus_api",
+          selected_model: "gpt-5.5",
+          launch_model_id: "gpt-5.5",
+          route_model_id: "wbp-deepseek-chat",
+          chatgpt_model_id: "gpt-5.5",
+          api_model_id: "wbp-deepseek-chat",
           running_status: true,
           isolated_home: true,
           isolated_codex_home: true,
@@ -4560,15 +5065,30 @@ const sandbox = {
           process_started: true,
           expected_custom_identity_observed: true,
           native_window_observed: true,
-          real_codex_app_launched: true,
           native_app_usable: true,
-          launch_claim_scope: "native_custom_codex_launch_packet_truth",
+          real_codex_app_launched: true,
+          bridge_alive: true,
+          stable_custom_codex_wbp_bridge_final_status: "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS",
+          launch_claim_scope: "custom_native_app_window_launch_only",
           selection_packet: {
-            selected_source_class: "server_owned_route",
-            selected_route_digest: "digest",
-            selected_model: "gpt-5.3-codex"
+            execution_mode: "chatgpt_plus_api",
+            chatgpt_model_id: "gpt-5.5",
+            api_model_id: "wbp-deepseek-chat",
+            api_reasoning_option_id: "normal",
+            primary_model_slot: { lane: "codex_account_lane", model_id: "gpt-5.5" },
+            coding_agent_model_slot: { lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+            dual_lane_slots_preserved: true,
+            chatgpt_line_used_as_executor: false,
+            api_line_used_as_executor: true,
+            api_only_calls_chatgpt: false,
+            chatgpt_only_calls_api: false
           },
+          route_packet_matches_selection_packet: true,
+          quick_start_launch_route_truth_proven_with_limits: true,
+          config_status: "matches_last_launch",
+          launch_packet_is_truth_source: true,
           new_launch_started: true,
+          custom_codex_launch_attempted: true,
           live_call_attempted: true,
           provider_called: false,
           fallback_used: false,
@@ -4583,79 +5103,65 @@ const sandbox = {
       });
     }
     if (url === "api/codex/custom/live-bridge-stability") {
-      if (options?.method === "POST" || options?.body) {
-        throw new Error("live bridge stability fetch must be a bounded GET");
-      }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
-          status: "blocked",
-          machine_error_code: "BRIDGE_WINDOW_NOT_BOUND",
-          bridge_status: "BRIDGE_WINDOW_NOT_BOUND",
-          failure_machine_error_code: "WINDOW_BOUND_TO_OLD_BRIDGE",
+          status: "ok",
+          machine_error_code: "OK",
+          bridge_status: "BRIDGE_READY",
           execution_mode: "chatgpt_plus_api",
+          chatgpt_model_id: "gpt-5.5",
+          api_model_id: "wbp-deepseek-chat",
           bridge_alive: true,
           port_alive: true,
-          responses_endpoint_available: true,
-          bridge_session_matches_active_window: false,
-          trace_id_matches_launch: false,
-          launch_id_matches_trace: false,
-          old_window_answered: true,
-          recovery_required: true,
-          recommended_recovery_action: "relaunch_custom",
+          bridge_session_matches_active_window: true,
+          trace_id_matches_launch: true,
+          launch_id_matches_trace: true,
+          old_window_answered: false,
           fallback_used: false,
-          silent_fallback_used: false,
-          raw_backend_details_exposed: false,
-          secret_value_exposed: false,
-          next_action: "inspect_bridge_stability_packet"
+          runtime_readiness_claimed: false,
+          next_action: "none"
         })
       });
     }
     if (url === "api/codex/custom/chatgpt-plus-api-coder-trace") {
-      if (options?.method === "POST" || options?.body) {
-        throw new Error("mixed coder trace fetch must be a bounded GET");
-      }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
-          status: "blocked",
-          machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
-          final_status: "STOP_AND_DIAGNOSE_DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CHATGPT_PLUS_API_NATIVE_TRACE_PROVEN_WITH_LIMITS",
           execution_mode: "chatgpt_plus_api",
-          primary_model_id: "gpt-5.3-codex",
-          coding_agent_model_id: "wbp-deepseek-v3",
-          primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.3-codex" },
-          coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-v3" },
-          prompt_seen: false,
-          prompt_seen_blocking_reason: "primary_chatgpt_request_absent_api_route_dispatched",
+          primary_model_id: "gpt-5.5",
+          coding_agent_model_id: "wbp-deepseek-chat",
+          primary_model_slot: { lane: "codex_account_lane", model_id: "gpt-5.5" },
+          coding_agent_model_slot: { lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
+          mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+          mixed_mode_launch_action: "available",
+          launch_proven: true,
+          launch_status: "ok",
+          launch_status_ok: true,
+          launch_context_present: true,
+          launch_context_missing: false,
+          prompt_seen: true,
+          primary_trace_proof_status: "proven",
           coder_dispatch_proven: true,
           coder_work_result_proven_with_limits: true,
           deepseek_route_observed: true,
-          api_route_dispatched_without_primary: true,
-          direct_api_dispatch_without_primary_trace: true,
-          native_mixed_primary_trace_supported: false,
-          primary_trace_id_matches_launch: false,
+          native_mixed_primary_trace_supported: true,
+          native_window_observed: true,
+          real_codex_app_launched: true,
+          slot_binding_blocking_reasons: [],
+          primary_trace_id_matches_launch: true,
           coder_trace_id_matches_launch: true,
-          primary_replacement_trace_id_matches_launch: false,
-          native_dual_lane_prompt_trace_missing: true,
-          native_current_launch_single_executor_observed: true,
           runtime_executor_lane: "api_route_lane",
-          runtime_executor_truth_source: "launch_packet",
+          runtime_executor_truth_source: "forced_bridge_route",
           mixed_mode_actual_primary_executor_is_api_route: true,
-          capability_proof_scope: "native_window_bridge_trace_current_launch",
-          unsupported_evidence: {
-            primary_prompt_record_seen: false,
-            primary_trace_id_matches_launch: false,
-            coder_record_seen: true,
-            coder_trace_id_matches_launch: true,
-            api_route_dispatched_without_primary: true,
-            primary_replaced_by_api_route: false,
-            native_current_launch_single_executor_observed: true,
-            session_dispatch_probe_boundary_available: true,
-            native_dual_lane_dispatcher_observed: false
-          },
           fallback_used: false,
-          next_action: "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
+          response_text_counts_as_model_truth: false,
+          ui_label_counts_as_proof: false,
+          runtime_readiness_claimed: false,
+          next_action: "none"
         })
       });
     }
@@ -4684,69 +5190,56 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
     "api/codex/custom/chatgpt-plus-api-coder-trace"
   ];
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
-    throw new Error(`unexpected launch fetches ${JSON.stringify(urls)}`);
+    throw new Error(`unexpected native mixed launch fetches ${JSON.stringify(urls)}`);
   }
-  if (new Set(packets.map((packet) => JSON.stringify(packet))).size !== 1) {
-    throw new Error(`launch chain mutated selection payloads: ${JSON.stringify(packets)}`);
+  if (packets.length !== 3) {
+    throw new Error(`native path did not post admission, preflight and launch exactly once: ${JSON.stringify(packets)}`);
   }
   for (const packet of packets) {
     if (packet.execution_mode !== "chatgpt_plus_api") {
       throw new Error(`wrong execution mode in payload: ${JSON.stringify(packet)}`);
     }
-    if (packet.chatgpt_model_id !== "gpt-5.3-codex") {
+    if (packet.chatgpt_model_id !== "gpt-5.5") {
       throw new Error(`wrong ChatGPT model in payload: ${JSON.stringify(packet)}`);
     }
-    if (packet.api_model_id !== "wbp-deepseek-v3") {
+    if (packet.api_model_id !== "wbp-deepseek-chat") {
       throw new Error(`wrong API model in payload: ${JSON.stringify(packet)}`);
     }
+    if (packet.api_reasoning_option_id !== "normal") {
+      throw new Error(`wrong API reasoning option in payload: ${JSON.stringify(packet)}`);
+    }
   }
-  if (nodes.quickStartLaunchState.className.includes("green")) {
-    throw new Error(`stale bridge binding must not leave launch state green: ${nodes.quickStartLaunchState.className}`);
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "запуск ok") {
+    throw new Error(`native mixed launch label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "blocked") {
-    throw new Error(`mixed blocker did not override stale-window launch state: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  if (nodes.quickStartBridgeState.lastElementChild.textContent !== "жив") {
+    throw new Error(`bridge state must render API bridge launch truth: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartBridgeState.lastElementChild.textContent !== "не привязан") {
-    throw new Error(`bridge state did not render stale binding: ${nodes.quickStartBridgeState.lastElementChild.textContent}`);
-  }
-  if (nodes.quickStartWindowState.lastElementChild.textContent !== "старое окно") {
-    throw new Error(`window state did not render stale binding: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
-  }
-  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "mixed blocked") {
-    throw new Error(`mixed trace blocker did not override launch route chip: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "найдено") {
+    throw new Error(`window state must render native launch truth: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
   }
   const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
-  if (rendered.machine_error_code !== "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED") {
-    throw new Error(`mixed trace truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
-  }
-  if (rendered.mixed_route_blocked !== true || rendered.coder_dispatch_proven !== true || rendered.prompt_seen !== false) {
-    throw new Error(`mixed lane split not rendered: ${nodes.quickStartRouteResponse.textContent}`);
-  }
   if (
-    rendered.primary_trace_id_matches_launch !== false ||
-    rendered.coder_trace_id_matches_launch !== true ||
-    rendered.native_dual_lane_prompt_trace_missing !== true ||
-    rendered.native_current_launch_single_executor_observed !== true
+    rendered.machine_error_code !== "OK" ||
+    rendered.execution_mode !== "chatgpt_plus_api" ||
+    rendered.chatgpt_model_id !== "gpt-5.5" ||
+    rendered.api_model_id !== "wbp-deepseek-chat" ||
+    rendered.mixed_route_truth_packet !== true
   ) {
-    throw new Error(`mixed unsupported evidence not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+    throw new Error(`native mixed launch identity not rendered: ${nodes.quickStartRouteResponse.textContent}`);
   }
-  const expectedUnsupportedEvidence = {
-    primary_prompt_record_seen: false,
-    primary_trace_id_matches_launch: false,
-    coder_record_seen: true,
-    coder_trace_id_matches_launch: true,
-    api_route_dispatched_without_primary: true,
-    primary_replaced_by_api_route: false,
-    native_current_launch_single_executor_observed: true,
-    session_dispatch_probe_boundary_available: true,
-    native_dual_lane_dispatcher_observed: false
-  };
   if (
+    rendered.launch_proven !== true ||
+    rendered.prompt_seen !== true ||
+    rendered.coder_dispatch_proven !== true ||
+    rendered.coder_work_result_proven_with_limits !== true ||
+    rendered.native_window_observed !== true ||
+    rendered.real_codex_app_launched !== true ||
     rendered.runtime_executor_lane !== "api_route_lane" ||
-    rendered.capability_proof_scope !== "native_window_bridge_trace_current_launch" ||
-    JSON.stringify(rendered.unsupported_evidence) !== JSON.stringify(expectedUnsupportedEvidence)
+    rendered.mixed_mode_actual_primary_executor_is_api_route !== true ||
+    rendered.runtime_readiness_claimed !== false
   ) {
-    throw new Error(`mixed capability scope not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+    throw new Error(`native mixed launch proof flags missing: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);

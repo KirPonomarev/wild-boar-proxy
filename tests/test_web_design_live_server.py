@@ -8325,8 +8325,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         stable_preflight.assert_called_once()
         bridge_prewarm.assert_called_once()
         ensure_bridge.assert_called_once()
+        self.assertEqual(ensure_bridge.call_args.kwargs["forced_route_model_id"], "")
         self.assertEqual(
-            ensure_bridge.call_args.kwargs["forced_route_model_id"],
+            ensure_bridge.call_args.kwargs["dual_lane_route_model_id"],
             "wbp-deepseek-v4-pro-max",
         )
         launch_native.assert_called_once()
@@ -8345,10 +8346,16 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "wbp-deepseek-v4-pro-max",
         )
         self.assertTrue(endpoint_packet["chatgpt_line_selected_as_executor"])
-        self.assertFalse(endpoint_packet["chatgpt_line_used_as_executor"])
-        self.assertTrue(endpoint_packet["mixed_mode_actual_primary_executor_is_api_route"])
-        self.assertEqual(endpoint_packet["runtime_executor_model_id"], "wbp-deepseek-v4-pro-max")
-        self.assertEqual(endpoint_packet["runtime_executor_truth_source"], "forced_bridge_route")
+        self.assertTrue(endpoint_packet["chatgpt_line_used_as_executor"])
+        self.assertFalse(endpoint_packet["mixed_mode_actual_primary_executor_is_api_route"])
+        self.assertEqual(endpoint_packet["runtime_executor_model_id"], "dual_lane")
+        self.assertEqual(endpoint_packet["runtime_executor_lane"], "dual_lane")
+        self.assertEqual(endpoint_packet["runtime_executor_truth_source"], "native_dual_lane_bridge")
+        self.assertTrue(endpoint_packet["native_dual_lane_bridge_used"])
+        self.assertEqual(
+            endpoint_packet["dual_lane_route_model_id"],
+            "wbp-deepseek-v4-pro-max",
+        )
         self.assertTrue(endpoint_packet["api_line_used_as_executor"])
         self.assertTrue(endpoint_packet["execution_mode_packet"]["dual_lane_slots_preserved"])
         self.assertFalse(endpoint_packet["execution_mode_packet"]["runtime_execution_proven"])
@@ -9848,6 +9855,35 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
 
+    def test_custom_window_prompt_trace_reports_missing_launch_context(self) -> None:
+        packet = live_server.build_custom_codex_window_prompt_trace_packet(
+            last_launch_packet={},
+            bridge_trace_packet={"request_count": 0, "records": []},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertEqual(packet["next_action"], "run_fresh_custom_codex_launch")
+        self.assertFalse(packet["launch_context_present"])
+        self.assertTrue(packet["launch_context_missing"])
+        self.assertEqual(
+            packet["launch_context_missing_reason"],
+            "last_launch_packet_missing_or_empty",
+        )
+        self.assertFalse(packet["window_launch_proven_with_limits"])
+        self.assertFalse(packet["request_seen_after_launch"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def _window_input_route_trace_fixture(
         self,
         *,
@@ -9983,6 +10019,33 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(packet["forbidden_fields"], ["model_id"])
         self.assertFalse(packet["browser_trace_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_window_input_route_trace_reports_missing_launch_context(self) -> None:
+        packet = live_server.build_custom_codex_window_input_route_trace_packet(
+            last_launch_packet={},
+            bridge_trace_packet={"request_count": 0, "records": []},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertEqual(packet["next_action"], "run_fresh_custom_codex_launch")
+        self.assertFalse(packet["launch_context_present"])
+        self.assertTrue(packet["launch_context_missing"])
+        self.assertFalse(packet["input_surface_observed"])
+        self.assertFalse(packet["input_proven"])
+        self.assertFalse(packet["window_prompt_seen"])
+        self.assertFalse(packet["route_trace_proven"])
+        self.assertFalse(packet["send_attempted"])
+        self.assertFalse(packet["send_succeeded"])
+        self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["secret_value_exposed"])
 
     def test_custom_window_input_route_trace_endpoint_rejects_query_authority(self) -> None:
@@ -10527,18 +10590,38 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN",
+            "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
         )
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertEqual(packet["next_action"], "run_fresh_chatgpt_plus_api_launch")
+        self.assertFalse(packet["launch_context_present"])
+        self.assertTrue(packet["launch_context_missing"])
+        self.assertEqual(
+            packet["launch_context_missing_reason"],
+            "last_launch_packet_missing_or_empty",
+        )
+        self.assertFalse(packet["persisted_config_counts_as_launch_context"])
+        self.assertFalse(packet["window_visibility_counts_as_launch_context"])
         self.assertFalse(packet["launch_proven"])
         self.assertFalse(packet["launch_evidence_proven_with_limits"])
         self.assertFalse(packet["current_launch_evidence_proven_with_limits"])
         self.assertFalse(packet["current_mixed_trace_evidence_fresh"])
         self.assertFalse(packet["launch_packet_stale"])
         self.assertFalse(packet["trace_snapshot_stale"])
-        self.assertIn(
-            "launch_status_not_ok",
-            packet["slot_binding_blocking_reasons"],
+        self.assertEqual(packet["slot_binding_blocking_reasons"], ["launch_context_missing"])
+        self.assertEqual(
+            packet["stage_statuses"]["slot_binding"],
+            "KNOWN_BLOCKER_CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
         )
+        self.assertEqual(packet["mixed_mode_launch_action"], "blocked")
+        self.assertEqual(
+            packet["mixed_mode_launch_blocked_reason"],
+            "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING",
+        )
+        self.assertFalse(packet["runtime_readiness_claimed"])
 
     def test_chatgpt_plus_api_coder_trace_proves_deepseek_coder_dispatch(self) -> None:
         launch = {
@@ -10626,6 +10709,17 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(packet["prompt_seen"])
         self.assertTrue(packet["chatgpt_route_observed"])
         self.assertTrue(packet["chatgpt_primary_route_observed"])
+        primary_lane = packet["chatgpt_primary_lane_proof"]
+        self.assertEqual(primary_lane["status"], "ok")
+        self.assertEqual(primary_lane["machine_error_code"], "OK")
+        self.assertEqual(primary_lane["proof_status"], "proven")
+        self.assertEqual(primary_lane["selected_model_id"], "gpt-5.4")
+        self.assertTrue(primary_lane["selected_model_bound"])
+        self.assertTrue(primary_lane["prompt_record_seen"])
+        self.assertTrue(primary_lane["trace_id_matches_launch"])
+        self.assertFalse(primary_lane["session_dispatch_probe_counts_as_native_primary_trace"])
+        self.assertTrue(primary_lane["runtime_readiness_claimed"])
+        self.assertEqual(primary_lane["blocking_reason"], "none")
         self.assertTrue(packet["deepseek_route_observed"])
         self.assertTrue(packet["deepseek_coding_route_observed"])
         self.assertTrue(packet["coder_dispatch_proven"])
@@ -10642,6 +10736,118 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["response_text_counts_as_proof"])
         self.assertFalse(packet["ui_label_counts_as_proof"])
         self.assertFalse(packet["response_text_counts_as_model_truth"])
+
+    def test_native_dispatch_proof_endpoint_proves_chatgpt_plus_api_trace(self) -> None:
+        primary = ThreadingHTTPServer(("127.0.0.1", free_port()), StableProbeHandler)
+        primary_thread = threading.Thread(target=primary.serve_forever, daemon=True)
+        primary_thread.start()
+        route_id = "wbp-deepseek-v4-pro-max"
+        lease = live_server._CustomNativeBridgeLease(bridge_port=free_port())
+        launch = {
+            "status": "ok",
+            "launch_id": "launch-proof",
+            "trace_id": "trace-proof",
+            "execution_mode": "chatgpt_plus_api",
+            "native_window_observed": True,
+            "real_codex_app_launched": True,
+            "stable_bridge_preflight_required": True,
+            "stable_bridge_preflight_status": "ok",
+            "stable_bridge_launch_allowed": True,
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": route_id,
+                "server_issued": True,
+            },
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        routes_packet = {
+            "data": {
+                "routes": [
+                    {
+                        "route_id": route_id,
+                        "enabled": True,
+                        "provider": "deepseek",
+                        "base_url": "https://deepseek.example.invalid/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+                    }
+                ]
+            }
+        }
+        try:
+            with (
+                mock.patch.object(live_server, "extract_local_api_key", return_value="sk-local"),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-deepseek",
+                ),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface.ExternalRouteResponsesAdapter.handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps(
+                            {"output_text": live_server.MIXED_DEEPSEEK_CODER_SMOKE_PHRASE}
+                        ).encode("utf-8"),
+                    ),
+                ) as route_handle,
+            ):
+                lease.ensure(
+                    downstream_endpoint=f"http://127.0.0.1:{primary.server_port}/v1",
+                    routes_packet=routes_packet,
+                    dual_lane_route_model_id=route_id,
+                )
+                lease.set_trace_context(
+                    {
+                        "launch_id": "launch-proof",
+                        "trace_id": "trace-proof",
+                        "selected_model": "gpt-5.5",
+                    }
+                )
+                packet = live_server._custom_native_chatgpt_plus_api_dispatch_proof_packet(
+                    last_launch_packet=launch,
+                    native_bridge_lease=lease,
+                    owner_authorized=True,
+                    browser_payload={},
+                )
+        finally:
+            lease.close()
+            primary.shutdown()
+            primary_thread.join(timeout=2)
+            primary.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["mixed_mode_product_decision"], "WORKS")
+        self.assertTrue(packet["native_dispatch_proof_attempted"])
+        self.assertEqual(packet["native_dispatch_http_status"], 200)
+        self.assertEqual(packet["native_dispatch_error_class"], "")
+        self.assertFalse(packet["native_ui_input_claimed"])
+        self.assertTrue(packet["prompt_seen"])
+        self.assertTrue(packet["coder_dispatch_proven"])
+        self.assertTrue(packet["deepseek_record_seen"])
+        self.assertTrue(packet["deepseek_route_observed"])
+        self.assertTrue(packet["coder_work_result_proven_with_limits"])
+        self.assertTrue(packet["trace_launch_packet_matches"])
+        self.assertTrue(packet["runtime_readiness_claimed"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        route_handle.assert_called_once()
 
     def test_chatgpt_plus_api_coder_trace_blocks_missing_stable_preflight(self) -> None:
         launch = {
@@ -10977,6 +11183,27 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["mixed_mode_launch_action"], "available")
         self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
         self.assertEqual(packet["primary_trace_proof_status"], "not_proven")
+        primary_lane = packet["chatgpt_primary_lane_proof"]
+        self.assertEqual(primary_lane["status"], "blocked")
+        self.assertEqual(
+            primary_lane["machine_error_code"],
+            "CHATGPT_PRIMARY_TRACE_UNSUPPORTED",
+        )
+        self.assertEqual(primary_lane["proof_status"], "not_proven")
+        self.assertEqual(primary_lane["selected_model_id"], "gpt-5.4")
+        self.assertTrue(primary_lane["selected_model_bound"])
+        self.assertFalse(primary_lane["prompt_record_seen"])
+        self.assertFalse(primary_lane["trace_id_matches_launch"])
+        self.assertFalse(primary_lane["session_dispatch_probe_counts_as_native_primary_trace"])
+        self.assertFalse(primary_lane["runtime_readiness_claimed"])
+        self.assertEqual(
+            primary_lane["blocking_reason"],
+            "primary_chatgpt_request_absent_api_route_dispatched",
+        )
+        self.assertEqual(
+            primary_lane["next_action"],
+            "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher",
+        )
         self.assertTrue(packet["mixed_mode_launch_available_with_primary_trace_gap"])
         self.assertFalse(packet["runtime_readiness_claimed"])
         self.assertFalse(packet["prompt_seen"])
@@ -11484,6 +11711,131 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(packet["coder_work_result_proven_with_limits"])
         self.assertTrue(packet["api_route_dispatched_without_primary"])
         self.assertEqual(packet["next_action"], "continue_in_existing_custom_window")
+
+    def test_chatgpt_plus_api_coder_trace_overrides_stale_launch_with_identity_bound_bridge_rebind(self) -> None:
+        launch = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "captured_at_utc": "2026-01-01T00:00:00Z",
+            "launch_id": "launch-test",
+            "trace_id": "trace-test",
+            "execution_mode": "chatgpt_plus_api",
+            "native_window_observed": True,
+            "real_codex_app_launched": True,
+            "stable_bridge_preflight_required": True,
+            "stable_bridge_preflight_status": "ok",
+            "stable_bridge_launch_allowed": True,
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": "wbp-deepseek-chat",
+                "server_issued": True,
+            },
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "current_codex_touched": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        captured_at = live_server.utc_now()
+        bridge_request_trace_packet = {
+            "captured_at_utc": captured_at,
+            "trace_id": "trace-test",
+            "launch_packet_id": "launch-test",
+            "request_started": True,
+            "request_count": 1,
+            "path": "/v1/responses",
+            "requested_model": "",
+            "effective_route_model": "",
+            "provider_called": False,
+            "downstream_called": False,
+            "stream_requested": False,
+            "stream_started": False,
+            "stream_completed": True,
+            "route_unchanged": True,
+            "fallback_used": False,
+            "machine_error_code": "OK",
+        }
+        bridge_trace_packet = {
+            "captured_at_utc": captured_at,
+            "trace_context": {
+                "launch_id": "launch-test",
+                "launch_packet_id": "launch-test",
+                "trace_id": "trace-test",
+                "selected_model": "gpt-5.5",
+                "launch_route_digest": "digest-test",
+            },
+            "trace_id": "trace-test",
+            "launch_packet_id": "launch-test",
+            "bridge_alive": True,
+            "responses_endpoint_alive": True,
+            "bridge_machine_error_code": "OK",
+            "auth_header_expected": True,
+            "auth_header_seen": True,
+            "auth_ok": True,
+            "route_unchanged": True,
+            "fallback_used": False,
+            "bridge_health_packet": {
+                "captured_at_utc": captured_at,
+                "trace_id": "trace-test",
+                "launch_packet_id": "launch-test",
+                "bridge_started": True,
+                "bridge_alive": True,
+                "bridge_port": 8765,
+                "port_owned_by_bridge": True,
+                "auth_header_expected": True,
+                "auth_header_present": True,
+                "auth_ok": True,
+                "responses_endpoint_ready": True,
+                "fallback_used": False,
+                "machine_error_code": "OK",
+                "request_trace_packet": bridge_request_trace_packet,
+            },
+            "bridge_request_trace_packet": bridge_request_trace_packet,
+            "request_count": 0,
+            "last_record": {},
+            "records": [],
+            "raw_prompt_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+        }
+
+        packet = live_server.build_custom_codex_chatgpt_plus_api_coder_trace_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=bridge_trace_packet,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+        )
+        self.assertEqual(packet["next_action"], "confirm_runtime_can_dispatch_coding_agent_model_slot")
+        self.assertTrue(packet["launch_packet_stale"])
+        self.assertTrue(packet["launch_packet_stale_overridden_by_current_bridge_trace"])
+        self.assertTrue(packet["current_bridge_trace_matches_launch"])
+        self.assertTrue(packet["current_bridge_identity_bound_rebind_proven"])
+        self.assertTrue(packet["bridge_identity_matches_launch"])
+        self.assertTrue(packet["current_launch_evidence_proven_with_limits"])
+        self.assertTrue(packet["current_mixed_trace_evidence_fresh"])
+        self.assertEqual(packet["slot_binding_blocking_reasons"], [])
+        self.assertTrue(packet["slot_binding_proven"])
+        self.assertFalse(packet["current_provider_record_matches_launch"])
+        self.assertFalse(packet["bridge_rebind_counts_as_provider_proof"])
+        self.assertFalse(packet["coder_dispatch_proven"])
+        self.assertFalse(packet["coder_work_result_proven_with_limits"])
+        self.assertFalse(packet["api_route_dispatched_without_primary"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["runtime_readiness_claimed"])
 
     def test_chatgpt_plus_api_coder_trace_reports_stale_trace_snapshot_blocker(self) -> None:
         stale_captured_at = "2026-01-01T00:00:00Z"
@@ -13629,6 +13981,96 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_process_lines_exposed"])
         self.assertFalse(packet["raw_path_exposed"])
 
+    def test_custom_native_launch_preflight_last_launch_presence_is_not_readiness_or_provider_proof(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        with mock.patch.object(
+            live_server,
+            "collect_codex_process_inventory",
+            return_value={
+                "custom_process_count": 1,
+                "default_process_count": 0,
+                "custom_process_lines": ["redacted"],
+            },
+        ):
+            packet = live_server._custom_native_launch_preflight_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": route_id,
+                    "api_reasoning_option_id": "catalog_default",
+                },
+                owner_authorized=True,
+                operator_status={
+                    "status": {"configured_model": "gpt-5.5"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
+                },
+                api_snapshot={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": route_id,
+                            "display_name": "DeepSeek V4 Pro · Максимум",
+                            "provider": "deepseek",
+                            "upstream_model": "deepseek-v4-pro",
+                            "enabled": True,
+                            "selection_enabled": True,
+                            "secret_ref": "DEEPSEEK_API_KEY",
+                        }
+                    ],
+                },
+                external_routes_packet=routes_list_packet(route_id),
+                native_bridge_lease=None,
+                last_launch_packet={
+                    "status": "ok",
+                    "mode_id": "codex_custom",
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": route_id,
+                    "api_reasoning_option_id": "catalog_default",
+                    "selected_model": "gpt-5.5",
+                    "launch_id": "previous-launch",
+                    "trace_id": "previous-trace",
+                    "launch_route_digest": "previous-route",
+                    "launch_trace_server_issued": True,
+                },
+                runtime_health_result={
+                    "status": "command_error",
+                    "machine_error_code": "AUTH_UNAVAILABLE",
+                    "human_message": "ChatGPT account authentication is unavailable.",
+                    "next_action": "reauthenticate_chatgpt_account",
+                    "packet": command_packet(
+                        status="error",
+                        exit_code=1,
+                        machine_error_code="AUTH_UNAVAILABLE",
+                        human_message="ChatGPT account authentication is unavailable.",
+                        next_action="reauthenticate_chatgpt_account",
+                    ),
+                },
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["last_launch_packet_present"])
+        self.assertTrue(packet["last_launch_packet_status_ok"])
+        self.assertTrue(packet["launch_trace_server_issued"])
+        self.assertEqual(packet["config_status"], "matches_last_launch")
+        self.assertTrue(packet["selection_matches_last_launch"])
+        self.assertTrue(packet["existing_window_reuse_admissible"])
+        self.assertFalse(packet["new_launch_required"])
+        self.assertFalse(packet["show_window_attempted"])
+        self.assertFalse(packet["new_launch_started"])
+        self.assertEqual(packet["runtime_health_gate"]["status"], "blocked")
+        self.assertFalse(packet["runtime_health_gate_blocks_window_launch"])
+        self.assertEqual(packet["chatgpt_runtime_proof_status"], "not_proven")
+        self.assertEqual(packet["runtime_health_machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["visible_window_counts_as_model_truth"])
+        self.assertFalse(packet["bridge_alive_counts_as_model_truth"])
+        self.assertFalse(packet["response_text_counts_as_route_truth"])
+
     def test_custom_native_launch_preflight_does_not_carry_trace_when_selection_mismatches(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
         with mock.patch.object(
@@ -14068,6 +14510,197 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(second["launch_packet_is_truth_source"])
         self.assertEqual(stable_preflight.call_count, 2)
         self.assertEqual(bridge_prewarm.call_count, 2)
+        launch.assert_called_once()
+        show_window.assert_called_once()
+
+    def test_custom_native_launch_endpoint_refreshes_stale_matching_window_context_without_new_launch(self) -> None:
+        route_id = "wbp-deepseek-chat"
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(route_id)
+        inventory_calls = {"count": 0}
+
+        def fake_inventory(*_: object, **__: object) -> dict[str, object]:
+            inventory_calls["count"] += 1
+            process_count = 0 if inventory_calls["count"] == 1 else 1
+            return {
+                "custom_process_count": process_count,
+                "default_process_count": 0,
+                "custom_process_lines": ["redacted"] if process_count else [],
+            }
+
+        execution_packet = {
+            "status": "ok",
+            "execution_mode": "chatgpt_plus_api",
+            "api_model_id": route_id,
+            "api_reasoning_option_id": "catalog_default",
+            "chatgpt_model_id": "gpt-5.5",
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": route_id,
+                "server_issued": True,
+            },
+            "chatgpt_line_used_as_executor": True,
+            "api_line_used_as_executor": True,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "server_issued_catalog_used": True,
+        }
+
+        def stale_first_launch(**_: object) -> dict[str, object]:
+            return {
+                "schema_version": 1,
+                "captured_at_utc": "2026-01-01T00:00:00Z",
+                "mode_id": "codex_custom",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "owner_authorization_phrase_present": True,
+                "running_status": True,
+                "process_started": True,
+                "new_launch_started": True,
+                "fresh_launch_started": True,
+                "launch_origin": "fresh_launch",
+                "expected_custom_identity_observed": True,
+                "native_window_observed": True,
+                "native_app_usable": True,
+                "real_codex_app_launched": True,
+                "selection_matches_last_launch": True,
+                "temp_profile_used": False,
+                "current_codex_touched": False,
+                "original_codex_touched": False,
+                "asar_touched": False,
+                "browser_raw_backend_authority_widened": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+
+        with (
+            mock.patch.object(live_server, "collect_codex_process_inventory", side_effect=fake_inventory),
+            mock.patch.object(
+                live_server,
+                "_custom_native_launch_mode_selection_packet",
+                return_value=execution_packet,
+            ),
+            mock.patch.object(
+                live_server,
+                "build_custom_model_registry_packet",
+                return_value={
+                    "endpoint": "http://127.0.0.1:8318/v1",
+                    "available_models": [
+                        {"lane": "codex_native", "model_id": "gpt-5.5", "selection_enabled": True},
+                        {"lane": "wbp_api", "model_id": route_id, "selection_enabled": True},
+                    ],
+                },
+            ),
+            mock.patch.object(live_server, "extract_local_api_key", return_value="sk-local"),
+            mock.patch(
+                "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                return_value="sk-deepseek",
+            ),
+            mock.patch.object(
+                live_server._CustomNativeBridgeLease,
+                "ensure",
+                return_value="http://127.0.0.1:8319/v1",
+            ),
+            mock.patch.object(
+                live_server,
+                "build_custom_codex_stable_bridge_preflight_packet",
+                return_value=self.stable_bridge_preflight_ok_packet(),
+            ),
+            mock.patch.object(
+                live_server,
+                "_custom_native_stable_bridge_prewarm_packet",
+                return_value=self.stable_bridge_prewarm_ok_packet(),
+            ),
+            mock.patch.object(live_server, "launch_custom_native_app_packet", side_effect=stale_first_launch) as launch,
+            mock.patch.object(
+                live_server,
+                "show_custom_native_window_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_show_window",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "custom_window_visible": True,
+                    "custom_window_frontmost": True,
+                    "native_app_usable": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usability_source": "input_capable_ui",
+                    "original_codex_touched": False,
+                    "asar_touched": False,
+                },
+            ) as show_window,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            launch_payload = {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": route_id,
+                "api_reasoning_option_id": "catalog_default",
+            }
+            try:
+                first = json.loads(
+                    post_json(f"{base}/api/codex/custom/native-launch", launch_payload)
+                )
+                second = json.loads(
+                    post_json(f"{base}/api/codex/custom/native-launch", launch_payload)
+                )
+                with NO_PROXY_OPENER.open(
+                    f"{base}/api/codex/custom/chatgpt-plus-api-coder-trace",
+                    timeout=10,
+                ) as response:
+                    trace = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(first["status"], "ok")
+        self.assertEqual(second["packet_kind"], "custom_native_launch_stability_guard")
+        self.assertEqual(second["status"], "ok")
+        self.assertTrue(second["selection_matches_last_launch"])
+        self.assertTrue(second["existing_window_reuse_admissible"])
+        self.assertTrue(second["reused_existing_window"])
+        self.assertEqual(second["launch_origin"], "existing_window")
+        self.assertFalse(second["new_launch_started"])
+        self.assertFalse(second["fresh_launch_started"])
+        self.assertFalse(second["live_provider_called"])
+        self.assertFalse(second["fallback_used"])
+        self.assertTrue(second["launch_packet_is_truth_source"])
+        self.assertEqual(trace["status"], "blocked")
+        self.assertEqual(
+            trace["machine_error_code"],
+            "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED",
+        )
+        self.assertFalse(trace["launch_context_missing"])
+        self.assertTrue(trace["launch_context_present"])
+        self.assertFalse(trace["launch_packet_stale"])
+        self.assertEqual(trace["slot_binding_blocking_reasons"], [])
+        self.assertTrue(trace["slot_binding_proven"])
+        self.assertFalse(trace["coder_dispatch_proven"])
+        self.assertFalse(trace["coder_work_result_proven_with_limits"])
+        self.assertFalse(trace["runtime_readiness_claimed"])
+        self.assertFalse(trace["provider_called"])
+        self.assertEqual(trace["next_action"], "confirm_runtime_can_dispatch_coding_agent_model_slot")
         launch.assert_called_once()
         show_window.assert_called_once()
 
@@ -20469,6 +21102,12 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         {},
                     )
                 )
+                detail = json.loads(
+                    urllib.request.urlopen(
+                        f"{base}/api/codex/custom/sessions/{session_id}",
+                        timeout=5,
+                    ).read()
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -20497,6 +21136,27 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["live_file_mutation_claimed"])
+        bounded = packet["session_dual_lane_dispatch"]
+        self.assertEqual(bounded["status"], "ok")
+        self.assertEqual(bounded["machine_error_code"], "OK")
+        self.assertEqual(
+            bounded["final_status"],
+            "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(bounded["proof_status"], "proven_with_limits")
+        self.assertTrue(bounded["same_session_dispatch_proven"])
+        self.assertTrue(bounded["primary_dispatch_proven"])
+        self.assertTrue(bounded["coding_dispatch_proven"])
+        self.assertFalse(bounded["fallback_used"])
+        self.assertEqual(bounded["primary_provider"], "cliproxy")
+        self.assertEqual(bounded["coding_provider"], "external_route")
+        self.assertTrue(bounded["does_not_prove_native_launch"])
+        self.assertTrue(bounded["does_not_claim_product_readiness"])
+        self.assertFalse(bounded["runtime_readiness_claimed"])
+        self.assertEqual(
+            detail["session"]["session_dual_lane_dispatch"],
+            bounded,
+        )
         self.assertEqual(
             created_sessions[0].run_payloads,
             [

@@ -54,6 +54,12 @@ SAFE_WORKTREE_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 SAFE_WORKTREE_CODER_ALLOWED_FIELDS = {"api_model_id", "task"}
 REPO_TMP_EDIT_PROBE_ALLOWED_FIELDS = {"api_model_id"}
 MIXED_SLOT_DISPATCH_PROBE_ALLOWED_FIELDS: set[str] = set()
+SESSION_DUAL_LANE_DISPATCH_PROVEN_FINAL_STATUS = (
+    "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS"
+)
+SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN_FINAL_STATUS = (
+    "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN"
+)
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
 PROMPT_RUN_ALLOWED_STATUSES = {
     "ready",
@@ -2053,7 +2059,7 @@ class CodexCustomSessionManager:
             if success
             else "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN"
         )
-        return {
+        packet = {
             **self._base_packet("ok" if success else "blocked", machine_error_code),
             "packet_kind": "chatgpt_plus_api_slot_dispatch_probe",
             "final_status": final_status,
@@ -2131,6 +2137,28 @@ class CodexCustomSessionManager:
             ),
             "next_action": "none" if success else "stop_and_diagnose_mixed_slot_dispatch",
         }
+        latest_session = self._sessions.get(session_id) or session
+        latest_session["session_dual_lane_dispatch"] = (
+            self._session_dual_lane_dispatch_summary(packet)
+        )
+        latest_session["updated_at_utc"] = utc_now()
+        self._append_ledger(
+            latest_session,
+            "session_dual_lane_dispatch_probe_completed",
+            {
+                "machine_error_code": machine_error_code,
+                "same_session_dispatch_proven": same_session_dispatch_proven,
+                "primary_dispatch_proven": primary_dispatch_proven,
+                "coding_dispatch_proven": coding_dispatch_proven,
+                "fallback_used": fallback_used,
+                "does_not_prove_native_launch": True,
+                "does_not_claim_product_readiness": True,
+            },
+        )
+        self._write_session(latest_session)
+        packet["session_dual_lane_dispatch"] = latest_session["session_dual_lane_dispatch"]
+        packet["role_slot_binding_packet"] = self._role_slot_binding_packet(latest_session)
+        return packet
 
     def temp_write_probe_packet(
         self,
@@ -3416,6 +3444,9 @@ class CodexCustomSessionManager:
             "model_response_present": public_session.get("model_response_present") is True,
             "inference_proven": public_session.get("inference_proven") is True,
             "token_burn": public_session.get("token_burn"),
+            "session_dual_lane_dispatch": self._session_dual_lane_dispatch_summary(
+                public_session.get("session_dual_lane_dispatch")
+            ),
         }
         if migrated:
             self._write_session(session)
@@ -3437,6 +3468,9 @@ class CodexCustomSessionManager:
             ),
             "runtime_execution_truth_closed_here": False,
             "role_slots": role_slots,
+            "session_dual_lane_dispatch": self._session_dual_lane_dispatch_summary(
+                session.get("session_dual_lane_dispatch")
+            ),
         }
 
     def _append_ledger(
@@ -3517,6 +3551,9 @@ class CodexCustomSessionManager:
             "slot_binding_runtime_dispatch_claimed": False,
             "role_slot_binding_count": bound_slot_count,
             "role_slots": role_slots,
+            "session_dual_lane_dispatch": self._session_dual_lane_dispatch_summary(
+                session.get("session_dual_lane_dispatch")
+            ),
             "selected_source_class": session.get("selected_source_class"),
             "selected_backend_digest": selected_backend_ref,
             "selected_backend_id_redacted": True,
@@ -3738,6 +3775,70 @@ class CodexCustomSessionManager:
             "runtime_slot_dispatch_proven": packet.get("runtime_slot_dispatch_proven") is True,
             "live_prompt_full_success": packet.get("live_prompt_full_success") is True,
             "fallback_attempted": packet.get("fallback_attempted") is True,
+        }
+
+    def _session_dual_lane_dispatch_summary(
+        self,
+        packet: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        packet = packet if isinstance(packet, dict) else {}
+        proven = bool(
+            packet.get("status") == "ok"
+            and packet.get("machine_error_code") == "OK"
+            and packet.get("same_session_dispatch_proven") is True
+            and packet.get("primary_dispatch_proven") is True
+            and packet.get("coding_dispatch_proven") is True
+            and packet.get("fallback_used") is False
+        )
+        machine_error_code = (
+            "OK"
+            if proven
+            else str(packet.get("machine_error_code") or "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN")
+        )
+        return {
+            "schema_version": 1,
+            "status": "ok" if proven else "blocked",
+            "machine_error_code": machine_error_code,
+            "final_status": (
+                SESSION_DUAL_LANE_DISPATCH_PROVEN_FINAL_STATUS
+                if proven
+                else SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN_FINAL_STATUS
+            ),
+            "proof_status": "proven_with_limits" if proven else "not_proven",
+            "source_packet_kind": str(
+                packet.get("packet_kind") or "chatgpt_plus_api_slot_dispatch_probe"
+            ),
+            "same_session_dispatch_proven": proven,
+            "primary_dispatch_proven": packet.get("primary_dispatch_proven") is True,
+            "coding_dispatch_proven": packet.get("coding_dispatch_proven") is True,
+            "fallback_used": packet.get("fallback_used") is True,
+            "primary_model_id": str(packet.get("primary_model_id") or ""),
+            "coding_agent_model_id": str(packet.get("coding_agent_model_id") or ""),
+            "primary_provider": str(
+                packet.get("primary_configured_provider")
+                or packet.get("primary_provider")
+                or ""
+            ),
+            "coding_provider": str(
+                packet.get("coding_configured_provider")
+                or packet.get("coding_provider")
+                or ""
+            ),
+            "primary_runtime_model": str(packet.get("primary_runtime_model") or ""),
+            "coding_runtime_model": str(packet.get("coding_runtime_model") or ""),
+            "primary_requested_slot_id": str(packet.get("primary_requested_slot_id") or ""),
+            "coding_requested_slot_id": str(packet.get("coding_requested_slot_id") or ""),
+            "primary_executed_slot_id": str(packet.get("primary_executed_slot_id") or ""),
+            "coding_executed_slot_id": str(packet.get("coding_executed_slot_id") or ""),
+            "does_not_prove_native_launch": True,
+            "does_not_claim_product_readiness": True,
+            "native_primary_trace_still_required_for_native_pass": True,
+            "runtime_readiness_claimed": False,
+            "response_text_counts_as_proof": False,
+            "ui_label_counts_as_proof": False,
+            "model_self_report_counts_as_runtime_truth": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
         }
 
     def _is_owned_session_path(self, path: Path) -> bool:
