@@ -728,7 +728,7 @@ if (node("codexCustomSessionInference").textContent !== "response proof · sessi
 if (node("codexCustomSessionsChip").className.includes("green")) {
   throw new Error(`session bounded proof must not make chip green: ${node("codexCustomSessionsChip").className}`);
 }
-const rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
+const rendered = JSON.parse(document.getElementById("codexCustomSessionResponse").textContent);
 if (rendered.session_dual_lane_dispatch_proven_with_limits !== true) {
   throw new Error(`bounded proof flag missing: ${node("codexCustomSessionResponse").textContent}`);
 }
@@ -2063,7 +2063,7 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
-    def test_c7_agent_aliases_are_ui_metadata_only(self) -> None:
+    def test_c7_agent_aliases_use_server_runtime_binding_contract(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
@@ -2078,7 +2078,8 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         alias_markup = alias_match.group("body")
 
         self.assertIn("Имена агентов", alias_markup)
-        self.assertIn("Только подписи UI", alias_markup)
+        self.assertIn("session packet", alias_markup)
+        self.assertIn("server-issued", alias_markup)
         self.assertIn('id="quickStartPrimaryAgentAliasInput"', alias_markup)
         self.assertIn('value="Codex"', alias_markup)
         self.assertIn('id="quickStartCodingAgentAliasInput"', alias_markup)
@@ -2087,24 +2088,157 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn('data-agent-alias-slot="primary_model_slot"', alias_markup)
         self.assertIn('data-agent-alias-slot="coding_agent_model_slot"', alias_markup)
         self.assertNotIn("data-ui-action", alias_markup)
-        self.assertNotIn("api/codex/custom/agent-aliases", html + js)
 
-        self.assertIn('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";', js)
-        self.assertIn('alias_scope: "ui_display_metadata_only"', js)
+        self.assertIn('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";', js)
+        self.assertIn("agent-aliases", js)
+        self.assertIn("agent-alias-dispatch-proof", js)
+        self.assertIn('alias_scope: serverPacket?.alias_scope || "server_runtime_binding_pending"', js)
+        self.assertIn("alias_runtime_binding_proven:", js)
         self.assertIn("persisted_in_browser_storage: false", js)
-        self.assertIn("semantic_alias_routing_enabled: false", js)
+        self.assertIn("semantic_alias_routing_enabled: serverPacket?.semantic_alias_routing_enabled === true", js)
         self.assertIn("runtime_dispatch_changed: false", js)
-        self.assertIn("session_manager_changed: false", js)
+        self.assertIn("session_manager_changed: true", js)
         self.assertIn("provider_selection_changed: false", js)
-        self.assertIn("command_surface_changed: false", js)
+        self.assertIn("command_surface_changed: true", js)
+        self.assertIn("browser_can_supply_alias_authority: false", js)
+        self.assertIn("browser_can_supply_route_authority: false", js)
+        self.assertIn("browser_backend_intake: false", js)
+        self.assertIn("browser_secret_intake: false", js)
+        self.assertIn("does_not_prove_native_free_text_tool_bridge", js)
         self.assertIn("changed_files: []", js)
-        self.assertIn("role_map: codexCustomAgentAliasRoleMap()", js)
+        self.assertIn("role_map: roleMap", js)
         self.assertIn("alias_role_map: aliasMetadata.role_map", js)
+        self.assertIn("agent_alias_binding: serverAliasBinding || null", js)
+        self.assertIn("manual_activation_proven", js)
+        self.assertIn("deepseek_response_token_matched", js)
+        self.assertIn('let codexCustomAgentAliasBindingSessionId = "";', js)
+        self.assertIn("codexCustomAgentAliasBindingSessionId === sessionId", js)
+        self.assertIn("boundedTruthGuardsHeld", js)
+        self.assertIn("&& boundedTruthGuardsHeld", js)
         self.assertIn("setupCodexCustomAgentAliases();", js)
-        alias_js = js.split('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";', 1)[1].split("function codexLaunchSetText", 1)[0]
+        alias_js = js.split('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";', 1)[1].split("function codexLaunchSetText", 1)[0]
         self.assertNotIn("localStorage", alias_markup + alias_js)
         self.assertIn(".quick-start-alias-card", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+
+    def test_c7_stale_agent_alias_binding_does_not_bleed_between_sessions(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async () => ({ ok: true, json: async () => ({ status: "ok" }) })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+codexCustomAgentAliasBindingPacket = {
+  status: "ok",
+  packet_kind: "codex_custom_agent_alias_runtime_binding",
+  alias_scope: "server_runtime_binding",
+  alias_runtime_binding_present: true,
+  alias_runtime_binding_proven: true,
+  semantic_alias_routing_enabled: true,
+  does_not_prove_native_free_text_tool_bridge: true,
+  alias_to_slot_map: [
+    { alias: "Codex", slot_id: "primary_model_slot" },
+    { alias: "DIP", slot_id: "coding_agent_model_slot" }
+  ]
+};
+codexCustomAgentAliasBindingSessionId = "ccs-old";
+
+renderCodexCustomSessionPacket({
+  status: "loaded",
+  machine_error_code: "SESSION_LOADED_FROM_LIST",
+  session: {
+    session_id: "ccs-new",
+    status: "loaded",
+    model_id: "gpt-5.5",
+    role_slots: {}
+  }
+});
+
+const rendered = JSON.parse(document.getElementById("codexCustomSessionResponse").textContent);
+if (rendered.agent_alias_binding !== null) {
+  throw new Error("stale alias binding leaked into new session: " + JSON.stringify(rendered));
+}
+if (
+  rendered.alias_runtime_binding_present !== false ||
+  rendered.alias_runtime_binding_proven !== false ||
+  rendered.semantic_alias_routing_enabled !== false
+) {
+  throw new Error("stale alias proof leaked into new session: " + JSON.stringify(rendered));
+}
+if (rendered.alias_scope !== "server_runtime_binding_pending") {
+  throw new Error("new session should require fresh server binding: " + JSON.stringify(rendered));
+}
+if (codexCustomAgentAliasBindingPacket !== null || codexCustomAgentAliasBindingSessionId !== "") {
+  throw new Error("stale alias cache was not cleared on session swap");
+}
+`, sandbox);
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_quick_start_wired_actions_stay_on_first_screen_and_do_not_cross_launch_paths(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

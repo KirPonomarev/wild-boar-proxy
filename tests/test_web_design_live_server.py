@@ -6703,6 +6703,31 @@ class DualLaneFakeOperatorSurfaceSession(ExternalRouteFakeOperatorSurfaceSession
         }
 
 
+class AliasProofFakeOperatorSurfaceSession(DualLaneFakeOperatorSurfaceSession):
+    def run_prompt(
+        self,
+        payload: dict[str, object],
+        *,
+        trace_wbp: bool = False,
+        sandbox_mode_override: str = "read-only",
+        writable_additional_dir: Path | None = None,
+        working_dir_override: Path | None = None,
+    ) -> dict[str, object]:
+        result = super().run_prompt(
+            payload,
+            trace_wbp=trace_wbp,
+            sandbox_mode_override=sandbox_mode_override,
+            writable_additional_dir=writable_additional_dir,
+            working_dir_override=working_dir_override,
+        )
+        if payload.get("slot_id") == "coding_agent_model_slot":
+            result["final_message"] = "WBP_ALIAS_RUNTIME_ACTIVATION_OK"
+            result["transcript"]["entries"][0][
+                "final_message"
+            ] = "WBP_ALIAS_RUNTIME_ACTIVATION_OK"
+        return result
+
+
 class WebDesignRouteEffectRegistryTests(unittest.TestCase):
     @staticmethod
     def _handler_block(start_marker: str, end_marker: str) -> str:
@@ -21167,6 +21192,121 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 },
                 {
                     "prompt": "Ответь одной строкой: WBP_MIXED_DEEPSEEK_CODER_OK",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
+
+    def test_codex_custom_agent_alias_dispatch_proof_endpoint_proves_alias_slots(self) -> None:
+        created_sessions: list[AliasProofFakeOperatorSurfaceSession] = []
+
+        def factory() -> AliasProofFakeOperatorSurfaceSession:
+            session = AliasProofFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                binding = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/agent-aliases",
+                        {
+                            "primary_alias": "Codex",
+                            "coding_alias": "DIP",
+                            "agent_1_alias": "Agent 1",
+                            "agent_2_alias": "Agent 2",
+                        },
+                    )
+                )
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/agent-alias-dispatch-proof",
+                        {
+                            "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                            "expected_coding_response": "WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                        },
+                    )
+                )
+                detail = json.loads(fetch(f"{base}/api/codex/custom/sessions/{session_id}"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(binding["status"], "ok")
+        self.assertEqual(binding["machine_error_code"], "OK")
+        self.assertTrue(binding["alias_runtime_binding_proven"])
+        self.assertEqual(binding["alias_scope"], "server_runtime_binding")
+        self.assertFalse(binding["browser_can_supply_route_authority"])
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["final_status"],
+            "ALIAS_RUNTIME_ACTIVATION_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["manual_activation_surface"], "wbp_server_command_surface")
+        self.assertTrue(packet["manual_activation_proven"])
+        self.assertTrue(packet["alias_runtime_binding_proven"])
+        self.assertTrue(packet["same_session_dispatch_proven"])
+        self.assertTrue(packet["primary_dispatch_proven"])
+        self.assertTrue(packet["coding_dispatch_proven"])
+        self.assertTrue(packet["deepseek_response_token_matched"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["native_free_text_activation_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertTrue(packet["does_not_prove_native_free_text_tool_bridge"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertEqual(
+            detail["agent_alias_binding_packet"]["labels"]["coding_alias"],
+            "DIP",
+        )
+        self.assertTrue(
+            detail["agent_alias_binding_packet"]["alias_runtime_binding_proven"]
+        )
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [
+                {
+                    "prompt": "Alias activation check. Confirm orchestration intent for: Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Ответь одной строкой: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
                     "model_id": "wbp-deepseek-v3",
                     "slot_id": "coding_agent_model_slot",
                 },

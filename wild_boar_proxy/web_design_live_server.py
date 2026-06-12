@@ -12617,6 +12617,27 @@ def build_handler(
                     )
                 )
                 return
+            if action == "agent-aliases":
+                self._send_json(
+                    codex_custom_sessions.agent_alias_binding_packet(
+                        session_id,
+                        self._read_json_body(),
+                    )
+                )
+                return
+            if action == "agent-alias-dispatch-proof":
+                self._send_json(
+                    codex_custom_sessions.agent_alias_dispatch_proof_packet(
+                        session_id,
+                        self._read_json_body(),
+                        lambda payload: operator_surface_session.run_prompt(
+                            payload,
+                            trace_wbp=True,
+                        ),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                    )
+                )
+                return
             if action == "prompt":
                 if codex_custom_live_prompt_authorized:
                     self._send_json(

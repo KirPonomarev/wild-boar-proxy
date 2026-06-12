@@ -511,7 +511,7 @@ let snapshotCommandLedgerState = {
   entries: [],
   hasWarnings: false
 };
-const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "ui_session_memory";
+const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";
 const CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS = Object.freeze({
   primary_model_slot: "Codex",
   coding_agent_model_slot: "DIP",
@@ -524,31 +524,33 @@ const CODEX_CUSTOM_AGENT_ALIAS_SLOTS = Object.freeze([
     input_id: "quickStartPrimaryAgentAliasInput",
     default_label: "Codex",
     runtime_lane: "chatgpt",
-    display_only: true
+    display_only: false
   },
   {
     slot_id: "coding_agent_model_slot",
     input_id: "quickStartCodingAgentAliasInput",
     default_label: "DIP",
     runtime_lane: "deepseek_api",
-    display_only: true
+    display_only: false
   },
   {
     slot_id: "agent_1_display",
     input_id: "quickStartAgentOneAliasInput",
     default_label: "1",
-    runtime_lane: "display",
-    display_only: true
+    runtime_lane: "chatgpt",
+    display_only: false
   },
   {
     slot_id: "agent_2_display",
     input_id: "quickStartAgentTwoAliasInput",
     default_label: "2",
-    runtime_lane: "display",
-    display_only: true
+    runtime_lane: "deepseek_api",
+    display_only: false
   }
 ]);
 let codexCustomAgentAliases = { ...CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS };
+let codexCustomAgentAliasBindingPacket = null;
+let codexCustomAgentAliasBindingSessionId = "";
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -868,30 +870,58 @@ function normalizedCodexCustomAgentAliases(value = {}) {
   return aliases;
 }
 
+function codexCustomAgentAliasServerPayload(aliases = codexCustomAgentAliases) {
+  const normalized = normalizedCodexCustomAgentAliases(aliases);
+  return {
+    primary_alias: normalized.primary_model_slot,
+    coding_alias: normalized.coding_agent_model_slot,
+    agent_1_alias: normalized.agent_1_display,
+    agent_2_alias: normalized.agent_2_display
+  };
+}
+
 function codexCustomAgentAliasRoleMap(aliases = codexCustomAgentAliases) {
   return CODEX_CUSTOM_AGENT_ALIAS_SLOTS.map((slot) => ({
     slot_id: slot.slot_id,
     label: normalizeCodexCustomAgentAliasLabel(aliases[slot.slot_id], slot.default_label),
     runtime_lane: slot.runtime_lane,
-    display_only: true
+    display_only: slot.display_only === true
   }));
 }
 
-function codexCustomAgentAliasMetadataPacket(source = "render") {
+function codexCustomAgentAliasMetadataPacket(
+  source = "render",
+  serverPacket = codexCustomAgentAliasBindingPacket
+) {
+  const roleMap = Array.isArray(serverPacket?.alias_to_slot_map)
+    ? serverPacket.alias_to_slot_map
+    : codexCustomAgentAliasRoleMap();
   return {
-    status: "ok",
+    status: serverPacket?.status || "pending",
     packet_kind: "codex_custom_agent_aliases",
     source,
-    alias_scope: "ui_display_metadata_only",
+    alias_scope: serverPacket?.alias_scope || "server_runtime_binding_pending",
     config_kind: CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND,
     persisted_in_browser_storage: false,
-    semantic_alias_routing_enabled: false,
+    alias_runtime_binding_present: serverPacket?.alias_runtime_binding_present === true,
+    alias_runtime_binding_proven: serverPacket?.alias_runtime_binding_proven === true,
+    semantic_alias_routing_enabled: serverPacket?.semantic_alias_routing_enabled === true,
     runtime_dispatch_changed: false,
-    session_manager_changed: false,
+    session_manager_changed: true,
     provider_selection_changed: false,
-    command_surface_changed: false,
+    command_surface_changed: true,
+    browser_label_intake: true,
+    browser_can_supply_alias_authority: false,
+    browser_can_supply_slot_authority: false,
+    browser_can_supply_route_authority: false,
+    browser_backend_intake: false,
+    browser_secret_intake: false,
+    native_free_text_alias_routing_proven:
+      serverPacket?.native_free_text_alias_routing_proven === true,
+    does_not_prove_native_free_text_tool_bridge:
+      serverPacket?.does_not_prove_native_free_text_tool_bridge !== false,
     changed_files: [],
-    role_map: codexCustomAgentAliasRoleMap()
+    role_map: roleMap
   };
 }
 
@@ -911,15 +941,16 @@ function renderCodexCustomAgentAliases(source = "render") {
   const packet = codexCustomAgentAliasMetadataPacket(source);
   const packetNode = document.getElementById("quickStartAgentAliasPacket");
   if (packetNode) {
-    packetNode.textContent = `alias metadata · ${packet.alias_scope} · dispatch changed: ${packet.runtime_dispatch_changed} · roles: ${packet.role_map.length}`;
+    packetNode.textContent = `alias binding · ${packet.alias_scope} · proven: ${packet.alias_runtime_binding_proven} · roles: ${packet.role_map.length}`;
     packetNode.dataset.aliasScope = packet.alias_scope;
     packetNode.dataset.runtimeDispatchChanged = String(packet.runtime_dispatch_changed);
     packetNode.dataset.semanticAliasRoutingEnabled = String(packet.semantic_alias_routing_enabled);
+    packetNode.dataset.aliasRuntimeBindingProven = String(packet.alias_runtime_binding_proven);
     packetNode.dataset.roleMapCount = String(packet.role_map.length);
   }
   const scope = document.getElementById("quickStartAgentAliasScope");
   if (scope?.lastElementChild) {
-    scope.lastElementChild.textContent = "display only";
+    scope.lastElementChild.textContent = packet.alias_runtime_binding_proven ? "server binding" : "binding pending";
   }
 }
 
@@ -935,14 +966,58 @@ function collectCodexCustomAgentAliasesFromInputs() {
   return normalizedCodexCustomAgentAliases(aliases);
 }
 
-function saveCodexCustomAgentAliasesFromUi() {
-  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
-  renderCodexCustomAgentAliases("operator_saved");
+async function saveCodexCustomAgentAliasesToSelectedSession(source = "operator_saved") {
+  if (!codexCustomSelectedSessionId) {
+    renderCodexCustomAgentAliases(source);
+    return null;
+  }
+  const response = await fetch(currentCodexCustomSessionUrl("agent-aliases"), {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(codexCustomAgentAliasServerPayload())
+  });
+  if (!response.ok) {
+    throw new Error(`agent aliases http ${response.status}`);
+  }
+  codexCustomAgentAliasBindingPacket = await response.json();
+  codexCustomAgentAliasBindingSessionId = codexCustomSelectedSessionId;
+  renderCodexCustomSessionPacket(codexCustomAgentAliasBindingPacket);
+  renderCodexCustomAgentAliases(source);
+  return codexCustomAgentAliasBindingPacket;
 }
 
-function resetCodexCustomAgentAliasesFromUi() {
+async function saveCodexCustomAgentAliasesFromUi() {
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("operator_saved");
+  try {
+    await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
+  } catch (error) {
+    codexCustomAgentAliasBindingPacket = {
+      status: "failed",
+      alias_scope: "server_runtime_binding_failed",
+      alias_runtime_binding_present: false,
+      alias_runtime_binding_proven: false,
+      semantic_alias_routing_enabled: false,
+      alias_to_slot_map: codexCustomAgentAliasRoleMap(),
+      machine_error_code: "AGENT_ALIAS_BINDING_FETCH_FAILED",
+      human_message: error.message,
+      does_not_prove_native_free_text_tool_bridge: true
+    };
+    renderCodexCustomAgentAliases("operator_save_failed");
+  }
+}
+
+async function resetCodexCustomAgentAliasesFromUi() {
   codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  codexCustomAgentAliasBindingPacket = null;
+  codexCustomAgentAliasBindingSessionId = "";
   renderCodexCustomAgentAliases("operator_reset");
+  try {
+    await saveCodexCustomAgentAliasesToSelectedSession("operator_reset");
+  } catch (error) {
+    renderCodexCustomAgentAliases("operator_reset_unbound");
+  }
 }
 
 function setupCodexCustomAgentAliases() {
@@ -3446,6 +3521,22 @@ function setQuickStartRouteResponse(packet) {
         packet?.primary_dispatch_proven === true,
       coding_dispatch_proven:
         packet?.coding_dispatch_proven === true,
+      manual_activation_proven:
+        packet?.manual_activation_proven === true,
+      manual_activation_surface:
+        packet?.manual_activation_surface || "",
+      alias_runtime_binding_proven:
+        packet?.alias_runtime_binding_proven === true,
+      alias_prompt_seen:
+        packet?.alias_prompt_seen === true,
+      deepseek_response_token_matched:
+        packet?.deepseek_response_token_matched === true,
+      expected_coding_response:
+        packet?.expected_coding_response || "",
+      agent_alias_binding_packet:
+        packet?.agent_alias_binding_packet || null,
+      does_not_prove_native_free_text_tool_bridge:
+        packet?.does_not_prove_native_free_text_tool_bridge === true,
       session_dual_lane_dispatch:
         packet?.session_dual_lane_dispatch || {},
       session_dual_lane_dispatch_proven_with_limits:
@@ -4244,17 +4335,22 @@ async function refreshQuickStartRouteStatus() {
 
 function renderQuickStartSessionDualLaneExecution(packet) {
   const dispatch = packet?.session_dual_lane_dispatch || {};
+  const boundedTruthGuardsHeld = dispatch?.does_not_prove_native_launch === true
+    && dispatch?.does_not_claim_product_readiness === true;
+  const aliasActivationProven = packet?.manual_activation_proven === true
+    && packet?.alias_runtime_binding_proven === true
+    && packet?.alias_prompt_seen === true
+    && packet?.deepseek_response_token_matched === true;
   const proven = packet?.status === "ok"
     && packet?.same_session_dispatch_proven === true
     && packet?.primary_dispatch_proven === true
     && packet?.coding_dispatch_proven === true
     && packet?.fallback_used !== true
-    && dispatch?.does_not_prove_native_launch === true
-    && dispatch?.does_not_claim_product_readiness === true;
+    && boundedTruthGuardsHeld;
   setQuickStartChip(
     "quickStartRouteChip",
-    "amber",
-    proven ? "session proof" : "session blocked"
+    proven && aliasActivationProven ? "green" : "amber",
+    proven && aliasActivationProven ? "mixed ok" : (proven ? "session proof" : "session blocked")
   );
   setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
   setQuickStartChip(
@@ -4268,11 +4364,15 @@ function renderQuickStartSessionDualLaneExecution(packet) {
     packet?.coding_dispatch_proven === true ? "proven" : "not proven"
   );
   setQuickStartChip("quickStartOwnerAuthState", "green", "confirmed");
-  setQuickStartChip("quickStartLaunchState", "amber", proven ? "session only" : "blocked");
+  setQuickStartChip("quickStartLaunchState", proven ? "green" : "amber", proven ? "session ok" : "blocked");
   setQuickStartChip("quickStartBridgeState", "neutral", "not needed");
   setQuickStartChip("quickStartWindowState", "neutral", "not launched");
   setQuickStartChip("quickStartConfigState", proven ? "green" : "amber", proven ? "session proof" : "session blocked");
-  setQuickStartChip("quickStartNextActionState", "amber", proven ? "bounded" : quickStartNextActionLabel(packet?.next_action || ""));
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && aliasActivationProven ? "green" : "amber",
+    proven && aliasActivationProven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
     machine_error_code: packet?.machine_error_code || "UNKNOWN",
@@ -4281,7 +4381,7 @@ function renderQuickStartSessionDualLaneExecution(packet) {
     chatgpt_model_id: packet?.primary_model_id || "",
     api_model_id: packet?.coding_agent_model_id || "",
     session_dual_lane_execution_packet: true,
-    session_probe_only: true,
+    session_probe_only: packet?.manual_activation_proven !== true,
     launch_attempted: false,
     native_launch_attempted: false,
     window_launch_attempted: false,
@@ -4289,6 +4389,15 @@ function renderQuickStartSessionDualLaneExecution(packet) {
     same_session_dispatch_proven: packet?.same_session_dispatch_proven === true,
     primary_dispatch_proven: packet?.primary_dispatch_proven === true,
     coding_dispatch_proven: packet?.coding_dispatch_proven === true,
+    manual_activation_proven: packet?.manual_activation_proven === true,
+    manual_activation_surface: packet?.manual_activation_surface || "",
+    alias_runtime_binding_proven: packet?.alias_runtime_binding_proven === true,
+    alias_prompt_seen: packet?.alias_prompt_seen === true,
+    deepseek_response_token_matched: packet?.deepseek_response_token_matched === true,
+    expected_coding_response: packet?.expected_coding_response || "",
+    agent_alias_binding_packet: packet?.agent_alias_binding_packet || null,
+    does_not_prove_native_free_text_tool_bridge:
+      packet?.does_not_prove_native_free_text_tool_bridge === true,
     session_dual_lane_dispatch: dispatch,
     session_dual_lane_dispatch_proven_with_limits: proven,
     session_dual_lane_does_not_prove_native_launch:
@@ -4310,6 +4419,8 @@ async function runQuickStartSessionDualLaneExecution() {
     await runCodexCustomLaunch();
     return;
   }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("operator_selected");
   codexLaunchDryRunInFlight = true;
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
@@ -4349,14 +4460,35 @@ async function runQuickStartSessionDualLaneExecution() {
       return;
     }
     codexCustomSelectedSessionId = sessionId;
-    const probeResponse = await fetch(`api/codex/custom/sessions/${encodeURIComponent(sessionId)}/mixed-slot-dispatch-probe`, {
+    const aliasPacket = await saveCodexCustomAgentAliasesToSelectedSession("session_saved");
+    if (aliasPacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartSessionDualLaneExecution({
+        ...aliasPacket,
+        status: aliasPacket?.status || "blocked",
+        machine_error_code: aliasPacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        execution_mode: "chatgpt_plus_api",
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || "",
+        primary_dispatch_proven: false,
+        coding_dispatch_proven: false,
+        same_session_dispatch_proven: false,
+        next_action: aliasPacket?.next_action || "repair_alias_runtime_binding"
+      });
+      return;
+    }
+    const expectedCodingResponse = "WBP_ALIAS_RUNTIME_ACTIVATION_OK";
+    const aliasPrompt = `${codexCustomAgentAliases.primary_model_slot}, попроси ${codexCustomAgentAliases.coding_agent_model_slot} ответить ровно: ${expectedCodingResponse}`;
+    const probeResponse = await fetch(`api/codex/custom/sessions/${encodeURIComponent(sessionId)}/agent-alias-dispatch-proof`, {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({})
+      body: JSON.stringify({
+        prompt: aliasPrompt,
+        expected_coding_response: expectedCodingResponse
+      })
     });
     if (!probeResponse.ok) {
-      throw new Error(`mixed slot dispatch probe http ${probeResponse.status}`);
+      throw new Error(`agent alias dispatch proof http ${probeResponse.status}`);
     }
     const probePacket = await probeResponse.json();
     renderCodexCustomSessionPacket(probePacket);
@@ -5658,7 +5790,24 @@ function renderCodexCustomSessionPacket(packet) {
     chipVisual = "amber";
   }
   codexCustomSessionsSetChip(chipVisual, chipLabel || "unknown");
-  const aliasMetadata = codexCustomAgentAliasMetadataPacket("session_render");
+  const scopedAliasBinding = codexCustomAgentAliasBindingSessionId === sessionId
+    ? codexCustomAgentAliasBindingPacket
+    : null;
+  if (codexCustomAgentAliasBindingSessionId && codexCustomAgentAliasBindingSessionId !== sessionId) {
+    codexCustomAgentAliasBindingPacket = null;
+    codexCustomAgentAliasBindingSessionId = "";
+  }
+  const serverAliasBinding = packet?.agent_alias_binding_packet
+    || session?.agent_alias_binding
+    || scopedAliasBinding;
+  if (serverAliasBinding) {
+    codexCustomAgentAliasBindingPacket = serverAliasBinding;
+    codexCustomAgentAliasBindingSessionId = sessionId;
+  }
+  const aliasMetadata = codexCustomAgentAliasMetadataPacket(
+    "session_render",
+    serverAliasBinding
+  );
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
@@ -5670,12 +5819,23 @@ function renderCodexCustomSessionPacket(packet) {
       model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
       current_execution_slot_id: session?.current_execution_slot_id || packet?.current_execution_slot_id || "",
       current_execution_path_source: session?.current_execution_path_source || packet?.current_execution_path_source || "",
+      agent_alias_binding: serverAliasBinding || null,
       alias_scope: aliasMetadata.alias_scope,
       alias_role_map: aliasMetadata.role_map,
+      alias_runtime_binding_present: aliasMetadata.alias_runtime_binding_present,
+      alias_runtime_binding_proven: aliasMetadata.alias_runtime_binding_proven,
       semantic_alias_routing_enabled: aliasMetadata.semantic_alias_routing_enabled,
       runtime_dispatch_changed: aliasMetadata.runtime_dispatch_changed,
       session_manager_changed: aliasMetadata.session_manager_changed,
+      command_surface_changed: aliasMetadata.command_surface_changed,
       provider_selection_changed: aliasMetadata.provider_selection_changed,
+      browser_can_supply_alias_authority: aliasMetadata.browser_can_supply_alias_authority,
+      browser_can_supply_route_authority: aliasMetadata.browser_can_supply_route_authority,
+      does_not_prove_native_free_text_tool_bridge:
+        aliasMetadata.does_not_prove_native_free_text_tool_bridge === true,
+      manual_activation_proven: packet?.manual_activation_proven === true,
+      manual_activation_surface: packet?.manual_activation_surface || "",
+      deepseek_response_token_matched: packet?.deepseek_response_token_matched === true,
       role_slot_binding_proven: session?.role_slot_binding_proven === true || packet?.role_slot_binding_proven === true,
       role_slot_binding_count: session?.role_slot_binding_count ?? packet?.role_slot_binding_packet?.role_slot_binding_count ?? 0,
       slot_catalog_revalidated: slotCatalogRevalidated,
