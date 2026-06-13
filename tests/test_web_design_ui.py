@@ -2078,7 +2078,7 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         alias_markup = alias_match.group("body")
 
         self.assertIn("Имена агентов", alias_markup)
-        self.assertIn("session packet", alias_markup)
+        self.assertIn("server-owned runtime bindings", alias_markup)
         self.assertIn("server-issued", alias_markup)
         self.assertIn('id="quickStartPrimaryAgentAliasInput"', alias_markup)
         self.assertIn('value="Codex"', alias_markup)
@@ -2089,13 +2089,17 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn('data-agent-alias-slot="coding_agent_model_slot"', alias_markup)
         self.assertNotIn("data-ui-action", alias_markup)
 
-        self.assertIn('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";', js)
+        self.assertIn('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_agent_bindings_packet";', js)
+        self.assertIn("/api/codex/custom/agent-bindings", js)
+        self.assertIn("codexCustomAgentBindingsPayload", js)
+        self.assertIn("codexCustomAgentRuntimeBindingPacket", js)
         self.assertIn("agent-aliases", js)
         self.assertIn("agent-alias-dispatch-proof", js)
         self.assertIn('alias_scope: serverPacket?.alias_scope || "server_runtime_binding_pending"', js)
         self.assertIn("alias_runtime_binding_proven:", js)
         self.assertIn("persisted_in_browser_storage: false", js)
         self.assertIn("semantic_alias_routing_enabled: serverPacket?.semantic_alias_routing_enabled === true", js)
+        self.assertIn("native_free_text_alias_routing_proven: false", js)
         self.assertIn("runtime_dispatch_changed: false", js)
         self.assertIn("session_manager_changed: true", js)
         self.assertIn("provider_selection_changed: false", js)
@@ -2116,7 +2120,7 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn("boundedTruthGuardsHeld", js)
         self.assertIn("&& boundedTruthGuardsHeld", js)
         self.assertIn("setupCodexCustomAgentAliases();", js)
-        alias_js = js.split('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";', 1)[1].split("function codexLaunchSetText", 1)[0]
+        alias_js = js.split('const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_agent_bindings_packet";', 1)[1].split("function codexLaunchSetText", 1)[0]
         self.assertNotIn("localStorage", alias_markup + alias_js)
         self.assertIn(".quick-start-alias-card", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
@@ -2230,6 +2234,320 @@ if (codexCustomAgentAliasBindingPacket !== null || codexCustomAgentAliasBindingS
   throw new Error("stale alias cache was not cleared on session swap");
 }
 `, sandbox);
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_c7_agent_alias_save_uses_runtime_bindings_before_session_aliases(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(value = "") {
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = value;
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+}
+
+const nodes = {};
+function node(id, value = "") {
+  if (!nodes[id]) {
+    nodes[id] = new Node(value);
+  }
+  return nodes[id];
+}
+
+[
+  ["quickStartPrimaryAgentAliasInput", "Planner"],
+  ["quickStartCodingAgentAliasInput", "Builder"],
+  ["quickStartAgentOneAliasInput", "Lead"],
+  ["quickStartAgentTwoAliasInput", "Worker"],
+  ["quickStartExecutionModeSelect", "chatgpt_plus_api"],
+  ["quickStartChatModelSelect", "gpt-5.5"],
+  ["quickStartApiModelSelect", "wbp-deepseek-chat"],
+  ["quickStartApiReasoningOptionSelect", "provider_declared_disabled"],
+  ["codexCustomExecutionModeSelect", ""],
+  ["codexCustomModelSelect", ""],
+  ["codexCustomApiModelSelect", ""],
+  ["codexCustomApiReasoningOptionSelect", ""],
+  ["quickStartAgentAliasPacket", ""],
+  ["quickStartAgentAliasScope", ""],
+  ["quickStartAgentAliasPreview", ""],
+  ["codexCustomSessionResponse", ""]
+].forEach(([id, value]) => node(id, value));
+
+const calls = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector(selector) {
+      if (String(selector).startsWith("meta[")) {
+        return { getAttribute() { return "test-token"; } };
+      }
+      return null;
+    },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ url: String(url), options, body });
+    if (String(url) === "/api/codex/custom/agent-bindings") {
+      return {
+        ok: true,
+        json: async () => ({
+          status: "ok",
+          machine_error_code: "OK",
+          alias_scope: "server_agent_bindings",
+          agent_bindings: body.agent_bindings,
+          alias_to_agent_id: { Planner: "codex", Builder: "dip" },
+          agent_id_to_route: { dip: "wbp-deepseek-chat" },
+          allowed_api_route_ids: ["wbp-deepseek-chat"]
+        })
+      };
+    }
+    if (String(url) === "api/codex/custom/sessions/ccs-1/agent-aliases") {
+      return {
+        ok: true,
+        json: async () => ({
+          status: "ok",
+          alias_scope: "session_aliases",
+          alias_runtime_binding_present: false,
+          alias_runtime_binding_proven: false,
+          session: { session_id: "ccs-1" }
+        })
+      };
+    }
+    throw new Error("unexpected fetch: " + url);
+  }
+};
+
+(async () => {
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+  await vm.runInContext(`
+    (async () => {
+      codexCustomSelectedSessionId = "ccs-1";
+      await saveCodexCustomAgentAliasesFromUi();
+    })()
+  `, sandbox);
+
+  if (calls.length !== 2) {
+    throw new Error("expected runtime binding write then session alias write: " + JSON.stringify(calls));
+  }
+  if (calls[0].url !== "/api/codex/custom/agent-bindings") {
+    throw new Error("first call was not runtime binding write: " + JSON.stringify(calls));
+  }
+  if (calls[1].url !== "api/codex/custom/sessions/ccs-1/agent-aliases") {
+    throw new Error("second call was not selected-session alias write: " + JSON.stringify(calls));
+  }
+  const primary = calls[0].body.agent_bindings[0];
+  const api = calls[0].body.agent_bindings[1];
+  if (primary.agent_id !== "codex" || primary.lane !== "primary_chatgpt" || primary.model_id !== "gpt-5.5") {
+    throw new Error("primary binding malformed: " + JSON.stringify(primary));
+  }
+  if (api.agent_id !== "dip" || api.lane !== "api_route" || api.route_id !== "wbp-deepseek-chat") {
+    throw new Error("api binding malformed: " + JSON.stringify(api));
+  }
+  for (const alias of ["Planner", "Lead", "Codex", "Agent 1", "1"]) {
+    if (!primary.aliases.includes(alias)) {
+      throw new Error("missing primary alias " + alias + ": " + JSON.stringify(primary.aliases));
+    }
+  }
+  for (const alias of ["Builder", "Worker", "DIP", "Agent 2", "2"]) {
+    if (!api.aliases.includes(alias)) {
+      throw new Error("missing api alias " + alias + ": " + JSON.stringify(api.aliases));
+    }
+  }
+  const packetNode = node("quickStartAgentAliasPacket");
+  if (packetNode.dataset.aliasScope !== "server_agent_bindings") {
+    throw new Error("runtime binding packet did not keep metadata precedence: " + JSON.stringify(packetNode.dataset));
+  }
+  if (packetNode.dataset.aliasRuntimeBindingProven !== "true") {
+    throw new Error("runtime binding proof lost after session save: " + JSON.stringify(packetNode.dataset));
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_c7_rejected_agent_runtime_binding_does_not_write_session_aliases(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(value = "") {
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = value;
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+}
+
+const nodes = {};
+function node(id, value = "") {
+  if (!nodes[id]) {
+    nodes[id] = new Node(value);
+  }
+  return nodes[id];
+}
+
+[
+  ["quickStartPrimaryAgentAliasInput", "Planner"],
+  ["quickStartCodingAgentAliasInput", "Bui\u200blder"],
+  ["quickStartAgentOneAliasInput", "Lead"],
+  ["quickStartAgentTwoAliasInput", "Worker"],
+  ["quickStartExecutionModeSelect", "chatgpt_plus_api"],
+  ["quickStartChatModelSelect", "gpt-5.5"],
+  ["quickStartApiModelSelect", "wbp-deepseek-chat"],
+  ["quickStartApiReasoningOptionSelect", "provider_declared_disabled"],
+  ["quickStartAgentAliasPacket", ""],
+  ["quickStartAgentAliasScope", ""],
+  ["quickStartAgentAliasPreview", ""]
+].forEach(([id, value]) => node(id, value));
+
+const calls = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector(selector) {
+      if (String(selector).startsWith("meta[")) {
+        return { getAttribute() { return "test-token"; } };
+      }
+      return null;
+    },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ url: String(url), options, body });
+    if (String(url) === "/api/codex/custom/agent-bindings") {
+      return {
+        ok: true,
+        json: async () => ({
+          status: "rejected",
+          machine_error_code: "CUSTOM_AGENT_BINDINGS_INVALID",
+          alias_scope: "server_agent_bindings",
+          alias_runtime_binding_present: false,
+          alias_runtime_binding_proven: false,
+          semantic_alias_routing_enabled: false,
+          blocking_reasons: ["binding_1_alias_0_forbidden_codepoint"],
+          agent_bindings: body.agent_bindings,
+          alias_to_agent_id: {},
+          agent_id_to_route: {},
+          allowed_api_route_ids: []
+        })
+      };
+    }
+    throw new Error("session alias write must not happen after rejected runtime binding: " + url);
+  }
+};
+
+(async () => {
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+  await vm.runInContext(`
+    (async () => {
+      codexCustomSelectedSessionId = "ccs-rejected";
+      await saveCodexCustomAgentAliasesFromUi();
+    })()
+  `, sandbox);
+
+  if (calls.length !== 1 || calls[0].url !== "/api/codex/custom/agent-bindings") {
+    throw new Error("rejected runtime binding should stop after one call: " + JSON.stringify(calls));
+  }
+  const packetNode = node("quickStartAgentAliasPacket");
+  if (packetNode.dataset.aliasRuntimeBindingProven !== "false") {
+    throw new Error("rejected runtime binding rendered as proven: " + JSON.stringify(packetNode.dataset));
+  }
+  const scopeNode = node("quickStartAgentAliasScope");
+  if (scopeNode.lastElementChild.textContent !== "binding pending") {
+    throw new Error("rejected runtime binding did not leave pending scope: " + scopeNode.lastElementChild.textContent);
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
 """
         result = subprocess.run(
             ["node", "-e", script],

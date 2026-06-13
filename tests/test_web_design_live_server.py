@@ -607,27 +607,35 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 def getcode(self) -> int:
                     return self.status
 
-            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
-                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
-                    payload={
-                        "alias": "DIP",
-                        "request_id": "acceptance-alias",
-                        "expected_text": "WBP_ALIAS_ACCEPTANCE_OK",
-                    },
-                    file_bridge_worker=worker,
-                    agent_runtime_context=context,
-                    timeout_seconds=0.1,
-                )
+            for index, alias in enumerate(
+                ("DIP", "dip", " DIP ", "Agent 2", "agent   2", "2", "\uff24\uff29\uff30")
+            ):
+                with self.subTest(alias=alias):
+                    with mock.patch.object(
+                        live_server,
+                        "proxyless_urlopen",
+                        return_value=FakeBridgeResponse(),
+                    ):
+                        packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                            payload={
+                                "alias": alias,
+                                "request_id": f"acceptance-alias-{index}",
+                                "expected_text": "WBP_ALIAS_ACCEPTANCE_OK",
+                            },
+                            file_bridge_worker=worker,
+                            agent_runtime_context=context,
+                            timeout_seconds=0.1,
+                        )
 
-        self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["machine_error_code"], "OK")
-        self.assertTrue(packet["agent_alias_route_acceptance_proven"])
-        self.assertEqual(packet["alias"], "DIP")
-        self.assertEqual(packet["agent_binding"]["route_id"], "wbp-deepseek-chat")
-        self.assertEqual(
-            packet["final_status"],
-            "CUSTOM_CODEX_AGENT_ALIAS_ROUTE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
-        )
+                    self.assertEqual(packet["status"], "ok")
+                    self.assertEqual(packet["machine_error_code"], "OK")
+                    self.assertTrue(packet["agent_alias_route_acceptance_proven"])
+                    self.assertEqual(packet["alias"], alias.strip())
+                    self.assertEqual(packet["agent_binding"]["route_id"], "wbp-deepseek-chat")
+                    self.assertEqual(
+                        packet["final_status"],
+                        "CUSTOM_CODEX_AGENT_ALIAS_ROUTE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
+                    )
 
     def test_custom_native_acceptance_smoke_blocks_unknown_alias_before_provider_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -723,18 +731,23 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ),
             }
 
-            with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
-                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
-                    payload={"alias": "Codex", "expected_text": "NO_CALL"},
-                    file_bridge_worker=worker,
-                    agent_runtime_context=context,
-                    timeout_seconds=0.1,
-                )
+            for alias in ("Codex", " codex ", "Agent   1", "\uff23\uff4f\uff44\uff45\uff58"):
+                with self.subTest(alias=alias):
+                    with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                        packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                            payload={"alias": alias, "expected_text": "NO_CALL"},
+                            file_bridge_worker=worker,
+                            agent_runtime_context=context,
+                            timeout_seconds=0.1,
+                        )
 
-        self.assertEqual(packet["status"], "blocked")
-        self.assertEqual(packet["machine_error_code"], "CUSTOM_CODEX_AGENT_ALIAS_NOT_API_ROUTE")
-        self.assertFalse(packet["agent_alias_route_acceptance_proven"])
-        urlopen.assert_not_called()
+                    self.assertEqual(packet["status"], "blocked")
+                    self.assertEqual(
+                        packet["machine_error_code"],
+                        "CUSTOM_CODEX_AGENT_ALIAS_NOT_API_ROUTE",
+                    )
+                    self.assertFalse(packet["agent_alias_route_acceptance_proven"])
+                    urlopen.assert_not_called()
 
     def test_custom_native_acceptance_smoke_blocks_wrong_route(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1015,6 +1028,82 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(context["forbidden_stale_route_ids"], ["wbp-deepseek-v3"])
         self.assertFalse(context["browser_can_supply_route_authority"])
         self.assertFalse(context["secret_value_exposed"])
+
+    def test_custom_native_runtime_context_suppresses_rejected_agent_binding_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            managed_dir.mkdir(parents=True)
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id="wbp-deepseek-chat",
+            )
+            bindings[1]["aliases"] = ["DIP", "Codex"]
+            live_server.agent_bindings_state_path(managed_dir).write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "packet_kind": "codex_custom_agent_bindings_state",
+                        "agent_bindings": bindings,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            execution_packet = {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-chat",
+                "coding_agent_model_slot": {
+                    "status": "bound",
+                    "lane": live_server.API_ROUTE_MODEL_LANE,
+                    "model_id": "wbp-deepseek-chat",
+                    "provider": "deepseek",
+                    "server_issued": True,
+                },
+            }
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id="gpt-5.5",
+                    route_model_id="wbp-deepseek-chat",
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                )
+
+        self.assertEqual(context["agent_bindings_status"], "rejected")
+        self.assertEqual(context["agent_bindings_machine_error_code"], "CUSTOM_AGENT_BINDINGS_INVALID")
+        self.assertEqual(context["alias_to_agent_id"], {})
+        self.assertEqual(context["agent_id_to_route"], {})
+        self.assertEqual(context["primary_aliases"], [])
+        self.assertEqual(context["coding_aliases"], [])
+        self.assertEqual(context["allowed_api_route_ids"], [])
+
+    def test_custom_native_runtime_context_blocks_chatgpt_plus_api_provider_mismatch(self) -> None:
+        execution_packet = {
+            "execution_mode": "chatgpt_plus_api",
+            "chatgpt_model_id": "gpt-5.5",
+            "api_model_id": "wbp-deepseek-chat",
+            "coding_agent_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": "wbp-deepseek-chat",
+                "provider": "openrouter",
+                "server_issued": True,
+            },
+        }
+
+        context = live_server._custom_native_agent_runtime_context(
+            execution_packet=execution_packet,
+            launch_model_id="gpt-5.5",
+            route_model_id="wbp-deepseek-chat",
+            bridge_endpoint="http://127.0.0.1:50555/v1",
+        )
+
+        self.assertEqual(context["agent_bindings_status"], "blocked")
+        self.assertEqual(
+            context["agent_bindings_machine_error_code"],
+            "CUSTOM_AGENT_BINDINGS_PROVIDER_MISMATCH",
+        )
+        self.assertEqual(context["alias_to_agent_id"], {})
+        self.assertEqual(context["allowed_api_route_ids"], [])
 
     def test_web_token_static_file_is_not_served_from_static_root(self) -> None:
         with tempfile.TemporaryDirectory() as static_dir:
@@ -10650,6 +10739,96 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["history_persistence_claimed"])
+
+    def test_custom_window_input_route_trace_routes_chatgpt_plus_api_to_native_dispatch_proof(self) -> None:
+        route_digest = live_server._safe_route_digest(
+            {
+                "route_id": "wbp-deepseek-chat",
+                "provider": "deepseek",
+                "upstream_model": "deepseek-chat",
+                "endpoint_path": "/chat/completions",
+            }
+        )
+        launch = {
+            "status": "ok",
+            "launch_id": "launch-mixed",
+            "trace_id": "trace-mixed",
+            "execution_mode": "chatgpt_plus_api",
+            "selected_model": "gpt-5.5",
+            "api_model_id": "wbp-deepseek-chat",
+            "route_model_id": "wbp-deepseek-chat",
+            "launch_route_digest": route_digest,
+            "native_window_observed": True,
+            "native_app_usable": True,
+            "real_codex_app_launched": True,
+            "custom_window_visible": True,
+            "custom_window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 783},
+            "window_focus_action_attempted": True,
+            "window_focus_action_succeeded": True,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        bridge = {
+            "request_count": 1,
+            "last_record": {
+                "launch_id": "launch-mixed",
+                "trace_id": "trace-mixed",
+                "path": "/v1/responses",
+                "request_seen_after_launch": True,
+                "selected_model": "gpt-5.5",
+                "requested_model": "wbp-deepseek-chat",
+                "effective_route_model": "wbp-deepseek-chat",
+                "forced_route_used": True,
+                "route_digest": route_digest,
+                "route_digest_matches_launch": True,
+                "provider_called": True,
+                "provider_id": "deepseek",
+                "upstream_model": "deepseek-chat",
+                "api_reasoning_option_id": "provider_declared_disabled",
+                "known_smoke_phrase_matched": False,
+                "response_seen": True,
+                "upstream_status": 200,
+                "prompt_hash": "mixed",
+                "response_body_sha256": "mixed-response",
+                "chatgpt_route_used": False,
+                "api_only_calls_chatgpt": False,
+                "fallback_used": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        }
+
+        packet = live_server.build_custom_codex_window_input_route_trace_packet(
+            last_launch_packet=launch,
+            bridge_trace_packet=bridge,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WINDOW_INPUT_ROUTE_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "KNOWN_BLOCKER_WINDOW_INPUT_ROUTE_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API",
+        )
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertTrue(packet["chatgpt_plus_api_native_dispatch_proof_required"])
+        self.assertEqual(
+            packet["native_dispatch_proof_endpoint"],
+            "/api/codex/custom/native-dispatch-proof",
+        )
+        self.assertEqual(
+            packet["next_action"],
+            "run_native_dispatch_proof_for_chatgpt_plus_api",
+        )
+        self.assertEqual(
+            packet["window_trace_oracle_scope"],
+            "api_only_deepseek_window_prompt_trace",
+        )
+        self.assertFalse(packet["route_trace_proven"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
 
     def test_custom_window_input_route_trace_rejects_browser_authority_fields(self) -> None:
         packet = live_server.build_custom_codex_window_input_route_trace_packet(

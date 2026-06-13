@@ -6441,15 +6441,48 @@ def _custom_native_agent_runtime_context(
         ),
         primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
         route_records=route_records,
+        require_api_route_binding=execution_mode == "chatgpt_plus_api",
     )
+    if (
+        execution_mode == "chatgpt_plus_api"
+        and api_model_id
+        and coding_provider
+        and coding_provider.lower() != "deepseek"
+    ):
+        bindings_packet = {
+            **bindings_packet,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_AGENT_BINDINGS_PROVIDER_MISMATCH",
+            "human_message": "Custom Codex ChatGPT+API bindings require a DeepSeek coding provider.",
+            "agent_bindings": [],
+            "blocking_reasons": [
+                *list(bindings_packet.get("blocking_reasons") or []),
+                "coding_provider_not_deepseek",
+            ],
+            "alias_to_agent_id": {},
+            "agent_id_to_route": {},
+            "allowed_api_route_ids": [],
+            "next_action": "repair_chatgpt_plus_api_provider_selection",
+        }
+    bindings_ok = bindings_packet.get("status") == "ok"
     bindings_projection = project_agent_bindings_for_runtime_context(
-        bindings_packet.get("agent_bindings", []),
+        bindings_packet.get("agent_bindings", []) if bindings_ok else [],
         route_records=route_records,
     )
-    primary_aliases = bindings_projection.get("primary_aliases") or ["Codex", "Agent 1", "1"]
-    coding_aliases = bindings_projection.get("coding_aliases") or ["DIP", "Agent 2", "2"]
-    allowed_api_route_ids = bindings_projection.get("allowed_api_route_ids") or (
-        [api_model_id] if api_model_id else []
+    primary_aliases = (
+        bindings_projection.get("primary_aliases") or ["Codex", "Agent 1", "1"]
+        if bindings_ok
+        else []
+    )
+    coding_aliases = (
+        bindings_projection.get("coding_aliases") or ["DIP", "Agent 2", "2"]
+        if bindings_ok
+        else []
+    )
+    allowed_api_route_ids = (
+        bindings_projection.get("allowed_api_route_ids") or ([api_model_id] if api_model_id else [])
+        if bindings_ok
+        else []
     )
     forbidden_stale_route_ids = bindings_projection.get("forbidden_stale_route_ids") or stale_route_ids
     python_executable = os.environ.get("WBP_PYTHON_BIN") or sys.executable or "python3"
@@ -7152,6 +7185,10 @@ def build_custom_codex_window_prompt_trace_packet(
         and launch.get("asar_touched") is False
     )
     launch_context_missing = not launch_context_present
+    execution_mode = str(launch.get("execution_mode") or "")
+    chatgpt_plus_api_native_dispatch_proof_required = (
+        execution_mode == "chatgpt_plus_api" and not prompt_trace_proven
+    )
     machine_error_code = "OK" if prompt_trace_proven else "WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
     final_status = (
         "CUSTOM_CODEX_WINDOW_DEEPSEEK_PROMPT_TRACE_PROVEN_WITH_LIMITS"
@@ -7159,6 +7196,10 @@ def build_custom_codex_window_prompt_trace_packet(
         else "KNOWN_BLOCKER_WINDOW_PROMPT_ROUTE_TRACE_NOT_PROVEN"
     )
     next_action = "none" if prompt_trace_proven else "send_window_smoke_prompt_and_refresh_trace_packet"
+    if chatgpt_plus_api_native_dispatch_proof_required:
+        machine_error_code = "WINDOW_PROMPT_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API"
+        final_status = "KNOWN_BLOCKER_WINDOW_PROMPT_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API"
+        next_action = "run_native_dispatch_proof_for_chatgpt_plus_api"
     if launch_context_missing:
         machine_error_code = "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
         final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
@@ -7180,6 +7221,15 @@ def build_custom_codex_window_prompt_trace_packet(
         "launch_id": launch_id,
         "trace_id": trace_id,
         "trace_server_issued": bool(launch_id and trace_id),
+        "window_trace_oracle_scope": "api_only_deepseek_window_prompt_trace",
+        "chatgpt_plus_api_native_dispatch_proof_required": (
+            chatgpt_plus_api_native_dispatch_proof_required and not launch_context_missing
+        ),
+        "native_dispatch_proof_endpoint": (
+            "/api/codex/custom/native-dispatch-proof"
+            if chatgpt_plus_api_native_dispatch_proof_required and not launch_context_missing
+            else ""
+        ),
         "browser_trace_authority": False,
         "request_seen_after_launch": request_seen,
         "request_count": int(trace.get("request_count") or 0),
@@ -7281,8 +7331,14 @@ def build_custom_codex_window_input_route_trace_packet(
     )
     full_success = input_proven and route_trace_proven
     launch_context_missing = route_packet.get("launch_context_missing") is True
+    execution_mode = str(launch.get("execution_mode") or "")
+    chatgpt_plus_api_native_dispatch_proof_required = (
+        execution_mode == "chatgpt_plus_api" and not full_success
+    )
     if launch_context_missing:
         next_action = str(route_packet.get("next_action") or "run_fresh_custom_codex_launch")
+    elif chatgpt_plus_api_native_dispatch_proof_required:
+        next_action = "run_native_dispatch_proof_for_chatgpt_plus_api"
     elif not input_proven:
         next_action = "send_window_prompt_and_refresh_trace_packet"
     elif not route_trace_proven:
@@ -7298,6 +7354,9 @@ def build_custom_codex_window_input_route_trace_packet(
     if launch_context_missing:
         machine_error_code = "CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
         final_status = "KNOWN_BLOCKER_CUSTOM_CODEX_WINDOW_LAUNCH_CONTEXT_MISSING"
+    elif chatgpt_plus_api_native_dispatch_proof_required:
+        machine_error_code = "WINDOW_INPUT_ROUTE_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API"
+        final_status = "KNOWN_BLOCKER_WINDOW_INPUT_ROUTE_TRACE_UNSUPPORTED_FOR_CHATGPT_PLUS_API"
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_window_input_route_trace",
@@ -7314,6 +7373,15 @@ def build_custom_codex_window_input_route_trace_packet(
             route_packet.get("launch_context_missing_reason") or ""
         ),
         "browser_trace_authority": False,
+        "window_trace_oracle_scope": "api_only_deepseek_window_prompt_trace",
+        "chatgpt_plus_api_native_dispatch_proof_required": (
+            chatgpt_plus_api_native_dispatch_proof_required and not launch_context_missing
+        ),
+        "native_dispatch_proof_endpoint": (
+            "/api/codex/custom/native-dispatch-proof"
+            if chatgpt_plus_api_native_dispatch_proof_required and not launch_context_missing
+            else ""
+        ),
         "input_surface_observed": input_surface_observed,
         "input_surface_method": (
             "window_prompt_trace"
@@ -11359,6 +11427,7 @@ def build_handler(
             "primary_model_ids": [],
             "route_records": route_records,
             "external_routes_available": bool(route_records),
+            "require_api_route_binding": True,
         }
 
     def _custom_agent_bindings_read_packet() -> dict[str, Any]:
@@ -11368,6 +11437,7 @@ def build_handler(
             default_bindings=context["default_bindings"],
             primary_model_ids=context["primary_model_ids"],
             route_records=context["route_records"],
+            require_api_route_binding=context["require_api_route_binding"],
         )
         packet["external_routes_available"] = context["external_routes_available"]
         return packet
@@ -11397,6 +11467,7 @@ def build_handler(
             payload,
             primary_model_ids=context["primary_model_ids"],
             route_records=context["route_records"],
+            require_api_route_binding=context["require_api_route_binding"],
         )
 
     def _custom_agent_bindings_write_packet(payload: dict[str, Any]) -> dict[str, Any]:
@@ -11408,6 +11479,7 @@ def build_handler(
             payload,
             primary_model_ids=context["primary_model_ids"],
             route_records=context["route_records"],
+            require_api_route_binding=context["require_api_route_binding"],
         )
 
     def build_rollback_point_create_admission_packet() -> dict[str, Any]:

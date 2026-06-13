@@ -511,7 +511,7 @@ let snapshotCommandLedgerState = {
   entries: [],
   hasWarnings: false
 };
-const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_session_packet";
+const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_agent_bindings_packet";
 const CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS = Object.freeze({
   primary_model_slot: "Codex",
   coding_agent_model_slot: "DIP",
@@ -551,6 +551,7 @@ const CODEX_CUSTOM_AGENT_ALIAS_SLOTS = Object.freeze([
 let codexCustomAgentAliases = { ...CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS };
 let codexCustomAgentAliasBindingPacket = null;
 let codexCustomAgentAliasBindingSessionId = "";
+let codexCustomAgentRuntimeBindingPacket = null;
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -880,6 +881,99 @@ function codexCustomAgentAliasServerPayload(aliases = codexCustomAgentAliases) {
   };
 }
 
+function uniqueCodexCustomAgentAliases(values = []) {
+  const aliases = [];
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = normalizeCodexCustomAgentAliasLabel(value, "");
+    const key = normalized.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!normalized || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    aliases.push(normalized);
+  }
+  return aliases;
+}
+
+function codexCustomAgentBindingsPayload(
+  aliases = codexCustomAgentAliases,
+  selection = codexRouteSelectionFromUi(true)
+) {
+  const normalized = normalizedCodexCustomAgentAliases(aliases);
+  const chatModel = selection?.chatgpt_model_id || QUICK_START_PREFERRED_CHATGPT_MODEL_ID;
+  const apiRoute = selection?.api_model_id || QUICK_START_PREFERRED_API_MODEL_ID;
+  return {
+    agent_bindings: [
+      {
+        agent_id: "codex",
+        display_name: normalized.primary_model_slot,
+        role: "orchestrator",
+        aliases: uniqueCodexCustomAgentAliases([
+          normalized.primary_model_slot,
+          normalized.agent_1_display,
+          "Codex",
+          "Agent 1",
+          "1"
+        ]),
+        lane: "primary_chatgpt",
+        model_id: chatModel,
+        enabled: true,
+        allowed_actions: ["plan", "inspect", "patch", "verify"]
+      },
+      {
+        agent_id: "dip",
+        display_name: normalized.coding_agent_model_slot,
+        role: "coding_agent",
+        aliases: uniqueCodexCustomAgentAliases([
+          normalized.coding_agent_model_slot,
+          normalized.agent_2_display,
+          "DIP",
+          "Agent 2",
+          "2"
+        ]),
+        lane: "api_route",
+        route_id: apiRoute,
+        enabled: true,
+        allowed_actions: ["code_review", "implementation_help", "format_check"]
+      }
+    ]
+  };
+}
+
+function agentBindingsPacketForAliasMetadata(packet) {
+  if (!packet) {
+    return null;
+  }
+  const ok = packet.status === "ok" && packet.machine_error_code === "OK";
+  return {
+    ...packet,
+    packet_kind: "codex_custom_agent_alias_runtime_binding",
+    alias_scope: "server_agent_bindings",
+    alias_runtime_binding_present: ok,
+    alias_runtime_binding_proven: ok,
+    semantic_alias_routing_enabled: ok,
+    native_free_text_alias_routing_proven: false,
+    does_not_prove_native_free_text_tool_bridge: true,
+    alias_to_slot_map: codexCustomAgentAliasRoleMap()
+  };
+}
+
+async function saveCodexCustomAgentBindingsToRuntime(source = "operator_saved") {
+  const response = await fetch("/api/codex/custom/agent-bindings", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(codexCustomAgentBindingsPayload())
+  });
+  if (!response.ok) {
+    throw new Error(`agent bindings http ${response.status}`);
+  }
+  codexCustomAgentRuntimeBindingPacket = agentBindingsPacketForAliasMetadata(await response.json());
+  renderCodexCustomAgentAliases(source);
+  return codexCustomAgentRuntimeBindingPacket;
+}
+
 function codexCustomAgentAliasRoleMap(aliases = codexCustomAgentAliases) {
   return CODEX_CUSTOM_AGENT_ALIAS_SLOTS.map((slot) => ({
     slot_id: slot.slot_id,
@@ -891,7 +985,7 @@ function codexCustomAgentAliasRoleMap(aliases = codexCustomAgentAliases) {
 
 function codexCustomAgentAliasMetadataPacket(
   source = "render",
-  serverPacket = codexCustomAgentAliasBindingPacket
+  serverPacket = codexCustomAgentRuntimeBindingPacket || codexCustomAgentAliasBindingPacket
 ) {
   const roleMap = Array.isArray(serverPacket?.alias_to_slot_map)
     ? serverPacket.alias_to_slot_map
@@ -991,9 +1085,12 @@ async function saveCodexCustomAgentAliasesFromUi() {
   codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
   renderCodexCustomAgentAliases("operator_saved");
   try {
-    await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_saved");
+    if (runtimePacket?.alias_runtime_binding_proven === true) {
+      await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
+    }
   } catch (error) {
-    codexCustomAgentAliasBindingPacket = {
+    codexCustomAgentRuntimeBindingPacket = {
       status: "failed",
       alias_scope: "server_runtime_binding_failed",
       alias_runtime_binding_present: false,
@@ -1010,11 +1107,15 @@ async function saveCodexCustomAgentAliasesFromUi() {
 
 async function resetCodexCustomAgentAliasesFromUi() {
   codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  codexCustomAgentRuntimeBindingPacket = null;
   codexCustomAgentAliasBindingPacket = null;
   codexCustomAgentAliasBindingSessionId = "";
   renderCodexCustomAgentAliases("operator_reset");
   try {
-    await saveCodexCustomAgentAliasesToSelectedSession("operator_reset");
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_reset");
+    if (runtimePacket?.alias_runtime_binding_proven === true) {
+      await saveCodexCustomAgentAliasesToSelectedSession("operator_reset");
+    }
   } catch (error) {
     renderCodexCustomAgentAliases("operator_reset_unbound");
   }

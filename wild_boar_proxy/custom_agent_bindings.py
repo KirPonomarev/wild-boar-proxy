@@ -6,7 +6,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping
+import unicodedata
 
 from .runtime import write_text_atomic
 
@@ -18,6 +20,17 @@ RUNTIME_CONTEXT_BINDINGS_SOURCE = "server_owned_agent_bindings"
 PRIMARY_CHATGPT_LANE = "primary_chatgpt"
 API_ROUTE_LANE = "api_route"
 ALLOWED_AGENT_LANES = {PRIMARY_CHATGPT_LANE, API_ROUTE_LANE}
+ALLOWED_AGENT_BINDING_FIELDS = {
+    "agent_id",
+    "display_name",
+    "role",
+    "aliases",
+    "lane",
+    "enabled",
+    "allowed_actions",
+    "model_id",
+    "route_id",
+}
 FORBIDDEN_AGENT_BINDING_FIELDS = {
     "backend",
     "backend_id",
@@ -33,6 +46,18 @@ FORBIDDEN_AGENT_BINDING_FIELDS = {
 FORBIDDEN_STALE_ROUTE_IDS = {"wbp-deepseek-v3"}
 DEFAULT_PRIMARY_AGENT_ID = "codex"
 DEFAULT_CODING_AGENT_ID = "dip"
+TEXT_FIELD_LIMITS = {
+    "agent_id": 64,
+    "display_name": 80,
+    "role": 64,
+    "lane": 32,
+    "model_id": 80,
+    "route_id": 80,
+    "alias": 80,
+    "allowed_action": 64,
+}
+FORBIDDEN_TEXT_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn"}
+WHITESPACE_RE = re.compile(r"\s+")
 
 
 def utc_now() -> str:
@@ -41,6 +66,23 @@ def utc_now() -> str:
 
 def agent_bindings_state_path(managed_dir: Path) -> Path:
     return managed_dir / AGENT_BINDINGS_FILENAME
+
+
+def _normalize_visible_text(value: object, *, collapse_whitespace: bool = True) -> str:
+    text = "" if value is None else str(value)
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\r", " ").replace("\n", " ")
+    if collapse_whitespace:
+        text = WHITESPACE_RE.sub(" ", text)
+    return text.strip()
+
+
+def _has_forbidden_text_codepoint(text: str) -> bool:
+    return any(unicodedata.category(character) in FORBIDDEN_TEXT_CATEGORIES for character in text)
+
+
+def _canonical_alias_key(value: object) -> str:
+    return _normalize_visible_text(value).casefold()
 
 
 def default_agent_bindings(
@@ -83,8 +125,7 @@ def default_agent_bindings(
 
 
 def _safe_text(value: object, *, max_length: int = 96) -> str:
-    text = "" if value is None else str(value)
-    text = text.replace("\r", " ").replace("\n", " ").strip()
+    text = _normalize_visible_text(value)
     return text[:max_length]
 
 
@@ -99,24 +140,106 @@ def _safe_list(raw: object, *, max_items: int = 20, max_length: int = 96) -> lis
     values: list[str] = []
     for item in raw[:max_items]:
         text = _safe_text(item, max_length=max_length)
-        if text and text not in values:
+        if text:
             values.append(text)
     return values
 
 
-def _route_records_by_id(route_records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _letter_script_family(character: str) -> str:
+    if not character.isalpha():
+        return ""
+    name = unicodedata.name(character, "")
+    for family in ("LATIN", "CYRILLIC", "GREEK"):
+        if family in name:
+            return family.lower()
+    return "other"
+
+
+def _has_mixed_confusable_alias_scripts(text: str) -> bool:
+    families = {
+        family
+        for family in (_letter_script_family(character) for character in text)
+        if family in {"latin", "cyrillic", "greek"}
+    }
+    return "latin" in families and bool(families & {"cyrillic", "greek"})
+
+
+def _route_records_by_id(
+    route_records: list[dict[str, Any]],
+    *,
+    enabled_only: bool = True,
+) -> dict[str, dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
     for route in route_records:
         if not isinstance(route, dict):
             continue
         route_id = str(route.get("route_id") or "").strip()
+        if enabled_only and route.get("enabled") is not True:
+            continue
         if route_id:
             records[route_id] = route
     return records
 
 
 def _primary_model_ids(primary_model_ids: list[str] | tuple[str, ...] | set[str]) -> set[str]:
-    return {str(model_id).strip() for model_id in primary_model_ids if str(model_id).strip()}
+    return {
+        _normalize_visible_text(model_id)
+        for model_id in primary_model_ids
+        if _normalize_visible_text(model_id)
+    }
+
+
+def _text_field_reasons(
+    raw: Mapping[str, Any],
+    field: str,
+    index: int,
+    *,
+    required: bool = False,
+) -> list[str]:
+    if field not in raw:
+        return [f"binding_{index}_{field}_missing"] if required else []
+    value = raw.get(field)
+    if not isinstance(value, str):
+        return [f"binding_{index}_{field}_not_string"]
+    normalized = _normalize_visible_text(value)
+    reasons: list[str] = []
+    if _has_forbidden_text_codepoint(value):
+        reasons.append(f"binding_{index}_{field}_forbidden_codepoint")
+    if required and not normalized:
+        reasons.append(f"binding_{index}_{field}_missing")
+    if len(normalized) > TEXT_FIELD_LIMITS[field]:
+        reasons.append(f"binding_{index}_{field}_too_long")
+    return reasons
+
+
+def _list_field_reasons(
+    raw: Mapping[str, Any],
+    field: str,
+    index: int,
+    *,
+    item_name: str,
+    max_items: int,
+) -> list[str]:
+    if field not in raw:
+        return []
+    values = raw.get(field)
+    if not isinstance(values, list):
+        return [f"binding_{index}_{field}_not_list"]
+    reasons: list[str] = []
+    if len(values) > max_items:
+        reasons.append(f"binding_{index}_{field}_too_many")
+    for item_index, value in enumerate(values[:max_items]):
+        if not isinstance(value, str):
+            reasons.append(f"binding_{index}_{item_name}_{item_index}_not_string")
+            continue
+        normalized = _normalize_visible_text(value)
+        if _has_forbidden_text_codepoint(value):
+            reasons.append(f"binding_{index}_{item_name}_{item_index}_forbidden_codepoint")
+        if not normalized:
+            reasons.append(f"binding_{index}_{item_name}_{item_index}_empty")
+        if len(normalized) > TEXT_FIELD_LIMITS[item_name]:
+            reasons.append(f"binding_{index}_{item_name}_{item_index}_too_long")
+    return reasons
 
 
 def _binding_from_raw(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -142,6 +265,7 @@ def validate_agent_bindings(
     *,
     primary_model_ids: list[str] | tuple[str, ...] | set[str] = (),
     route_records: list[dict[str, Any]] | None = None,
+    require_api_route_binding: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(raw_bindings, list):
         return _validation_packet(
@@ -151,7 +275,8 @@ def validate_agent_bindings(
             blocking_reasons=["agent_bindings_not_list"],
         )
     route_records = route_records or []
-    routes_by_id = _route_records_by_id(route_records)
+    all_routes_by_id = _route_records_by_id(route_records, enabled_only=False)
+    routes_by_id = _route_records_by_id(route_records, enabled_only=True)
     available_route_ids = sorted(routes_by_id)
     available_primary_model_ids = _primary_model_ids(primary_model_ids)
     normalized: list[dict[str, Any]] = []
@@ -162,9 +287,41 @@ def validate_agent_bindings(
         if not isinstance(raw, Mapping):
             blocking_reasons.append(f"binding_{index}_not_object")
             continue
+        unknown_fields = sorted(set(raw) - ALLOWED_AGENT_BINDING_FIELDS)
+        if unknown_fields:
+            blocking_reasons.append(f"binding_{index}_unknown_fields")
         forbidden_fields = sorted(set(raw) & FORBIDDEN_AGENT_BINDING_FIELDS)
         if forbidden_fields:
             blocking_reasons.append(f"binding_{index}_forbidden_fields")
+        for field in ("agent_id", "display_name", "role", "lane"):
+            blocking_reasons.extend(
+                _text_field_reasons(
+                    raw,
+                    field,
+                    index,
+                    required=field in {"agent_id", "display_name", "lane"},
+                )
+            )
+        blocking_reasons.extend(
+            _list_field_reasons(
+                raw,
+                "aliases",
+                index,
+                item_name="alias",
+                max_items=24,
+            )
+        )
+        blocking_reasons.extend(
+            _list_field_reasons(
+                raw,
+                "allowed_actions",
+                index,
+                item_name="allowed_action",
+                max_items=24,
+            )
+        )
+        if "enabled" in raw and not isinstance(raw.get("enabled"), bool):
+            blocking_reasons.append(f"binding_{index}_enabled_not_bool")
         binding = _binding_from_raw(raw)
         agent_id = str(binding.get("agent_id") or "")
         lane = str(binding.get("lane") or "")
@@ -173,7 +330,8 @@ def validate_agent_bindings(
             blocking_reasons.append(f"binding_{index}_agent_id_missing")
         elif agent_id in seen_agent_ids:
             blocking_reasons.append(f"binding_{index}_agent_id_duplicate")
-        seen_agent_ids.add(agent_id)
+        if agent_id:
+            seen_agent_ids.add(agent_id)
         if not binding.get("display_name"):
             blocking_reasons.append(f"binding_{index}_display_name_missing")
         if lane not in ALLOWED_AGENT_LANES:
@@ -181,30 +339,52 @@ def validate_agent_bindings(
         if not aliases:
             blocking_reasons.append(f"binding_{index}_aliases_missing")
         for alias in aliases:
-            alias_key = alias.casefold()
+            alias_key = _canonical_alias_key(alias)
+            if _has_mixed_confusable_alias_scripts(alias):
+                blocking_reasons.append(f"alias_confusable_mixed_script:{alias}")
             if alias_key in seen_aliases:
                 blocking_reasons.append(f"alias_duplicate:{alias}")
             else:
                 seen_aliases[alias_key] = agent_id
         if lane == PRIMARY_CHATGPT_LANE:
+            if "route_id" in raw:
+                blocking_reasons.append(f"binding_{index}_route_id_wrong_lane")
+            blocking_reasons.extend(
+                _text_field_reasons(raw, "model_id", index, required=True)
+            )
             model_id = str(binding.get("model_id") or "")
             if not model_id:
                 blocking_reasons.append(f"binding_{index}_model_id_missing")
             elif available_primary_model_ids and model_id not in available_primary_model_ids:
                 blocking_reasons.append(f"binding_{index}_model_id_not_server_issued")
         if lane == API_ROUTE_LANE:
+            if "model_id" in raw:
+                blocking_reasons.append(f"binding_{index}_model_id_wrong_lane")
+            blocking_reasons.extend(
+                _text_field_reasons(raw, "route_id", index, required=True)
+            )
             route_id = str(binding.get("route_id") or "")
             if not route_id:
                 blocking_reasons.append(f"binding_{index}_route_id_missing")
-            elif not routes_by_id:
-                blocking_reasons.append(f"binding_{index}_route_registry_unavailable")
             elif route_id in FORBIDDEN_STALE_ROUTE_IDS:
                 blocking_reasons.append(f"binding_{index}_route_id_stale")
+            elif route_id in all_routes_by_id and route_id not in routes_by_id:
+                blocking_reasons.append(f"binding_{index}_route_id_disabled")
+            elif not routes_by_id:
+                blocking_reasons.append(f"binding_{index}_route_registry_unavailable")
             elif route_id not in routes_by_id:
                 blocking_reasons.append(f"binding_{index}_route_id_not_server_issued")
         normalized.append(binding)
-    if not any(binding.get("lane") == PRIMARY_CHATGPT_LANE for binding in normalized):
-        blocking_reasons.append("primary_chatgpt_binding_missing")
+    if not any(
+        binding.get("lane") == PRIMARY_CHATGPT_LANE and binding.get("enabled") is True
+        for binding in normalized
+    ):
+        blocking_reasons.append("primary_chatgpt_enabled_binding_missing")
+    if require_api_route_binding and not any(
+        binding.get("lane") == API_ROUTE_LANE and binding.get("enabled") is True
+        for binding in normalized
+    ):
+        blocking_reasons.append("api_route_enabled_binding_missing")
     status = "ok" if not blocking_reasons else "rejected"
     return _validation_packet(
         status=status,
@@ -224,8 +404,9 @@ def _validation_packet(
     route_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     route_records = route_records or []
+    active_bindings = normalized_bindings if status == "ok" else []
     projection = project_agent_bindings_for_runtime_context(
-        normalized_bindings,
+        active_bindings,
         route_records=route_records,
     )
     return {
@@ -270,9 +451,12 @@ def project_agent_bindings_for_runtime_context(
     coding_aliases: list[str] = []
     allowed_api_route_ids: list[str] = []
     for binding in agent_bindings:
+        enabled = binding.get("enabled") is True
         agent_id = str(binding.get("agent_id") or "")
         lane = str(binding.get("lane") or "")
         aliases = [str(alias) for alias in binding.get("aliases", []) if str(alias)]
+        if not enabled:
+            continue
         for alias in aliases:
             alias_to_agent_id[alias] = agent_id
         if lane == PRIMARY_CHATGPT_LANE:
@@ -330,6 +514,7 @@ def read_agent_bindings_packet(
     default_bindings: list[dict[str, Any]],
     primary_model_ids: list[str] | tuple[str, ...] | set[str] = (),
     route_records: list[dict[str, Any]] | None = None,
+    require_api_route_binding: bool = False,
 ) -> dict[str, Any]:
     state_file_present = path.is_file()
     if state_file_present:
@@ -349,6 +534,7 @@ def read_agent_bindings_packet(
         raw_bindings,
         primary_model_ids=primary_model_ids,
         route_records=route_records,
+        require_api_route_binding=require_api_route_binding,
     )
     packet["source"] = source
     packet["state_file_present"] = state_file_present
@@ -361,6 +547,7 @@ def dry_run_agent_bindings_packet(
     *,
     primary_model_ids: list[str] | tuple[str, ...] | set[str] = (),
     route_records: list[dict[str, Any]] | None = None,
+    require_api_route_binding: bool = False,
 ) -> dict[str, Any]:
     forbidden_fields = sorted(set(payload) - {"agent_bindings"})
     if forbidden_fields:
@@ -374,6 +561,10 @@ def dry_run_agent_bindings_packet(
             "forbidden_fields": forbidden_fields,
             "agent_bindings": [],
             "agent_binding_count": 0,
+            "alias_to_agent_id": {},
+            "agent_id_to_route": {},
+            "allowed_api_route_ids": [],
+            "forbidden_stale_route_ids": sorted(FORBIDDEN_STALE_ROUTE_IDS),
             "browser_can_supply_route_authority": False,
             "browser_backend_intake": False,
             "browser_secret_intake": False,
@@ -386,6 +577,7 @@ def dry_run_agent_bindings_packet(
         payload.get("agent_bindings"),
         primary_model_ids=primary_model_ids,
         route_records=route_records,
+        require_api_route_binding=require_api_route_binding,
     ) | {"dry_run": True}
 
 
@@ -395,11 +587,13 @@ def write_agent_bindings_packet(
     *,
     primary_model_ids: list[str] | tuple[str, ...] | set[str] = (),
     route_records: list[dict[str, Any]] | None = None,
+    require_api_route_binding: bool = False,
 ) -> dict[str, Any]:
     packet = dry_run_agent_bindings_packet(
         payload,
         primary_model_ids=primary_model_ids,
         route_records=route_records,
+        require_api_route_binding=require_api_route_binding,
     )
     if packet.get("status") != "ok":
         return packet | {"dry_run": False, "changed_files": []}
@@ -429,11 +623,11 @@ def resolve_alias_binding(
     agent_bindings: list[dict[str, Any]],
     alias: str,
 ) -> dict[str, Any]:
-    normalized_alias = str(alias or "").strip().casefold()
+    normalized_alias = _canonical_alias_key(alias)
     if not normalized_alias:
         return {}
     for binding in agent_bindings:
-        aliases = [str(value).strip().casefold() for value in binding.get("aliases", [])]
+        aliases = [_canonical_alias_key(value) for value in binding.get("aliases", [])]
         if normalized_alias in aliases:
             return binding
     return {}
