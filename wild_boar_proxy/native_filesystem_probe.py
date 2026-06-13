@@ -52,6 +52,7 @@ DEFAULT_CODEX_PROCESS_PATTERNS = (
     "Codex Helper",
     "Contents/Resources/codex app-server",
 )
+AGENT_RUNTIME_CONTEXT_FILENAME = "wbp-agent-runtime-context.json"
 
 
 def utc_now() -> str:
@@ -4284,6 +4285,7 @@ def materialize_probe_profile(
     model: str,
     auth_command_path: Path,
     local_token: str,
+    agent_runtime_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     layout.tmp_root.mkdir(parents=True, exist_ok=True)
     layout.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -4303,12 +4305,32 @@ def materialize_probe_profile(
         layout.launcher_path,
         build_repo_owned_default_launcher_script_text() + "\n",
     )
+    agent_runtime_context_path = layout.profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+    agent_runtime_context_written = False
+    agent_runtime_context_sha256 = ""
+    if agent_runtime_context is not None:
+        agent_runtime_context_text = (
+            json.dumps(dict(agent_runtime_context), indent=2, sort_keys=True) + "\n"
+        )
+        write_text_atomic(agent_runtime_context_path, agent_runtime_context_text)
+        agent_runtime_context_written = True
+        agent_runtime_context_sha256 = hashlib.sha256(
+            agent_runtime_context_text.encode("utf-8")
+        ).hexdigest()
     layout.launcher_path.chmod(0o755)
     return {
         "profile_dir": str(layout.profile_dir),
         "launcher_path": str(layout.launcher_path),
         "config_path": str(layout.profile_dir / "config.toml"),
         "auth_path": str(layout.profile_dir / "auth.json"),
+        "agent_runtime_context_path": (
+            str(agent_runtime_context_path) if agent_runtime_context_written else ""
+        ),
+        "agent_runtime_context_profile_relative_path": (
+            AGENT_RUNTIME_CONTEXT_FILENAME if agent_runtime_context_written else ""
+        ),
+        "agent_runtime_context_written": agent_runtime_context_written,
+        "agent_runtime_context_sha256": agent_runtime_context_sha256,
         "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
         "custom_user_data_dir": str(layout.custom_user_data_dir),
         "custom_home_dir": str(layout.custom_home_dir),

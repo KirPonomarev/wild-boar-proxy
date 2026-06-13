@@ -398,6 +398,330 @@ class MappingRunner:
 
 
 class WebDesignLiveServerTests(unittest.TestCase):
+    def test_custom_native_file_bridge_worker_processes_request_through_server_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bridge_root = Path(temp_dir) / "file-bridge"
+            worker = live_server._CustomNativeFileBridgeWorker(bridge_root=bridge_root)
+            bridge_contract = worker.packet(enabled=True, model="wbp-deepseek-chat")
+            shell_template = bridge_contract["shell_command_template"]
+            self.assertTrue(bridge_contract["shell_command_template_requires_statement_separators"])
+            self.assertIn("request_file=\"$request_dir/$request_id.json\"", shell_template)
+            self.assertIn("response_file=\"$response_dir/$request_id.json\"", shell_template)
+            self.assertIn("mkdir -p \"$request_dir\" \"$response_dir\"", shell_template)
+            self.assertIn("while [ \"$SECONDS\" -lt \"$deadline\" ]; do", shell_template)
+            self.assertNotIn("request_file=\"$request_dir/$request_id.json\" printf", shell_template)
+
+            worker.request_dir.mkdir(parents=True)
+            worker.response_dir.mkdir(parents=True)
+            worker.processed_dir.mkdir(parents=True)
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+
+            request_path = worker.request_dir / "manual-proof.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "request_id": "manual-proof",
+                        "model": "wbp-deepseek-chat",
+                        "input": "Answer exactly one line: WBP_FILE_BRIDGE_OK",
+                        "stream": False,
+                        "max_output_tokens": 32,
+                        "temperature": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": False,
+                            "output_text": "WBP_FILE_BRIDGE_OK",
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            captured: dict[str, object] = {}
+
+            def fake_urlopen(
+                request: urllib.request.Request,
+                *,
+                timeout: int,
+            ) -> FakeBridgeResponse:
+                captured["url"] = request.full_url
+                captured["body"] = json.loads((request.data or b"{}").decode("utf-8"))
+                captured["timeout"] = timeout
+                return FakeBridgeResponse()
+
+            with mock.patch.object(live_server, "proxyless_urlopen", side_effect=fake_urlopen):
+                packet = worker._process_request_file(request_path)
+
+            self.assertEqual(captured["url"], "http://127.0.0.1:50555/v1/responses")
+            self.assertEqual(captured["timeout"], 30)
+            self.assertEqual(captured["body"]["model"], "wbp-deepseek-chat")
+            self.assertEqual(captured["body"]["input"], "Answer exactly one line: WBP_FILE_BRIDGE_OK")
+            self.assertEqual(packet["packet_kind"], "custom_native_file_bridge_response")
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(packet["request_id"], "manual-proof")
+            self.assertEqual(packet["provider"], "deepseek")
+            self.assertFalse(packet["fallback_used"])
+            self.assertEqual(packet["output_text"], "WBP_FILE_BRIDGE_OK")
+            self.assertFalse(packet["secret_value_exposed"])
+
+            response_packet = json.loads(
+                (worker.response_dir / "manual-proof.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(response_packet["output_text"], "WBP_FILE_BRIDGE_OK")
+            self.assertTrue((worker.processed_dir / "manual-proof.json").exists())
+            self.assertFalse(request_path.exists())
+
+    def test_custom_native_acceptance_smoke_passes_only_fresh_exact_deepseek_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bridge_root = Path(temp_dir) / "file-bridge"
+            worker = live_server._CustomNativeFileBridgeWorker(bridge_root=bridge_root)
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+                "secret_value_exposed": False,
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": False,
+                            "output_text": "WBP_ACCEPTANCE_OK",
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "request_id": "acceptance-ok",
+                        "expected_text": "WBP_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["acceptance_smoke_proven"])
+        self.assertTrue(packet["file_bridge_acceptance_proven"])
+        self.assertTrue(packet["custom_codex_agent_runtime_context_proven"])
+        self.assertFalse(packet["custom_codex_external_client_invocation_proven"])
+        self.assertFalse(packet["native_coder_slot_dispatch_proven"])
+        self.assertEqual(packet["provider"], "deepseek")
+        self.assertEqual(packet["requested_model"], "wbp-deepseek-chat")
+        self.assertFalse(packet["fallback_used"])
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_GPT_PLUS_API_FILE_BRIDGE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
+        )
+
+    def test_custom_native_acceptance_smoke_blocks_wrong_route(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "api_model_id": "wbp-deepseek-v3",
+                "allowed_api_route_ids": ["wbp-deepseek-v3"],
+                "forbidden_stale_route_ids": [],
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-v3",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-v3",
+                            "fallback_used": False,
+                            "output_text": "WBP_ACCEPTANCE_OK",
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "request_id": "acceptance-wrong-route",
+                        "expected_text": "WBP_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_ACCEPTANCE_SMOKE_CONTRACT_MISMATCH",
+        )
+        self.assertIn("api_model_id_not_acceptance_route", packet["blocking_reasons"])
+        self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
+        self.assertFalse(packet["acceptance_smoke_proven"])
+
+    def test_custom_native_acceptance_smoke_blocks_wrong_output_and_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": True,
+                            "output_text": "WRONG",
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "request_id": "acceptance-wrong-output",
+                        "expected_text": "WBP_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIn("response_status_not_ok", packet["blocking_reasons"])
+        self.assertIn("response_machine_error_code_not_ok", packet["blocking_reasons"])
+        self.assertIn("output_text_mismatch", packet["blocking_reasons"])
+        self.assertIn("fallback_used", packet["blocking_reasons"])
+
+    def test_custom_native_acceptance_response_validation_blocks_stale_response(self) -> None:
+        context = {
+            "packet_kind": "codex_custom_native_agent_runtime_context",
+            "execution_mode": "chatgpt_plus_api",
+            "api_model_id": "wbp-deepseek-chat",
+            "allowed_api_route_ids": ["wbp-deepseek-chat"],
+            "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+        }
+        now = live_server.datetime(2026, 6, 13, 12, 0, tzinfo=live_server.timezone.utc)
+        stale_time = live_server.datetime(
+            2026,
+            6,
+            13,
+            11,
+            55,
+            tzinfo=live_server.timezone.utc,
+        )
+        proven, blocking_reasons, validation = (
+            live_server._custom_native_validate_acceptance_response(
+                agent_runtime_context=context,
+                response_packet={
+                    "packet_kind": "custom_native_file_bridge_response",
+                    "captured_at_utc": stale_time.isoformat().replace("+00:00", "Z"),
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "acceptance-stale",
+                    "model": "wbp-deepseek-chat",
+                    "provider": "deepseek",
+                    "requested_model": "wbp-deepseek-chat",
+                    "fallback_used": False,
+                    "output_text": "WBP_ACCEPTANCE_OK",
+                },
+                request_id="acceptance-stale",
+                expected_text="WBP_ACCEPTANCE_OK",
+                now=now,
+            )
+        )
+
+        self.assertFalse(proven)
+        self.assertIn("response_stale", blocking_reasons)
+        self.assertEqual(validation["response_age_seconds"], 300)
+
     def test_web_token_static_file_is_not_served_from_static_root(self) -> None:
         with tempfile.TemporaryDirectory() as static_dir:
             static_root = Path(static_dir)
@@ -14727,6 +15051,81 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(trace["provider_called"])
         self.assertEqual(trace["next_action"], "confirm_runtime_can_dispatch_coding_agent_model_slot")
         launch.assert_called_once()
+        launch_context = launch.call_args.kwargs["agent_runtime_context"]
+        self.assertEqual(
+            launch_context["packet_kind"],
+            "codex_custom_native_agent_runtime_context",
+        )
+        self.assertEqual(launch_context["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(launch_context["primary_model_id"], "gpt-5.5")
+        self.assertEqual(launch_context["api_model_id"], route_id)
+        self.assertEqual(launch_context["coding_agent_model_id"], route_id)
+        self.assertEqual(launch_context["allowed_api_route_ids"], [route_id])
+        bridge = launch_context["deepseek_live_format_check_bridge"]
+        self.assertTrue(bridge["enabled"])
+        self.assertEqual(bridge["bridge_kind"], "local_wbp_responses_bridge")
+        self.assertEqual(
+            bridge["network_boundary"],
+            "loopback_to_wbp_server_then_provider",
+        )
+        self.assertTrue(bridge["url"].startswith("http://127.0.0.1:"))
+        self.assertTrue(bridge["url"].endswith("/v1/responses"))
+        self.assertEqual(bridge["endpoint_path"], "/responses")
+        self.assertEqual(bridge["base_url_candidates"][0], bridge["base_url"])
+        self.assertEqual(bridge["url_candidates"][0], bridge["url"])
+        self.assertIn("http://localhost:", bridge["url_candidates"][1])
+        self.assertIn("http://[::1]:", bridge["url_candidates"][2])
+        self.assertTrue(bridge["curl_no_proxy_required"])
+        self.assertIn(7, bridge["retry_on_curl_exit_codes"])
+        self.assertEqual(bridge["method"], "POST")
+        self.assertEqual(bridge["model"], route_id)
+        self.assertEqual(
+            bridge["auth_policy"],
+            "loopback_missing_auth_allowed_by_server_owned_bridge",
+        )
+        self.assertEqual(bridge["response_text_field"], "output_text")
+        self.assertIn("response_text_field_equals_expected_text", bridge["success_requires"])
+        self.assertFalse(bridge["secret_value_exposed"])
+        file_bridge = launch_context["deepseek_live_format_check_file_bridge"]
+        self.assertTrue(file_bridge["enabled"])
+        self.assertEqual(file_bridge["bridge_kind"], "server_owned_file_bridge")
+        self.assertEqual(
+            file_bridge["network_boundary"],
+            "custom_sandbox_filesystem_to_wbp_server_then_provider",
+        )
+        self.assertTrue(file_bridge["request_dir"].endswith("wbp-file-bridge/requests"))
+        self.assertTrue(file_bridge["response_dir"].endswith("wbp-file-bridge/responses"))
+        self.assertTrue(file_bridge["preferred_when_socket_connect_fails_with_errno_1"])
+        self.assertEqual(file_bridge["model"], route_id)
+        self.assertTrue(file_bridge["shell_command_template_requires_statement_separators"])
+        self.assertIn("request_file=\"$request_dir/$request_id.json\"", file_bridge["shell_command_template"])
+        self.assertIn("mkdir -p \"$request_dir\" \"$response_dir\"", file_bridge["shell_command_template"])
+        self.assertNotIn(
+            "request_file=\"$request_dir/$request_id.json\" printf",
+            file_bridge["shell_command_template"],
+        )
+        self.assertIn("response_text_field_equals_expected_text", file_bridge["success_requires"])
+        self.assertFalse(file_bridge["secret_value_exposed"])
+        self.assertTrue(launch_context["deepseek_live_format_check_python_executable"])
+        self.assertEqual(launch_context["deepseek_live_format_check_workdir"], str(live_server.ROOT))
+        self.assertEqual(
+            launch_context["deepseek_live_format_check_cli_command"][1:],
+            [
+                "-m",
+                "wild_boar_proxy.cli",
+                "external-models",
+                "live-format-check",
+                "--route",
+                route_id,
+                "--json",
+            ],
+        )
+        self.assertIn("Codex", launch_context["primary_aliases"])
+        self.assertIn("DIP", launch_context["coding_aliases"])
+        self.assertIn("wbp-deepseek-v3", launch_context["forbidden_stale_route_ids"])
+        self.assertTrue(launch_context["must_not_infer_route_from_tests_or_history"])
+        self.assertFalse(launch_context["browser_can_supply_route_authority"])
+        self.assertFalse(launch_context["secret_value_exposed"])
         show_window.assert_called_once()
 
     def test_custom_native_launch_stability_guard_does_not_promote_visible_window_to_usable(self) -> None:

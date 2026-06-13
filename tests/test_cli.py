@@ -23059,10 +23059,8 @@ class CliTests(unittest.TestCase):
         self.assertIn('"$CODEX_APP_BIN"', launcher_text)
         self.assertNotIn('proxy_env "$CODEX_APP_BIN"', launcher_text)
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', launcher_text)
-        self.assertIn(
-            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
-            launcher_text,
-        )
+        self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', launcher_text)
+        self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', launcher_text)
         self.assertIn(
             'printf "%s\\n" "$!" > "$APP_PID_FILE"',
             launcher_text,
@@ -23078,7 +23076,15 @@ class CliTests(unittest.TestCase):
         self,
     ) -> None:
         payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
-        self.assertIn('PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"', payload)
+        self.assertIn(
+            'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"',
+            payload,
+        )
+        self.assertIn('PROFILE_DIR="${WBP_PROFILE_DIR:-$SCRIPT_DIR}"', payload)
+        self.assertNotIn(
+            'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
+            payload,
+        )
         self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
         self.assertIn('APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"', payload)
         self.assertIn('APP_HOME="$PROFILE_DIR/home"', payload)
@@ -23130,10 +23136,8 @@ class CliTests(unittest.TestCase):
         self.assertIn('"$CODEX_APP_BIN"', payload)
         self.assertNotIn('proxy_env "$CODEX_APP_BIN"', payload)
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', payload)
-        self.assertIn(
-            '"--user-data-dir=$APP_USER_DATA_DIR" "--open-project=$WORKSPACE_PATH"',
-            payload,
-        )
+        self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', payload)
+        self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
         self.assertIn(
             'printf "%s\\n" "$!" > "$APP_PID_FILE"',
             payload,

@@ -17,9 +17,11 @@ import mimetypes
 import os
 from pathlib import Path
 from queue import Empty, Queue
+import shlex
 import socket
 import sqlite3
 import subprocess
+import sys
 import time
 from threading import RLock, Thread
 from typing import Any, Callable
@@ -83,6 +85,7 @@ from wild_boar_proxy.native_window_probe import (
     show_custom_native_window_packet,
 )
 from wild_boar_proxy.native_filesystem_probe import (
+    AGENT_RUNTIME_CONTEXT_FILENAME,
     collect_codex_process_inventory,
     default_persistent_custom_profile_paths,
     terminate_custom_processes,
@@ -112,6 +115,7 @@ from wild_boar_proxy.runtime import (
     build_launcher_subprocess_env,
     proxyless_urlopen,
     run_legacy_import,
+    write_text_atomic,
 )
 from wild_boar_proxy.review_bridge_apply_admission import (
     ReviewApplyContext,
@@ -336,6 +340,9 @@ CUSTOM_CODEX_READONLY_TIMEOUT_CODE = "CUSTOM_CODEX_READONLY_TIMEOUT"
 CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE = "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY"
 VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
 CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS = 10 * 60
+CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS = 2 * 60
+CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID = "wbp-deepseek-chat"
+CUSTOM_GPT_PLUS_API_ACCEPTANCE_EXPECTED_TEXT = "WBP_CHATGPT_PLUS_API_ACCEPTANCE_OK"
 VISIBLE_HISTORY_CONFIRMED_STATUS = "VISIBLE_THREAD_HISTORY_RESTORE_OWNER_CONFIRMED_WITH_LIMITS"
 VISIBLE_HISTORY_NOT_PROVEN_STATUS = "VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY"
 VISIBLE_HISTORY_RELAUNCH_CONFIRMED_STATUS = (
@@ -1255,6 +1262,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     _post_route("/api/codex/custom/native-launch", EFFECT_MUTATE),
     _post_route(
         "/api/codex/custom/native-dispatch-proof",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/chatgpt-plus-api-acceptance-smoke",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -2582,6 +2594,587 @@ class _CustomNativeBridgeLease:
             self.bridge.__exit__(None, None, None)
         self.bridge = None
         self.signature = ""
+
+
+class _CustomNativeFileBridgeWorker:
+    def __init__(
+        self,
+        *,
+        bridge_root: Path,
+        poll_interval_seconds: float = 0.25,
+    ) -> None:
+        self.bridge_root = bridge_root
+        self.poll_interval_seconds = poll_interval_seconds
+        self.request_dir = bridge_root / "requests"
+        self.response_dir = bridge_root / "responses"
+        self.processed_dir = bridge_root / "processed"
+        self._lock = RLock()
+        self._bridge_endpoint = ""
+        self._thread: Thread | None = None
+
+    def ensure_started(self, *, bridge_endpoint: str) -> None:
+        with self._lock:
+            self._bridge_endpoint = str(bridge_endpoint or "").rstrip("/")
+            self.request_dir.mkdir(parents=True, exist_ok=True)
+            self.response_dir.mkdir(parents=True, exist_ok=True)
+            self.processed_dir.mkdir(parents=True, exist_ok=True)
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+    def packet(self, *, enabled: bool, model: str) -> dict[str, Any]:
+        model_value = str(model or "") if enabled else ""
+        return {
+            "enabled": bool(enabled),
+            "bridge_kind": "server_owned_file_bridge",
+            "network_boundary": "custom_sandbox_filesystem_to_wbp_server_then_provider",
+            "request_dir": str(self.request_dir),
+            "response_dir": str(self.response_dir),
+            "processed_dir": str(self.processed_dir),
+            "request_extension": ".json",
+            "response_extension": ".json",
+            "model": model_value,
+            "preferred_when_socket_connect_fails_with_errno_1": True,
+            "poll_interval_seconds": self.poll_interval_seconds,
+            "timeout_seconds": 45,
+            "request_json_template": {
+                "schema_version": 1,
+                "request_id": "<unique-id>",
+                "model": model_value,
+                "input": "Answer exactly one line: <expected_text>",
+                "stream": False,
+                "max_output_tokens": 32,
+                "temperature": 0,
+            },
+            "shell_command_template": "\n".join(
+                [
+                    f"request_dir={shlex.quote(str(self.request_dir))}",
+                    f"response_dir={shlex.quote(str(self.response_dir))}",
+                    "expected_text='<expected_text>'",
+                    "request_id=\"codex-$(date +%s)-$$\"",
+                    "request_file=\"$request_dir/$request_id.json\"",
+                    "response_file=\"$response_dir/$request_id.json\"",
+                    "mkdir -p \"$request_dir\" \"$response_dir\"",
+                    (
+                        "printf "
+                        "'{\"schema_version\":1,\"request_id\":\"%s\","
+                        "\"model\":\"%s\","
+                        "\"input\":\"Answer exactly one line: %s\","
+                        "\"max_output_tokens\":32,\"stream\":false,\"temperature\":0}\\n' "
+                        f"\"$request_id\" {shlex.quote(model_value)} \"$expected_text\" "
+                        "> \"$request_file\""
+                    ),
+                    "deadline=$((SECONDS+45))",
+                    "while [ \"$SECONDS\" -lt \"$deadline\" ]; do",
+                    "  if [ -f \"$response_file\" ]; then",
+                    "    sed -n '1,240p' \"$response_file\"",
+                    "    exit 0",
+                    "  fi",
+                    "  sleep 0.25",
+                    "done",
+                    (
+                        "printf "
+                        "'{\"bridge_kind\":\"server_owned_file_bridge\","
+                        "\"machine_error_code\":\"TIMEOUT\",\"output_text\":\"\"}\\n'"
+                    ),
+                    "exit 1",
+                ]
+            ),
+            "shell_command_template_requires_statement_separators": True,
+            "success_requires": [
+                "response_json_status_ok",
+                "response_text_field_equals_expected_text",
+                "no_local_imitation",
+            ],
+            "response_text_field": "output_text",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    def _run(self) -> None:
+        while True:
+            try:
+                self._process_once()
+            except Exception:
+                pass
+            time.sleep(self.poll_interval_seconds)
+
+    def _process_once(self) -> None:
+        for request_path in sorted(self.request_dir.glob("*.json")):
+            self._process_request_file(request_path)
+
+    def _process_request_file(self, request_path: Path) -> dict[str, Any]:
+        request_id = request_path.stem
+        processing_path = self.processed_dir / f"{request_id}.processing.json"
+        try:
+            os.replace(request_path, processing_path)
+        except FileNotFoundError:
+            return {}
+        try:
+            payload = json.loads(processing_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            os.replace(processing_path, request_path)
+            return {}
+        packet = self._execute_payload(payload, fallback_request_id=request_id)
+        response_path = self.response_dir / f"{packet['request_id']}.json"
+        write_text_atomic(
+            response_path,
+            json.dumps(packet, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+        os.replace(processing_path, self.processed_dir / f"{request_id}.json")
+        return packet
+
+    def _execute_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        fallback_request_id: str,
+    ) -> dict[str, Any]:
+        request_id = str(payload.get("request_id") or fallback_request_id)
+        with self._lock:
+            bridge_endpoint = self._bridge_endpoint
+        if not bridge_endpoint:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_ENDPOINT_MISSING",
+                human_message="Server-owned file bridge has no active HTTP bridge endpoint.",
+            )
+        bridge_url = f"{bridge_endpoint.rstrip('/')}/responses"
+        try:
+            body = json.dumps(
+                {
+                    "model": str(payload.get("model") or ""),
+                    "input": str(payload.get("input") or ""),
+                    "stream": bool(payload.get("stream") is True),
+                    "max_output_tokens": int(payload.get("max_output_tokens") or 32),
+                    "temperature": payload.get("temperature", 0),
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+            request = urllib.request.Request(
+                bridge_url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with proxyless_urlopen(request, timeout=30) as response:
+                response_body = response.read().decode("utf-8")
+                status_code = int(getattr(response, "status", 0) or response.getcode())
+        except Exception as exc:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_PROVIDER_REQUEST_FAILED",
+                human_message=f"Server-owned file bridge provider request failed: {exc}",
+            )
+        try:
+            provider_packet = json.loads(response_body)
+        except json.JSONDecodeError:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_INVALID_PROVIDER_JSON",
+                human_message="Server-owned file bridge received invalid provider JSON.",
+            )
+        output_text = str(provider_packet.get("output_text") or "")
+        ok = (
+            200 <= status_code < 300
+            and str(provider_packet.get("status") or "") == "completed"
+            and bool(provider_packet.get("fallback_used")) is False
+            and output_text != ""
+        )
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_file_bridge_response",
+            "captured_at_utc": utc_now(),
+            "status": "ok" if ok else "blocked",
+            "machine_error_code": "OK" if ok else "FILE_BRIDGE_PROVIDER_RESPONSE_NOT_COMPLETED",
+            "request_id": request_id,
+            "model": str(payload.get("model") or ""),
+            "bridge_http_status": status_code,
+            "provider_status": str(provider_packet.get("status") or ""),
+            "provider": str(provider_packet.get("provider") or ""),
+            "requested_model": str(provider_packet.get("requested_model") or ""),
+            "fallback_used": bool(provider_packet.get("fallback_used")),
+            "output_text": output_text,
+            "response_text_field": "output_text",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    def _error_packet(
+        self,
+        *,
+        request_id: str,
+        machine_error_code: str,
+        human_message: str,
+    ) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_file_bridge_response",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "request_id": request_id,
+            "fallback_used": False,
+            "output_text": "",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+
+def _custom_native_file_bridge_root() -> Path:
+    return ROOT / ".tmp" / "wbp-file-bridge"
+
+
+def _custom_native_agent_runtime_context_candidates(
+    last_launch_packet: dict[str, Any] | None,
+) -> list[Path]:
+    candidates: list[Path] = []
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    profile_root = str(launch.get("persistent_profile_root") or "").strip()
+    relative_path = str(
+        launch.get("agent_runtime_context_profile_relative_path") or ""
+    ).strip()
+    if profile_root and relative_path:
+        candidates.append(Path(profile_root).expanduser() / relative_path)
+    default_paths = default_persistent_custom_profile_paths(
+        profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+    )
+    default_profile_root = str(default_paths.get("persistent_profile_root") or "")
+    if default_profile_root:
+        candidates.append(
+            Path(default_profile_root).expanduser() / AGENT_RUNTIME_CONTEXT_FILENAME
+        )
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            unique.append(candidate)
+            seen.add(key)
+    return unique
+
+
+def _load_custom_native_agent_runtime_context(
+    last_launch_packet: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    attempted = 0
+    for context_path in _custom_native_agent_runtime_context_candidates(last_launch_packet):
+        attempted += 1
+        if not context_path.is_file():
+            continue
+        try:
+            text = context_path.read_text(encoding="utf-8")
+            packet = json.loads(text)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(packet, dict):
+            continue
+        return packet, {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "context_candidate_count": attempted,
+            "context_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "context_path_redacted": True,
+        }
+    return {}, {
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING",
+        "context_candidate_count": attempted,
+        "context_sha256": "",
+        "context_path_redacted": True,
+    }
+
+
+def _custom_native_acceptance_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    request_id: str = "",
+    expected_text: str = "",
+    context_metadata: dict[str, Any] | None = None,
+    blocking_reasons: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_gpt_plus_api_acceptance_smoke",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "final_status": "CUSTOM_CODEX_GPT_PLUS_API_ACCEPTANCE_SMOKE_NOT_PROVEN",
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "blocking_reasons": blocking_reasons or [machine_error_code],
+        "context_metadata": context_metadata or {},
+        "acceptance_smoke_proven": False,
+        "file_bridge_acceptance_proven": False,
+        "native_coder_slot_dispatch_proven": False,
+        "runtime_readiness_claimed": False,
+        "fallback_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": "stop_and_diagnose_acceptance_smoke",
+    }
+
+
+def _custom_native_validate_acceptance_response(
+    *,
+    agent_runtime_context: dict[str, Any],
+    response_packet: dict[str, Any],
+    request_id: str,
+    expected_text: str,
+    now: datetime | None = None,
+) -> tuple[bool, list[str], dict[str, Any]]:
+    current_time = now or datetime.now(timezone.utc)
+    api_model_id = str(agent_runtime_context.get("api_model_id") or "")
+    allowed_route_ids = [
+        str(route_id)
+        for route_id in agent_runtime_context.get("allowed_api_route_ids", [])
+        if str(route_id)
+    ]
+    forbidden_stale_route_ids = {
+        str(route_id)
+        for route_id in agent_runtime_context.get("forbidden_stale_route_ids", [])
+        if str(route_id)
+    }
+    response_time = _parse_utc_timestamp(response_packet.get("captured_at_utc"))
+    response_age_seconds = (
+        int((current_time - response_time).total_seconds())
+        if response_time is not None
+        else None
+    )
+    response_stale = bool(
+        response_age_seconds is None
+        or response_age_seconds < 0
+        or response_age_seconds > CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS
+    )
+    requested_model = str(response_packet.get("requested_model") or "")
+    response_model = str(response_packet.get("model") or "")
+    provider = str(response_packet.get("provider") or "").lower()
+    blocking_reasons: list[str] = []
+    if agent_runtime_context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
+        blocking_reasons.append("agent_runtime_context_kind_mismatch")
+    if agent_runtime_context.get("execution_mode") != "chatgpt_plus_api":
+        blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
+    if api_model_id != CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID:
+        blocking_reasons.append("api_model_id_not_acceptance_route")
+    if allowed_route_ids != [api_model_id]:
+        blocking_reasons.append("allowed_api_route_ids_not_exact")
+    if CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID in forbidden_stale_route_ids:
+        blocking_reasons.append("acceptance_route_forbidden")
+    if "wbp-deepseek-v3" not in forbidden_stale_route_ids:
+        blocking_reasons.append("stale_route_guard_missing")
+    if str(response_packet.get("packet_kind") or "") != "custom_native_file_bridge_response":
+        blocking_reasons.append("response_packet_kind_mismatch")
+    if str(response_packet.get("request_id") or "") != request_id:
+        blocking_reasons.append("request_id_mismatch")
+    if response_stale:
+        blocking_reasons.append("response_stale")
+    if response_packet.get("status") != "ok":
+        blocking_reasons.append("response_status_not_ok")
+    if response_packet.get("machine_error_code") != "OK":
+        blocking_reasons.append("response_machine_error_code_not_ok")
+    if str(response_packet.get("output_text") or "") != expected_text:
+        blocking_reasons.append("output_text_mismatch")
+    if provider != "deepseek":
+        blocking_reasons.append("provider_not_deepseek")
+    if requested_model != api_model_id:
+        blocking_reasons.append("requested_model_mismatch")
+    if response_model and response_model != api_model_id:
+        blocking_reasons.append("response_model_mismatch")
+    if response_packet.get("fallback_used") is not False:
+        blocking_reasons.append("fallback_used")
+    if response_packet.get("raw_backend_details_exposed") is True:
+        blocking_reasons.append("raw_backend_details_exposed")
+    if response_packet.get("secret_value_exposed") is True:
+        blocking_reasons.append("secret_value_exposed")
+    return not blocking_reasons, blocking_reasons, {
+        "api_model_id": api_model_id,
+        "allowed_api_route_ids": allowed_route_ids,
+        "forbidden_stale_route_ids": sorted(forbidden_stale_route_ids),
+        "requested_model": requested_model,
+        "provider": provider,
+        "response_age_seconds": response_age_seconds,
+        "freshness_window_seconds": CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS,
+    }
+
+
+def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    timeout_seconds: float = 10.0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(set(payload) - {"expected_text", "request_id"})
+    expected_text = str(
+        payload.get("expected_text") or CUSTOM_GPT_PLUS_API_ACCEPTANCE_EXPECTED_TEXT
+    ).strip()
+    if forbidden_fields:
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_FORBIDDEN_FIELD",
+            human_message="Acceptance smoke accepts only expected_text and request_id.",
+            expected_text=expected_text,
+            blocking_reasons=forbidden_fields,
+        )
+    if not expected_text:
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_EXPECTED_TEXT_REQUIRED",
+            human_message="Acceptance smoke expected_text must be non-empty.",
+        )
+    context_metadata: dict[str, Any] = {
+        "status": "provided",
+        "machine_error_code": "OK",
+        "context_path_redacted": True,
+    }
+    context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
+    if context is None:
+        context, context_metadata = _load_custom_native_agent_runtime_context(
+            last_launch_packet
+        )
+    if not context:
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code=str(
+                context_metadata.get("machine_error_code")
+                or "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
+            ),
+            human_message="Custom Codex agent runtime context is missing or unreadable.",
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    file_bridge = (
+        context.get("deepseek_live_format_check_file_bridge")
+        if isinstance(context.get("deepseek_live_format_check_file_bridge"), dict)
+        else {}
+    )
+    if file_bridge.get("enabled") is not True:
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_FILE_BRIDGE_DISABLED",
+            human_message="Custom Codex file bridge is not enabled in runtime context.",
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    api_model_id = str(context.get("api_model_id") or "")
+    request_id = str(payload.get("request_id") or f"wbp-acceptance-{uuid.uuid4().hex}")
+    if not request_id or any(
+        not (character.isalnum() or character in {"-", "_"})
+        for character in request_id
+    ):
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_REQUEST_ID_INVALID",
+            human_message="Acceptance smoke request_id must contain only letters, numbers, '-' or '_'.",
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    request_path = file_bridge_worker.request_dir / f"{request_id}.json"
+    response_path = file_bridge_worker.response_dir / f"{request_id}.json"
+    if request_path.exists() or response_path.exists():
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_REQUEST_ID_EXISTS",
+            human_message="Acceptance smoke request_id already has request or response evidence.",
+            request_id=request_id,
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    if bridge_endpoint:
+        file_bridge_worker.ensure_started(bridge_endpoint=bridge_endpoint)
+    file_bridge_worker.request_dir.mkdir(parents=True, exist_ok=True)
+    file_bridge_worker.response_dir.mkdir(parents=True, exist_ok=True)
+    file_bridge_worker.processed_dir.mkdir(parents=True, exist_ok=True)
+    request_payload = {
+        "schema_version": 1,
+        "request_id": request_id,
+        "model": api_model_id,
+        "input": f"Answer exactly one line: {expected_text}",
+        "stream": False,
+        "max_output_tokens": 32,
+        "temperature": 0,
+    }
+    write_text_atomic(
+        request_path,
+        json.dumps(request_payload, ensure_ascii=False, sort_keys=True) + "\n",
+    )
+    file_bridge_worker._process_request_file(request_path)
+    deadline = time.monotonic() + max(float(timeout_seconds), 0.0)
+    while not response_path.is_file() and time.monotonic() <= deadline:
+        time.sleep(0.05)
+    if not response_path.is_file():
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_RESPONSE_TIMEOUT",
+            human_message="Acceptance smoke file bridge response did not appear before timeout.",
+            request_id=request_id,
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    try:
+        response_packet = json.loads(response_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_RESPONSE_INVALID_JSON",
+            human_message="Acceptance smoke file bridge response is not valid JSON.",
+            request_id=request_id,
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    if not isinstance(response_packet, dict):
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_RESPONSE_NOT_OBJECT",
+            human_message="Acceptance smoke file bridge response must be a JSON object.",
+            request_id=request_id,
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+        )
+    proven, blocking_reasons, validation = _custom_native_validate_acceptance_response(
+        agent_runtime_context=context,
+        response_packet=response_packet,
+        request_id=request_id,
+        expected_text=expected_text,
+        now=now,
+    )
+    if not proven:
+        return _custom_native_acceptance_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_CONTRACT_MISMATCH",
+            human_message="Acceptance smoke response did not satisfy the runtime context and exact-response contract.",
+            request_id=request_id,
+            expected_text=expected_text,
+            context_metadata=context_metadata,
+            blocking_reasons=blocking_reasons,
+        ) | {
+            "validation": validation,
+            "response_packet_kind": str(response_packet.get("packet_kind") or ""),
+            "response_machine_error_code": str(response_packet.get("machine_error_code") or ""),
+        }
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_gpt_plus_api_acceptance_smoke",
+        "captured_at_utc": utc_now(),
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Custom Codex GPT-plus-API file bridge acceptance smoke passed with exact DeepSeek response evidence.",
+        "final_status": "CUSTOM_CODEX_GPT_PLUS_API_FILE_BRIDGE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "context_metadata": context_metadata,
+        "validation": validation,
+        "acceptance_smoke_proven": True,
+        "file_bridge_acceptance_proven": True,
+        "custom_codex_agent_runtime_context_proven": True,
+        "custom_codex_external_client_invocation_proven": False,
+        "native_coder_slot_dispatch_proven": False,
+        "runtime_readiness_claimed": False,
+        "provider": validation["provider"],
+        "requested_model": validation["requested_model"],
+        "fallback_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": "none",
+    }
 
 
 def _server_owned_api_route_id(runner: CommandRunner | None = None) -> str:
@@ -5698,6 +6291,134 @@ def _custom_native_bridge_truth_fields(
     }
 
 
+def _custom_native_agent_runtime_context(
+    *,
+    execution_packet: dict[str, Any] | None,
+    launch_model_id: str,
+    route_model_id: str,
+    bridge_endpoint: str = "",
+) -> dict[str, Any]:
+    packet = execution_packet if isinstance(execution_packet, dict) else {}
+    execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
+    api_model_id = str(packet.get("api_model_id") or route_model_id or "")
+    chatgpt_model_id = str(packet.get("chatgpt_model_id") or launch_model_id or "")
+    stale_route_ids = sorted(
+        route_id
+        for route_id in {"wbp-deepseek-v3"}
+        if route_id and route_id != api_model_id
+    )
+    bridge_endpoint = str(bridge_endpoint or "").rstrip("/")
+    local_bridge_enabled = bool(
+        api_model_id
+        and bridge_endpoint.startswith("http://127.0.0.1:")
+        and execution_mode == "chatgpt_plus_api"
+    )
+    bridge_base_url_candidates: list[str] = []
+    bridge_url_candidates: list[str] = []
+    bridge_endpoint_path = "/responses"
+    if local_bridge_enabled:
+        parsed_bridge = urlparse(bridge_endpoint)
+        bridge_port = parsed_bridge.port
+        bridge_path = (parsed_bridge.path or "/v1").rstrip("/") or "/v1"
+        if bridge_port:
+            bridge_base_url_candidates = [
+                f"http://127.0.0.1:{bridge_port}{bridge_path}",
+                f"http://localhost:{bridge_port}{bridge_path}",
+                f"http://[::1]:{bridge_port}{bridge_path}",
+            ]
+        else:
+            bridge_base_url_candidates = [bridge_endpoint]
+        bridge_url_candidates = [
+            f"{candidate}{bridge_endpoint_path}"
+            for candidate in bridge_base_url_candidates
+        ]
+    file_bridge_worker = _CustomNativeFileBridgeWorker(
+        bridge_root=_custom_native_file_bridge_root()
+    )
+    python_executable = os.environ.get("WBP_PYTHON_BIN") or sys.executable or "python3"
+    cli_args = [
+        "external-models",
+        "live-format-check",
+        "--route",
+        api_model_id,
+        "--json",
+    ] if api_model_id else []
+    return {
+        "schema_version": 1,
+        "packet_kind": "codex_custom_native_agent_runtime_context",
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "execution_mode": execution_mode,
+        "context_truth_source": "server_launch_selection_packet",
+        "alias_scope": "server_runtime_binding",
+        "alias_runtime_binding_present": True,
+        "browser_can_supply_alias_authority": False,
+        "browser_can_supply_route_authority": False,
+        "native_free_text_activation_instruction_scope": "agent_runtime_context_only",
+        "primary_model_slot": packet.get("primary_model_slot", {}),
+        "coding_agent_model_slot": packet.get("coding_agent_model_slot", {}),
+        "primary_aliases": ["Codex", "Agent 1", "1"],
+        "coding_aliases": ["DIP", "Agent 2", "2"],
+        "primary_model_id": chatgpt_model_id,
+        "coding_agent_model_id": api_model_id,
+        "api_model_id": api_model_id,
+        "route_model_id": route_model_id,
+        "allowed_api_route_ids": [api_model_id] if api_model_id else [],
+        "forbidden_stale_route_ids": stale_route_ids,
+        "manual_probe_expected_text": "WBP_CHATGPT_PLUS_DEEPSEEK_OK",
+        "deepseek_live_format_check_bridge": {
+            "enabled": local_bridge_enabled,
+            "bridge_kind": "local_wbp_responses_bridge",
+            "network_boundary": "loopback_to_wbp_server_then_provider",
+            "base_url": bridge_base_url_candidates[0] if bridge_base_url_candidates else "",
+            "base_url_candidates": bridge_base_url_candidates,
+            "endpoint_path": bridge_endpoint_path,
+            "url": bridge_url_candidates[0] if bridge_url_candidates else "",
+            "url_candidates": bridge_url_candidates,
+            "method": "POST",
+            "model": api_model_id if local_bridge_enabled else "",
+            "auth_policy": "loopback_missing_auth_allowed_by_server_owned_bridge",
+            "curl_no_proxy_required": True,
+            "retry_on_curl_exit_codes": [7],
+            "request_json_template": {
+                "model": api_model_id if local_bridge_enabled else "",
+                "input": "Answer exactly one line: <expected_text>",
+                "stream": False,
+                "max_output_tokens": 32,
+                "temperature": 0,
+            },
+            "response_text_field": "output_text",
+            "success_requires": [
+                "http_2xx",
+                "response_text_field_equals_expected_text",
+                "no_local_imitation",
+            ],
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        },
+        "deepseek_live_format_check_file_bridge": file_bridge_worker.packet(
+            enabled=local_bridge_enabled,
+            model=api_model_id,
+        ),
+        "deepseek_live_format_check_python_executable": python_executable,
+        "deepseek_live_format_check_workdir": str(ROOT),
+        "deepseek_live_format_check_python_entrypoint": "wild_boar_proxy.cli:main",
+        "deepseek_live_format_check_cli_args": cli_args,
+        "deepseek_live_format_check_cli_command": [
+            python_executable,
+            "-m",
+            "wild_boar_proxy.cli",
+            *cli_args,
+        ] if cli_args else [],
+        "route_id_truth_source": "execution_mode_packet.api_model_id",
+        "must_not_infer_route_from_tests_or_history": True,
+        "fallback_used": False,
+        "raw_backend_details_exposed": False,
+        "raw_secret_ref_exposed": False,
+        "secret_value_exposed": False,
+    }
+
+
 def _launch_custom_native_codex_packet(
     payload: dict[str, Any],
     *,
@@ -5896,6 +6617,12 @@ def _launch_custom_native_codex_packet(
         ),
         keep_running_on_window_observed=True,
         reuse_existing_window_if_present=not bool(route_record),
+        agent_runtime_context=_custom_native_agent_runtime_context(
+            execution_packet=execution_packet,
+            launch_model_id=model_id,
+            route_model_id=route_model_id,
+            bridge_endpoint=bridge_endpoint,
+        ),
     )
     legacy_selection = _codex_custom_selection_packet(
         model_id=model_id,
@@ -10435,6 +11162,9 @@ def build_handler(
     custom_native_bridge_lease = _CustomNativeBridgeLease(
         bridge_port=_custom_codex_stable_wbp_bridge_port()
     )
+    custom_native_file_bridge_worker = _CustomNativeFileBridgeWorker(
+        bridge_root=_custom_native_file_bridge_root()
+    )
     custom_native_launch_state: dict[str, dict[str, Any] | None] = {
         "previous_packet": None,
         "last_packet": None,
@@ -11817,6 +12547,10 @@ def build_handler(
                 record_custom_native_launch_packet(packet)
                 self._send_json(packet)
                 return
+            if api_route_launch_selected:
+                custom_native_file_bridge_worker.ensure_started(
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint
+                )
             if (
                 preflight_packet.get("existing_window_reuse_admissible") is True
             ):
@@ -12166,6 +12900,17 @@ def build_handler(
                     native_bridge_lease=custom_native_bridge_lease,
                     owner_authorized=codex_custom_live_prompt_authorized,
                     browser_payload=self._read_optional_json_body(),
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_chatgpt_plus_api_acceptance_smoke(self, actual_path: str) -> None:
+            self._send_json(
+                _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload=self._read_optional_json_body(),
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
                 )
             )
             return

@@ -56,7 +56,7 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             payload.count(' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'),
-            4,
+            2,
         )
         self.assertIn(
             'CODEX_REMOTE_DEBUGGING_ADDRESS="127.0.0.1"',
@@ -68,16 +68,59 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             payload.count('"--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'),
-            4,
+            2,
         )
         self.assertEqual(
             payload.count('"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'),
-            4,
+            2,
         )
         self.assertIn(
             '"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT" "--user-data-dir=$APP_USER_DATA_DIR"',
             payload,
         )
+
+    def test_repo_owned_default_launcher_detaches_desktop_app_from_shell(
+        self,
+    ) -> None:
+        payload = runtime.build_repo_owned_default_launcher_script_payload()
+
+        self.assertIn(
+            'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"',
+            payload,
+        )
+        self.assertIn('PROFILE_DIR="${WBP_PROFILE_DIR:-$SCRIPT_DIR}"', payload)
+        self.assertNotIn(
+            'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
+            payload,
+        )
+        self.assertIn("launch_codex_app() {", payload)
+        self.assertEqual(payload.count('nohup "$CODEX_APP_BIN"'), 1)
+        self.assertEqual(payload.count("nohup env HTTP_PROXY="), 1)
+        self.assertEqual(
+            payload.count('< /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &'),
+            2,
+        )
+        self.assertEqual(payload.count('printf "%s\\n" "$!" > "$APP_PID_FILE"'), 1)
+        self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
+        self.assertIn("  launch_codex_app\n  sleep 3", payload)
+
+    def test_repo_owned_default_launcher_preserves_owner_external_models_root(
+        self,
+    ) -> None:
+        payload = runtime.build_repo_owned_default_launcher_script_payload()
+
+        owner_root_line = (
+            'OWNER_EXTERNAL_MODELS_DIR="${WBP_OWNER_EXTERNAL_MODELS_DIR:-'
+            '${WBP_EXTERNAL_MODELS_DIR:-$HOME/.wild-boar-proxy/external-models}}"'
+        )
+        export_line = 'export WBP_EXTERNAL_MODELS_DIR="$OWNER_EXTERNAL_MODELS_DIR"'
+        home_line = 'export HOME="$APP_HOME"'
+        self.assertIn(owner_root_line, payload)
+        self.assertIn(export_line, payload)
+        self.assertLess(payload.index(owner_root_line), payload.index(home_line))
+        self.assertLess(payload.index(export_line), payload.index(home_line))
+        self.assertNotIn("DEEPSEEK_API_KEY", payload)
+        self.assertNotIn("OPENROUTER_API_KEY", payload)
 
     def test_auth_pool_hygiene_uses_snapshot_as_observed_selection_when_runtime_loaded_ids_empty(
         self,

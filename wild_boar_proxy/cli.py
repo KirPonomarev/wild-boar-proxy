@@ -776,3 +776,7 @@ def main(argv: list[str] | None = None) -> int:
         ):
             payload["mutation_id"] = None
         return emit_json(payload)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

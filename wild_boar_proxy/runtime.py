@@ -1066,7 +1066,8 @@ def build_repo_owned_default_launcher_script_payload() -> str:
         [
             "set -eu",
             'mode="${1:-}"',
-            'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
+            'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"',
+            'PROFILE_DIR="${WBP_PROFILE_DIR:-$SCRIPT_DIR}"',
             'AUTH_FILE="$PROFILE_DIR/auth.json"',
             'APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"',
             'APP_HOME="$PROFILE_DIR/home"',
@@ -1080,6 +1081,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'PROFILE_BASENAME="$(basename "$PROFILE_DIR")"',
             'APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"',
             'APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"',
+            'OWNER_EXTERNAL_MODELS_DIR="${WBP_OWNER_EXTERNAL_MODELS_DIR:-${WBP_EXTERNAL_MODELS_DIR:-$HOME/.wild-boar-proxy/external-models}}"',
             'PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"',
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
             'CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"',
@@ -1149,6 +1151,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  printf "wild-boar-proxy runtime tmpdir\\n" > "$APP_RUNTIME_TMPDIR_MARKER"',
             '  printf "wbp runtime tmpdir: %s\\n" "$APP_RUNTIME_TMPDIR" >> "$APP_STDOUT_LOG"',
             '  export CODEX_HOME="$PROFILE_DIR"',
+            '  export WBP_EXTERNAL_MODELS_DIR="$OWNER_EXTERNAL_MODELS_DIR"',
             '  export HOME="$APP_HOME"',
             '  export XDG_CONFIG_HOME="$APP_HOME/.config"',
             '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
@@ -1164,11 +1167,9 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "PY",
             ')"',
             '  cd "$CODEX_APP_RESOURCES"',
-            "  shift || true",
-            '  WORKSPACE_PATH="${1:-}"',
-            '  if [ -n "$WORKSPACE_PATH" ]; then',
+            "  launch_codex_app() {",
             '    if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
-            '      env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            '      nohup env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
             ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
             ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
             ' http_proxy="$WBP_CURRENT_PROXY_URL"'
@@ -1179,44 +1180,28 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
             ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
-            ' "--open-project=$WORKSPACE_PATH"'
-            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            ' "$@"'
+            ' < /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
             "    else",
-            '      "$CODEX_APP_BIN"'
+            '      nohup "$CODEX_APP_BIN"'
             ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
             ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
             ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
-            ' "--open-project=$WORKSPACE_PATH"'
-            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            ' "$@"'
+            ' < /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
             "    fi",
             '    printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "  }",
+            "  shift || true",
+            '  WORKSPACE_PATH="${1:-}"',
+            '  if [ -n "$WORKSPACE_PATH" ]; then',
+            '    launch_codex_app "--open-project=$WORKSPACE_PATH"',
             "    sleep 3",
             '    kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             "    exit 0",
             "  fi",
-            '  if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
-            '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' "$CODEX_APP_BIN"'
-            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
-            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
-            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
-            ' "--user-data-dir=$APP_USER_DATA_DIR"'
-            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
-            "  else",
-            '    "$CODEX_APP_BIN"'
-            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
-            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
-            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
-            ' "--user-data-dir=$APP_USER_DATA_DIR"'
-            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
-            "  fi",
-            '  printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            "  launch_codex_app",
             "  sleep 3",
             '  kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             "  exit 0",

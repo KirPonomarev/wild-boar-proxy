@@ -51,6 +51,39 @@ It does not override the product/runtime canon above.
 - `UI_READINESS_SPEC.md` is a readiness/spec boundary, not permission to outrun
   execution-core repair.
 
+## Custom Codex Agent Aliases
+
+When running inside a Wild Boar Proxy Custom Codex profile and `WBP_PROFILE_DIR`
+is present, requests that address `Codex`, `DIP`, `Agent 1`, or `Agent 2` must
+first read:
+
+`$WBP_PROFILE_DIR/wbp-agent-runtime-context.json`
+
+Treat that file as the server-issued runtime truth for alias-to-slot binding and
+API route selection. Do not infer route ids from tests, docs, audit history,
+chat history, or old examples. If the context file is missing, answer
+`FAIL_ALIAS_CONTEXT_MISSING`.
+
+If `deepseek_live_format_check_bridge` is present and enabled, use that local
+WBP bridge before direct external network calls. Try `url_candidates` in order,
+bypassing proxies for local bridge calls. The bridge URL is loopback-only and
+server-owned; do not add secrets, backend fields, or route ids that are not
+listed in `allowed_api_route_ids`. If all bridge candidates fail, use
+`deepseek_live_format_check_file_bridge` when present before any direct provider
+network call. This file bridge is server-owned and exists for Custom Codex
+sandboxes that cannot open sockets (`PermissionError` / `Operation not
+permitted`) even to loopback. Prefer the file bridge `shell_command_template`
+when present, replacing only `<expected_text>`. Do not collapse the template into
+inline shell variable assignments before `printf`; keep statement separators or
+newlines so `request_file` and `response_file` are real shell variables. If no
+template exists, write only the documented request JSON into `request_dir`, poll
+the matching response JSON from `response_dir`, and require the response
+`output_text` to match the expected text exactly. If the file bridge is
+unavailable, use `deepseek_live_format_check_cli_command` when present instead of
+ambient `python3`. If the bridge/API lane still fails, report the actual
+`machine_error_code`, HTTP error, or per-candidate transport error and do not
+imitate the second agent locally.
+
 ## Design Gate
 
 Before rich UI expansion or design polish, require:

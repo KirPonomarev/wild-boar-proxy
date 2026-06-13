@@ -4531,6 +4531,95 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(env["WBP_RUNTIME_TMPDIR"], str(layout.tmp_root / "runtime-bind"))
         self.assertEqual(env["WBP_PYTHON_BIN"], sys.executable)
 
+    def test_materialize_probe_profile_writes_agent_runtime_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "primary_aliases": ["Codex", "Agent 1"],
+                "coding_aliases": ["DIP", "Agent 2"],
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "deepseek_live_format_check_bridge": {
+                    "url_candidates": [
+                        "http://127.0.0.1:50555/v1/responses",
+                        "http://localhost:50555/v1/responses",
+                    ],
+                    "curl_no_proxy_required": True,
+                },
+                "deepseek_live_format_check_file_bridge": {
+                    "request_dir": str(root / "file-bridge" / "requests"),
+                    "response_dir": str(root / "file-bridge" / "responses"),
+                    "preferred_when_socket_connect_fails_with_errno_1": True,
+                },
+                "deepseek_live_format_check_cli_command": [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy.cli",
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-chat",
+                    "--json",
+                ],
+                "secret_value_exposed": False,
+            }
+
+            packet = native_fs_probe.materialize_probe_profile(
+                layout=layout,
+                endpoint="http://127.0.0.1:8788/v1",
+                model="gpt-5.5",
+                auth_command_path=root / "auth.py",
+                local_token="local-token",
+                agent_runtime_context=context,
+            )
+
+            context_path = layout.profile_dir / "wbp-agent-runtime-context.json"
+            written = json.loads(context_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(packet["agent_runtime_context_written"])
+        self.assertEqual(
+            packet["agent_runtime_context_profile_relative_path"],
+            "wbp-agent-runtime-context.json",
+        )
+        self.assertEqual(written["api_model_id"], "wbp-deepseek-chat")
+        self.assertEqual(written["coding_aliases"], ["DIP", "Agent 2"])
+        self.assertEqual(written["forbidden_stale_route_ids"], ["wbp-deepseek-v3"])
+        self.assertTrue(
+            written["deepseek_live_format_check_bridge"]["curl_no_proxy_required"]
+        )
+        self.assertIn(
+            "http://localhost:50555/v1/responses",
+            written["deepseek_live_format_check_bridge"]["url_candidates"],
+        )
+        self.assertTrue(
+            written["deepseek_live_format_check_file_bridge"][
+                "preferred_when_socket_connect_fails_with_errno_1"
+            ]
+        )
+        self.assertTrue(
+            written["deepseek_live_format_check_file_bridge"]["request_dir"].endswith(
+                "/file-bridge/requests"
+            )
+        )
+        self.assertEqual(
+            written["deepseek_live_format_check_cli_command"][1:],
+            [
+                "-m",
+                "wild_boar_proxy.cli",
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-chat",
+                "--json",
+            ],
+        )
+        self.assertNotIn("secret_ref", written)
+        self.assertNotIn("local-token", json.dumps(written))
+        self.assertEqual(len(packet["agent_runtime_context_sha256"]), 64)
+
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(
             host_negative_packet={

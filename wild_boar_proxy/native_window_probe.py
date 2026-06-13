@@ -1472,6 +1472,7 @@ def launch_custom_native_app_packet(
     persistent_profile_base_dir: Path | None = None,
     keep_running_on_window_observed: bool = False,
     reuse_existing_window_if_present: bool = False,
+    agent_runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     admission = build_native_custom_preflight_packet(
         native_window_probe_command(),
@@ -1548,6 +1549,10 @@ def launch_custom_native_app_packet(
         "launch_origin": "not_started",
         "launcher_exit_code_early": None,
         "launcher_failed_before_custom_process": False,
+        "agent_runtime_context_written": False,
+        "agent_runtime_context_profile_relative_path": "",
+        "agent_runtime_context_sha256": "",
+        "agent_runtime_context_path_redacted": True,
     }
     if auth["status"] != "ok":
         return {
@@ -1574,12 +1579,13 @@ def launch_custom_native_app_packet(
             base_dir=persistent_profile_base_dir,
         )
         tmp_root = layout.tmp_root
-        materialize_probe_profile(
+        materialized_profile = materialize_probe_profile(
             layout=layout,
             endpoint=endpoint,
             model=model,
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
+            agent_runtime_context=agent_runtime_context,
         )
         persistent_fields = {
             "profile_mode": "persistent_custom",
@@ -1595,6 +1601,18 @@ def launch_custom_native_app_packet(
             "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
             "browser_client_path_authority": False,
             "original_codex_profile_runtime_dependency": False,
+            "agent_runtime_context_written": materialized_profile.get(
+                "agent_runtime_context_written"
+            )
+            is True,
+            "agent_runtime_context_profile_relative_path": str(
+                materialized_profile.get("agent_runtime_context_profile_relative_path")
+                or ""
+            ),
+            "agent_runtime_context_sha256": str(
+                materialized_profile.get("agent_runtime_context_sha256") or ""
+            ),
+            "agent_runtime_context_path_redacted": True,
         }
         keychain_preflight = prepare_isolated_home_keychain(
             isolated_home=layout.custom_home_dir,
