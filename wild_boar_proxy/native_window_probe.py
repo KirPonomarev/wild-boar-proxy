@@ -60,6 +60,8 @@ WINDOW_OBSERVATION_POLL_SECONDS = 0.5
 CODEX_RENDERER_RECOVERY_WAIT_SECONDS = 2.0
 POST_LAUNCH_USABILITY_RECHECK_SECONDS = 8.0
 POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS = 0.5
+CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_SECONDS = 20.0
+CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_POLL_SECONDS = 0.25
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
@@ -68,6 +70,17 @@ RUNTIME_READY_STDOUT_MARKERS = (
 )
 CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER = (
     "Sign in to ChatGPT in Codex Desktop to check remote control authorization."
+)
+CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
+    "desktop_fetch_auth_401",
+    "hadToken=false",
+    "no_token_attached",
+)
+CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
+    {
+        "cdp_renderer_input_surface_not_observed",
+        "input_capable_window_not_proven_for_pid",
+    }
 )
 
 
@@ -1142,8 +1155,16 @@ def _latest_launch_stderr_segment(text: str) -> str:
     return text[index:] if index >= 0 else text
 
 
-def _codex_desktop_auth_blocker_from_profile(profile_dir: Path) -> dict[str, Any]:
-    stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+def _codex_desktop_auth_blocker_from_profile(
+    profile_dir: Path,
+    *,
+    launcher_stderr_path: Path | str | None = None,
+) -> dict[str, Any]:
+    stderr_path = (
+        Path(launcher_stderr_path)
+        if launcher_stderr_path is not None
+        else profile_dir / "tmp" / "launcher.stderr.log"
+    )
     try:
         text = stderr_path.read_text(errors="replace")
     except OSError:
@@ -1153,7 +1174,9 @@ def _codex_desktop_auth_blocker_from_profile(profile_dir: Path) -> dict[str, Any
             "codex_desktop_auth_diagnostic_source": "launcher_stderr_missing",
         }
     segment = _latest_launch_stderr_segment(text)
-    if CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER not in segment:
+    sign_in_required = CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER in segment
+    no_token_auth_401 = all(marker in segment for marker in CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS)
+    if not sign_in_required and not no_token_auth_401:
         return {
             "codex_desktop_auth_blocker_observed": False,
             "codex_desktop_auth_blocked_reason_class": "",
@@ -1166,9 +1189,50 @@ def _codex_desktop_auth_blocker_from_profile(profile_dir: Path) -> dict[str, Any
         ),
         "codex_desktop_auth_error_class": (
             "codex_desktop_remote_control_authorization_sign_in_required"
+            if sign_in_required
+            else "codex_desktop_chatgpt_auth_token_missing"
         ),
         "codex_desktop_auth_diagnostic_source": "launcher_stderr_latest_segment",
         "launcher_stderr_redacted": True,
+    }
+
+
+def _codex_desktop_profile_auth_state_blocker(profile_dir: Path) -> dict[str, Any]:
+    custom_home_dir = profile_dir / "home"
+    if not custom_home_dir.exists():
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_error_class": "",
+            "codex_desktop_auth_diagnostic_source": "custom_profile_home_missing",
+        }
+    desktop_auth_json = (
+        custom_home_dir
+        / "Library"
+        / "Application Support"
+        / "Codex"
+        / "auth.json"
+    )
+    if desktop_auth_json.is_file():
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_error_class": "",
+            "codex_desktop_auth_diagnostic_source": "custom_profile_chatgpt_auth_state_present",
+            "desktop_auth_state_path_redacted": True,
+        }
+    return {
+        "codex_desktop_auth_blocker_observed": True,
+        "codex_desktop_auth_blocked_reason_class": (
+            "codex_desktop_sign_in_required_for_renderer_surface"
+        ),
+        "codex_desktop_auth_error_class": (
+            "codex_desktop_custom_profile_chatgpt_auth_state_missing"
+        ),
+        "codex_desktop_auth_diagnostic_source": (
+            "custom_profile_chatgpt_auth_state_missing"
+        ),
+        "desktop_auth_state_path_redacted": True,
     }
 
 
@@ -1176,22 +1240,70 @@ def _apply_codex_desktop_auth_blocker(
     usability_packet: dict[str, Any],
     *,
     profile_dir: Path,
+    launcher_stderr_path: Path | str | None = None,
+    allow_profile_auth_state_fallback: bool = False,
+    profile_auth_state_fallback_allowed_by_current_launch: bool = False,
 ) -> dict[str, Any]:
-    if usability_packet.get("blocked_reason_class") != "cdp_renderer_input_surface_not_observed":
+    blocked_reason_class = str(usability_packet.get("blocked_reason_class") or "")
+    if blocked_reason_class not in CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS:
         return usability_packet
-    auth_blocker = _codex_desktop_auth_blocker_from_profile(profile_dir)
+    if launcher_stderr_path is None:
+        return usability_packet
+    auth_blocker = _codex_desktop_auth_blocker_from_profile(
+        profile_dir,
+        launcher_stderr_path=launcher_stderr_path,
+    )
+    if (
+        auth_blocker.get("codex_desktop_auth_blocker_observed") is not True
+        and allow_profile_auth_state_fallback
+        and profile_auth_state_fallback_allowed_by_current_launch
+    ):
+        auth_blocker = _codex_desktop_profile_auth_state_blocker(profile_dir)
     if auth_blocker.get("codex_desktop_auth_blocker_observed") is not True:
         return usability_packet
     packet = dict(usability_packet)
     packet.update(auth_blocker)
     packet["renderer_surface_blocked_reason_class"] = str(
-        usability_packet.get("blocked_reason_class") or ""
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or blocked_reason_class
     )
     packet["blocked_reason_class"] = str(
         auth_blocker["codex_desktop_auth_blocked_reason_class"]
     )
     packet["native_app_usability_source"] = "codex_desktop_auth_blocker"
     return packet
+
+
+def _bounded_recheck_codex_desktop_auth_blocker(
+    usability_packet: dict[str, Any],
+    *,
+    profile_dir: Path,
+    launcher_stderr_path: Path | str | None,
+    allow_profile_auth_state_fallback: bool = False,
+    profile_auth_state_fallback_allowed_by_current_launch: bool = False,
+) -> dict[str, Any]:
+    if usability_packet.get("codex_desktop_auth_blocker_observed") is True:
+        return usability_packet
+    if usability_packet.get("native_window_usable") is True:
+        return usability_packet
+    if launcher_stderr_path is None:
+        return usability_packet
+    deadline = time.time() + CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_SECONDS
+    current_packet = usability_packet
+    while time.time() < deadline:
+        time.sleep(CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_POLL_SECONDS)
+        current_packet = _apply_codex_desktop_auth_blocker(
+            current_packet,
+            profile_dir=profile_dir,
+            launcher_stderr_path=launcher_stderr_path,
+            allow_profile_auth_state_fallback=allow_profile_auth_state_fallback,
+            profile_auth_state_fallback_allowed_by_current_launch=(
+                profile_auth_state_fallback_allowed_by_current_launch
+            ),
+        )
+        if current_packet.get("codex_desktop_auth_blocker_observed") is True:
+            return current_packet
+    return current_packet
 
 
 def _custom_native_launch_blocked_machine_error(
@@ -1201,12 +1313,15 @@ def _custom_native_launch_blocked_machine_error(
     process_still_alive: bool,
     custom_window_visible: bool,
     native_app_usable: bool,
+    desktop_auth_blocker: bool,
     renderer_surface_blocked_reason: str,
 ) -> str:
     if launcher_failed_before_process:
         return "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
     if process_started and not process_still_alive:
         return "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START"
+    if desktop_auth_blocker:
+        return "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED"
     if custom_window_visible and not native_app_usable:
         if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck":
             return "CUSTOM_NATIVE_RENDERER_STARTUP_LOADER_STUCK"
@@ -1228,8 +1343,8 @@ def _custom_native_launch_blocked_human_message(
         return "Custom Codex launcher exited before a Custom process was observed."
     if process_started and not process_still_alive:
         return "Custom Codex process was observed after launch, then exited before proof completed."
-    if custom_window_visible and not native_app_usable and desktop_auth_blocker:
-        return "Custom Codex native window was observed, but Codex Desktop sign-in is required before input-capable UI can be proven."
+    if desktop_auth_blocker:
+        return "Custom Codex native launch reached Codex Desktop, but Codex Desktop sign-in is required before input-capable UI can be proven."
     if (
         custom_window_visible
         and not native_app_usable
@@ -1842,6 +1957,12 @@ def launch_custom_native_app_packet(
         usability_packet = _apply_codex_desktop_auth_blocker(
             usability_packet,
             profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+        )
+        usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
         )
         renderer_recovery_packet = _renderer_recovery_not_required_packet()
         observed_pid_for_recovery = window_packet.get("observed_pid")
@@ -1888,6 +2009,11 @@ def launch_custom_native_app_packet(
             if post_launch_usability_recheck_packet.get("status") == "ok":
                 window_packet = rechecked_window_packet
                 usability_packet = rechecked_usability_packet
+        usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+        )
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
@@ -1899,12 +2025,12 @@ def launch_custom_native_app_packet(
         input_capable_ui_observed = usability_packet.get("native_window_usable") is True
         runtime_ready_observed = runtime_ready_packet.get("runtime_ready_observed") is True
         native_app_usable = input_capable_ui_observed
+        desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
         native_app_usability_source = (
             str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
-            if input_capable_ui_observed
+            if input_capable_ui_observed or desktop_auth_blocker
             else "not_proven"
         )
-        desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
         usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
         renderer_surface_blocked_reason = str(
             usability_packet.get("renderer_surface_blocked_reason_class") or usability_blocked_reason
@@ -1915,6 +2041,7 @@ def launch_custom_native_app_packet(
             process_still_alive=process_still_alive,
             custom_window_visible=custom_window_visible,
             native_app_usable=native_app_usable,
+            desktop_auth_blocker=desktop_auth_blocker,
             renderer_surface_blocked_reason=renderer_surface_blocked_reason,
         )
         blocked_human_message = _custom_native_launch_blocked_human_message(
@@ -1944,6 +2071,48 @@ def launch_custom_native_app_packet(
 
         if not success and not keep_running_with_limited_proof:
             termination = terminate_custom_processes(str(layout.custom_user_data_dir))
+            usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+                usability_packet,
+                profile_dir=layout.profile_dir,
+                launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+                allow_profile_auth_state_fallback=True,
+                profile_auth_state_fallback_allowed_by_current_launch=(
+                    process_started
+                    and process_still_alive
+                    and not launcher_failed_before_process
+                ),
+            )
+            input_capable_ui_observed = usability_packet.get("native_window_usable") is True
+            native_app_usable = input_capable_ui_observed
+            desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
+            native_app_usability_source = (
+                str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
+                if input_capable_ui_observed or desktop_auth_blocker
+                else "not_proven"
+            )
+            usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+            renderer_surface_blocked_reason = str(
+                usability_packet.get("renderer_surface_blocked_reason_class")
+                or usability_blocked_reason
+            )
+            blocked_machine_error = _custom_native_launch_blocked_machine_error(
+                launcher_failed_before_process=launcher_failed_before_process,
+                process_started=process_started,
+                process_still_alive=process_still_alive,
+                custom_window_visible=custom_window_visible,
+                native_app_usable=native_app_usable,
+                desktop_auth_blocker=desktop_auth_blocker,
+                renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+            )
+            blocked_human_message = _custom_native_launch_blocked_human_message(
+                launcher_failed_before_process=launcher_failed_before_process,
+                process_started=process_started,
+                process_still_alive=process_still_alive,
+                custom_window_visible=custom_window_visible,
+                native_app_usable=native_app_usable,
+                desktop_auth_blocker=desktop_auth_blocker,
+                renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+            )
             cleanup_error = remove_tree_with_retry(tmp_root)
 
         return {
@@ -2046,6 +2215,8 @@ def launch_custom_native_app_packet(
                     else (
                         "relaunch_custom_codex_after_process_exit"
                         if process_started and not process_still_alive
+                        else "sign_in_to_codex_desktop_custom_profile"
+                        if desktop_auth_blocker
                         else "stop_and_diagnose_custom_renderer_startup_loader"
                         if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
                         else "stop_and_diagnose_custom_window_usability"

@@ -497,6 +497,7 @@ let reviewCommandsPacket = null;
 let reviewLastCommandPacket = null;
 let codexLaunchDryRunInFlight = false;
 const QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS = 30000;
+const CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS = 120000;
 let quickStartManualCheckSnapshot = null;
 let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
@@ -2078,7 +2079,9 @@ async function runCodexCustomLaunch() {
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   codexLaunchSetChip("neutral", "launching");
   const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 45000) : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS)
+    : null;
   try {
     const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
       method: "POST",

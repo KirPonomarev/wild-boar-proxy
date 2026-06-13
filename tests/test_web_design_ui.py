@@ -467,7 +467,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('fetch("api/codex/custom/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/custom/native-launch"', js)
         self.assertIn('const controller = typeof AbortController === "function" ? new AbortController() : null;', js)
-        self.assertIn('setTimeout(() => controller.abort(), 45000)', js)
+        self.assertIn("const CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS = 120000;", js)
+        self.assertIn(
+            "setTimeout(() => controller.abort(), CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS)",
+            js,
+        )
         self.assertIn('machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED"', js)
         self.assertIn("execution_mode: executionMode", js)
         self.assertIn("chatgpt_model_id: chatgptModelId", js)

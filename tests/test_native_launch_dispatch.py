@@ -455,6 +455,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     "browser_cdp_authority_widened": False,
                 },
                 profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
             )
 
         self.assertFalse(packet["native_window_usable"])
@@ -478,6 +479,287 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["raw_dom_exposed"])
         self.assertFalse(packet["raw_ax_tree_exposed"])
         self.assertFalse(packet["browser_cdp_authority_widened"])
+
+    def test_codex_desktop_auth_blocker_requires_current_launch_stderr_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            stale_stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stale_stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stale_stderr_path.write_text(
+                "\n".join(
+                    [
+                        "DevTools listening on ws://127.0.0.1:9223/devtools/browser/old",
+                        "Sign in to ChatGPT in Codex Desktop to check remote control authorization.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "cdp_renderer_input_surface_not_observed",
+                    "native_app_usability_source": "cdp_renderer_target_without_editable_surface",
+                    "cdp_localhost_only": True,
+                    "cdp_endpoint_redacted": True,
+                    "cdp_target_bound_to_custom_launch": True,
+                    "cdp_editable_surface_observed": False,
+                    "raw_dom_exposed": False,
+                    "raw_ax_tree_exposed": False,
+                    "browser_cdp_authority_widened": False,
+                },
+                profile_dir=profile_dir,
+            )
+
+        self.assertNotIn("codex_desktop_auth_blocker_observed", packet)
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "cdp_renderer_input_surface_not_observed",
+        )
+
+    def test_codex_desktop_auth_blocker_refines_missing_window_block_without_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "\n".join(
+                    [
+                        "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current",
+                        "Sign in to ChatGPT in Codex Desktop to check remote control authorization.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    "native_app_usability_source": "not_proven",
+                },
+                profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
+            )
+
+        self.assertFalse(packet["native_window_usable"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "codex_desktop_sign_in_required_for_renderer_surface",
+        )
+        self.assertEqual(
+            packet["renderer_surface_blocked_reason_class"],
+            "input_capable_window_not_proven_for_pid",
+        )
+        self.assertEqual(packet["native_app_usability_source"], "codex_desktop_auth_blocker")
+        self.assertTrue(packet["codex_desktop_auth_blocker_observed"])
+        self.assertTrue(packet["launcher_stderr_redacted"])
+
+    def test_codex_desktop_auth_blocker_has_specific_launch_machine_code(self) -> None:
+        machine_error_code = native_probe._custom_native_launch_blocked_machine_error(
+            launcher_failed_before_process=False,
+            process_started=True,
+            process_still_alive=True,
+            custom_window_visible=False,
+            native_app_usable=False,
+            desktop_auth_blocker=True,
+            renderer_surface_blocked_reason="input_capable_window_not_proven_for_pid",
+        )
+
+        self.assertEqual(
+            machine_error_code,
+            "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+        )
+
+    def test_codex_desktop_process_exit_beats_auth_blocker_machine_code(self) -> None:
+        machine_error_code = native_probe._custom_native_launch_blocked_machine_error(
+            launcher_failed_before_process=False,
+            process_started=True,
+            process_still_alive=False,
+            custom_window_visible=False,
+            native_app_usable=False,
+            desktop_auth_blocker=True,
+            renderer_surface_blocked_reason="input_capable_window_not_proven_for_pid",
+        )
+
+        self.assertEqual(
+            machine_error_code,
+            "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START",
+        )
+
+    def test_codex_desktop_process_exit_beats_auth_blocker_human_message(self) -> None:
+        human_message = native_probe._custom_native_launch_blocked_human_message(
+            launcher_failed_before_process=False,
+            process_started=True,
+            process_still_alive=False,
+            custom_window_visible=False,
+            native_app_usable=False,
+            desktop_auth_blocker=True,
+            renderer_surface_blocked_reason="input_capable_window_not_proven_for_pid",
+        )
+
+        self.assertIn("then exited", human_message)
+        self.assertNotIn("sign-in is required", human_message)
+
+    def test_codex_desktop_auth_blocker_detects_no_token_auth_401(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "\n".join(
+                    [
+                        "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current",
+                        '[electron-fetch-wrapper] desktop_fetch_auth_401 hadToken=false skipRetryReason=no_token_attached target="GET https://chatgpt.com/backend-api/wham/tasks/list"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            packet = native_probe._codex_desktop_auth_blocker_from_profile(
+                profile_dir,
+                launcher_stderr_path=stderr_path,
+            )
+
+        self.assertTrue(packet["codex_desktop_auth_blocker_observed"])
+        self.assertEqual(
+            packet["codex_desktop_auth_blocked_reason_class"],
+            "codex_desktop_sign_in_required_for_renderer_surface",
+        )
+        self.assertEqual(
+            packet["codex_desktop_auth_error_class"],
+            "codex_desktop_chatgpt_auth_token_missing",
+        )
+
+    def test_codex_desktop_auth_blocker_bounded_recheck_catches_late_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current\n",
+                encoding="utf-8",
+            )
+
+            def write_late_marker(_seconds: float) -> None:
+                stderr_path.write_text(
+                    "\n".join(
+                        [
+                            "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current",
+                            '[electron-fetch-wrapper] desktop_fetch_auth_401 hadToken=false skipRetryReason=no_token_attached target="GET https://chatgpt.com/backend-api/wham/tasks/list"',
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+            with mock.patch.object(native_probe.time, "sleep", side_effect=write_late_marker):
+                packet = native_probe._bounded_recheck_codex_desktop_auth_blocker(
+                    {
+                        "native_window_usable": False,
+                        "input_capable_ui_observed": False,
+                        "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                        "native_app_usability_source": "not_proven",
+                    },
+                    profile_dir=profile_dir,
+                    launcher_stderr_path=stderr_path,
+                )
+
+        self.assertTrue(packet["codex_desktop_auth_blocker_observed"])
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "codex_desktop_sign_in_required_for_renderer_surface",
+        )
+
+    def test_codex_desktop_auth_state_fallback_refines_missing_profile_auth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            (profile_dir / "home").mkdir(parents=True, exist_ok=True)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current\n",
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    "native_app_usability_source": "not_proven",
+                },
+                profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
+                allow_profile_auth_state_fallback=True,
+                profile_auth_state_fallback_allowed_by_current_launch=True,
+            )
+
+        self.assertTrue(packet["codex_desktop_auth_blocker_observed"])
+        self.assertEqual(
+            packet["codex_desktop_auth_error_class"],
+            "codex_desktop_custom_profile_chatgpt_auth_state_missing",
+        )
+        self.assertEqual(packet["native_app_usability_source"], "codex_desktop_auth_blocker")
+        self.assertTrue(packet["desktop_auth_state_path_redacted"])
+
+    def test_codex_desktop_auth_state_fallback_requires_current_launch_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            (profile_dir / "home").mkdir(parents=True, exist_ok=True)
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current\n",
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    "native_app_usability_source": "not_proven",
+                },
+                profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
+                allow_profile_auth_state_fallback=True,
+            )
+
+        self.assertNotIn("codex_desktop_auth_blocker_observed", packet)
+        self.assertEqual(packet["blocked_reason_class"], "input_capable_window_not_proven_for_pid")
+
+    def test_codex_desktop_auth_state_fallback_does_not_override_present_auth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            auth_path = (
+                profile_dir
+                / "home"
+                / "Library"
+                / "Application Support"
+                / "Codex"
+                / "auth.json"
+            )
+            auth_path.parent.mkdir(parents=True, exist_ok=True)
+            auth_path.write_text("{}", encoding="utf-8")
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current\n",
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    "native_app_usability_source": "not_proven",
+                },
+                profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
+                allow_profile_auth_state_fallback=True,
+                profile_auth_state_fallback_allowed_by_current_launch=True,
+            )
+
+        self.assertNotIn("codex_desktop_auth_blocker_observed", packet)
+        self.assertEqual(packet["blocked_reason_class"], "input_capable_window_not_proven_for_pid")
 
     def test_cdp_input_capable_blocks_when_debug_port_not_owned_by_pid(self) -> None:
         with mock.patch(
