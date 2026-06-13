@@ -56,6 +56,16 @@ from wild_boar_proxy.codex_account_selection import (
     build_accounts_truth_packet,
 )
 from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
+from wild_boar_proxy.custom_agent_bindings import (
+    API_ROUTE_LANE,
+    agent_bindings_state_path,
+    default_agent_bindings,
+    dry_run_agent_bindings_packet,
+    project_agent_bindings_for_runtime_context,
+    read_agent_bindings_packet,
+    resolve_alias_binding,
+    write_agent_bindings_packet,
+)
 from wild_boar_proxy.codex_model_registry import (
     API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
     API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
@@ -1203,6 +1213,7 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/codex/custom/api-action-gate"),
     _get_route("/api/codex/custom/accounts"),
     _get_route("/api/codex/custom/account-selection"),
+    _get_route("/api/codex/custom/agent-bindings"),
     _get_route("/api/codex/custom/sessions"),
     _get_route("/api/codex/custom/recovery/contract"),
     _get_route("/api/codex/custom/recovery/admitted-session-actions"),
@@ -1279,6 +1290,8 @@ WEB_DESIGN_LIVE_ROUTES = (
     _post_route("/api/codex/custom/model-dry-run", EFFECT_READ),
     _post_route("/api/codex/custom/model-selector-dry-run", EFFECT_READ),
     _post_route("/api/codex/custom/api-action-gate", EFFECT_PROBE),
+    _post_route("/api/codex/custom/agent-bindings/dry-run", EFFECT_PROBE),
+    _post_route("/api/codex/custom/agent-bindings", EFFECT_MUTATE),
     _post_route("/api/codex/custom/execution-mode-dry-run", EFFECT_READ),
     _post_route("/api/codex/custom/server-model-selection-truth", EFFECT_PROBE),
     _post_route("/api/codex/custom/quick-start/config-admission", EFFECT_PROBE),
@@ -2357,6 +2370,15 @@ def _primary_external_route_id(packet: dict[str, Any] | None) -> str:
     return str(enabled_routes[0].get("route_id") or "").strip()
 
 
+def _custom_agent_default_api_route_id(
+    route_records: list[dict[str, Any]],
+) -> str:
+    route_ids = [str(route.get("route_id") or "").strip() for route in route_records]
+    if CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID in route_ids:
+        return CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID
+    return route_ids[0] if route_ids else CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID
+
+
 def _json_object_or_empty(raw_bytes: bytes) -> dict[str, Any]:
     try:
         payload = json.loads(raw_bytes.decode("utf-8"))
@@ -2910,6 +2932,7 @@ def _custom_native_acceptance_blocked_packet(
         "context_metadata": context_metadata or {},
         "acceptance_smoke_proven": False,
         "file_bridge_acceptance_proven": False,
+        "agent_alias_route_acceptance_proven": False,
         "native_coder_slot_dispatch_proven": False,
         "runtime_readiness_claimed": False,
         "fallback_used": False,
@@ -2925,10 +2948,12 @@ def _custom_native_validate_acceptance_response(
     response_packet: dict[str, Any],
     request_id: str,
     expected_text: str,
+    expected_route_id: str | None = None,
     now: datetime | None = None,
 ) -> tuple[bool, list[str], dict[str, Any]]:
     current_time = now or datetime.now(timezone.utc)
     api_model_id = str(agent_runtime_context.get("api_model_id") or "")
+    route_id = str(expected_route_id or api_model_id or "")
     allowed_route_ids = [
         str(route_id)
         for route_id in agent_runtime_context.get("allowed_api_route_ids", [])
@@ -2958,11 +2983,13 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("agent_runtime_context_kind_mismatch")
     if agent_runtime_context.get("execution_mode") != "chatgpt_plus_api":
         blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
-    if api_model_id != CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID:
+    if agent_runtime_context.get("agent_bindings_status") not in {None, "", "ok"}:
+        blocking_reasons.append("agent_bindings_not_ok")
+    if route_id != CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID:
         blocking_reasons.append("api_model_id_not_acceptance_route")
-    if allowed_route_ids != [api_model_id]:
-        blocking_reasons.append("allowed_api_route_ids_not_exact")
-    if CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID in forbidden_stale_route_ids:
+    if route_id not in allowed_route_ids:
+        blocking_reasons.append("allowed_api_route_id_missing")
+    if route_id in forbidden_stale_route_ids:
         blocking_reasons.append("acceptance_route_forbidden")
     if "wbp-deepseek-v3" not in forbidden_stale_route_ids:
         blocking_reasons.append("stale_route_guard_missing")
@@ -2980,9 +3007,9 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("output_text_mismatch")
     if provider != "deepseek":
         blocking_reasons.append("provider_not_deepseek")
-    if requested_model != api_model_id:
+    if requested_model != route_id:
         blocking_reasons.append("requested_model_mismatch")
-    if response_model and response_model != api_model_id:
+    if response_model and response_model != route_id:
         blocking_reasons.append("response_model_mismatch")
     if response_packet.get("fallback_used") is not False:
         blocking_reasons.append("fallback_used")
@@ -2992,6 +3019,7 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("secret_value_exposed")
     return not blocking_reasons, blocking_reasons, {
         "api_model_id": api_model_id,
+        "expected_route_id": route_id,
         "allowed_api_route_ids": allowed_route_ids,
         "forbidden_stale_route_ids": sorted(forbidden_stale_route_ids),
         "requested_model": requested_model,
@@ -3012,7 +3040,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
-    forbidden_fields = sorted(set(payload) - {"expected_text", "request_id"})
+    forbidden_fields = sorted(set(payload) - {"alias", "expected_text", "request_id"})
     expected_text = str(
         payload.get("expected_text") or CUSTOM_GPT_PLUS_API_ACCEPTANCE_EXPECTED_TEXT
     ).strip()
@@ -3061,6 +3089,49 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             context_metadata=context_metadata,
         )
     api_model_id = str(context.get("api_model_id") or "")
+    alias = str(payload.get("alias") or "").strip()
+    alias_binding: dict[str, Any] = {}
+    expected_route_id = api_model_id
+    if alias:
+        alias_binding = resolve_alias_binding(
+            context.get("agent_bindings", [])
+            if isinstance(context.get("agent_bindings"), list)
+            else [],
+            alias,
+        )
+        if not alias_binding:
+            return _custom_native_acceptance_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_UNKNOWN",
+                human_message="Custom Codex agent alias is not present in runtime context bindings.",
+                expected_text=expected_text,
+                context_metadata=context_metadata,
+                blocking_reasons=["alias_unknown"],
+            ) | {"alias": alias}
+        if alias_binding.get("enabled") is not True:
+            return _custom_native_acceptance_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_DISABLED",
+                human_message="Custom Codex agent alias maps to a disabled binding.",
+                expected_text=expected_text,
+                context_metadata=context_metadata,
+                blocking_reasons=["alias_disabled"],
+            ) | {"alias": alias}
+        if alias_binding.get("lane") != API_ROUTE_LANE:
+            return _custom_native_acceptance_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_NOT_API_ROUTE",
+                human_message="Custom Codex acceptance smoke requires an API-route agent alias.",
+                expected_text=expected_text,
+                context_metadata=context_metadata,
+                blocking_reasons=["alias_not_api_route"],
+            ) | {"alias": alias}
+        expected_route_id = str(alias_binding.get("route_id") or "")
+        if not expected_route_id:
+            return _custom_native_acceptance_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_ROUTE_MISSING",
+                human_message="Custom Codex API-route alias has no route_id.",
+                expected_text=expected_text,
+                context_metadata=context_metadata,
+                blocking_reasons=["alias_route_missing"],
+            ) | {"alias": alias}
     request_id = str(payload.get("request_id") or f"wbp-acceptance-{uuid.uuid4().hex}")
     if not request_id or any(
         not (character.isalnum() or character in {"-", "_"})
@@ -3090,7 +3161,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
     request_payload = {
         "schema_version": 1,
         "request_id": request_id,
-        "model": api_model_id,
+        "model": expected_route_id,
         "input": f"Answer exactly one line: {expected_text}",
         "stream": False,
         "max_output_tokens": 32,
@@ -3135,6 +3206,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         response_packet=response_packet,
         request_id=request_id,
         expected_text=expected_text,
+        expected_route_id=expected_route_id,
         now=now,
     )
     if not proven:
@@ -3157,13 +3229,20 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         "status": "ok",
         "machine_error_code": "OK",
         "human_message": "Custom Codex GPT-plus-API file bridge acceptance smoke passed with exact DeepSeek response evidence.",
-        "final_status": "CUSTOM_CODEX_GPT_PLUS_API_FILE_BRIDGE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
+        "final_status": (
+            "CUSTOM_CODEX_AGENT_ALIAS_ROUTE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS"
+            if alias
+            else "CUSTOM_CODEX_GPT_PLUS_API_FILE_BRIDGE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS"
+        ),
         "request_id": request_id,
+        "alias": alias,
+        "agent_binding": alias_binding,
         "expected_text": expected_text,
         "context_metadata": context_metadata,
         "validation": validation,
         "acceptance_smoke_proven": True,
         "file_bridge_acceptance_proven": True,
+        "agent_alias_route_acceptance_proven": bool(alias),
         "custom_codex_agent_runtime_context_proven": True,
         "custom_codex_external_client_invocation_proven": False,
         "native_coder_slot_dispatch_proven": False,
@@ -6335,6 +6414,44 @@ def _custom_native_agent_runtime_context(
     file_bridge_worker = _CustomNativeFileBridgeWorker(
         bridge_root=_custom_native_file_bridge_root()
     )
+    coding_slot = packet.get("coding_agent_model_slot")
+    coding_provider = (
+        str(coding_slot.get("provider") or "")
+        if isinstance(coding_slot, dict)
+        else ""
+    )
+    route_records = (
+        [
+            {
+                "route_id": api_model_id,
+                "provider": coding_provider or "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "server_owned_redacted"},
+            }
+        ]
+        if api_model_id
+        else []
+    )
+    bindings_state_path = agent_bindings_state_path(RuntimePaths.from_env().managed_dir)
+    bindings_packet = read_agent_bindings_packet(
+        bindings_state_path,
+        default_bindings=default_agent_bindings(
+            primary_model_id=chatgpt_model_id,
+            api_route_id=api_model_id,
+        ),
+        primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
+        route_records=route_records,
+    )
+    bindings_projection = project_agent_bindings_for_runtime_context(
+        bindings_packet.get("agent_bindings", []),
+        route_records=route_records,
+    )
+    primary_aliases = bindings_projection.get("primary_aliases") or ["Codex", "Agent 1", "1"]
+    coding_aliases = bindings_projection.get("coding_aliases") or ["DIP", "Agent 2", "2"]
+    allowed_api_route_ids = bindings_projection.get("allowed_api_route_ids") or (
+        [api_model_id] if api_model_id else []
+    )
+    forbidden_stale_route_ids = bindings_projection.get("forbidden_stale_route_ids") or stale_route_ids
     python_executable = os.environ.get("WBP_PYTHON_BIN") or sys.executable or "python3"
     cli_args = [
         "external-models",
@@ -6357,14 +6474,28 @@ def _custom_native_agent_runtime_context(
         "native_free_text_activation_instruction_scope": "agent_runtime_context_only",
         "primary_model_slot": packet.get("primary_model_slot", {}),
         "coding_agent_model_slot": packet.get("coding_agent_model_slot", {}),
-        "primary_aliases": ["Codex", "Agent 1", "1"],
-        "coding_aliases": ["DIP", "Agent 2", "2"],
+        "agent_bindings_status": str(bindings_packet.get("status") or "unknown"),
+        "agent_bindings_machine_error_code": str(
+            bindings_packet.get("machine_error_code") or ""
+        ),
+        "agent_binding_truth_source": bindings_projection.get(
+            "agent_binding_truth_source"
+        ),
+        "agent_bindings": bindings_projection.get("agent_bindings", []),
+        "alias_to_agent_id": bindings_projection.get("alias_to_agent_id", {}),
+        "agent_id_to_route": bindings_projection.get("agent_id_to_route", {}),
+        "agent_id_to_model": bindings_projection.get("agent_id_to_model", {}),
+        "agent_binding_source": bindings_packet.get("source", ""),
+        "agent_binding_state_file_present": bindings_packet.get("state_file_present") is True,
+        "agent_binding_state_path_redacted": True,
+        "primary_aliases": primary_aliases,
+        "coding_aliases": coding_aliases,
         "primary_model_id": chatgpt_model_id,
         "coding_agent_model_id": api_model_id,
         "api_model_id": api_model_id,
         "route_model_id": route_model_id,
-        "allowed_api_route_ids": [api_model_id] if api_model_id else [],
-        "forbidden_stale_route_ids": stale_route_ids,
+        "allowed_api_route_ids": allowed_api_route_ids,
+        "forbidden_stale_route_ids": forbidden_stale_route_ids,
         "manual_probe_expected_text": "WBP_CHATGPT_PLUS_DEEPSEEK_OK",
         "deepseek_live_format_check_bridge": {
             "enabled": local_bridge_enabled,
@@ -11215,6 +11346,70 @@ def build_handler(
         packet = result.get("packet")
         return packet if isinstance(packet, dict) else None
 
+    def _custom_agent_binding_context() -> dict[str, Any]:
+        external_routes_packet = _external_routes_packet()
+        route_records = _enabled_external_route_records(external_routes_packet)
+        api_route_id = _custom_agent_default_api_route_id(route_records)
+        return {
+            "state_path": agent_bindings_state_path(owner_paths.managed_dir),
+            "default_bindings": default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=api_route_id,
+            ),
+            "primary_model_ids": [],
+            "route_records": route_records,
+            "external_routes_available": bool(route_records),
+        }
+
+    def _custom_agent_bindings_read_packet() -> dict[str, Any]:
+        context = _custom_agent_binding_context()
+        packet = read_agent_bindings_packet(
+            context["state_path"],
+            default_bindings=context["default_bindings"],
+            primary_model_ids=context["primary_model_ids"],
+            route_records=context["route_records"],
+        )
+        packet["external_routes_available"] = context["external_routes_available"]
+        return packet
+
+    def _custom_agent_bindings_dry_run_packet(payload: dict[str, Any]) -> dict[str, Any]:
+        context = _custom_agent_binding_context()
+        if context["external_routes_available"] is not True:
+            return {
+                "schema_version": 1,
+                "packet_kind": "codex_custom_agent_bindings",
+                "captured_at_utc": utc_now(),
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_AGENT_BINDINGS_ROUTE_REGISTRY_UNAVAILABLE",
+                "human_message": "Agent bindings require the server-owned external route registry before validation.",
+                "agent_bindings": [],
+                "agent_binding_count": 0,
+                "blocking_reasons": ["external_route_registry_unavailable"],
+                "browser_can_supply_route_authority": False,
+                "browser_backend_intake": False,
+                "browser_secret_intake": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "changed_files": [],
+                "next_action": "retry",
+            }
+        return dry_run_agent_bindings_packet(
+            payload,
+            primary_model_ids=context["primary_model_ids"],
+            route_records=context["route_records"],
+        )
+
+    def _custom_agent_bindings_write_packet(payload: dict[str, Any]) -> dict[str, Any]:
+        context = _custom_agent_binding_context()
+        if context["external_routes_available"] is not True:
+            return _custom_agent_bindings_dry_run_packet(payload) | {"dry_run": False}
+        return write_agent_bindings_packet(
+            context["state_path"],
+            payload,
+            primary_model_ids=context["primary_model_ids"],
+            route_records=context["route_records"],
+        )
+
     def build_rollback_point_create_admission_packet() -> dict[str, Any]:
         original_status = build_original_status_packet()
         custom_status = build_custom_status_packet(operator_surface_session.status_payload())
@@ -11765,6 +11960,11 @@ def build_handler(
                     operator_surface_session.status_payload(),
                 )
             )
+            return
+
+        def _handle_get_api_codex_custom_agent_bindings(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(_custom_agent_bindings_read_packet())
             return
 
         def _handle_get_api_codex_custom_sessions(self, request_path: str) -> None:
@@ -13028,6 +13228,14 @@ def build_handler(
                     api_snapshot=api_snapshot,
                 )
             self._send_json(packet)
+            return
+
+        def _handle_post_api_codex_custom_agent_bindings_dry_run(self, actual_path: str) -> None:
+            self._send_json(_custom_agent_bindings_dry_run_packet(self._read_json_body()))
+            return
+
+        def _handle_post_api_codex_custom_agent_bindings(self, actual_path: str) -> None:
+            self._send_json(_custom_agent_bindings_write_packet(self._read_json_body()))
             return
 
         def _handle_post_api_codex_custom_execution_mode_dry_run(self, actual_path: str) -> None:
