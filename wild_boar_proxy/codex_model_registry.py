@@ -56,13 +56,18 @@ CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER = (
 )
 API_ONLY_EXECUTOR_TRUTH_FINAL_STATUS = "API_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS"
 API_ONLY_EXECUTOR_TRUTH_BLOCKER = "STOP_AND_DIAGNOSE_API_ONLY_EXECUTOR_TRUTH_NOT_PROVEN"
-API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {"execution_mode", "api_model_id"}
+API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {
+    "execution_mode",
+    "api_model_id",
+    "api_reasoning_option_id",
+}
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
 CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_plus_api"
 CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = "api_only"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT = "API_ONLY_DEEPSEEK_READY"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT = (
-    "Верни короткий ответ: API_ONLY_DEEPSEEK_READY"
+    "Return exactly this single line, with no quotes and no extra text: "
+    "API_ONLY_DEEPSEEK_READY"
 )
 CUSTOM_CODEX_EXECUTION_MODES = {
     CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
@@ -2807,6 +2812,7 @@ def _live_format_result_packet(live_result: dict[str, Any] | None) -> dict[str, 
     retry_count = int(result.get("retry_count") or 0)
     expected_text_observed = result.get("expected_text_observed") is True
     response_shape = str(result.get("response_shape") or "")
+    thinking = result.get("thinking") if isinstance(result.get("thinking"), dict) else {}
     return {
         "packet_kind": "api_only_deepseek_live_route_format_result",
         "status": "ok" if request_count == 1 and expected_text_observed else "blocked",
@@ -2822,6 +2828,10 @@ def _live_format_result_packet(live_result: dict[str, Any] | None) -> dict[str, 
         "response_shape": response_shape,
         "response_profile": str(result.get("response_profile") or ""),
         "request_shape": str(result.get("request_shape") or ""),
+        "thinking": dict(thinking),
+        "api_parameter_sent": result.get("api_parameter_sent") is True,
+        "label_source": str(result.get("label_source") or ""),
+        "intelligence_measured": result.get("intelligence_measured") is True,
         "latency_ms": result.get("latency_ms"),
         "request_count": request_count,
         "retry_count": retry_count,
@@ -2837,6 +2847,20 @@ def _live_format_result_packet(live_result: dict[str, Any] | None) -> dict[str, 
         "codex_history_sent": result.get("codex_history_sent") is True,
         "repo_context_sent": result.get("repo_context_sent") is True,
     }
+
+
+def _api_reasoning_thinking_for_proof(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    thinking_type = str(value.get("type") or "").strip().lower()
+    if thinking_type == "disabled":
+        return {"type": "disabled"}
+    if thinking_type == "enabled":
+        effort = str(value.get("reasoning_effort") or "").strip().lower()
+        if not effort:
+            return {}
+        return {"type": "enabled", "reasoning_effort": effort}
+    return {}
 
 
 def build_api_only_deepseek_live_route_format_packet(
@@ -2929,7 +2953,7 @@ def build_api_only_deepseek_live_route_format_packet(
         "execution_mode"
     ) == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY
     deepseek_selected = _selection_targets_deepseek(api_selection)
-    live_ok = (
+    format_live_ok = (
         live_result_packet["provider_called"] is True
         and live_result_packet["expected_text_observed"] is True
         and live_result_packet["codex_compatible_response_shape"] is True
@@ -2940,6 +2964,55 @@ def build_api_only_deepseek_live_route_format_packet(
         and live_result_packet["state_written"] is False
         and live_result_packet["evidence_written"] is False
     )
+    selector_reasoning_packet = dict(
+        selector_packet.get("api_reasoning_option_packet") or {}
+    )
+    selector_provider_option = dict(
+        selector_reasoning_packet.get("provider_option") or {}
+    )
+    requested_reasoning_option = str(
+        selector_packet.get("api_reasoning_option_id") or ""
+    )
+    expected_thinking = _api_reasoning_thinking_for_proof(
+        selector_provider_option.get("thinking")
+    )
+    observed_thinking = _api_reasoning_thinking_for_proof(
+        live_result_packet["thinking"]
+    )
+    thinking_evidence_present = bool(observed_thinking)
+    provider_parameter_expected = (
+        selector_provider_option.get("api_parameter_sent") is True
+    )
+    reasoning_evidence_required = bool(
+        requested_reasoning_option
+        and requested_reasoning_option
+        != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+    ) or thinking_evidence_present or (
+        provider_parameter_expected and bool(expected_thinking)
+    )
+    reasoning_parameter_ok = (
+        not reasoning_evidence_required
+        or live_result_packet["api_parameter_sent"] is True
+    )
+    reasoning_thinking_ok = (
+        not reasoning_evidence_required
+        or not expected_thinking
+        or observed_thinking == expected_thinking
+    )
+    reasoning_measurement_ok = live_result_packet["intelligence_measured"] is not True
+    reasoning_live_ok = (
+        reasoning_parameter_ok
+        and reasoning_thinking_ok
+        and reasoning_measurement_ok
+    )
+    live_ok = format_live_ok and reasoning_live_ok
+    reasoning_blocking_reasons: list[str] = []
+    if not reasoning_parameter_ok:
+        reasoning_blocking_reasons.append("api_reasoning_parameter_not_sent")
+    if not reasoning_thinking_ok:
+        reasoning_blocking_reasons.append("api_reasoning_thinking_mismatch")
+    if not reasoning_measurement_ok:
+        reasoning_blocking_reasons.append("api_reasoning_intelligence_measured_claimed")
 
     status = "ok" if mode_ok and deepseek_selected and owner_authorized and live_ok else "blocked"
     machine_error_code = "OK"
@@ -2962,6 +3035,9 @@ def build_api_only_deepseek_live_route_format_packet(
             or "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE"
         )
         next_action = str(live_error.get("next_action") or "fix_deepseek_route_or_format")
+    elif not reasoning_live_ok:
+        machine_error_code = "API_ONLY_DEEPSEEK_REASONING_EVIDENCE_NOT_PROVEN"
+        next_action = "prove_selected_reasoning_parameter_and_thinking_reach_provider"
     elif not live_ok:
         machine_error_code = "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE"
         next_action = "fix_deepseek_route_or_response_format"
@@ -2983,6 +3059,34 @@ def build_api_only_deepseek_live_route_format_packet(
         "execution_mode": str(selector_packet.get("execution_mode") or ""),
         "api_provider_id": str((api_selection or {}).get("provider") or ""),
         "api_model_id": api_model_id,
+        "api_reasoning_option_id": requested_reasoning_option,
+        "api_reasoning_operator_level": str(
+            selector_packet.get("api_reasoning_operator_level") or ""
+        ),
+        "api_reasoning_option_model_bound": (
+            selector_reasoning_packet.get("status") == "ok"
+        ),
+        "api_reasoning_option_server_validated": (
+            selector_reasoning_packet.get("status") == "ok"
+        ),
+        "api_reasoning_option_provider_parameter_sent": (
+            live_result_packet["api_parameter_sent"] is True
+        ),
+        "api_reasoning_provider_parameter_expected": provider_parameter_expected,
+        "api_reasoning_live_evidence_required": reasoning_evidence_required,
+        "api_reasoning_live_evidence_proven": reasoning_live_ok and format_live_ok,
+        "api_reasoning_expected_thinking": expected_thinking,
+        "api_reasoning_observed_thinking": observed_thinking,
+        "api_reasoning_thinking_matched": reasoning_thinking_ok,
+        "api_reasoning_blocking_reasons": reasoning_blocking_reasons,
+        "api_reasoning_option_runtime_mutation_claimed": (
+            selector_packet.get("api_reasoning_option_runtime_mutation_claimed") is True
+        ),
+        "api_reasoning_intelligence_measured": (
+            live_result_packet["intelligence_measured"] is True
+        ),
+        "thinking": live_result_packet["thinking"],
+        "api_reasoning_label_source": live_result_packet["label_source"],
         "api_model_family": "deepseek" if deepseek_selected else "unknown",
         "server_issued_catalog_used": selector_packet.get("server_issued_catalog_used") is True,
         "deepseek_selected_from_server_catalog": deepseek_selected

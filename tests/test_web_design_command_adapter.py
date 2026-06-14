@@ -529,7 +529,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_live_format_check",
             structured_args={
                 "route_id": "wbp-deepseek-v3",
-                "prompt": "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "prompt": "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "expected_text": "API_ONLY_DEEPSEEK_READY",
             },
         )
@@ -570,7 +570,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                     "--route",
                     "wbp-deepseek-v3",
                     "--prompt",
-                    "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                    "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                     "--expected-text",
                     "API_ONLY_DEEPSEEK_READY",
                     "--json",

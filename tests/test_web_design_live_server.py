@@ -637,6 +637,358 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         "CUSTOM_CODEX_AGENT_ALIAS_ROUTE_ACCEPTANCE_SMOKE_PROVEN_WITH_LIMITS",
                     )
 
+    def test_custom_native_acceptance_smoke_proves_reasoning_parameter_from_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "agent_bindings_status": "ok",
+                "agent_bindings": live_server.default_agent_bindings(
+                    primary_model_id="gpt-5.5",
+                    api_route_id="wbp-deepseek-chat",
+                ),
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "api_reasoning_option_id": "provider_declared_max",
+                "api_reasoning_option_packet": {
+                    "option_id": "provider_declared_max",
+                    "provider_option": {
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    },
+                },
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": False,
+                            "output_text": "WBP_REASONING_ACCEPTANCE_OK",
+                            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                            "api_parameter_sent": True,
+                            "max_tokens_sent": 2048,
+                            "intelligence_measured": False,
+                            "label_source": "provider_declared_plus_operator_mapping",
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "alias": "DIP",
+                        "request_id": "acceptance-reasoning-ok",
+                        "expected_text": "WBP_REASONING_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
+        self.assertTrue(packet["api_reasoning_evidence_required"])
+        self.assertTrue(packet["api_reasoning_parameter_sent"])
+        self.assertFalse(packet["api_reasoning_intelligence_measured"])
+        self.assertEqual(packet["thinking"], {"type": "enabled", "reasoning_effort": "max"})
+
+    def test_custom_native_acceptance_smoke_blocks_reasoning_false_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "agent_bindings_status": "ok",
+                "agent_bindings": live_server.default_agent_bindings(
+                    primary_model_id="gpt-5.5",
+                    api_route_id="wbp-deepseek-chat",
+                ),
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "api_reasoning_option_id": "provider_declared_max",
+                "api_reasoning_option_packet": {
+                    "option_id": "provider_declared_max",
+                    "provider_option": {
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    },
+                },
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": False,
+                            "output_text": "WBP_REASONING_ACCEPTANCE_OK",
+                            "thinking": {"type": "enabled", "reasoning_effort": "high"},
+                            "api_parameter_sent": False,
+                            "intelligence_measured": True,
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "alias": "DIP",
+                        "request_id": "acceptance-reasoning-bad",
+                        "expected_text": "WBP_REASONING_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_ACCEPTANCE_SMOKE_CONTRACT_MISMATCH",
+        )
+        self.assertIn("api_reasoning_parameter_not_sent", packet["blocking_reasons"])
+        self.assertIn("api_reasoning_thinking_mismatch", packet["blocking_reasons"])
+        self.assertIn(
+            "api_reasoning_intelligence_measured_claimed",
+            packet["blocking_reasons"],
+        )
+
+    def test_custom_native_agent_alias_acceptance_matrix_proves_custom_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            agent_bindings = [
+                {
+                    "agent_id": "planner",
+                    "display_name": "Теркистратор",
+                    "role": "orchestrator",
+                    "aliases": ["Теркистратор", "Planner", "1"],
+                    "lane": "primary_chatgpt",
+                    "model_id": "gpt-5.5",
+                    "enabled": True,
+                    "allowed_actions": ["plan", "inspect"],
+                },
+                {
+                    "agent_id": "builder",
+                    "display_name": "Агент Кузнец",
+                    "role": "coding_agent",
+                    "aliases": ["Агент Кузнец", "Builder", "2"],
+                    "lane": live_server.API_ROUTE_LANE,
+                    "route_id": "wbp-deepseek-v4-pro-max",
+                    "enabled": True,
+                    "allowed_actions": ["implementation_help"],
+                },
+            ]
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "agent_bindings_status": "ok",
+                "agent_bindings": agent_bindings,
+                "primary_aliases": ["Теркистратор", "Planner", "1"],
+                "coding_aliases": ["Агент Кузнец", "Builder", "2"],
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "allowed_api_route_ids": ["wbp-deepseek-v4-pro-max"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "api_reasoning_option_id": "provider_declared_max",
+                "api_reasoning_option_packet": {
+                    "option_id": "provider_declared_max",
+                    "provider_option": {
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    },
+                },
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-v4-pro-max",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-v4-pro-max",
+                            "fallback_used": False,
+                            "output_text": "WBP_AGENT_ALIAS_MATRIX_OK",
+                            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                            "api_parameter_sent": True,
+                            "intelligence_measured": False,
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(
+                live_server,
+                "proxyless_urlopen",
+                return_value=FakeBridgeResponse(),
+            ) as urlopen:
+                packet = live_server._custom_native_agent_alias_acceptance_matrix_packet(
+                    payload={"request_id_prefix": "matrix-custom"},
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["acceptance_matrix_proven"])
+        self.assertTrue(packet["all_coding_aliases_route_acceptance_proven"])
+        self.assertTrue(packet["primary_aliases_rejected_as_api_route"])
+        self.assertTrue(packet["api_reasoning_evidence_required"])
+        self.assertTrue(packet["api_reasoning_parameter_sent"])
+        self.assertEqual(packet["coding_alias_count"], 3)
+        self.assertEqual(packet["primary_alias_count"], 3)
+        self.assertEqual(packet["provider_call_count"], 3)
+        self.assertEqual(urlopen.call_count, 3)
+        self.assertFalse(packet["native_free_text_activation_proven"])
+        self.assertTrue(packet["does_not_prove_native_free_text_tool_bridge"])
+
+    def test_custom_native_agent_alias_acceptance_matrix_blocks_invalid_inputs_before_provider_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            empty_coding_context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "agent_bindings_status": "ok",
+                "primary_aliases": ["Codex"],
+                "coding_aliases": [],
+                "agent_bindings": live_server.default_agent_bindings(
+                    primary_model_id="gpt-5.5",
+                    api_route_id="wbp-deepseek-chat",
+                ),
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+            }
+
+            with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                forbidden = live_server._custom_native_agent_alias_acceptance_matrix_packet(
+                    payload={"expected_text": "OK", "route_id": "browser-route"},
+                    file_bridge_worker=worker,
+                    agent_runtime_context=empty_coding_context,
+                    timeout_seconds=0.1,
+                )
+                empty_expected = live_server._custom_native_agent_alias_acceptance_matrix_packet(
+                    payload={"expected_text": ""},
+                    file_bridge_worker=worker,
+                    agent_runtime_context=empty_coding_context,
+                    timeout_seconds=0.1,
+                )
+                empty_coding = live_server._custom_native_agent_alias_acceptance_matrix_packet(
+                    payload={"expected_text": "OK"},
+                    file_bridge_worker=worker,
+                    agent_runtime_context=empty_coding_context,
+                    timeout_seconds=0.1,
+                )
+                with mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[Path(temp_dir) / "missing-context.json"],
+                ):
+                    missing_context = live_server._custom_native_agent_alias_acceptance_matrix_packet(
+                        payload={"expected_text": "OK"},
+                        file_bridge_worker=worker,
+                        agent_runtime_context=None,
+                        last_launch_packet={},
+                        timeout_seconds=0.1,
+                    )
+
+        self.assertEqual(forbidden["status"], "blocked")
+        self.assertEqual(
+            forbidden["machine_error_code"],
+            "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_FORBIDDEN_FIELD",
+        )
+        self.assertIn("route_id", forbidden["blocking_reasons"])
+
+        self.assertEqual(empty_expected["status"], "blocked")
+        self.assertEqual(
+            empty_expected["machine_error_code"],
+            "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_EXPECTED_TEXT_REQUIRED",
+        )
+        self.assertIn("expected_text_required", empty_expected["blocking_reasons"])
+
+        self.assertEqual(empty_coding["status"], "blocked")
+        self.assertEqual(
+            empty_coding["machine_error_code"],
+            "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_CODING_ALIASES_EMPTY",
+        )
+        self.assertIn("coding_aliases_empty", empty_coding["blocking_reasons"])
+
+        self.assertEqual(missing_context["status"], "blocked")
+        self.assertEqual(
+            missing_context["machine_error_code"],
+            "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING",
+        )
+        self.assertIn("agent_runtime_context_missing", missing_context["blocking_reasons"])
+        urlopen.assert_not_called()
+
     def test_custom_native_acceptance_smoke_blocks_unknown_alias_before_provider_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             worker = live_server._CustomNativeFileBridgeWorker(
@@ -807,7 +1159,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
             packet["machine_error_code"],
             "CUSTOM_CODEX_ACCEPTANCE_SMOKE_CONTRACT_MISMATCH",
         )
-        self.assertIn("api_model_id_not_acceptance_route", packet["blocking_reasons"])
         self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
         self.assertFalse(packet["acceptance_smoke_proven"])
 
@@ -997,6 +1348,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "execution_mode": "chatgpt_plus_api",
                 "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-chat",
+                "api_reasoning_option_id": "provider_declared_max",
+                "api_reasoning_operator_level": "max",
+                "api_reasoning_supported_operator_levels": ["fast", "high", "max"],
+                "api_reasoning_option_packet": {
+                    "option_id": "provider_declared_max",
+                    "provider_option": {
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                    },
+                },
                 "primary_model_slot": {
                     "status": "bound",
                     "lane": live_server.CODEX_ACCOUNT_MODEL_LANE,
@@ -1025,6 +1386,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(context["agent_id_to_route"]["dip"], "wbp-deepseek-chat")
         self.assertEqual(context["coding_aliases"], ["Builder", "DIP"])
         self.assertEqual(context["allowed_api_route_ids"], ["wbp-deepseek-chat"])
+        self.assertEqual(context["api_reasoning_option_id"], "provider_declared_max")
+        self.assertEqual(context["api_reasoning_operator_level"], "max")
+        self.assertEqual(
+            context["api_reasoning_supported_operator_levels"],
+            ["fast", "high", "max"],
+        )
+        self.assertEqual(
+            context["api_reasoning_option_packet"]["provider_option"]["thinking"],
+            {"type": "enabled", "reasoning_effort": "max"},
+        )
         self.assertEqual(context["forbidden_stale_route_ids"], ["wbp-deepseek-v3"])
         self.assertFalse(context["browser_can_supply_route_authority"])
         self.assertFalse(context["secret_value_exposed"])
@@ -2141,7 +2512,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "--route",
                 "wbp-deepseek-v3",
                 "--prompt",
-                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "--expected-text",
                 "API_ONLY_DEEPSEEK_READY",
                 "--json",
@@ -6926,7 +7297,7 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
             "--route",
             "wbp-deepseek-v3",
             "--prompt",
-            "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+            "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
             "--expected-text",
             "API_ONLY_DEEPSEEK_READY",
             "--json",
@@ -6968,6 +7339,10 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 "request_shape": "messages",
                 "response_profile": "openai_chat_choices",
                 "response_shape": "choices_message",
+                "thinking": {"type": "disabled"},
+                "api_parameter_sent": True,
+                "label_source": "provider_declared_plus_operator_mapping",
+                "intelligence_measured": False,
             },
         ),
         ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"): command_packet(
@@ -10435,6 +10810,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "owner_authorization_phrase",
                 "keep_running_on_window_observed",
                 "reuse_existing_window_if_present",
+                "agent_runtime_context",
             },
         )
         self.assertTrue(kwargs["keep_running_on_window_observed"])
@@ -10449,6 +10825,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertNotIn("base_url", kwargs)
         self.assertNotIn("secret_ref", kwargs)
         self.assertNotIn("CODEX_HOME", kwargs)
+        agent_runtime_context = kwargs["agent_runtime_context"]
+        self.assertEqual(agent_runtime_context["api_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(agent_runtime_context["api_reasoning_option_id"], "provider_declared_max")
+        self.assertEqual(agent_runtime_context["api_reasoning_operator_level"], "max")
+        self.assertEqual(
+            agent_runtime_context["api_reasoning_option_packet"]["provider_option"]["thinking"],
+            {"type": "enabled", "reasoning_effort": "max"},
+        )
+        self.assertFalse(agent_runtime_context["secret_value_exposed"])
         status_payload.assert_called()
         self.assertEqual(runner.calls, [("external-models", "routes", "list", "--json")])
 
@@ -19420,7 +19805,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 "--route",
                 "wbp-deepseek-v3",
                 "--prompt",
-                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "--expected-text",
                 "API_ONLY_DEEPSEEK_READY",
                 "--json",
@@ -19488,7 +19873,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 "--route",
                 "wbp-deepseek-v3",
                 "--prompt",
-                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "--expected-text",
                 "API_ONLY_DEEPSEEK_READY",
                 "--json",
@@ -19499,6 +19884,237 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
             runner.calls,
         )
+
+    def test_codex_custom_api_only_deepseek_live_format_proves_reasoning_parameter(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        payloads = live_payloads()
+        route_packet = routes_list_packet(route_id)
+        route_packet["data"]["routes"][0].update(  # type: ignore[index]
+            {
+                "display_name": "DeepSeek V4 Pro Max",
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            }
+        )
+        payloads[("external-models", "routes", "list", "--json")] = route_packet
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": route_id,
+                        "display_name": "DeepSeek V4 Pro Max",
+                        "provider": "deepseek",
+                        "base_url": "http://127.0.0.1:54321/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        )
+        live_format_call = (
+            "external-models",
+            "live-format-check",
+            "--route",
+            route_id,
+            "--prompt",
+            "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
+            "--expected-text",
+            "API_ONLY_DEEPSEEK_READY",
+            "--json",
+        )
+        payloads[live_format_call] = command_packet(
+            human_message=(
+                "External-models route live format check captured one provider response "
+                "without writing state or evidence."
+            ),
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            data={
+                "check_kind": "api_only_live_route_format",
+                "network_dependent": True,
+                "verification_scope": "route_provider_only_no_write",
+                "route_state": "live_response_observed_no_write",
+                "requested_model": route_id,
+                "effective_model": "deepseek-v4-pro",
+                "provider": "deepseek",
+                "fallback_used": False,
+                "fallback_chain": [route_id],
+                "cost_class": "paid_or_free_limited",
+                "latency_ms": 21,
+                "request_count": 1,
+                "retry_count": 0,
+                "parallel_fanout_attempted": False,
+                "expected_text": "API_ONLY_DEEPSEEK_READY",
+                "expected_text_observed": True,
+                "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+                "response_text_length": 23,
+                "changed_files": [],
+                "state_written": False,
+                "evidence_written": False,
+                "file_mutation_attempted": False,
+                "commands_started_by_provider": False,
+                "codex_history_sent": False,
+                "repo_context_sent": False,
+                "request_shape": "openai_chat_messages",
+                "response_profile": "openai_chat_choices_message",
+                "response_shape": "choices_message",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                "api_parameter_sent": True,
+                "label_source": "provider_declared_plus_operator_mapping",
+                "intelligence_measured": False,
+            },
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": route_id,
+                            "api_reasoning_option_id": "provider_declared_max",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
+        self.assertEqual(packet["api_reasoning_operator_level"], "max")
+        self.assertTrue(packet["api_reasoning_option_server_validated"])
+        self.assertTrue(packet["api_reasoning_option_provider_parameter_sent"])
+        self.assertTrue(packet["api_reasoning_live_evidence_required"])
+        self.assertTrue(packet["api_reasoning_live_evidence_proven"])
+        self.assertFalse(packet["api_reasoning_intelligence_measured"])
+        self.assertEqual(packet["thinking"], {"type": "enabled", "reasoning_effort": "max"})
+        self.assertIn(live_format_call, runner.calls)
+
+    def test_codex_custom_api_only_deepseek_live_format_blocks_mismatched_reasoning_before_provider_call(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        payloads = live_payloads()
+        route_packet = routes_list_packet(route_id)
+        route_packet["data"]["routes"][0].update(  # type: ignore[index]
+            {
+                "display_name": "DeepSeek V4 Pro Max",
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            }
+        )
+        payloads[("external-models", "routes", "list", "--json")] = route_packet
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": route_id,
+                        "display_name": "DeepSeek V4 Pro Max",
+                        "provider": "deepseek",
+                        "base_url": "http://127.0.0.1:54321/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-v4-pro",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        )
+        live_format_call = (
+            "external-models",
+            "live-format-check",
+            "--route",
+            route_id,
+            "--prompt",
+            "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
+            "--expected-text",
+            "API_ONLY_DEEPSEEK_READY",
+            "--json",
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/api-only-deepseek/live-format",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": route_id,
+                            "api_reasoning_option_id": "provider_declared_high",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_API_REASONING_OPTION_NOT_BACKED_BY_SELECTED_MODEL",
+        )
+        self.assertFalse(packet["api_line_selected_as_executor"])
+        self.assertFalse(packet["provider_called"])
+        self.assertNotIn(live_format_call, runner.calls)
 
     def test_codex_custom_api_only_deepseek_live_format_rejects_raw_browser_fields(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -19550,7 +20166,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 "--route",
                 "wbp-deepseek-v3",
                 "--prompt",
-                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "--expected-text",
                 "API_ONLY_DEEPSEEK_READY",
                 "--json",

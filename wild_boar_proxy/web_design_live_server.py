@@ -23,7 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from threading import RLock, Thread
+from threading import Event, RLock, Thread
 from typing import Any, Callable
 import urllib.error
 import urllib.request
@@ -71,6 +71,7 @@ from wild_boar_proxy.codex_model_registry import (
     API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
+    CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
     build_api_only_deepseek_live_route_format_packet,
     build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
@@ -1278,6 +1279,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     ),
     _post_route(
         "/api/codex/custom/chatgpt-plus-api-acceptance-smoke",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/agent-alias-acceptance-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -2643,6 +2649,7 @@ class _CustomNativeFileBridgeWorker:
         self.response_dir = bridge_root / "responses"
         self.processed_dir = bridge_root / "processed"
         self._lock = RLock()
+        self._poll_event = Event()
         self._bridge_endpoint = ""
         self._thread: Thread | None = None
 
@@ -2732,7 +2739,7 @@ class _CustomNativeFileBridgeWorker:
                 self._process_once()
             except Exception:
                 pass
-            time.sleep(self.poll_interval_seconds)
+            self._poll_event.wait(self.poll_interval_seconds)
 
     def _process_once(self) -> None:
         for request_path in sorted(self.request_dir.glob("*.json")):
@@ -2810,6 +2817,11 @@ class _CustomNativeFileBridgeWorker:
                 human_message="Server-owned file bridge received invalid provider JSON.",
             )
         output_text = str(provider_packet.get("output_text") or "")
+        thinking = (
+            provider_packet.get("thinking")
+            if isinstance(provider_packet.get("thinking"), dict)
+            else {}
+        )
         ok = (
             200 <= status_code < 300
             and str(provider_packet.get("status") or "") == "completed"
@@ -2830,6 +2842,11 @@ class _CustomNativeFileBridgeWorker:
             "requested_model": str(provider_packet.get("requested_model") or ""),
             "fallback_used": bool(provider_packet.get("fallback_used")),
             "output_text": output_text,
+            "thinking": dict(thinking),
+            "api_parameter_sent": provider_packet.get("api_parameter_sent") is True,
+            "max_tokens_sent": int(provider_packet.get("max_tokens_sent") or 0),
+            "intelligence_measured": provider_packet.get("intelligence_measured") is True,
+            "label_source": str(provider_packet.get("label_source") or ""),
             "response_text_field": "output_text",
             "raw_backend_details_exposed": False,
             "secret_value_exposed": False,
@@ -2990,6 +3007,37 @@ def _custom_native_validate_acceptance_response(
     requested_model = str(response_packet.get("requested_model") or "")
     response_model = str(response_packet.get("model") or "")
     provider = str(response_packet.get("provider") or "").lower()
+    reasoning_packet = (
+        agent_runtime_context.get("api_reasoning_option_packet")
+        if isinstance(agent_runtime_context.get("api_reasoning_option_packet"), dict)
+        else {}
+    )
+    provider_option = (
+        reasoning_packet.get("provider_option")
+        if isinstance(reasoning_packet.get("provider_option"), dict)
+        else {}
+    )
+    expected_thinking = (
+        provider_option.get("thinking")
+        if isinstance(provider_option.get("thinking"), dict)
+        else {}
+    )
+    response_thinking = (
+        response_packet.get("thinking")
+        if isinstance(response_packet.get("thinking"), dict)
+        else {}
+    )
+    reasoning_option_id = str(
+        agent_runtime_context.get("api_reasoning_option_id")
+        or reasoning_packet.get("option_id")
+        or ""
+    )
+    reasoning_evidence_required = bool(
+        reasoning_option_id
+        and reasoning_option_id != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        and expected_thinking
+        and expected_thinking.get("type") != "unconfigured"
+    )
     blocking_reasons: list[str] = []
     if agent_runtime_context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
         blocking_reasons.append("agent_runtime_context_kind_mismatch")
@@ -2997,8 +3045,6 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("execution_mode_not_chatgpt_plus_api")
     if agent_runtime_context.get("agent_bindings_status") not in {None, "", "ok"}:
         blocking_reasons.append("agent_bindings_not_ok")
-    if route_id != CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID:
-        blocking_reasons.append("api_model_id_not_acceptance_route")
     if route_id not in allowed_route_ids:
         blocking_reasons.append("allowed_api_route_id_missing")
     if route_id in forbidden_stale_route_ids:
@@ -3029,6 +3075,13 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("raw_backend_details_exposed")
     if response_packet.get("secret_value_exposed") is True:
         blocking_reasons.append("secret_value_exposed")
+    if reasoning_evidence_required:
+        if response_packet.get("api_parameter_sent") is not True:
+            blocking_reasons.append("api_reasoning_parameter_not_sent")
+        if response_thinking != expected_thinking:
+            blocking_reasons.append("api_reasoning_thinking_mismatch")
+    if response_packet.get("intelligence_measured") is True:
+        blocking_reasons.append("api_reasoning_intelligence_measured_claimed")
     return not blocking_reasons, blocking_reasons, {
         "api_model_id": api_model_id,
         "expected_route_id": route_id,
@@ -3038,6 +3091,14 @@ def _custom_native_validate_acceptance_response(
         "provider": provider,
         "response_age_seconds": response_age_seconds,
         "freshness_window_seconds": CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS,
+        "api_reasoning_option_id": reasoning_option_id,
+        "api_reasoning_evidence_required": reasoning_evidence_required,
+        "expected_thinking": dict(expected_thinking),
+        "response_thinking": dict(response_thinking),
+        "api_reasoning_parameter_sent": response_packet.get("api_parameter_sent") is True,
+        "api_reasoning_intelligence_measured": (
+            response_packet.get("intelligence_measured") is True
+        ),
     }
 
 
@@ -3261,10 +3322,214 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         "runtime_readiness_claimed": False,
         "provider": validation["provider"],
         "requested_model": validation["requested_model"],
+        "api_reasoning_option_id": validation["api_reasoning_option_id"],
+        "api_reasoning_evidence_required": validation[
+            "api_reasoning_evidence_required"
+        ],
+        "api_reasoning_parameter_sent": validation["api_reasoning_parameter_sent"],
+        "api_reasoning_intelligence_measured": validation[
+            "api_reasoning_intelligence_measured"
+        ],
+        "thinking": validation["response_thinking"],
         "fallback_used": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
         "next_action": "none",
+    }
+
+
+def _custom_native_agent_alias_acceptance_matrix_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    timeout_seconds: float = 10.0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(set(payload) - {"expected_text", "request_id_prefix"})
+    expected_text = (
+        str(payload.get("expected_text") or "").strip()
+        if "expected_text" in payload
+        else "WBP_AGENT_ALIAS_MATRIX_OK"
+    )
+    raw_prefix = str(payload.get("request_id_prefix") or "wbp-agent-alias-matrix")
+    request_id_prefix = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "-"
+        for character in raw_prefix.strip()
+    ).strip("-_")[:48]
+    request_id_prefix = request_id_prefix or "wbp-agent-alias-matrix"
+    if forbidden_fields:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_FORBIDDEN_FIELD",
+            "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+            "blocking_reasons": forbidden_fields,
+            "acceptance_matrix_proven": False,
+            "next_action": "remove_forbidden_fields",
+        }
+    if not expected_text:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_EXPECTED_TEXT_REQUIRED",
+            "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+            "blocking_reasons": ["expected_text_required"],
+            "acceptance_matrix_proven": False,
+            "next_action": "provide_expected_text",
+        }
+    context_metadata: dict[str, Any] = {
+        "status": "provided",
+        "machine_error_code": "OK",
+        "context_path_redacted": True,
+    }
+    context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
+    if context is None:
+        context, context_metadata = _load_custom_native_agent_runtime_context(
+            last_launch_packet
+        )
+    if not context:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": str(
+                context_metadata.get("machine_error_code")
+                or "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
+            ),
+            "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+            "context_metadata": context_metadata,
+            "blocking_reasons": ["agent_runtime_context_missing"],
+            "acceptance_matrix_proven": False,
+            "next_action": "stop_and_diagnose_alias_matrix",
+        }
+    coding_aliases = [
+        str(alias)
+        for alias in context.get("coding_aliases", [])
+        if str(alias).strip()
+    ]
+    primary_aliases = [
+        str(alias)
+        for alias in context.get("primary_aliases", [])
+        if str(alias).strip()
+    ]
+    if not coding_aliases:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_CODING_ALIASES_EMPTY",
+            "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+            "context_metadata": context_metadata,
+            "blocking_reasons": ["coding_aliases_empty"],
+            "acceptance_matrix_proven": False,
+            "custom_codex_agent_runtime_context_proven": True,
+            "next_action": "repair_agent_bindings",
+        }
+    suffix = uuid.uuid4().hex[:8]
+    coding_results: list[dict[str, Any]] = []
+    for index, alias in enumerate(coding_aliases, start=1):
+        coding_results.append(
+            _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                payload={
+                    "alias": alias,
+                    "expected_text": expected_text,
+                    "request_id": f"{request_id_prefix}-coding-{index}-{suffix}",
+                },
+                file_bridge_worker=file_bridge_worker,
+                agent_runtime_context=context,
+                bridge_endpoint=bridge_endpoint,
+                timeout_seconds=timeout_seconds,
+                now=now,
+            )
+        )
+    primary_results: list[dict[str, Any]] = []
+    for index, alias in enumerate(primary_aliases, start=1):
+        primary_results.append(
+            _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                payload={
+                    "alias": alias,
+                    "expected_text": expected_text,
+                    "request_id": f"{request_id_prefix}-primary-{index}-{suffix}",
+                },
+                file_bridge_worker=file_bridge_worker,
+                agent_runtime_context=context,
+                bridge_endpoint=bridge_endpoint,
+                timeout_seconds=timeout_seconds,
+                now=now,
+            )
+        )
+    coding_ok = all(result.get("status") == "ok" for result in coding_results)
+    primary_ok = bool(primary_results) and all(
+        result.get("status") == "blocked"
+        and result.get("machine_error_code") == "CUSTOM_CODEX_AGENT_ALIAS_NOT_API_ROUTE"
+        for result in primary_results
+    )
+    reasoning_evidence_required = any(
+        result.get("api_reasoning_evidence_required") is True
+        for result in coding_results
+    )
+    reasoning_parameter_sent = (
+        not reasoning_evidence_required
+        or all(result.get("api_reasoning_parameter_sent") is True for result in coding_results)
+    )
+    matrix_ok = coding_ok and primary_ok and reasoning_parameter_sent
+    blocking_reasons: list[str] = []
+    if not coding_ok:
+        blocking_reasons.append("coding_alias_acceptance_failed")
+    if not primary_ok:
+        blocking_reasons.append("primary_alias_api_route_guard_failed")
+    if not reasoning_parameter_sent:
+        blocking_reasons.append("api_reasoning_parameter_not_sent")
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if matrix_ok else "blocked",
+        "machine_error_code": "OK"
+        if matrix_ok
+        else "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+        "final_status": (
+            "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_PROVEN_WITH_LIMITS"
+            if matrix_ok
+            else "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN"
+        ),
+        "expected_text": expected_text,
+        "context_metadata": context_metadata,
+        "acceptance_matrix_proven": matrix_ok,
+        "all_coding_aliases_route_acceptance_proven": coding_ok,
+        "primary_aliases_rejected_as_api_route": primary_ok,
+        "custom_codex_agent_runtime_context_proven": True,
+        "file_bridge_acceptance_proven": coding_ok,
+        "agent_alias_route_acceptance_proven": coding_ok,
+        "api_reasoning_evidence_required": reasoning_evidence_required,
+        "api_reasoning_parameter_sent": reasoning_parameter_sent,
+        "native_free_text_activation_proven": False,
+        "native_free_text_tool_bridge_proven": False,
+        "does_not_prove_native_free_text_tool_bridge": True,
+        "custom_codex_external_client_invocation_proven": False,
+        "native_coder_slot_dispatch_proven": False,
+        "runtime_readiness_claimed": False,
+        "coding_alias_count": len(coding_aliases),
+        "primary_alias_count": len(primary_aliases),
+        "provider_call_count": sum(
+            1 for result in coding_results if result.get("provider") == "deepseek"
+        ),
+        "coding_results": coding_results,
+        "primary_guard_results": primary_results,
+        "blocking_reasons": blocking_reasons,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": "none" if matrix_ok else "stop_and_diagnose_alias_matrix",
     }
 
 
@@ -6568,6 +6833,28 @@ def _custom_native_agent_runtime_context(
         "primary_model_id": chatgpt_model_id,
         "coding_agent_model_id": api_model_id,
         "api_model_id": api_model_id,
+        "api_reasoning_option_id": str(packet.get("api_reasoning_option_id") or ""),
+        "api_reasoning_operator_level": str(
+            packet.get("api_reasoning_operator_level") or ""
+        ),
+        "api_reasoning_supported_operator_levels": [
+            str(level)
+            for level in packet.get("api_reasoning_supported_operator_levels") or []
+        ],
+        "api_reasoning_option_packet": (
+            packet.get("api_reasoning_option_packet")
+            if isinstance(packet.get("api_reasoning_option_packet"), dict)
+            else {}
+        ),
+        "api_reasoning_option_runtime_mutation_claimed": (
+            packet.get("api_reasoning_option_runtime_mutation_claimed") is True
+        ),
+        "api_reasoning_intelligence_measured": (
+            packet.get("api_reasoning_intelligence_measured") is True
+        ),
+        "api_reasoning_codex_parity_claimed": (
+            packet.get("api_reasoning_codex_parity_claimed") is True
+        ),
         "route_model_id": route_model_id,
         "allowed_api_route_ids": allowed_api_route_ids,
         "forbidden_stale_route_ids": forbidden_stale_route_ids,
@@ -13229,6 +13516,17 @@ def build_handler(
             )
             return
 
+        def _handle_post_api_codex_custom_agent_alias_acceptance_matrix(self, actual_path: str) -> None:
+            self._send_json(
+                _custom_native_agent_alias_acceptance_matrix_packet(
+                    payload=self._read_optional_json_body(),
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                )
+            )
+            return
+
         def _handle_post_api_codex_custom_show_window(self, actual_path: str) -> None:
             self._read_optional_json_body()
             packet = show_custom_native_window_packet()
@@ -13452,6 +13750,7 @@ def build_handler(
             if (
                 preflight.get("status") != "rejected"
                 and preflight.get("execution_mode") == "api_only"
+                and preflight.get("api_line_selected_as_executor") is True
                 and preflight.get("deepseek_selected_from_server_catalog") is True
                 and codex_custom_live_prompt_authorized
             ):

@@ -193,6 +193,24 @@ class ExternalModelContractTests(unittest.TestCase):
             deepseek_payload["thinking"],
             {"type": "enabled", "reasoning_effort": "max"},
         )
+        self.assertEqual(
+            deepseek_payload["max_tokens"],
+            transforms.THINKING_CHECK_REQUEST_COMPLETION_BUDGET,
+        )
+        deepseek_developer_payload, _metadata = transforms.build_check_request(
+            sample_route()
+            | {
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "transform_profile": "openai_chat_developer_to_system",
+                "thinking": {"type": "enabled", "reasoning_effort": "high"},
+            },
+            user_prompt="ping",
+        )
+        self.assertEqual(
+            deepseek_developer_payload["max_tokens"],
+            transforms.THINKING_CHECK_REQUEST_COMPLETION_BUDGET,
+        )
         deepseek_disabled_payload, disabled_metadata = transforms.build_check_request(
             sample_route()
             | {
@@ -203,6 +221,10 @@ class ExternalModelContractTests(unittest.TestCase):
             user_prompt="ping",
         )
         self.assertEqual(deepseek_disabled_payload["thinking"], {"type": "disabled"})
+        self.assertEqual(
+            deepseek_disabled_payload["max_tokens"],
+            transforms.CHECK_REQUEST_COMPLETION_BUDGET,
+        )
         self.assertTrue(disabled_metadata["api_parameter_sent"])
 
     def test_paths_from_env_uses_isolated_overrides(self) -> None:

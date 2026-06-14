@@ -1216,7 +1216,7 @@ class ExternalModelsCliTests(unittest.TestCase):
                 "--route",
                 "wbp-deepseek-v3",
                 "--prompt",
-                "Верни короткий ответ: API_ONLY_DEEPSEEK_READY",
+                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
                 "--expected-text",
                 "API_ONLY_DEEPSEEK_READY",
             )

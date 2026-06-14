@@ -11,6 +11,7 @@ from . import errors
 DEFAULT_REQUEST_TRANSFORM = "openai_chat_passthrough"
 DEFAULT_RESPONSE_PROFILE = "openai_chat_choices_message"
 CHECK_REQUEST_COMPLETION_BUDGET = 96
+THINKING_CHECK_REQUEST_COMPLETION_BUDGET = 2048
 THINKING_REASONING_EFFORTS = frozenset({"high", "max"})
 
 REQUEST_TRANSFORM_PROFILES = frozenset(
@@ -156,6 +157,14 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
     }
     thinking_metadata = apply_route_thinking_policy(base_payload, route)
     metadata = metadata | thinking_metadata
+    if (
+        isinstance(thinking_metadata.get("thinking"), dict)
+        and thinking_metadata["thinking"].get("type") == "enabled"
+    ):
+        base_payload["max_tokens"] = max(
+            int(base_payload["max_tokens"]),
+            THINKING_CHECK_REQUEST_COMPLETION_BUDGET,
+        )
     transform_profile = metadata["transform_profile"]
     if transform_profile == DEFAULT_REQUEST_TRANSFORM:
         return base_payload, metadata | {"request_shape": "openai_chat_messages"}
@@ -167,7 +176,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         payload = {
             "model": route["upstream_model"],
             "messages": transformed_messages,
-            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+            "max_tokens": base_payload["max_tokens"],
         }
         if "thinking" in base_payload:
             payload["thinking"] = base_payload["thinking"]
@@ -180,7 +189,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         payload = {
             "model": route["upstream_model"],
             "messages": transformed_messages,
-            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+            "max_tokens": base_payload["max_tokens"],
         }
         if "thinking" in base_payload:
             payload["thinking"] = base_payload["thinking"]
@@ -192,7 +201,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
             {
                 "model": route["upstream_model"],
                 "input_text": input_text,
-                "max_output_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+                "max_output_tokens": base_payload["max_tokens"],
             },
             metadata | {"request_shape": "input_text"},
         )

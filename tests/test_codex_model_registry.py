@@ -137,6 +137,34 @@ def api_snapshot_with_deepseek_reasoning_variants() -> dict[str, object]:
     }
 
 
+def api_only_live_result(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "request_count": 1,
+        "retry_count": 0,
+        "expected_text": "API_ONLY_DEEPSEEK_READY",
+        "expected_text_observed": True,
+        "response_shape": "choices_message",
+        "response_profile": "openai_chat_choices",
+        "request_shape": "messages",
+        "latency_ms": 12,
+        "parallel_fanout_attempted": False,
+        "fallback_used": False,
+        "fallback_chain": [],
+        "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+        "response_text_length": 23,
+        "state_written": False,
+        "evidence_written": False,
+        "file_mutation_attempted": False,
+        "commands_started_by_provider": False,
+        "codex_history_sent": False,
+        "repo_context_sent": False,
+        "api_parameter_sent": True,
+        "intelligence_measured": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
 class CodexModelRegistryTests(unittest.TestCase):
     def test_model_registry_is_degraded_when_claim_gate_blocked_without_false_green(self) -> None:
         packet = build_custom_model_registry_packet(operator_status(claim_gate="blocked"))
@@ -1317,6 +1345,75 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(proven["original_codex_touched"])
         self.assertFalse(proven["asar_touched"])
         self.assertTrue(proven["codex_compatible_response_shape"])
+
+    def test_api_only_deepseek_live_route_format_proves_fast_disabled_thinking(self) -> None:
+        packet = build_api_only_deepseek_live_route_format_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-fast",
+                "api_reasoning_option_id": "provider_declared_fast",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            owner_authorized=True,
+            live_result=api_only_live_result(
+                fallback_chain=["wbp-deepseek-v4-pro-fast"],
+                thinking={"type": "disabled"},
+            ),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_fast")
+        self.assertEqual(packet["api_reasoning_operator_level"], "fast")
+        self.assertTrue(packet["api_reasoning_live_evidence_required"])
+        self.assertTrue(packet["api_reasoning_option_provider_parameter_sent"])
+        self.assertTrue(packet["api_reasoning_live_evidence_proven"])
+        self.assertEqual(packet["api_reasoning_expected_thinking"], {"type": "disabled"})
+        self.assertEqual(packet["api_reasoning_observed_thinking"], {"type": "disabled"})
+        self.assertTrue(packet["api_reasoning_thinking_matched"])
+        self.assertFalse(packet["api_reasoning_intelligence_measured"])
+
+    def test_api_only_deepseek_live_route_format_blocks_thinking_false_green(self) -> None:
+        packet = build_api_only_deepseek_live_route_format_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            owner_authorized=True,
+            live_result=api_only_live_result(
+                fallback_chain=["wbp-deepseek-v4-pro-max"],
+                thinking={"type": "enabled", "reasoning_effort": "high"},
+                api_parameter_sent=True,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "API_ONLY_DEEPSEEK_REASONING_EVIDENCE_NOT_PROVEN",
+        )
+        self.assertTrue(packet["provider_called"])
+        self.assertTrue(packet["expected_text_observed"])
+        self.assertTrue(packet["api_reasoning_live_evidence_required"])
+        self.assertFalse(packet["api_reasoning_live_evidence_proven"])
+        self.assertEqual(
+            packet["api_reasoning_expected_thinking"],
+            {"type": "enabled", "reasoning_effort": "max"},
+        )
+        self.assertEqual(
+            packet["api_reasoning_observed_thinking"],
+            {"type": "enabled", "reasoning_effort": "high"},
+        )
+        self.assertFalse(packet["api_reasoning_thinking_matched"])
+        self.assertIn(
+            "api_reasoning_thinking_mismatch",
+            packet["api_reasoning_blocking_reasons"],
+        )
+        self.assertFalse(packet["api_line_used_as_executor"])
 
     def test_api_only_deepseek_live_route_format_blocks_wrong_mode_and_wrong_model(self) -> None:
         wrong_mode = build_api_only_deepseek_live_route_format_packet(
