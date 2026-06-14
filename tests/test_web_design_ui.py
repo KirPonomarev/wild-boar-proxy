@@ -3144,6 +3144,42 @@ if (quickStartMixedLaunchAvailableWithTraceGap({
 }) !== false) {
   throw new Error("forced primary replacement must not render as launch trace gap");
 }
+for (const launchEvidenceField of [
+  "launch_evidence_proven_with_limits",
+  "current_launch_evidence_proven_with_limits",
+  "existing_window_reuse_proven_with_limits",
+  "native_limited_launch_proven_with_limits"
+]) {
+  if (quickStartMixedLaunchAvailableWithTraceGap({
+    mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+    mixed_mode_launch_action: "available",
+    mixed_mode_launch_available_with_primary_trace_gap: true,
+    launch_proven: false,
+    [launchEvidenceField]: true,
+    api_route_dispatched_without_primary: true,
+    primary_replaced_by_api_route: true,
+    chatgpt_replaced_by_api: false,
+    coder_dispatch_proven: true,
+    coder_work_result_proven_with_limits: true
+  }) !== false) {
+    throw new Error(launchEvidenceField + " must not bypass primary replacement guard");
+  }
+}
+if (quickStartMixedLaunchAvailableWithTraceGap({
+  mixed_mode_product_decision: "WORKS_WITH_LIMITS",
+  mixed_mode_launch_action: "available",
+  mixed_mode_launch_available_with_primary_trace_gap: true,
+  launch_proven: false,
+  launch_evidence_proven_with_limits: true,
+  existing_window_reuse_proven_with_limits: true,
+  api_route_dispatched_without_primary: true,
+  primary_replaced_by_api_route: false,
+  chatgpt_replaced_by_api: false,
+  coder_dispatch_proven: true,
+  coder_work_result_proven_with_limits: true
+}) !== true) {
+  throw new Error("limited launch evidence must render as launch trace gap");
+}
 renderQuickStartMixedCoderTrace({
   status: "degraded",
   machine_error_code: "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
@@ -3156,7 +3192,8 @@ renderQuickStartMixedCoderTrace({
   coding_agent_model_id: "wbp-deepseek-chat",
   primary_model_slot: { status: "bound", lane: "codex_account_lane", model_id: "gpt-5.5" },
   coding_agent_model_slot: { status: "bound", lane: "api_route_lane", model_id: "wbp-deepseek-chat" },
-  launch_proven: true,
+  launch_proven: false,
+  launch_evidence_proven_with_limits: true,
   launch_status: "ok",
   launch_status_ok: true,
   slot_binding_proven: true,

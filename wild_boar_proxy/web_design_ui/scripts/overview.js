@@ -4001,11 +4001,18 @@ function quickStartMixedTraceUnsupported(packet) {
 }
 
 function quickStartMixedLaunchAvailableWithTraceGap(packet) {
+  const launchEvidenceProven = Boolean(
+    packet?.launch_proven === true
+    || packet?.launch_evidence_proven_with_limits === true
+    || packet?.current_launch_evidence_proven_with_limits === true
+    || packet?.existing_window_reuse_proven_with_limits === true
+    || packet?.native_limited_launch_proven_with_limits === true
+  );
   return Boolean(
     packet?.mixed_mode_product_decision === "WORKS_WITH_LIMITS"
     && packet?.mixed_mode_launch_action === "available"
     && packet?.mixed_mode_launch_available_with_primary_trace_gap === true
-    && packet?.launch_proven === true
+    && launchEvidenceProven
     && packet?.api_route_dispatched_without_primary === true
     && packet?.primary_replaced_by_api_route !== true
     && packet?.chatgpt_replaced_by_api !== true

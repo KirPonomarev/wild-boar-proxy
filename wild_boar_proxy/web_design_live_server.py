@@ -2593,6 +2593,18 @@ class _CustomNativeBridgeLease:
         if self.bridge is not None:
             self.bridge.set_trace_context(context)
 
+    @property
+    def forced_route_model_id(self) -> str:
+        if self.bridge is None:
+            return ""
+        return self.bridge.forced_route_model_id
+
+    @property
+    def dual_lane_route_model_id(self) -> str:
+        if self.bridge is None:
+            return ""
+        return self.bridge.dual_lane_route_model_id
+
     def trace_snapshot(self) -> dict[str, Any]:
         if self.bridge is None:
             return {
@@ -5636,12 +5648,18 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
         http_status: int = 0,
         error_class: str = "",
         response_body: bytes = b"",
+        requested_model_id: str = "",
+        requested_slot_id: str = "",
+        dispatch_strategy: str = "",
     ) -> dict[str, Any]:
         return {
             **packet,
             "native_dispatch_proof_attempted": attempted,
             "native_dispatch_proof_scope": "control_plane_bridge_request_current_native_launch",
             "native_dispatch_proof_skipped_reason": skipped_reason,
+            "native_dispatch_requested_model_id": requested_model_id,
+            "native_dispatch_requested_slot_id": requested_slot_id,
+            "native_dispatch_strategy": dispatch_strategy,
             "native_dispatch_http_status": http_status,
             "native_dispatch_error_class": error_class,
             "native_dispatch_response_body_sha256": (
@@ -5708,6 +5726,27 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
             skipped_reason="bridge_not_owned",
         )
 
+    bridge_forced_route_model_id = native_bridge_lease.forced_route_model_id
+    bridge_dual_lane_route_model_id = native_bridge_lease.dual_lane_route_model_id
+    bridge_can_shadow_primary_to_coder = bool(
+        bridge_dual_lane_route_model_id
+        and bridge_dual_lane_route_model_id == coding_model_id
+        and not bridge_forced_route_model_id
+    )
+    dispatch_model_id = (
+        primary_model_id if bridge_can_shadow_primary_to_coder else coding_model_id
+    )
+    dispatch_slot_id = (
+        "primary_model_slot"
+        if bridge_can_shadow_primary_to_coder
+        else "coding_agent_model_slot"
+    )
+    dispatch_strategy = (
+        "primary_dual_lane_shadow"
+        if bridge_can_shadow_primary_to_coder
+        else "coding_slot_direct"
+    )
+
     bridge_endpoint = native_bridge_lease.stable_endpoint
     if not _loopback_port_accepts_connection(native_bridge_lease.bridge_port):
         return with_dispatch_fields(
@@ -5739,7 +5778,7 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
         )
 
     dispatch_payload = {
-        "model": primary_model_id,
+        "model": dispatch_model_id,
         "instructions": (
             "You are an exact echo smoke-test endpoint. Your entire response "
             "must be the exact requested token only."
@@ -5788,6 +5827,9 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
         http_status=http_status,
         error_class=error_class,
         response_body=response_body,
+        requested_model_id=dispatch_model_id,
+        requested_slot_id=dispatch_slot_id,
+        dispatch_strategy=dispatch_strategy,
     )
 
 

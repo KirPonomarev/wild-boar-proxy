@@ -2138,6 +2138,14 @@ class HybridOpenAICompatAdapter:
     def route_model_ids(self) -> list[str]:
         return list(self._route_model_ids)
 
+    @property
+    def forced_route_model_id(self) -> str:
+        return self._forced_route_model_id
+
+    @property
+    def dual_lane_route_model_id(self) -> str:
+        return self._dual_lane_route_model_id
+
     def set_trace_context(self, context: dict[str, Any]) -> None:
         safe_context = {
             "launch_id": str(context.get("launch_id") or ""),

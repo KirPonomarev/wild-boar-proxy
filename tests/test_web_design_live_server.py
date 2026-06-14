@@ -11658,6 +11658,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(packet["native_dispatch_proof_attempted"])
         self.assertEqual(packet["native_dispatch_http_status"], 200)
         self.assertEqual(packet["native_dispatch_error_class"], "")
+        self.assertEqual(packet["native_dispatch_requested_model_id"], "gpt-5.5")
+        self.assertEqual(packet["native_dispatch_requested_slot_id"], "primary_model_slot")
+        self.assertEqual(packet["native_dispatch_strategy"], "primary_dual_lane_shadow")
         self.assertFalse(packet["native_ui_input_claimed"])
         self.assertTrue(packet["prompt_seen"])
         self.assertTrue(packet["coder_dispatch_proven"])
@@ -11670,6 +11673,134 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
         route_handle.assert_called_once()
+
+    def test_native_dispatch_proof_endpoint_uses_coding_slot_when_bridge_is_forced_route(self) -> None:
+        primary = ThreadingHTTPServer(("127.0.0.1", free_port()), StableProbeHandler)
+        primary_thread = threading.Thread(target=primary.serve_forever, daemon=True)
+        primary_thread.start()
+        route_id = "wbp-deepseek-chat"
+        lease = live_server._CustomNativeBridgeLease(bridge_port=free_port())
+        launch = {
+            "status": "ok",
+            "launch_id": "launch-proof",
+            "trace_id": "trace-proof",
+            "execution_mode": "chatgpt_plus_api",
+            "native_window_observed": True,
+            "real_codex_app_launched": True,
+            "stable_bridge_preflight_required": True,
+            "stable_bridge_preflight_status": "ok",
+            "stable_bridge_launch_allowed": True,
+            "primary_model_slot": {
+                "slot_id": "primary_model_slot",
+                "status": "bound",
+                "lane": "codex_account_lane",
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "slot_id": "coding_agent_model_slot",
+                "status": "bound",
+                "lane": "api_route_lane",
+                "provider": "deepseek",
+                "model_id": route_id,
+                "server_issued": True,
+            },
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+        }
+        routes_packet = {
+            "data": {
+                "routes": [
+                    {
+                        "route_id": route_id,
+                        "enabled": True,
+                        "provider": "deepseek",
+                        "base_url": "https://deepseek.example.invalid/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+                    }
+                ]
+            }
+        }
+        try:
+            with (
+                mock.patch.object(live_server, "extract_local_api_key", return_value="sk-local"),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-deepseek",
+                ),
+                mock.patch(
+                    "wild_boar_proxy.operator_surface.ExternalRouteResponsesAdapter.handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps(
+                            {"output_text": live_server.MIXED_DEEPSEEK_CODER_SMOKE_PHRASE}
+                        ).encode("utf-8"),
+                    ),
+                ) as route_handle,
+            ):
+                lease.ensure(
+                    downstream_endpoint=f"http://127.0.0.1:{primary.server_port}/v1",
+                    routes_packet=routes_packet,
+                    forced_route_model_id=route_id,
+                )
+                lease.set_trace_context(
+                    {
+                        "launch_id": "launch-proof",
+                        "trace_id": "trace-proof",
+                        "selected_model": "gpt-5.5",
+                    }
+                )
+                packet = live_server._custom_native_chatgpt_plus_api_dispatch_proof_packet(
+                    last_launch_packet=launch,
+                    native_bridge_lease=lease,
+                    owner_authorized=True,
+                    browser_payload={},
+                )
+        finally:
+            lease.close()
+            primary.shutdown()
+            primary_thread.join(timeout=2)
+            primary.server_close()
+
+        self.assertEqual(packet["status"], "degraded")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "CHATGPT_PLUS_API_LAUNCH_PROVEN_PRIMARY_TRACE_NOT_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["mixed_mode_product_decision"], "WORKS_WITH_LIMITS")
+        self.assertEqual(packet["mixed_mode_launch_action"], "available")
+        self.assertEqual(packet["mixed_mode_launch_blocked_reason"], "")
+        self.assertTrue(packet["native_dispatch_proof_attempted"])
+        self.assertEqual(packet["native_dispatch_http_status"], 200)
+        self.assertEqual(packet["native_dispatch_error_class"], "")
+        self.assertEqual(packet["native_dispatch_requested_model_id"], route_id)
+        self.assertEqual(packet["native_dispatch_requested_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(packet["native_dispatch_strategy"], "coding_slot_direct")
+        self.assertFalse(packet["native_ui_input_claimed"])
+        self.assertFalse(packet["prompt_seen"])
+        self.assertFalse(packet["chatgpt_replaced_by_api"])
+        self.assertFalse(packet["primary_replaced_by_api_route"])
+        self.assertFalse(packet["primary_replacement_record_seen"])
+        self.assertTrue(packet["api_route_dispatched_without_primary"])
+        self.assertTrue(packet["coder_dispatch_proven"])
+        self.assertTrue(packet["coder_work_result_proven_with_limits"])
+        self.assertTrue(packet["deepseek_route_observed"])
+        self.assertFalse(packet["runtime_readiness_claimed"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        route_handle.assert_called_once()
+        requested_body = json.loads(route_handle.call_args.kwargs["body"].decode("utf-8"))
+        self.assertEqual(requested_body["model"], route_id)
 
     def test_chatgpt_plus_api_coder_trace_blocks_missing_stable_preflight(self) -> None:
         launch = {
