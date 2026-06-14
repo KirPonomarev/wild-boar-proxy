@@ -577,6 +577,147 @@ class MappingRunner:
 
 
 class WebDesignLiveServerTests(unittest.TestCase):
+    def _reasoning_matrix_ok_packet(self, *, provider_call_count: int = 3) -> dict[str, object]:
+        level_results = [
+            {
+                "operator_level": level,
+                "reasoning_level_dispatch_proven": True,
+                "api_reasoning_dispatch_proven": True,
+                "api_provider_acknowledged": True,
+                "chatgpt_slot_selection_proven": True,
+                "provider_called": True,
+                "request_count": 1,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "secret_value_exposed": False,
+                "intelligence_measured": False,
+            }
+            for level in ("fast", "high", "max")
+        ]
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+            "captured_at_utc": "2026-01-01T00:00:00Z",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "reasoning_dispatch_matrix_proven": True,
+            "api_reasoning_dispatch_proven": True,
+            "api_provider_acknowledged": True,
+            "chatgpt_slot_selection_proven": True,
+            "not_intelligence_proof": True,
+            "intelligence_measured": False,
+            "chatgpt_provider_backed_reasoning_proven": False,
+            "browser_can_supply_reasoning_authority": False,
+            "provider_call_count": provider_call_count,
+            "level_results": level_results,
+        }
+
+    def _reasoning_matrix_blocked_packet(self) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+            "captured_at_utc": "2026-01-01T00:00:00Z",
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_NOT_PROVEN",
+            "reasoning_dispatch_matrix_proven": False,
+            "not_intelligence_proof": True,
+            "intelligence_measured": False,
+            "chatgpt_provider_backed_reasoning_proven": False,
+            "browser_can_supply_reasoning_authority": False,
+            "provider_call_count": 0,
+        }
+
+    def _bridge_response(
+        self,
+        *,
+        route_id: str,
+        output_text: str,
+        thinking: dict[str, object] | None = None,
+        api_parameter_sent: bool = False,
+    ) -> object:
+        class FakeBridgeResponse:
+            status = 200
+
+            def __enter__(self) -> "FakeBridgeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                body: dict[str, object] = {
+                    "status": "completed",
+                    "provider": "deepseek",
+                    "requested_model": route_id,
+                    "fallback_used": False,
+                    "output_text": output_text,
+                    "intelligence_measured": False,
+                }
+                if thinking is not None:
+                    body["thinking"] = dict(thinking)
+                    body["api_parameter_sent"] = api_parameter_sent
+                return json.dumps(body).encode("utf-8")
+
+            def getcode(self) -> int:
+                return self.status
+
+        return FakeBridgeResponse()
+
+    def _write_command_loop_context(
+        self,
+        *,
+        temp_dir: str,
+        worker: live_server._CustomNativeFileBridgeWorker,
+        primary_aliases: list[str],
+        coding_aliases: list[str],
+        route_id: str = "wbp-deepseek-chat",
+        allowed_route_ids: list[str] | None = None,
+        forbidden_stale_route_ids: list[str] | None = None,
+    ) -> Path:
+        context = {
+            "packet_kind": "codex_custom_native_agent_runtime_context",
+            "execution_mode": "chatgpt_plus_api",
+            "agent_bindings_status": "ok",
+            "agent_bindings": [
+                {
+                    "agent_id": "planner",
+                    "display_name": primary_aliases[0],
+                    "role": "orchestrator",
+                    "aliases": primary_aliases,
+                    "lane": live_server.PRIMARY_CHATGPT_LANE,
+                    "model_id": "gpt-5.5",
+                    "enabled": True,
+                    "allowed_actions": ["plan", "inspect", "verify"],
+                },
+                {
+                    "agent_id": "builder",
+                    "display_name": coding_aliases[0],
+                    "role": "coding_agent",
+                    "aliases": coding_aliases,
+                    "lane": live_server.API_ROUTE_LANE,
+                    "route_id": route_id,
+                    "enabled": True,
+                    "allowed_actions": ["implementation_help", "format_check"],
+                },
+            ],
+            "primary_aliases": primary_aliases,
+            "coding_aliases": coding_aliases,
+            "api_model_id": route_id,
+            "allowed_api_route_ids": allowed_route_ids or [route_id],
+            "forbidden_stale_route_ids": forbidden_stale_route_ids or ["wbp-deepseek-v3"],
+            "deepseek_live_format_check_file_bridge": worker.packet(
+                enabled=True,
+                model=route_id,
+            ),
+            "secret_value_exposed": False,
+        }
+        context_path = Path(temp_dir) / "wbp-agent-runtime-context.json"
+        context_path.write_text(
+            json.dumps(context, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return context_path
+
     def test_custom_native_file_bridge_worker_processes_request_through_server_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             bridge_root = Path(temp_dir) / "file-bridge"
@@ -1257,6 +1398,567 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["secret_value_exposed"])
         self.assertEqual(packet["provider_call_count"], 1)
         self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_gpt_api_alias_command_loop_proves_runtime_context_roles_and_exact_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner", "Lead", "Codex", "Agent 1", "1"],
+                coding_aliases=["Builder", "Worker", "DIP", "Agent 2", "2"],
+            )
+            captured: dict[str, object] = {}
+
+            def fake_urlopen(
+                request: urllib.request.Request,
+                *,
+                timeout: int,
+            ) -> object:
+                captured["url"] = request.full_url
+                captured["body"] = json.loads((request.data or b"{}").decode("utf-8"))
+                captured["timeout"] = timeout
+                return self._bridge_response(
+                    route_id="wbp-deepseek-chat",
+                    output_text="WBP_COMMAND_LOOP_OK",
+                )
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen", side_effect=fake_urlopen),
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": (
+                            "Planner: составь ТЗ и проверь результат. "
+                            "Builder: answer exactly one line."
+                        ),
+                        "expected_coding_response": "WBP_COMMAND_LOOP_OK",
+                        "request_id": "command-loop-ok",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    timeout_seconds=0.1,
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertTrue(packet["native_alias_context_read"])
+        self.assertEqual(packet["context_read_source"], "profile_context_file")
+        self.assertEqual(packet["primary_alias"], "Planner")
+        self.assertEqual(packet["coding_alias"], "Builder")
+        self.assertEqual(packet["primary_role"], "orchestrator")
+        self.assertEqual(packet["coding_role"], "coding_agent")
+        self.assertTrue(packet["primary_alias_bound_to_chatgpt_lane"])
+        self.assertTrue(packet["coding_alias_bound_to_api_lane"])
+        self.assertTrue(packet["primary_alias_precedes_coding_alias"])
+        self.assertTrue(packet["reasoning_prerequisite_proven"])
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertTrue(packet["file_bridge_acceptance_proven"])
+        self.assertTrue(packet["agent_alias_route_acceptance_proven"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertTrue(packet["bridge_or_file_bridge_used"])
+        self.assertEqual(packet["reasoning_provider_call_count"], 3)
+        self.assertEqual(packet["command_loop_provider_call_count"], 1)
+        self.assertFalse(packet["primary_provider_call_attempted"])
+        self.assertFalse(packet["chatgpt_provider_backed_reasoning_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertFalse(packet["native_coder_slot_dispatch_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(captured["url"], "http://127.0.0.1:50555/v1/responses")
+        self.assertEqual(captured["body"]["model"], "wbp-deepseek-chat")
+        self.assertEqual(
+            captured["body"]["input"],
+            "Answer exactly one line: WBP_COMMAND_LOOP_OK",
+        )
+
+    def test_custom_native_gpt_api_alias_command_loop_endpoint_dispatches_and_proves_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bridge_root = Path(temp_dir) / "file-bridge"
+            context_worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=bridge_root
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=context_worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            runner = MappingRunner(live_payloads_with_reasoning_variants())
+            with (
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text="WBP_ENDPOINT_LOOP_OK",
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
+                            {
+                                "prompt": (
+                                    "Planner: inspect and assign. "
+                                    "Builder: answer exactly one line."
+                                ),
+                                "expected_text": "WBP_ENDPOINT_LOOP_OK",
+                                "request_id": "endpoint-command-loop-ok",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["reasoning_prerequisite_proven"])
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertEqual(packet["primary_alias"], "Planner")
+        self.assertEqual(packet["coding_alias"], "Builder")
+        self.assertEqual(packet["reasoning_provider_call_count"], 3)
+        self.assertEqual(packet["command_loop_provider_call_count"], 1)
+        self.assertEqual(
+            sum(1 for call in runner.calls if call[:2] == ("external-models", "live-format-check")),
+            3,
+        )
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_gpt_api_alias_command_loop_accepts_name_variants(self) -> None:
+        variants = [
+            ("Codex", "DIP"),
+            ("Agent 1", "Agent 2"),
+            ("1", "2"),
+            ("Агент GPT", "Агент Дип"),
+            ("Теркистратор", "Ты кодишь"),
+            ("Agent_Ptichka", "Agent_Shmel"),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+
+            for index, (primary_alias, coding_alias) in enumerate(variants):
+                with self.subTest(primary_alias=primary_alias, coding_alias=coding_alias):
+                    context_path = self._write_command_loop_context(
+                        temp_dir=temp_dir,
+                        worker=worker,
+                        primary_aliases=[primary_alias, f"Primary-{index}"],
+                        coding_aliases=[coding_alias, f"Coding-{index}"],
+                    )
+                    with (
+                        mock.patch.object(
+                            live_server,
+                            "_custom_native_agent_runtime_context_candidates",
+                            return_value=[context_path],
+                        ),
+                        mock.patch.object(
+                            live_server,
+                            "proxyless_urlopen",
+                            return_value=self._bridge_response(
+                                route_id="wbp-deepseek-chat",
+                                output_text="WBP_VARIANT_OK",
+                            ),
+                        ),
+                    ):
+                        packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                            payload={
+                                "prompt": (
+                                    f"{primary_alias}: inspect and assign. "
+                                    f"{coding_alias}: answer exactly one line."
+                                ),
+                                "expected_text": "WBP_VARIANT_OK",
+                                "request_id": f"variant-{index}",
+                            },
+                            file_bridge_worker=worker,
+                            last_launch_packet={},
+                            timeout_seconds=0.1,
+                            reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                        )
+
+                    self.assertEqual(packet["status"], "ok")
+                    self.assertTrue(packet["command_loop_proven"])
+                    self.assertEqual(packet["primary_alias"], primary_alias)
+                    self.assertEqual(packet["coding_alias"], coding_alias)
+                    self.assertTrue(packet["api_lane_exact_token_matched"])
+                    self.assertFalse(packet["local_imitation_used"])
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_forbidden_payload_before_any_call(self) -> None:
+        called = False
+
+        def reasoning_builder() -> dict[str, object]:
+            nonlocal called
+            called = True
+            return self._reasoning_matrix_ok_packet()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "route_id": "browser-route",
+                        "api_reasoning_option_id": "browser-reasoning",
+                    },
+                    file_bridge_worker=worker,
+                    reasoning_matrix_builder=reasoning_builder,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
+        )
+        self.assertIn("route_id", packet["blocking_reasons"])
+        self.assertIn("api_reasoning_option_id", packet["blocking_reasons"])
+        self.assertFalse(called)
+        self.assertEqual(packet["reasoning_provider_call_count"], 0)
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_missing_context_before_any_call(self) -> None:
+        called = False
+
+        def reasoning_builder() -> dict[str, object]:
+            nonlocal called
+            called = True
+            return self._reasoning_matrix_ok_packet()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[Path(temp_dir) / "missing-context.json"],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={"request_id": "missing-context"},
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=reasoning_builder,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING",
+        )
+        self.assertIn("agent_runtime_context_missing", packet["blocking_reasons"])
+        self.assertFalse(called)
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_reasoning_gate_before_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "reasoning-blocked",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=self._reasoning_matrix_blocked_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_REQUIRED",
+        )
+        self.assertIn("reasoning_dispatch_matrix_not_proven", packet["blocking_reasons"])
+        self.assertFalse(packet["reasoning_prerequisite_proven"])
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_short_reasoning_false_green(self) -> None:
+        short_ok_packet = {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+            "captured_at_utc": "2026-01-01T00:00:00Z",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "reasoning_dispatch_matrix_proven": True,
+            "not_intelligence_proof": True,
+            "intelligence_measured": False,
+            "chatgpt_provider_backed_reasoning_proven": False,
+            "browser_can_supply_reasoning_authority": False,
+            "provider_call_count": 0,
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "short-reasoning-false-green",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=lambda: short_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_REQUIRED",
+        )
+        self.assertEqual(packet["reasoning_provider_call_count"], 0)
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_does_not_match_alias_inside_words(self) -> None:
+        called = False
+
+        def reasoning_builder() -> dict[str, object]:
+            nonlocal called
+            called = True
+            return self._reasoning_matrix_ok_packet()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["A"],
+                coding_aliases=["B"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Assign the work to Builder without explicit aliases.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "short-alias-word-boundary",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=reasoning_builder,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_PROMPT_ALIAS_MISSING",
+        )
+        self.assertIn("primary_alias_missing_from_prompt", packet["blocking_reasons"])
+        self.assertFalse(called)
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_ambiguous_and_swapped_aliases_before_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            ambiguous_context = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Agent"],
+                coding_aliases=["agent"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[ambiguous_context],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                ambiguous = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Agent: inspect. agent: answer.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "ambiguous-aliases",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+            swapped_context = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[swapped_context],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as swapped_urlopen,
+            ):
+                swapped = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Builder: start coding. Planner: inspect after.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "swapped-order",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(ambiguous["status"], "blocked")
+        self.assertEqual(
+            ambiguous["machine_error_code"],
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_AMBIGUOUS_ALIASES",
+        )
+        self.assertIn("ambiguous_aliases", ambiguous["blocking_reasons"])
+        self.assertEqual(ambiguous["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
+
+        self.assertEqual(swapped["status"], "blocked")
+        self.assertEqual(
+            swapped["machine_error_code"],
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ROLE_ORDER_SWAPPED",
+        )
+        self.assertIn("primary_alias_after_coding_alias", swapped["blocking_reasons"])
+        self.assertEqual(swapped["command_loop_provider_call_count"], 0)
+        swapped_urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_blocks_route_not_allowed_before_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+                route_id="wbp-deepseek-chat",
+                allowed_route_ids=["wbp-other-deepseek"],
+            )
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
+                        "expected_text": "NO_PROVIDER_CALL",
+                        "request_id": "route-not-allowed",
+                    },
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ROUTE_NOT_ALLOWED",
+        )
+        self.assertIn("coding_route_not_allowed", packet["blocking_reasons"])
+        self.assertEqual(packet["allowed_api_route_ids"], ["wbp-other-deepseek"])
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        urlopen.assert_not_called()
 
     def test_custom_native_agent_alias_acceptance_matrix_blocks_injected_context_false_green(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

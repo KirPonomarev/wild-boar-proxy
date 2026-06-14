@@ -25,6 +25,7 @@ import sys
 import time
 from threading import Event, RLock, Thread
 from typing import Any, Callable
+import unicodedata
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlparse
@@ -58,6 +59,7 @@ from wild_boar_proxy.codex_account_selection import (
 from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.custom_agent_bindings import (
     API_ROUTE_LANE,
+    PRIMARY_CHATGPT_LANE,
     agent_bindings_state_path,
     default_agent_bindings,
     dry_run_agent_bindings_packet,
@@ -1289,6 +1291,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     ),
     _post_route(
         "/api/codex/custom/agent-alias-acceptance-matrix",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/gpt-api-alias-command-loop-proof",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -4066,6 +4073,702 @@ def _custom_reasoning_dispatch_matrix_packet(
         "not_intelligence_proof": True,
         "blocking_reasons": blocking_reasons,
         "next_action": "none" if matrix_ok else "stop_and_diagnose_reasoning_dispatch",
+    }
+
+
+def _custom_reasoning_dispatch_matrix_live_packet(
+    *,
+    payload: dict[str, Any] | None,
+    action_runner: CommandRunner,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    availability_lattice_packet: dict[str, Any] | None,
+    owner_authorized: bool,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    candidates, missing_levels = _reasoning_dispatch_matrix_candidates(
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    forbidden_fields = sorted(set(payload) - REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS)
+    live_results_by_route: dict[str, dict[str, Any]] = {}
+    live_errors_by_route: dict[str, dict[str, Any]] = {}
+    if not forbidden_fields and not missing_levels and owner_authorized:
+        for candidate in candidates:
+            route_id = str(candidate.get("api_model_id") or "")
+            if not route_id:
+                continue
+            live_command = execute_command(
+                action_runner,
+                "external_models_live_format_check",
+                structured_args={
+                    "route_id": route_id,
+                    "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
+                    "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
+                },
+            )
+            packet = live_command.get("packet")
+            packet_data = packet.get("data") if isinstance(packet, dict) else None
+            if live_command.get("status") == "ok" and isinstance(packet_data, dict):
+                live_results_by_route[route_id] = packet_data
+            else:
+                live_errors_by_route[route_id] = {
+                    "status": live_command.get("status"),
+                    "machine_error_code": live_command.get("machine_error_code"),
+                    "human_message": live_command.get("human_message"),
+                    "next_action": live_command.get("next_action"),
+                    "changed_files": live_command.get("changed_files") or [],
+                }
+    return _custom_reasoning_dispatch_matrix_packet(
+        payload=payload,
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+        owner_authorized=owner_authorized,
+        live_results_by_route=live_results_by_route,
+        live_errors_by_route=live_errors_by_route,
+    )
+
+
+GPT_API_ALIAS_COMMAND_LOOP_ALLOWED_FIELDS: set[str] = {
+    "prompt",
+    "expected_text",
+    "expected_coding_response",
+    "request_id",
+}
+GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT = "WBP_GPT_API_ALIAS_COMMAND_LOOP_OK"
+
+
+def _custom_native_alias_key(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    return " ".join(text.split()).casefold()
+
+
+def _custom_native_aliases_for_lane(
+    context: dict[str, Any],
+    *,
+    context_key: str,
+    lane: str,
+) -> list[str]:
+    raw_aliases = context.get(context_key)
+    aliases = [
+        str(alias).strip()
+        for alias in raw_aliases
+        if str(alias).strip()
+    ] if isinstance(raw_aliases, list) else []
+    if aliases:
+        return aliases
+    bindings = context.get("agent_bindings")
+    if not isinstance(bindings, list):
+        return []
+    derived: list[str] = []
+    seen: set[str] = set()
+    for binding in bindings:
+        if not isinstance(binding, dict) or binding.get("lane") != lane:
+            continue
+        raw_binding_aliases = binding.get("aliases")
+        if not isinstance(raw_binding_aliases, list):
+            continue
+        for alias in raw_binding_aliases:
+            text = str(alias).strip()
+            key = _custom_native_alias_key(text)
+            if text and key and key not in seen:
+                derived.append(text)
+                seen.add(key)
+    return derived
+
+
+def _custom_native_prompt_alias_match(
+    prompt: str,
+    aliases: list[str],
+) -> tuple[str, int]:
+    prompt_key = _custom_native_alias_key(prompt)
+    ranked = sorted(
+        (
+            (alias, _custom_native_alias_key(alias))
+            for alias in aliases
+            if _custom_native_alias_key(alias)
+        ),
+        key=lambda item: len(item[1]),
+        reverse=True,
+    )
+    for alias, alias_key in ranked:
+        search_from = 0
+        while True:
+            position = prompt_key.find(alias_key, search_from)
+            if position < 0:
+                break
+            before = prompt_key[position - 1] if position > 0 else ""
+            after_index = position + len(alias_key)
+            after = prompt_key[after_index] if after_index < len(prompt_key) else ""
+            before_boundary = not before or not before.isalnum()
+            after_boundary = not after or not after.isalnum()
+            if before_boundary and after_boundary:
+                return alias, position
+            search_from = position + 1
+    return "", -1
+
+
+def _custom_native_gpt_api_command_loop_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    expected_text: str = "",
+    prompt: str = "",
+    request_id: str = "",
+    context_metadata: dict[str, Any] | None = None,
+    blocking_reasons: list[str] | None = None,
+    reasoning_packet: dict[str, Any] | None = None,
+    acceptance_packet: dict[str, Any] | None = None,
+    command_loop_provider_call_count: int = 0,
+) -> dict[str, Any]:
+    reasoning = reasoning_packet if isinstance(reasoning_packet, dict) else {}
+    acceptance = acceptance_packet if isinstance(acceptance_packet, dict) else {}
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_gpt_api_alias_command_loop_proof",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "final_status": "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_NOT_PROVEN",
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "prompt": prompt,
+        "context_metadata": context_metadata or {},
+        **_custom_native_context_readout_fields(context_metadata),
+        "blocking_reasons": blocking_reasons or [machine_error_code],
+        "command_loop_proven": False,
+        "runtime_context_file_proven": False,
+        "custom_codex_agent_runtime_context_proven": False,
+        "primary_alias_resolved_from_context": False,
+        "coding_alias_resolved_from_context": False,
+        "primary_alias_bound_to_chatgpt_lane": False,
+        "coding_alias_bound_to_api_lane": False,
+        "primary_alias_precedes_coding_alias": False,
+        "reasoning_prerequisite_proven": False,
+        "api_lane_exact_token_matched": False,
+        "file_bridge_acceptance_proven": False,
+        "agent_alias_route_acceptance_proven": False,
+        "allowed_api_route_ids_enforced": False,
+        "forbidden_stale_route_ids_enforced": False,
+        "bridge_or_file_bridge_used": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "primary_provider_call_attempted": False,
+        "chatgpt_provider_backed_reasoning_proven": False,
+        "native_free_text_tool_bridge_proven": False,
+        "native_coder_slot_dispatch_proven": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "reasoning_provider_call_count": int(reasoning.get("provider_call_count") or 0),
+        "command_loop_provider_call_count": command_loop_provider_call_count,
+        "reasoning_packet": reasoning,
+        "acceptance_packet": acceptance,
+        "next_action": "stop_and_diagnose_gpt_api_alias_command_loop",
+    }
+
+
+def _custom_native_reasoning_matrix_ready_for_command_loop(
+    reasoning_packet: dict[str, Any],
+) -> bool:
+    level_results = [
+        result
+        for result in reasoning_packet.get("level_results", [])
+        if isinstance(result, dict)
+    ] if isinstance(reasoning_packet.get("level_results"), list) else []
+    required_level_count = len(REASONING_DISPATCH_MATRIX_LEVELS)
+    provider_call_count = int(reasoning_packet.get("provider_call_count") or 0)
+    return bool(
+        reasoning_packet.get("packet_kind") == "custom_codex_reasoning_dispatch_matrix"
+        and reasoning_packet.get("status") == "ok"
+        and reasoning_packet.get("machine_error_code") == "OK"
+        and reasoning_packet.get("reasoning_dispatch_matrix_proven") is True
+        and reasoning_packet.get("api_reasoning_dispatch_proven") is True
+        and reasoning_packet.get("api_provider_acknowledged") is True
+        and reasoning_packet.get("chatgpt_slot_selection_proven") is True
+        and reasoning_packet.get("not_intelligence_proof") is True
+        and reasoning_packet.get("intelligence_measured") is False
+        and reasoning_packet.get("chatgpt_provider_backed_reasoning_proven") is False
+        and reasoning_packet.get("browser_can_supply_reasoning_authority") is False
+        and provider_call_count >= required_level_count
+        and len(level_results) == required_level_count
+        and all(
+            result.get("reasoning_level_dispatch_proven") is True
+            and result.get("api_reasoning_dispatch_proven") is True
+            and result.get("api_provider_acknowledged") is True
+            and result.get("chatgpt_slot_selection_proven") is True
+            and result.get("provider_called") is True
+            and int(result.get("request_count") or 0) >= 1
+            and result.get("fallback_used") is False
+            and result.get("local_imitation_used") is False
+            and result.get("secret_value_exposed") is False
+            and result.get("intelligence_measured") is False
+            for result in level_results
+        )
+    )
+
+
+def _custom_native_gpt_api_alias_command_loop_proof_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    context_metadata: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    timeout_seconds: float = 10.0,
+    now: datetime | None = None,
+    reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(set(payload) - GPT_API_ALIAS_COMMAND_LOOP_ALLOWED_FIELDS)
+    expected_text_payload = str(payload.get("expected_text") or "").strip()
+    expected_coding_response_payload = str(
+        payload.get("expected_coding_response") or ""
+    ).strip()
+    expected_text = (
+        expected_coding_response_payload
+        or expected_text_payload
+        or GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT
+    )
+    prompt_payload = str(payload.get("prompt") or "").strip()
+    request_id = str(
+        payload.get("request_id") or f"wbp-gpt-api-loop-{uuid.uuid4().hex}"
+    ).strip()
+    if forbidden_fields:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
+            human_message="Command-loop proof accepts only prompt, expected_text, expected_coding_response and request_id.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            blocking_reasons=forbidden_fields,
+        )
+    if (
+        expected_text_payload
+        and expected_coding_response_payload
+        and expected_text_payload != expected_coding_response_payload
+    ):
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXPECTED_TEXT_CONFLICT",
+            human_message="expected_text and expected_coding_response must match when both are supplied.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            blocking_reasons=["expected_text_conflict"],
+        )
+    if not expected_text:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXPECTED_TEXT_REQUIRED",
+            human_message="Command-loop proof expected text must be non-empty.",
+            prompt=prompt_payload,
+            request_id=request_id,
+            blocking_reasons=["expected_text_required"],
+        )
+    if not request_id or any(
+        not (character.isalnum() or character in {"-", "_"})
+        for character in request_id
+    ):
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_REQUEST_ID_INVALID",
+            human_message="Command-loop proof request_id must contain only letters, numbers, '-' or '_'.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            blocking_reasons=["request_id_invalid"],
+        )
+
+    resolved_context_metadata: dict[str, Any] = (
+        dict(context_metadata)
+        if isinstance(context_metadata, dict)
+        else _custom_native_injected_runtime_context_metadata()
+    )
+    context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
+    if context is None:
+        context, resolved_context_metadata = _load_custom_native_agent_runtime_context(
+            last_launch_packet
+        )
+    if not context:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code=str(
+                resolved_context_metadata.get("machine_error_code")
+                or "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
+            ),
+            human_message="Custom Codex agent runtime context is missing or unreadable.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_runtime_context_missing"],
+        )
+    runtime_context_file_proven = _custom_native_context_file_read_proven(
+        resolved_context_metadata
+    )
+    if not runtime_context_file_proven:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_CONTEXT_NOT_READ",
+            human_message="Command-loop proof requires the server-issued runtime context file.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["native_alias_context_not_read"],
+        )
+
+    if context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_CONTEXT_KIND_MISMATCH",
+            human_message="Runtime context packet kind does not match Custom Codex agent context.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_runtime_context_kind_mismatch"],
+        )
+    if context.get("execution_mode") != "chatgpt_plus_api":
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXECUTION_MODE_MISMATCH",
+            human_message="Command-loop proof requires chatgpt_plus_api execution mode.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["execution_mode_not_chatgpt_plus_api"],
+        )
+    if context.get("agent_bindings_status") not in {None, "", "ok"}:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_BINDINGS_NOT_OK",
+            human_message="Runtime context agent bindings are not marked ok.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_bindings_not_ok"],
+        )
+
+    primary_aliases = _custom_native_aliases_for_lane(
+        context,
+        context_key="primary_aliases",
+        lane=PRIMARY_CHATGPT_LANE,
+    )
+    coding_aliases = _custom_native_aliases_for_lane(
+        context,
+        context_key="coding_aliases",
+        lane=API_ROUTE_LANE,
+    )
+    primary_keys = {
+        _custom_native_alias_key(alias) for alias in primary_aliases if _custom_native_alias_key(alias)
+    }
+    coding_keys = {
+        _custom_native_alias_key(alias) for alias in coding_aliases if _custom_native_alias_key(alias)
+    }
+    duplicate_alias_keys = sorted(primary_keys & coding_keys)
+    if not primary_aliases or not coding_aliases:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ALIASES_EMPTY",
+            human_message="Command-loop proof requires primary and coding aliases from runtime context.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["primary_or_coding_aliases_empty"],
+        )
+    if duplicate_alias_keys:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_AMBIGUOUS_ALIASES",
+            human_message="Primary and coding aliases overlap after normalization.",
+            expected_text=expected_text,
+            prompt=prompt_payload,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["ambiguous_aliases"],
+        ) | {"duplicate_alias_key_count": len(duplicate_alias_keys)}
+
+    prompt = prompt_payload or (
+        f"{primary_aliases[0]}: orchestrate the implementation check. "
+        f"{coding_aliases[0]}: answer exactly one line: {expected_text}"
+    )
+    prompt_source = "browser_payload" if prompt_payload else "server_default_from_context_aliases"
+    primary_alias, primary_position = _custom_native_prompt_alias_match(prompt, primary_aliases)
+    coding_alias, coding_position = _custom_native_prompt_alias_match(prompt, coding_aliases)
+    if not primary_alias or not coding_alias:
+        missing = []
+        if not primary_alias:
+            missing.append("primary_alias_missing_from_prompt")
+        if not coding_alias:
+            missing.append("coding_alias_missing_from_prompt")
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_PROMPT_ALIAS_MISSING",
+            human_message="Command-loop prompt must address one primary alias and one coding alias from runtime context.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=missing,
+        )
+    if primary_position > coding_position:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ROLE_ORDER_SWAPPED",
+            human_message="Command-loop prompt must address the GPT/orchestrator alias before the API/coder alias.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["primary_alias_after_coding_alias"],
+        ) | {
+            "primary_alias": primary_alias,
+            "coding_alias": coding_alias,
+            "primary_alias_position": primary_position,
+            "coding_alias_position": coding_position,
+        }
+
+    agent_bindings = (
+        context.get("agent_bindings")
+        if isinstance(context.get("agent_bindings"), list)
+        else []
+    )
+    primary_binding = resolve_alias_binding(agent_bindings, primary_alias)
+    coding_binding = resolve_alias_binding(agent_bindings, coding_alias)
+    if not primary_binding or not coding_binding:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_BINDING_MISSING",
+            human_message="Prompt aliases must resolve to server-owned runtime bindings.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["alias_binding_missing"],
+        )
+    primary_role = str(primary_binding.get("role") or "")
+    coding_role = str(coding_binding.get("role") or "")
+    if (
+        primary_binding.get("enabled") is not True
+        or primary_binding.get("lane") != PRIMARY_CHATGPT_LANE
+        or primary_role != "orchestrator"
+    ):
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_PRIMARY_BINDING_INVALID",
+            human_message="Primary alias must map to the enabled ChatGPT orchestrator lane.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["primary_binding_not_chatgpt_orchestrator"],
+        ) | {"primary_alias": primary_alias, "primary_binding": primary_binding}
+    if (
+        coding_binding.get("enabled") is not True
+        or coding_binding.get("lane") != API_ROUTE_LANE
+        or coding_role != "coding_agent"
+    ):
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_CODING_BINDING_INVALID",
+            human_message="Coding alias must map to the enabled API coding-agent lane.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["coding_binding_not_api_coding_agent"],
+        ) | {"coding_alias": coding_alias, "coding_binding": coding_binding}
+
+    route_id = str(coding_binding.get("route_id") or "")
+    allowed_route_ids = [
+        str(route_id_value)
+        for route_id_value in context.get("allowed_api_route_ids", [])
+        if str(route_id_value)
+    ]
+    forbidden_stale_route_ids = {
+        str(route_id_value)
+        for route_id_value in context.get("forbidden_stale_route_ids", [])
+        if str(route_id_value)
+    }
+    if not route_id or route_id not in allowed_route_ids or route_id in forbidden_stale_route_ids:
+        reasons = []
+        if not route_id:
+            reasons.append("coding_route_missing")
+        if route_id and route_id not in allowed_route_ids:
+            reasons.append("coding_route_not_allowed")
+        if route_id and route_id in forbidden_stale_route_ids:
+            reasons.append("coding_route_forbidden_stale")
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ROUTE_NOT_ALLOWED",
+            human_message="Coding alias route must be present in allowed_api_route_ids and absent from forbidden stale routes.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=reasons,
+        ) | {
+            "coding_alias": coding_alias,
+            "coding_binding": coding_binding,
+            "allowed_api_route_ids": allowed_route_ids,
+            "forbidden_stale_route_ids": sorted(forbidden_stale_route_ids),
+        }
+
+    try:
+        reasoning_packet = (
+            reasoning_matrix_builder()
+            if callable(reasoning_matrix_builder)
+            else _custom_reasoning_dispatch_matrix_packet(
+                payload={},
+                operator_status=None,
+                api_snapshot=None,
+                availability_lattice_packet=None,
+                owner_authorized=False,
+            )
+        )
+    except Exception as exc:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_EXCEPTION",
+            human_message=f"Reasoning dispatch matrix failed before command-loop provider call: {exc}",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["reasoning_dispatch_matrix_exception"],
+        )
+    reasoning_ok = (
+        _custom_native_reasoning_matrix_ready_for_command_loop(reasoning_packet)
+        if isinstance(reasoning_packet, dict)
+        else False
+    )
+    if not reasoning_ok:
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_REQUIRED",
+            human_message="Command-loop proof requires the server-owned reasoning dispatch matrix to pass first.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["reasoning_dispatch_matrix_not_proven"],
+            reasoning_packet=reasoning_packet if isinstance(reasoning_packet, dict) else {},
+        )
+
+    acceptance_packet = _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+        payload={
+            "alias": coding_alias,
+            "expected_text": expected_text,
+            "request_id": request_id,
+        },
+        file_bridge_worker=file_bridge_worker,
+        agent_runtime_context=context,
+        context_metadata=resolved_context_metadata,
+        bridge_endpoint=bridge_endpoint,
+        timeout_seconds=timeout_seconds,
+        now=now,
+    )
+    command_loop_provider_call_count = (
+        1
+        if (
+            acceptance_packet.get("provider") == "deepseek"
+            or isinstance(acceptance_packet.get("validation"), dict)
+            or acceptance_packet.get("bridge_or_file_bridge_used") is True
+        )
+        else 0
+    )
+    if acceptance_packet.get("status") != "ok":
+        return _custom_native_gpt_api_command_loop_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ACCEPTANCE_NOT_PROVEN",
+            human_message="DeepSeek API coding alias did not satisfy exact-token command-loop acceptance.",
+            expected_text=expected_text,
+            prompt=prompt,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["coding_alias_acceptance_not_proven"],
+            reasoning_packet=reasoning_packet,
+            acceptance_packet=acceptance_packet,
+            command_loop_provider_call_count=command_loop_provider_call_count,
+        )
+
+    command_loop_proven = bool(
+        runtime_context_file_proven
+        and primary_position >= 0
+        and coding_position >= 0
+        and primary_position < coding_position
+        and primary_binding.get("lane") == PRIMARY_CHATGPT_LANE
+        and coding_binding.get("lane") == API_ROUTE_LANE
+        and acceptance_packet.get("exact_token_matched") is True
+        and acceptance_packet.get("file_bridge_acceptance_proven") is True
+        and acceptance_packet.get("agent_alias_route_acceptance_proven") is True
+        and acceptance_packet.get("allowed_api_route_ids_enforced") is True
+        and acceptance_packet.get("forbidden_stale_route_ids_enforced") is True
+        and acceptance_packet.get("fallback_used") is False
+        and acceptance_packet.get("local_imitation_used") is False
+        and acceptance_packet.get("secret_value_exposed") is False
+        and reasoning_ok
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_gpt_api_alias_command_loop_proof",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if command_loop_proven else "blocked",
+        "machine_error_code": "OK"
+        if command_loop_proven
+        else "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_NOT_PROVEN",
+        "human_message": "Custom Codex GPT-orchestrator plus DeepSeek API-coder alias command loop passed with exact response evidence.",
+        "final_status": (
+            "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_PROVEN_WITH_LIMITS"
+            if command_loop_proven
+            else "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_NOT_PROVEN"
+        ),
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "prompt": prompt,
+        "prompt_source": prompt_source,
+        "context_metadata": resolved_context_metadata,
+        **_custom_native_context_readout_fields(resolved_context_metadata),
+        "primary_alias": primary_alias,
+        "coding_alias": coding_alias,
+        "primary_alias_position": primary_position,
+        "coding_alias_position": coding_position,
+        "primary_binding": primary_binding,
+        "coding_binding": coding_binding,
+        "primary_role": primary_role,
+        "coding_role": coding_role,
+        "command_loop_proven": command_loop_proven,
+        "runtime_context_file_proven": runtime_context_file_proven,
+        "custom_codex_agent_runtime_context_proven": runtime_context_file_proven,
+        "primary_alias_resolved_from_context": True,
+        "coding_alias_resolved_from_context": True,
+        "primary_alias_bound_to_chatgpt_lane": primary_binding.get("lane") == PRIMARY_CHATGPT_LANE,
+        "coding_alias_bound_to_api_lane": coding_binding.get("lane") == API_ROUTE_LANE,
+        "primary_alias_precedes_coding_alias": primary_position < coding_position,
+        "reasoning_prerequisite_proven": reasoning_ok,
+        "api_lane_exact_token_matched": acceptance_packet.get("exact_token_matched") is True,
+        "file_bridge_acceptance_proven": acceptance_packet.get("file_bridge_acceptance_proven") is True,
+        "agent_alias_route_acceptance_proven": acceptance_packet.get("agent_alias_route_acceptance_proven") is True,
+        "allowed_api_route_ids_enforced": acceptance_packet.get("allowed_api_route_ids_enforced") is True,
+        "forbidden_stale_route_ids_enforced": acceptance_packet.get("forbidden_stale_route_ids_enforced") is True,
+        "bridge_or_file_bridge_used": acceptance_packet.get("bridge_or_file_bridge_used") is True,
+        "provider": acceptance_packet.get("provider"),
+        "requested_model": acceptance_packet.get("requested_model"),
+        "api_reasoning_option_id": acceptance_packet.get("api_reasoning_option_id"),
+        "api_reasoning_evidence_required": acceptance_packet.get("api_reasoning_evidence_required") is True,
+        "api_reasoning_parameter_sent": acceptance_packet.get("api_reasoning_parameter_sent") is True,
+        "api_reasoning_intelligence_measured": acceptance_packet.get("api_reasoning_intelligence_measured") is True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "primary_provider_call_attempted": False,
+        "chatgpt_provider_backed_reasoning_proven": False,
+        "native_free_text_tool_bridge_proven": False,
+        "native_coder_slot_dispatch_proven": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "reasoning_provider_call_count": int(reasoning_packet.get("provider_call_count") or 0),
+        "command_loop_provider_call_count": command_loop_provider_call_count,
+        "reasoning_packet": reasoning_packet,
+        "acceptance_packet": acceptance_packet,
+        "blocking_reasons": [] if command_loop_proven else ["command_loop_not_proven"],
+        "next_action": "none" if command_loop_proven else "stop_and_diagnose_gpt_api_alias_command_loop",
     }
 
 
@@ -14063,6 +14766,34 @@ def build_handler(
             )
             return
 
+        def _handle_post_api_codex_custom_gpt_api_alias_command_loop_proof(self, actual_path: str) -> None:
+            def reasoning_matrix_builder() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                return _custom_reasoning_dispatch_matrix_live_packet(
+                    payload={},
+                    action_runner=action_runner,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+
+            self._send_json(
+                _custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload=self._read_optional_json_body(),
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            )
+            return
+
         def _handle_post_api_codex_custom_show_window(self, actual_path: str) -> None:
             self._read_optional_json_body()
             packet = show_custom_native_window_packet()
@@ -14332,56 +15063,14 @@ def build_handler(
                 operator_status,
                 api_snapshot=api_snapshot,
             )
-            candidates, missing_levels = _reasoning_dispatch_matrix_candidates(
-                operator_status=operator_status,
-                api_snapshot=api_snapshot,
-                availability_lattice_packet=availability_lattice_packet,
-            )
-            forbidden_fields = sorted(
-                set(payload if isinstance(payload, dict) else {})
-                - REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS
-            )
-            live_results_by_route: dict[str, dict[str, Any]] = {}
-            live_errors_by_route: dict[str, dict[str, Any]] = {}
-            if (
-                not forbidden_fields
-                and not missing_levels
-                and codex_custom_live_prompt_authorized
-            ):
-                for candidate in candidates:
-                    route_id = str(candidate.get("api_model_id") or "")
-                    if not route_id:
-                        continue
-                    live_command = execute_command(
-                        action_runner,
-                        "external_models_live_format_check",
-                        structured_args={
-                            "route_id": route_id,
-                            "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
-                            "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
-                        },
-                    )
-                    packet = live_command.get("packet")
-                    packet_data = packet.get("data") if isinstance(packet, dict) else None
-                    if live_command.get("status") == "ok" and isinstance(packet_data, dict):
-                        live_results_by_route[route_id] = packet_data
-                    else:
-                        live_errors_by_route[route_id] = {
-                            "status": live_command.get("status"),
-                            "machine_error_code": live_command.get("machine_error_code"),
-                            "human_message": live_command.get("human_message"),
-                            "next_action": live_command.get("next_action"),
-                            "changed_files": live_command.get("changed_files") or [],
-                        }
             self._send_json(
-                _custom_reasoning_dispatch_matrix_packet(
+                _custom_reasoning_dispatch_matrix_live_packet(
                     payload=payload,
+                    action_runner=action_runner,
                     operator_status=operator_status,
                     api_snapshot=api_snapshot,
                     availability_lattice_packet=availability_lattice_packet,
                     owner_authorized=codex_custom_live_prompt_authorized,
-                    live_results_by_route=live_results_by_route,
-                    live_errors_by_route=live_errors_by_route,
                 )
             )
             return
